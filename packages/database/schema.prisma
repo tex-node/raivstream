@@ -1,0 +1,319 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  VIEWER
+  CREATOR
+}
+
+enum PremiumTier {
+  FREE
+  VIEWER_PREMIUM
+  CREATOR_PREMIUM
+  ULTIMATE
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  MODERATION_REVIEW
+  BLOCKED
+}
+
+enum BadgeType {
+  TOP_VIEWED_WEEK
+  TOP_LIKED_WEEK
+  HIGHEST_ENGAGEMENT_WEEK
+  VIEWERS_PICK_WEEK
+  VIRAL_HIT
+  CREATOR_MILESTONE_1K
+  CREATOR_MILESTONE_10K
+  CREATOR_MILESTONE_100K
+}
+
+model User {
+  id                String        @id @default(cuid())
+  clerkId           String        @unique
+  email             String        @unique
+  username          String        @unique
+  displayName       String
+  avatarUrl         String?
+  bio               String?
+  role              UserRole      @default(VIEWER)
+  premiumTier       PremiumTier   @default(FREE)
+  premiumUntil      DateTime?
+  verified          Boolean       @default(false)
+  
+  // Stats
+  followerCount     Int           @default(0)
+  followingCount    Int           @default(0)
+  totalViews        Int           @default(0)
+  totalLikes        Int           @default(0)
+  
+  // Relations
+  videos            Video[]       @relation("CreatorVideos")
+  interactions      VideoInteraction[]
+  watchHistory      WatchHistory[]
+  following         Follow[]      @relation("Follower")
+  followers         Follow[]      @relation("Following")
+  badges            UserBadge[]
+  subscriptions     Subscription[]
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([username])
+  @@index([premiumTier])
+  @@index([role])
+  @@map("users")
+}
+
+model Video {
+  id                String        @id @default(cuid())
+  creatorId         String
+  creator           User          @relation("CreatorVideos", fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  title             String
+  description       String?
+  thumbnailUrl      String
+  duration          Int
+  aspectRatio       String        @default("9:16")
+  
+  // Video files
+  rawVideoUrl       String?
+  hlsMasterUrl      String?
+  hlsPath           String?
+  
+  status            VideoStatus   @default(UPLOADING)
+  
+  // Categorization
+  tags              String[]
+  categories        VideoCategory[]
+  
+  // Stats (denormalized for performance)
+  viewCount         Int           @default(0)
+  uniqueViewCount   Int           @default(0)
+  likeCount         Int           @default(0)
+  dislikeCount      Int           @default(0)
+  starRatingSum     Int           @default(0)
+  starRatingCount   Int           @default(0)
+  avgStarRating     Float         @default(0)
+  commentCount      Int           @default(0)
+  shareCount        Int           @default(0)
+  completionRate    Float         @default(0)
+  avgWatchTime      Float         @default(0)
+  
+  // Engagement score (computed periodically)
+  engagementScore   Float         @default(0)
+  
+  // Visibility
+  isPublic          Boolean       @default(true)
+  isPremiumOnly     Boolean       @default(false)
+  
+  // Relations
+  interactions      VideoInteraction[]
+  watchHistory      WatchHistory[]
+  badges            VideoBadge[]
+  featuredIn        FeaturedContent[]
+  
+  publishedAt       DateTime      @default(now())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([creatorId])
+  @@index([status])
+  @@index([publishedAt])
+  @@index([engagementScore])
+  @@index([viewCount])
+  @@index([avgStarRating])
+  @@index([tags])
+  @@index([creatorId, status])
+  @@fulltext([title, description])
+  @@map("videos")
+}
+
+model Category {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  slug        String          @unique
+  description String?
+  icon        String?
+  videos      VideoCategory[]
+  
+  createdAt   DateTime        @default(now())
+  
+  @@map("categories")
+}
+
+model VideoCategory {
+  videoId    String
+  categoryId String
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@id([videoId, categoryId])
+  @@map("video_categories")
+}
+
+model VideoInteraction {
+  id          String    @id @default(cuid())
+  userId      String
+  videoId     String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  // Interaction types
+  liked       Boolean   @default(false)
+  disliked    Boolean   @default(false)
+  starRating  Int?
+  
+  // Watch metrics
+  watchTime   Int       @default(0)
+  completed   Boolean   @default(false)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+  @@index([liked])
+  @@index([starRating])
+  @@index([completed])
+  @@index([userId, updatedAt])
+  @@map("video_interactions")
+}
+
+model WatchHistory {
+  id          String    @id @default(cuid())
+  userId      String
+  videoId     String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  watchTime   Int
+  completed   Boolean   @default(false)
+  lastPosition Int      @default(0)
+  
+  watchedAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([userId, watchedAt])
+  @@index([videoId])
+  @@map("watch_history")
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  follower    User      @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User      @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime  @default(now())
+  
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  type        BadgeType   @unique
+  name        String
+  description String
+  iconUrl     String
+  
+  userBadges  UserBadge[]
+  videoBadges VideoBadge[]
+  
+  createdAt   DateTime    @default(now())
+  
+  @@map("badges")
+}
+
+model UserBadge {
+  id          String    @id @default(cuid())
+  userId      String
+  badgeId     String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge       Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  
+  awardedAt   DateTime  @default(now())
+  
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@map("user_badges")
+}
+
+model VideoBadge {
+  id          String    @id @default(cuid())
+  videoId     String
+  badgeId     String
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  badge       Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  
+  week        String
+  
+  awardedAt   DateTime  @default(now())
+  
+  @@unique([videoId, badgeId, week])
+  @@index([videoId])
+  @@index([week])
+  @@map("video_badges")
+}
+
+model FeaturedContent {
+  id          String    @id @default(cuid())
+  videoId     String
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  section     String
+  position    Int
+  week        String?
+  
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([section, startDate])
+  @@index([week])
+  @@map("featured_content")
+}
+
+model Subscription {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  stripeCustomerId      String    @unique
+  stripeSubscriptionId  String    @unique
+  stripePriceId         String
+  
+  tier              PremiumTier
+  status            String
+  
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean      @default(false)
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([userId])
+  @@map("subscriptions")
+}

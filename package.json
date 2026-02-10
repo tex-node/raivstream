@@ -1,0 +1,44 @@
+{
+  "name": "raivstream",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Premium short-form vertical video streaming platform",
+  "author": "Raivstream Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "test:coverage": "turbo run test:coverage",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "cd packages/database && prisma generate",
+    "db:push": "cd packages/database && prisma db push",
+    "db:migrate": "cd packages/database && prisma migrate dev",
+    "db:migrate:deploy": "cd packages/database && prisma migrate deploy",
+    "db:studio": "cd packages/database && prisma studio",
+    "db:seed": "cd packages/database && tsx seed.ts",
+    "deploy:web": "cd apps/web && vercel --prod",
+    "deploy:mobile": "cd apps/mobile && eas build --platform all"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "prettier": "^3.1.1",
+    "turbo": "^1.11.3",
+    "typescript": "^5.3.3"
+  }
+}
