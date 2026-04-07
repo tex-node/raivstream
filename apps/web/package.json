@@ -24,7 +24,8 @@
     "zod": "^3.22.4",
     "hls.js": "^1.5.1",
     "lucide-react": "^0.303.0",
-    "stripe": "^14.14.0"
+    "stripe": "^14.14.0",
+    "@upstash/redis": "^1.28.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
