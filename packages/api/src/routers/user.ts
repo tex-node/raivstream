@@ -1,22 +1,136 @@
-import { router, protectedProcedure } from '../index';
+import { router, protectedProcedure, publicProcedure } from '../trpc';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 export const userRouter = router({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.user;
+    // Return full profile from DB (includes fields not in the auth context like bio, premiumUntil)
+    return ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        bio: true,
+        role: true,
+        premiumTier: true,
+        premiumUntil: true,
+        verified: true,
+        followerCount: true,
+        followingCount: true,
+        totalViews: true,
+        totalLikes: true,
+      },
+    });
   }),
-  
+
   updateProfile: protectedProcedure
     .input(
       z.object({
-        displayName: z.string().optional(),
-        bio: z.string().optional(),
+        displayName: z.string().min(1).max(50).optional(),
+        bio: z.string().max(300).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      return await ctx.prisma.user.update({
+      return ctx.prisma.user.update({
         where: { id: ctx.user.id },
         data: input,
+        select: { id: true, displayName: true, bio: true },
       });
+    }),
+
+  getByUsername: publicProcedure
+    .input(z.object({ username: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.user.findUnique({
+        where: { username: input.username },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+          bio: true,
+          role: true,
+          verified: true,
+          followerCount: true,
+          followingCount: true,
+          totalViews: true,
+          badges: {
+            select: {
+              badge: {
+                select: { id: true, name: true, description: true, iconUrl: true },
+              },
+            },
+            orderBy: { awardedAt: 'desc' },
+            take: 10,
+          },
+        },
+      });
+
+      if (!profile) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      // Check if the current viewer follows this profile
+      let isFollowing = false;
+      if (ctx.userId) {
+        const follow = await ctx.prisma.follow.findUnique({
+          where: { followerId_followingId: { followerId: ctx.userId, followingId: profile.id } },
+        });
+        isFollowing = !!follow;
+      }
+
+      return { ...profile, isFollowing };
+    }),
+
+  becomeCreator: protectedProcedure.mutation(async ({ ctx }) => {
+    return ctx.prisma.user.update({
+      where: { id: ctx.user.id },
+      data: { role: 'CREATOR' },
+      select: { id: true, role: true },
+    });
+  }),
+
+  toggleFollow: protectedProcedure
+    .input(z.object({ targetUserId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.targetUserId === ctx.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot follow yourself' });
+      }
+
+      const existing = await ctx.prisma.follow.findUnique({
+        where: {
+          followerId_followingId: {
+            followerId: ctx.user.id,
+            followingId: input.targetUserId,
+          },
+        },
+      });
+
+      if (existing) {
+        // Unfollow
+        await ctx.prisma.follow.delete({
+          where: {
+            followerId_followingId: {
+              followerId: ctx.user.id,
+              followingId: input.targetUserId,
+            },
+          },
+        });
+        await ctx.prisma.$transaction([
+          ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { followingCount: { decrement: 1 } } }),
+          ctx.prisma.user.update({ where: { id: input.targetUserId }, data: { followerCount: { decrement: 1 } } }),
+        ]);
+        return { following: false };
+      } else {
+        // Follow
+        await ctx.prisma.follow.create({
+          data: { followerId: ctx.user.id, followingId: input.targetUserId },
+        });
+        await ctx.prisma.$transaction([
+          ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { followingCount: { increment: 1 } } }),
+          ctx.prisma.user.update({ where: { id: input.targetUserId }, data: { followerCount: { increment: 1 } } }),
+        ]);
+        return { following: true };
+      }
     }),
 });

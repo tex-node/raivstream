@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command:*)",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"del /f /q \"\"C:\\\\Users\\\\XPS\\\\OneDrive\\\\Documents\\\\Claude\\\\Raivstream\\\\raivstream\\\\apps\\\\web\\\\src\\\\app\\\\@[username]\\\\page.tsx\"\" && rmdir /s /q \"\"C:\\\\Users\\\\XPS\\\\OneDrive\\\\Documents\\\\Claude\\\\Raivstream\\\\raivstream\\\\apps\\\\web\\\\src\\\\app\\\\@[username]\"\"\")",
+      "Bash(node -e \"const fs = require\\(''fs''\\); const path = ''C:/Users/XPS/OneDrive/Documents/Claude/Raivstream/raivstream/apps/web/src/app/@[username]/page.tsx''; const dir = ''C:/Users/XPS/OneDrive/Documents/Claude/Raivstream/raivstream/apps/web/src/app/@[username]''; fs.unlinkSync\\(path\\); fs.rmdirSync\\(dir\\); console.log\\(''deleted''\\);\")",
+      "Bash(node -e \"const fs = require\\(''fs''\\); const p = ''C:/Users/XPS/OneDrive/Documents/Claude/Raivstream/raivstream/apps/web/src/app/api/webhooks/mediaconvert/route.ts''; const dir = ''C:/Users/XPS/OneDrive/Documents/Claude/Raivstream/raivstream/apps/web/src/app/api/webhooks/mediaconvert''; fs.unlinkSync\\(p\\); fs.rmdirSync\\(dir\\); console.log\\(''deleted''\\);\")",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(pnpm --version:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm view:*)",
+      "Bash(node:*)",
+      "Bash(__NEW_LINE_d4d4550f314eb1a9__ node -e \"\nconst fs = require\\(''fs''\\);\n[''apps/web/package.json'', ''apps/mobile/package.json'', ''packages/api/package.json''].forEach\\(p => {\n  const full = ''C:/Users/XPS/OneDrive/Documents/Claude/Raivstream/raivstream/'' + p;\n  let content = fs.readFileSync\\(full, ''utf8''\\);\n  content = content.replace\\(/\"\"@trpc\\\\/\\(client|server|react-query|next\\)\"\": \"\"\\\\^10\\\\.\\\\d+\\\\.\\\\d+\"\"/g, \\(m, pkg\\) => {\n    return ''\"\"@trpc/'' + pkg + ''\"\": \"\"^11.10.0\"\"'';\n  }\\);\n  fs.writeFileSync\\(full, content\\);\n  console.log\\(''updated'', p\\);\n}\\);\n\")",
+      "Bash(pnpm type-check:*)",
+      "Bash(cat:*)",
+      "Bash(git -C /c/Raiv/raivstream show:*)",
+      "Bash(git -C /c/Raiv/raivstream checkout HEAD -- packages/)",
+      "WebFetch(domain:supabase.com)",
+      "Bash(pnpm db:generate:*)",
+      "Bash(npx prisma:*)",
+      "Bash(node_modules/.bin/prisma:*)",
+      "Bash(/c/Raiv/raivstream/node_modules/.pnpm/node_modules/.bin/prisma db push:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(ls:*)",
+      "Bash(curl:*)",
+      "Bash(xargs:*)",
+      "Bash(# Check if AWS CLI or wrangler is available to apply CORS which aws || echo \"\"no aws cli\"\" which wrangler || echo \"\"no wrangler\"\" npx wrangler --version)",
+      "Bash(npx wrangler:*)",
+      "Bash(grep:*)",
+      "Bash(# Find what''s on port 3000 cmd.exe /c \"\"netstat -ano | findstr :3000\"\")",
+      "Bash(cmd.exe /c \"netstat -ano | findstr LISTEN | findstr :3000\")",
+      "Bash(cmd.exe /c \"netstat -ano | findstr :3001\")",
+      "Bash(cmd.exe /c \"netstat -ano | findstr LISTEN\")",
+      "Bash(# Port 3001 might be in TIME_WAIT, try 3010 which is definitely free # Update the dev script to use 3010 cd /c/Raiv/raivstream && node -e \"\" const fs = require\\(''fs''\\); let pkg = fs.readFileSync\\(''apps/web/package.json'', ''utf8''\\); pkg = pkg.replace\\(''next dev -p 3001'', ''next dev -p 3010''\\); fs.writeFileSync\\(''apps/web/package.json'', pkg\\); console.log\\(''Updated to port 3010''\\); \"\" pnpm dev:web 2>&1 & echo \"\"PID $!\"\" sleep 22 cat /tmp/raiv-dev.log)",
+      "Bash(# Restart smee too since we killed all node processes npx smee-client --url https://smee.io/DqCQqRd461STN2BQ --target http://localhost:3010/api/webhooks/clerk 2>&1 & sleep 4 cat /tmp/smee.log)",
+      "Bash(find C:/Raiv/raivstream -name package.json -path */stripe/package.json)"
+    ]
+  }
+}

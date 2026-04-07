@@ -32,12 +32,16 @@
     "db:migrate:deploy": "cd packages/database && prisma migrate deploy",
     "db:studio": "cd packages/database && prisma studio",
     "db:seed": "cd packages/database && tsx seed.ts",
+    "db:reset": "cd packages/database && prisma migrate reset --force",
+    "dev:web": "turbo run dev --filter=@raivstream/web",
+    "dev:mobile": "turbo run dev --filter=@raivstream/mobile",
     "deploy:web": "cd apps/web && vercel --prod",
     "deploy:mobile": "cd apps/mobile && eas build --platform all"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
     "prettier": "^3.1.1",
+    "tsx": "^4.7.0",
     "turbo": "^1.11.3",
     "typescript": "^5.3.3"
   }

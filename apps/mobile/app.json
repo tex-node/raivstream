@@ -43,24 +43,15 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-video",
-        {
-          "supportsBackgroundAudio": false,
-          "supportsPictureInPicture": false
-        }
-      ]
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "your-project-id"
-      }
+      "router": { "origin": false },
+      "eas": { "projectId": "your-project-id" },
+      "apiUrl": "http://192.168.100.29:3000"
     }
   }
 }

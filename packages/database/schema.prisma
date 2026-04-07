@@ -3,12 +3,13 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+  previewFeatures = ["fullTextSearch"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -32,6 +33,23 @@ enum VideoStatus {
   BLOCKED
 }
 
+enum GenerationModel {
+  NANO_BANANA
+  GROK_IMAGINE
+  LTX2
+  WAN_25
+  KLING
+  HIGGSFIELD
+}
+
+enum GenerationStatus {
+  QUEUED
+  GENERATING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 enum BadgeType {
   TOP_VIEWED_WEEK
   TOP_LIKED_WEEK
@@ -45,23 +63,27 @@ enum BadgeType {
 
 model User {
   id                String        @id @default(cuid())
-  clerkId           String        @unique
   email             String        @unique
   username          String        @unique
   displayName       String
+  passwordHash      String
   avatarUrl         String?
   bio               String?
   role              UserRole      @default(VIEWER)
   premiumTier       PremiumTier   @default(FREE)
   premiumUntil      DateTime?
   verified          Boolean       @default(false)
-  
+
+  // Security
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
   // Stats
   followerCount     Int           @default(0)
   followingCount    Int           @default(0)
   totalViews        Int           @default(0)
   totalLikes        Int           @default(0)
-  
+
   // Relations
   videos            Video[]       @relation("CreatorVideos")
   interactions      VideoInteraction[]
@@ -70,14 +92,31 @@ model User {
   followers         Follow[]      @relation("Following")
   badges            UserBadge[]
   subscriptions     Subscription[]
-  
+  refreshTokens     RefreshToken[]
+  generationJobs    GenerationJob[]
+
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  
+
   @@index([username])
   @@index([premiumTier])
   @@index([role])
   @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  family     String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([family])
+  @@map("refresh_tokens")
 }
 
 model Video {
@@ -93,8 +132,9 @@ model Video {
   aspectRatio       String        @default("9:16")
   
   // Video files
-  rawVideoUrl       String?
-  hlsMasterUrl      String?
+  rawVideoUrl       String?   // original upload key in R2 (private bucket)
+  mp4Url            String?   // CDN-served MP4 URL (set after confirmUpload)
+  hlsMasterUrl      String?   // HLS .m3u8 URL (set after transcoding)
   hlsPath           String?
   
   status            VideoStatus   @default(UPLOADING)
@@ -128,6 +168,7 @@ model Video {
   watchHistory      WatchHistory[]
   badges            VideoBadge[]
   featuredIn        FeaturedContent[]
+  generationJob     GenerationJob?
   
   publishedAt       DateTime      @default(now())
   createdAt         DateTime      @default(now())
@@ -141,7 +182,6 @@ model Video {
   @@index([avgStarRating])
   @@index([tags])
   @@index([creatorId, status])
-  @@fulltext([title, description])
   @@map("videos")
 }
 
@@ -211,6 +251,7 @@ model WatchHistory {
   watchedAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
+  @@unique([userId, videoId])
   @@index([userId, watchedAt])
   @@index([videoId])
   @@map("watch_history")
@@ -316,4 +357,49 @@ model Subscription {
   
   @@index([userId])
   @@map("subscriptions")
+}
+
+model GenerationJob {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // What model was used
+  model           GenerationModel
+
+  // Prompt inputs
+  prompt          String
+  negativePrompt  String?
+
+  // Generation parameters
+  duration        Float            @default(5)
+  aspectRatio     String           @default("9:16")
+  style           String?
+  seedImageUrl    String?          // optional image for image-to-video models
+
+  // Job lifecycle
+  status          GenerationStatus @default(QUEUED)
+  providerJobId   String?          // external job/prediction ID from the AI provider
+  outputUrl       String?          // final generated video URL
+  thumbnailUrl    String?          // extracted thumbnail from generated video
+  errorMessage    String?
+
+  // If the user publishes the generated video, link it here
+  videoId         String?          @unique
+  video           Video?           @relation(fields: [videoId], references: [id], onDelete: SetNull)
+
+  // Billing
+  creditsUsed     Int              @default(1)
+
+  // Extra provider-specific metadata (seed, dimensions, etc.)
+  metadata        Json?
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([model])
+  @@index([userId, createdAt])
+  @@map("generation_jobs")
 }
