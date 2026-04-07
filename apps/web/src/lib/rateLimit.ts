@@ -50,9 +50,9 @@ function memoryCheck(key: string, max: number, windowMs: number): RateLimitResul
 
 async function redisCheck(key: string, max: number, windowSec: number): Promise<RateLimitResult> {
   // @upstash/redis is an optional dep — install with: pnpm add @upstash/redis --filter web
-  // Using require + any to keep this file compilable before the package is installed.
+  // webpackIgnore prevents the build from failing when the package is not installed.
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
-  const { Redis } = require('@upstash/redis') as any;
+  const { Redis } = require(/* webpackIgnore: true */ '@upstash/redis') as any;
   const redis = new Redis({
     url:   process.env.UPSTASH_REDIS_URL!,
     token: process.env.UPSTASH_REDIS_TOKEN!,
