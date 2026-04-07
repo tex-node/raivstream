@@ -12,6 +12,10 @@ const REQUIRED_VARS: { name: string; description: string }[] = [
   { name: 'DATABASE_URL',        description: 'PostgreSQL connection string' },
   { name: 'JWT_ACCESS_SECRET',   description: 'Access token signing secret (min 64 chars)' },
   { name: 'JWT_REFRESH_SECRET',  description: 'Refresh token signing secret (min 64 chars)' },
+];
+
+// Optional vars — warn but don't crash if missing (video upload won't work without R2)
+const OPTIONAL_VARS: { name: string; description: string }[] = [
   { name: 'R2_ENDPOINT',         description: 'Cloudflare R2 endpoint URL' },
   { name: 'R2_ACCESS_KEY_ID',    description: 'Cloudflare R2 access key' },
   { name: 'R2_SECRET_ACCESS_KEY',description: 'Cloudflare R2 secret key' },
@@ -53,6 +57,13 @@ export function validateEnv(): void {
     }
     if (FORBIDDEN_VALUES.some((bad) => value.toLowerCase().includes(bad))) {
       errors.push(`${name} appears to be a weak default — generate a random secret`);
+    }
+  }
+
+  // Warn (don't crash) for optional vars
+  for (const { name, description } of OPTIONAL_VARS) {
+    if (!process.env[name]) {
+      console.warn(`[env] WARNING: ${name} not set — ${description} (video upload disabled)`);
     }
   }
 
