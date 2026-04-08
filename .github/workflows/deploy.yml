@@ -1,176 +1,45 @@
-name: CI/CD Pipeline
+name: Deploy to VPS
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    branches: [main]
+
+# Only one deploy runs at a time; a new push cancels the in-progress one
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type Check
+  deploy:
+    name: Build & deploy web
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      
-      - name: Generate Prisma Client
-        run: pnpm db:generate
-      
-      - name: Lint
-        run: pnpm lint
-      
-      - name: Type check
-        run: pnpm type-check
+    timeout-minutes: 15
 
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    needs: lint-and-typecheck
-    
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: raivstream_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          version: 8
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      
-      - name: Generate Prisma Client
-        run: pnpm db:generate
-      
-      - name: Run database migrations
-        run: pnpm db:migrate:deploy
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/raivstream_test
-      
-      - name: Run tests
-        run: pnpm test
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/raivstream_test
-          UPSTASH_REDIS_URL: redis://localhost:6379
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
 
-  deploy-web:
-    name: Deploy Web to Vercel
-    runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-          working-directory: ./apps/web
+            cd /root/raivstream
 
-  build-mobile:
-    name: Build Mobile Apps
-    runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-      
-      - name: Setup Expo
-        uses: expo/expo-github-action@v8
-        with:
-          expo-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      
-      - name: Build iOS (Preview)
-        run: cd apps/mobile && eas build --platform ios --profile preview --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      
-      - name: Build Android (Preview)
-        run: cd apps/mobile && eas build --platform android --profile preview --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+            echo "==> Pulling latest code..."
+            git pull --ff-only
 
-  notify:
-    name: Notify Deployment
-    runs-on: ubuntu-latest
-    needs: [deploy-web, build-mobile]
-    if: always()
-    
-    steps:
-      - name: Deployment status
-        run: |
-          if [ "${{ needs.deploy-web.result }}" == "success" ] && [ "${{ needs.build-mobile.result }}" == "success" ]; then
-            echo "✅ Deployment successful!"
-          else
-            echo "❌ Deployment failed!"
-            exit 1
-          fi
+            echo "==> Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            echo "==> Building web app..."
+            pnpm --filter @raivstream/web build
+
+            echo "==> Restarting PM2 process..."
+            pm2 restart raivstream-web --update-env
+
+            echo "==> Deploy complete ✅"
+            pm2 list
