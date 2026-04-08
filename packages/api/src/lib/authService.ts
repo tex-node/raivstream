@@ -6,7 +6,7 @@
  */
 
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 import type { PrismaClient } from '@raivstream/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwt';
 
@@ -244,4 +244,91 @@ export async function logoutUser(
 
 export async function logoutAllDevices(prisma: PrismaClient, userId: string): Promise<void> {
   await prisma.refreshToken.deleteMany({ where: { userId } });
+}
+
+// ─── Password reset ───────────────────────────────────────────────────────────
+
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Generate a password reset token for the given email.
+ * Returns the raw token (to be embedded in the reset URL) and the userId.
+ * Always succeeds even if the email doesn't exist — prevents user enumeration.
+ */
+export async function requestPasswordReset(
+  prisma: PrismaClient,
+  email:  string,
+): Promise<{ rawToken: string; userId: string } | null> {
+  const user = await prisma.user.findUnique({
+    where:  { email: email.toLowerCase() },
+    select: { id: true },
+  });
+
+  // Return null silently — caller should still respond with 200
+  if (!user) return null;
+
+  // Invalidate all previous reset tokens for this user
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+  const rawToken  = randomBytes(32).toString('hex'); // 64-char hex string
+  const tokenHash = await bcrypt.hash(rawToken, 10);
+
+  await prisma.passwordResetToken.create({
+    data: {
+      userId:    user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MS),
+    },
+  });
+
+  return { rawToken, userId: user.id };
+}
+
+/**
+ * Consume a password-reset token and update the user's password.
+ * Throws with code UNAUTHORIZED if the token is invalid, expired, or already used.
+ */
+export async function resetPassword(
+  prisma:       PrismaClient,
+  rawToken:     string,
+  newPassword:  string,
+): Promise<void> {
+  // Find all unexpired, unused tokens and check which one matches
+  const candidates = await prisma.passwordResetToken.findMany({
+    where: {
+      expiresAt: { gt: new Date() },
+      usedAt:    null,
+    },
+    orderBy: { createdAt: 'desc' },
+    take:    50, // safety cap
+  });
+
+  let matched: (typeof candidates)[number] | null = null;
+  for (const candidate of candidates) {
+    const ok = await bcrypt.compare(rawToken, candidate.tokenHash);
+    if (ok) { matched = candidate; break; }
+  }
+
+  if (!matched) {
+    throw Object.assign(
+      new Error('Reset link is invalid or has expired. Please request a new one.'),
+      { code: 'UNAUTHORIZED' as const },
+    );
+  }
+
+  const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  // Atomically: mark token used + update password + invalidate all sessions
+  await prisma.$transaction([
+    prisma.passwordResetToken.update({
+      where: { id: matched.id },
+      data:  { usedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: matched.userId },
+      data:  { passwordHash: newHash, failedLoginAttempts: 0, lockedUntil: null },
+    }),
+    // Revoke all active sessions so stolen sessions can't persist
+    prisma.refreshToken.deleteMany({ where: { userId: matched.userId } }),
+  ]);
 }
