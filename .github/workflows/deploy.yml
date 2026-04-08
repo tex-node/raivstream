@@ -35,6 +35,9 @@ jobs:
             echo "==> Installing dependencies..."
             pnpm install --frozen-lockfile
 
+            echo "==> Regenerating Prisma client..."
+            cd packages/database && pnpm exec prisma generate && cd /root/raivstream
+
             echo "==> Building web app..."
             pnpm --filter @raivstream/web build
 
