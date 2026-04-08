@@ -82,6 +82,33 @@ export const userRouter = router({
       return { ...profile, isFollowing };
     }),
 
+  // Current credit balance for the signed-in user
+  creditBalance: protectedProcedure.query(async ({ ctx }) => {
+    const balance = await ctx.prisma.creditBalance.findUnique({
+      where: { userId: ctx.user.id },
+      select: { balance: true, updatedAt: true },
+    });
+    return { balance: balance?.balance ?? 0, updatedAt: balance?.updatedAt ?? null };
+  }),
+
+  // Recent credit transactions (last 20)
+  creditHistory: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.creditTransaction.findMany({
+      where:   { userId: ctx.user.id },
+      orderBy: { createdAt: 'desc' },
+      take:    20,
+      select: {
+        id:           true,
+        amount:       true,
+        type:         true,
+        featureKey:   true,
+        description:  true,
+        balanceAfter: true,
+        createdAt:    true,
+      },
+    });
+  }),
+
   // Returns episode gate status for the current FREE user.
   // Used by the feed to show a paywall after 5 unique episodes.
   episodeGate: protectedProcedure.query(async ({ ctx }) => {
