@@ -4,13 +4,13 @@
  * API credentials: set XAI_API_KEY in .env
  * Docs:            https://docs.x.ai/docs/api-reference#create-image
  *
- * Grok Imagine generates high-quality images from text prompts.
- * The generated image can be used as:
- *   1. A thumbnail for a video
- *   2. A seed frame fed into a video generation model (e.g. Wan 2.5, Kling)
+ * xAI returns short-lived signed URLs — we immediately mirror them to R2
+ * so they remain accessible permanently.
  *
  * xAI uses an OpenAI-compatible REST API.
  */
+
+import { mirrorUrlToR2 } from '../r2';
 
 export interface GrokImagineInput {
   prompt: string;
@@ -81,10 +81,11 @@ export async function generateImage(input: GrokImagineInput): Promise<GrokImagin
 
 /**
  * Full text-to-video flow using Grok Imagine:
- *   1. Generate an image from the prompt
- *   2. Return the image URL so it can be passed to a video model or stored as a thumbnail
+ *   1. Generate an image from the prompt (xAI returns a short-lived signed URL)
+ *   2. Mirror the image to R2 for permanent storage
+ *   3. Return the permanent R2 URL
  *
- * When a dedicated Grok video endpoint becomes available, replace step 2 with a
+ * When a dedicated Grok video endpoint becomes available, replace step 3 with a
  * video generation call using the image as a seed frame.
  */
 export async function generateVideoFromPrompt(input: GrokImagineInput): Promise<{
@@ -92,11 +93,14 @@ export async function generateVideoFromPrompt(input: GrokImagineInput): Promise<
   thumbnailUrl: string;
 }> {
   const [result] = await generateImage(input);
-  // Grok Imagine is currently image-only.
-  // The returned image is used as a thumbnail / seed for downstream video models.
-  // jobId is the image URL itself (no async polling needed for image generation).
+
+  // xAI signed URLs expire in seconds — mirror to R2 immediately
+  const jobId = `grok-image-${Date.now()}`;
+  const key   = `generated/grok/${jobId}.jpg`;
+  const permanentUrl = await mirrorUrlToR2(result.imageUrl, key, 'image/jpeg');
+
   return {
-    jobId: `grok-image-${Date.now()}`,
-    thumbnailUrl: result.imageUrl,
+    jobId,
+    thumbnailUrl: permanentUrl,
   };
 }
