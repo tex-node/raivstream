@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
 
-# Only one deploy runs at a time; a new push cancels the in-progress one
 concurrency:
   group: deploy-production
   cancel-in-progress: true
@@ -17,32 +16,33 @@ jobs:
 
     steps:
       - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: 22
-          script_stop: true
-          script: |
-            set -euo pipefail
+        run: |
+          # Write the private key to a temp file
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
 
+          # Strip any carriage returns that Windows/GitHub UI might have added
+          sed -i 's/\r//' /tmp/deploy_key
+
+          # Run deploy commands on the VPS
+          ssh -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o PasswordAuthentication=no \
+            -p 22 \
+            root@${{ secrets.SSH_HOST }} \
+            "set -e
             cd /root/raivstream
-
-            echo "==> Pulling latest code..."
+            echo '==> Pulling latest code...'
             git pull --ff-only
-
-            echo "==> Installing dependencies..."
+            echo '==> Installing dependencies...'
             pnpm install --frozen-lockfile
-
-            echo "==> Regenerating Prisma client..."
+            echo '==> Regenerating Prisma client...'
             cd packages/database && pnpm exec prisma generate && cd /root/raivstream
-
-            echo "==> Building web app..."
+            echo '==> Building web app...'
             pnpm --filter @raivstream/web build
-
-            echo "==> Restarting PM2 process..."
+            echo '==> Restarting PM2...'
             pm2 restart raivstream-web --update-env
+            echo '==> Done ✅'
+            pm2 list"
 
-            echo "==> Deploy complete ✅"
-            pm2 list
+          rm -f /tmp/deploy_key
