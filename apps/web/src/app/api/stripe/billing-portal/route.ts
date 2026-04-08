@@ -26,6 +26,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No active subscription' }, { status: 404 });
   }
 
+  if (!sub.stripeCustomerId) {
+    return NextResponse.json({ error: 'No Stripe subscription found' }, { status: 400 });
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
   const portalSession = await stripe.billingPortal.sessions.create({
