@@ -18,10 +18,16 @@ enum UserRole {
 }
 
 enum PremiumTier {
-  FREE
-  VIEWER_PREMIUM
-  CREATOR_PREMIUM
-  ULTIMATE
+  FREE     // 5 free episodes then paywall
+  VIEWER   // ₦1,500/month — unlimited watching
+  CREATOR  // credit-based — buy credits to use AI features
+}
+
+enum CreditTxType {
+  PURCHASE  // bought credits with money
+  USAGE     // spent credits on a feature
+  BONUS     // promotional / gift credits
+  REFUND    // credits returned (e.g. failed generation)
 }
 
 enum VideoStatus {
@@ -85,15 +91,17 @@ model User {
   totalLikes        Int           @default(0)
 
   // Relations
-  videos            Video[]       @relation("CreatorVideos")
-  interactions      VideoInteraction[]
-  watchHistory      WatchHistory[]
-  following         Follow[]      @relation("Follower")
-  followers         Follow[]      @relation("Following")
-  badges            UserBadge[]
-  subscriptions     Subscription[]
-  refreshTokens     RefreshToken[]
-  generationJobs    GenerationJob[]
+  videos             Video[]       @relation("CreatorVideos")
+  interactions       VideoInteraction[]
+  watchHistory       WatchHistory[]
+  following          Follow[]      @relation("Follower")
+  followers          Follow[]      @relation("Following")
+  badges             UserBadge[]
+  subscriptions      Subscription[]
+  refreshTokens      RefreshToken[]
+  generationJobs     GenerationJob[]
+  creditBalance      CreditBalance?
+  creditTransactions CreditTransaction[]
 
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -337,26 +345,91 @@ model FeaturedContent {
 }
 
 model Subscription {
-  id                String        @id @default(cuid())
-  userId            String
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  stripeCustomerId      String    @unique
-  stripeSubscriptionId  String    @unique
-  stripePriceId         String
-  
-  tier              PremiumTier
-  status            String
-  
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Payment provider: "paystack" | "stripe"
+  provider String @default("paystack")
+
+  // Paystack (primary — local payments)
+  paystackCustomerCode     String? @unique
+  paystackSubscriptionCode String? @unique
+  paystackPlanCode         String?
+
+  // Stripe (international payments — future)
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  tier   PremiumTier
+  status String // active | cancelled | past_due | expired
+
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
-  cancelAtPeriodEnd  Boolean      @default(false)
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  
+  cancelAtPeriodEnd  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
+  @@index([status])
   @@map("subscriptions")
+}
+
+// ─── Credit System ─────────────────────────────────────────────────────────────
+
+model CreditBalance {
+  id      String @id @default(cuid())
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_balances")
+}
+
+model CreditTransaction {
+  id     String       @id @default(cuid())
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount      Int          // positive = credit in, negative = credit out
+  type        CreditTxType
+  featureKey  String?      // which feature was used (populated on USAGE)
+  description String?
+  referenceId String?      // payment ref, generation job ID, etc.
+
+  balanceBefore Int
+  balanceAfter  Int
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("credit_transactions")
+}
+
+// Admin-configurable credit cost per feature key
+// e.g. featureKey="generate:kling" creditsPerUnit=500
+//      featureKey="generate:nano_banana" creditsPerUnit=100
+//      featureKey="thumbnail:ai" creditsPerUnit=50
+model FeatureCreditRate {
+  id             String  @id @default(cuid())
+  featureKey     String  @unique // namespaced: "category:feature"
+  creditsPerUnit Int
+  unitLabel      String  @default("request") // "request" | "second" | "image"
+  description    String?
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("feature_credit_rates")
 }
 
 model GenerationJob {
