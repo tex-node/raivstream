@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
 import { VideoCard } from '@/components/video/VideoCard';
+import { PaywallModal } from '@/components/feed/PaywallModal';
+import { useUser } from '@/lib/auth';
 
 type FeedType = 'forYou' | 'following' | 'trending' | 'viewersPick';
 
@@ -14,6 +16,14 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
+  const { isSignedIn, user } = useUser();
+
+  // Episode gate — only query for signed-in FREE users
+  const gateQuery = trpc.user.episodeGate.useQuery(undefined, {
+    enabled: isSignedIn && user?.premiumTier === 'FREE',
+  });
+  const gate = gateQuery.data;
+  const showPaywall = gate?.isGated ?? false;
 
   // Fetch the right feed based on tab
   const forYouQuery = trpc.feed.forYou.useInfiniteQuery(
@@ -124,25 +134,32 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className="flex-1 overflow-y-scroll snap-y snap-mandatory scroll-smooth"
-      style={{ scrollbarWidth: 'none' }}
-    >
-      {videos.map((video, i) => (
-        <div
-          key={`${video.id}-${i}`}
-          className="snap-start w-full h-screen flex-shrink-0"
-        >
-          <VideoCard video={video} isActive={i === activeIndex} />
-        </div>
-      ))}
+    <div className="flex-1 relative">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {videos.map((video, i) => (
+          <div
+            key={`${video.id}-${i}`}
+            className="snap-start w-full h-screen flex-shrink-0"
+          >
+            <VideoCard video={video} isActive={i === activeIndex && !showPaywall} />
+          </div>
+        ))}
 
-      {activeQuery.isFetchingNextPage && (
-        <div className="h-20 flex items-center justify-center bg-black">
-          <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-        </div>
+        {activeQuery.isFetchingNextPage && (
+          <div className="h-20 flex items-center justify-center bg-black">
+            <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+      </div>
+
+      {/* Episode gate paywall */}
+      {showPaywall && gate && (
+        <PaywallModal watched={gate.watched} limit={gate.limit} />
       )}
     </div>
   );

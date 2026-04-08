@@ -102,6 +102,26 @@ export const interactionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Episode gate — FREE users can watch 5 unique episodes
+      if (ctx.user.premiumTier === 'FREE') {
+        const existing = await ctx.prisma.watchHistory.findUnique({
+          where: { userId_videoId: { userId: ctx.user.id, videoId: input.videoId } },
+          select: { id: true },
+        });
+
+        if (!existing) {
+          const watched = await ctx.prisma.watchHistory.count({
+            where: { userId: ctx.user.id },
+          });
+          if (watched >= 5) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'EPISODE_GATE_REACHED',
+            });
+          }
+        }
+      }
+
       await ctx.prisma.watchHistory.upsert({
         where: { userId_videoId: { userId: ctx.user.id, videoId: input.videoId } },
         create: {

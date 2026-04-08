@@ -82,6 +82,22 @@ export const userRouter = router({
       return { ...profile, isFollowing };
     }),
 
+  // Returns episode gate status for the current FREE user.
+  // Used by the feed to show a paywall after 5 unique episodes.
+  episodeGate: protectedProcedure.query(async ({ ctx }) => {
+    const LIMIT = 5;
+
+    if (ctx.user.premiumTier !== 'FREE') {
+      return { watched: 0, limit: LIMIT, isGated: false };
+    }
+
+    const watched = await ctx.prisma.watchHistory.count({
+      where: { userId: ctx.user.id },
+    });
+
+    return { watched, limit: LIMIT, isGated: watched >= LIMIT };
+  }),
+
   becomeCreator: protectedProcedure.mutation(async ({ ctx }) => {
     return ctx.prisma.user.update({
       where: { id: ctx.user.id },
