@@ -5,9 +5,8 @@ import { stripe } from '@/lib/stripe';
 import type { PremiumTier } from '@raivstream/database';
 
 const TIER_MAP: Record<string, PremiumTier> = {
-  VIEWER_PREMIUM: 'VIEWER_PREMIUM',
-  CREATOR_PREMIUM: 'CREATOR_PREMIUM',
-  ULTIMATE: 'ULTIMATE',
+  VIEWER:  'VIEWER',
+  CREATOR: 'CREATOR',
 };
 
 async function upsertSubscription(
@@ -60,10 +59,7 @@ async function upsertSubscription(
       premiumTier: isActive ? tier : 'FREE',
       premiumUntil: isActive ? periodEnd : null,
       // Upgrade to CREATOR role if on a creator-capable plan
-      role:
-        isActive && (tier === 'CREATOR_PREMIUM' || tier === 'ULTIMATE')
-          ? 'CREATOR'
-          : undefined,
+      role: isActive && tier === 'CREATOR' ? 'CREATOR' : undefined,
     },
   });
 }
