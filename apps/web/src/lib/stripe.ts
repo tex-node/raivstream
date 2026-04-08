@@ -5,45 +5,19 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   typescript: true,
 });
 
-export const PLANS = {
-  VIEWER_PREMIUM: {
-    name: 'Viewer Premium',
-    price: 4.99,
-    priceId: process.env.STRIPE_VIEWER_PREMIUM_PRICE_ID!,
-    tier: 'VIEWER_PREMIUM' as const,
-    features: [
-      'Ad-free viewing',
-      'HD quality streams',
-      'Exclusive premium content',
-      'Early access to new features',
-    ],
+// Stripe plans — international payments only
+// Primary payment is handled by Paystack (see lib/paystack.ts)
+export const STRIPE_PLANS = {
+  VIEWER: {
+    name: 'Viewer',
+    priceId: process.env.STRIPE_VIEWER_PRICE_ID!,
+    tier: 'VIEWER' as const,
   },
-  CREATOR_PREMIUM: {
-    name: 'Creator Premium',
-    price: 9.99,
-    priceId: process.env.STRIPE_CREATOR_PREMIUM_PRICE_ID!,
-    tier: 'CREATOR_PREMIUM' as const,
-    features: [
-      'Everything in Viewer Premium',
-      'Upload unlimited videos',
-      'Creator analytics dashboard',
-      'Revenue sharing (70/30)',
-      'Priority processing',
-    ],
-  },
-  ULTIMATE: {
-    name: 'Ultimate',
-    price: 14.99,
-    priceId: process.env.STRIPE_ULTIMATE_PRICE_ID!,
-    tier: 'ULTIMATE' as const,
-    features: [
-      'Everything in Creator Premium',
-      'Priority support',
-      'Featured placement eligibility',
-      'Advanced analytics',
-      'Early beta features',
-    ],
+  CREATOR: {
+    name: 'Creator',
+    priceId: process.env.STRIPE_CREATOR_PRICE_ID!,
+    tier: 'CREATOR' as const,
   },
 } as const;
 
-export type PlanKey = keyof typeof PLANS;
+export type StripePlanKey = keyof typeof STRIPE_PLANS;

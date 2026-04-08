@@ -4,18 +4,18 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { Navbar } from '@/components/layout/Navbar';
-import { PLANS, type PlanKey } from '@/lib/stripe';
+import { STRIPE_PLANS, type StripePlanKey } from '@/lib/stripe';
 
-const PLAN_KEYS: PlanKey[] = ['VIEWER_PREMIUM', 'CREATOR_PREMIUM', 'ULTIMATE'];
+const PLAN_KEYS: StripePlanKey[] = ['VIEWER', 'CREATOR'];
 
-const HIGHLIGHT: PlanKey = 'CREATOR_PREMIUM';
+const HIGHLIGHT: StripePlanKey = 'CREATOR';
 
 export default function PricingPage() {
   const { isSignedIn } = useUser();
   const router = useRouter();
-  const [loading, setLoading] = useState<PlanKey | null>(null);
+  const [loading, setLoading] = useState<StripePlanKey | null>(null);
 
-  const handleSubscribe = async (planKey: PlanKey) => {
+  const handleSubscribe = async (planKey: StripePlanKey) => {
     if (!isSignedIn) return;
     setLoading(planKey);
     try {
@@ -60,7 +60,7 @@ export default function PricingPage() {
         {/* Paid plans */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {PLAN_KEYS.map((key) => {
-            const plan = PLANS[key];
+            const plan = STRIPE_PLANS[key];
             const isHighlighted = key === HIGHLIGHT;
             const isLoadingThis = loading === key;
 
@@ -136,7 +136,7 @@ export default function PricingPage() {
 
         {/* Footer note */}
         <p className="text-center text-white/30 text-xs mt-10">
-          Cancel anytime · Billed monthly · Secure checkout via Stripe
+          Cancel anytime · Billed monthly · International payments via Stripe
         </p>
       </div>
     </div>

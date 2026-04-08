@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@raivstream/database';
-import { stripe, PLANS, type PlanKey } from '@/lib/stripe';
+import { stripe, STRIPE_PLANS, type StripePlanKey } from '@/lib/stripe';
 import { verifyAccessToken, extractBearerToken } from '@raivstream/api/src/lib/jwt';
 
 export async function POST(req: NextRequest) {
@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { plan } = (await req.json()) as { plan: PlanKey };
-  const selectedPlan = PLANS[plan];
+  const { plan } = (await req.json()) as { plan: StripePlanKey };
+  const selectedPlan = STRIPE_PLANS[plan];
   if (!selectedPlan) {
     return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
   }
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const existingSub = await prisma.subscription.findFirst({
-    where: { userId: user.id },
+    where: { userId: user.id, provider: 'stripe' },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -42,13 +42,8 @@ export async function POST(req: NextRequest) {
     line_items: [{ price: selectedPlan.priceId, quantity: 1 }],
     success_url: `${appUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/pricing`,
-    metadata: {
-      userId: user.id,
-      plan: selectedPlan.tier,
-    },
-    subscription_data: {
-      metadata: { userId: user.id, plan: selectedPlan.tier },
-    },
+    metadata: { userId: user.id, plan: selectedPlan.tier },
+    subscription_data: { metadata: { userId: user.id, plan: selectedPlan.tier } },
     allow_promotion_codes: true,
   });
 

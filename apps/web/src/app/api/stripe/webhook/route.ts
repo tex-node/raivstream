@@ -151,11 +151,10 @@ async function handleEvent(event: Stripe.Event): Promise<void> {
   }
 }
 
-function deriveTier(priceId?: string): 'FREE' | 'VIEWER_PREMIUM' | 'CREATOR_PREMIUM' | 'ULTIMATE' {
+function deriveTier(priceId?: string): 'FREE' | 'VIEWER' | 'CREATOR' {
   if (!priceId) return 'FREE';
-  if (priceId === process.env.STRIPE_VIEWER_PREMIUM_PRICE_ID)  return 'VIEWER_PREMIUM';
-  if (priceId === process.env.STRIPE_CREATOR_PREMIUM_PRICE_ID) return 'CREATOR_PREMIUM';
-  if (priceId === process.env.STRIPE_ULTIMATE_PRICE_ID)        return 'ULTIMATE';
+  if (priceId === process.env.STRIPE_VIEWER_PRICE_ID)  return 'VIEWER';
+  if (priceId === process.env.STRIPE_CREATOR_PRICE_ID) return 'CREATOR';
   return 'FREE';
 }
 
