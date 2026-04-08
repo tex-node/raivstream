@@ -28,39 +28,32 @@ export interface GrokImagineResult {
 
 const XAI_BASE_URL = 'https://api.x.ai/v1';
 
-/** Map our aspect ratio string to the nearest xAI-supported size */
-function aspectRatioToSize(ar?: string): string {
-  switch (ar) {
-    case '9:16': return '1024x1820';
-    case '16:9': return '1820x1024';
-    case '4:3':  return '1365x1024';
-    case '3:4':  return '1024x1365';
-    default:     return '1024x1024'; // square fallback
-  }
-}
-
 /**
  * Generate an image using Grok Imagine.
  * Returns the URL(s) of the generated image(s).
+ *
+ * grok-2-image only accepts: model, prompt, n
+ * It does NOT support: size, response_format, or aspect_ratio parameters.
  */
 export async function generateImage(input: GrokImagineInput): Promise<GrokImagineResult[]> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) throw new Error('XAI_API_KEY is not set in environment variables');
 
+  // Build prompt — weave negative prompt in naturally since there's no separate field
+  const prompt = input.negativePrompt
+    ? `${input.prompt}. Avoid: ${input.negativePrompt}`
+    : input.prompt;
+
   const res = await fetch(`${XAI_BASE_URL}/images/generations`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization:  `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'grok-2-image',
-      prompt: input.negativePrompt
-        ? `${input.prompt} (avoid: ${input.negativePrompt})`
-        : input.prompt,
+      model:  'grok-2-image',
+      prompt,
       n: input.n ?? 1,
-      size: aspectRatioToSize(input.aspectRatio),
-      response_format: 'url',
     }),
   });
 
