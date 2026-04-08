@@ -2,14 +2,26 @@ import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { submitGenerationJob, pollJobStatus, MODEL_META, type SupportedModel } from '../lib/generators';
+import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
 
 const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD'] as const;
 
 export const generationRouter = router({
 
-  /** List all models with their metadata (public — used by the generate page) */
-  listModels: publicProcedure.query(() => {
-    return Object.entries(MODEL_META).map(([id, meta]) => ({ id, ...meta }));
+  /** List all models with their metadata + credit cost (public — used by the generate page) */
+  listModels: publicProcedure.query(async ({ ctx }) => {
+    // Pull active credit rates so the UI can display cost-per-generation
+    const rates = await ctx.prisma.featureCreditRate.findMany({
+      where:  { isActive: true },
+      select: { featureKey: true, creditsPerUnit: true },
+    });
+    const rateMap = Object.fromEntries(rates.map((r) => [r.featureKey, r.creditsPerUnit]));
+
+    return Object.entries(MODEL_META).map(([id, meta]) => ({
+      id,
+      ...meta,
+      creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
+    }));
   }),
 
   /** Submit a new AI generation job */
@@ -33,7 +45,22 @@ export const generationRouter = router({
         });
       }
 
-      // Create a QUEUED job record first so the UI can show progress immediately
+      // ── Credit gate ──────────────────────────────────────────────────────────
+      // Deduct credits BEFORE creating the job so the user sees the balance
+      // updated immediately and we never run a job for a user who can't pay.
+      const featureKey  = MODEL_FEATURE_KEY[input.model as SupportedModel];
+      // We use a placeholder referenceId here — we'll update the job record after creation
+      const creditJobId = `pending-${ctx.user.id}-${Date.now()}`;
+      const creditsUsed = await deductCredits(
+        ctx.prisma,
+        ctx.user.id,
+        featureKey,
+        creditJobId,
+        `${meta.label} generation`,
+      );
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // Create a QUEUED job record so the UI can show progress immediately
       const job = await ctx.prisma.generationJob.create({
         data: {
           userId:         ctx.user.id,
@@ -80,6 +107,20 @@ export const generationRouter = router({
             errorMessage: err instanceof Error ? err.message : 'Generation failed',
           },
         });
+
+        // Refund credits — the provider rejected the submission before any GPU work ran
+        await refundCredits(
+          ctx.prisma,
+          ctx.user.id,
+          creditsUsed,
+          featureKey,
+          job.id,
+          `Refund: ${meta.label} submission failed`,
+        ).catch(() => {
+          // Log but don't swallow the original error
+          console.error(`[credits] Failed to refund ${creditsUsed} credits to user ${ctx.user.id} for job ${job.id}`);
+        });
+
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: err instanceof Error ? err.message : 'Generation failed',

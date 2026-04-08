@@ -14,6 +14,7 @@ type Model = {
   icon: string;
   maxDuration: number;
   supportsImageToVideo: boolean;
+  creditCost: number | null;
 };
 
 type AspectRatio = '9:16' | '16:9' | '1:1';
@@ -55,9 +56,15 @@ export default function GeneratePage() {
   const [pubTags, setPubTags] = useState('');
 
   const { data: models } = trpc.generation.listModels.useQuery();
+  const { data: balanceData, refetch: refetchBalance } = trpc.user.creditBalance.useQuery(
+    undefined, { enabled: isSignedIn }
+  );
+  const balance = balanceData?.balance ?? 0;
+
   const createJob = trpc.generation.create.useMutation({
     onSuccess: (job) => {
       setActiveJobId(job.id);
+      refetchBalance();
       if (job.status === 'COMPLETED') {
         setPollEnabled(false);
       } else {
@@ -125,6 +132,17 @@ export default function GeneratePage() {
             AI Video Studio
           </h1>
           <p className="text-white/50 text-sm">Generate short-form videos with state-of-the-art AI models</p>
+          {isSignedIn && (
+            <div className="inline-flex items-center gap-2 mt-4 bg-white/5 border border-white/10 rounded-full px-4 py-1.5">
+              <svg className="w-3.5 h-3.5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-white font-semibold text-sm">{balance.toLocaleString()}</span>
+              <span className="text-white/40 text-xs">credits</span>
+              <a href="/credits" className="text-pink-400 hover:text-pink-300 text-xs font-medium ml-1 transition-colors">+ Buy</a>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -152,9 +170,16 @@ export default function GeneratePage() {
                     >
                       <span className="text-2xl mb-2 block">{model.icon}</span>
                       <p className="font-semibold text-sm text-white">{model.label}</p>
-                      <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 ${BADGE_STYLES[model.badge as Model['badge']]}`}>
-                        {BADGE_LABELS[model.badge as Model['badge']]}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE_STYLES[model.badge as Model['badge']]}`}>
+                          {BADGE_LABELS[model.badge as Model['badge']]}
+                        </span>
+                        {model.creditCost != null && (
+                          <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/20">
+                            {model.creditCost} cr
+                          </span>
+                        )}
+                      </div>
                       <p className="text-white/40 text-xs mt-2 leading-snug line-clamp-2">{model.description}</p>
                     </button>
                   );
@@ -253,14 +278,31 @@ export default function GeneratePage() {
                     Generating…
                   </>
                 ) : (
-                  <>✨ Generate</>
+                  <>
+                    ✨ Generate
+                    {currentModel?.creditCost != null && (
+                      <span className="opacity-70 font-normal text-xs">({currentModel.creditCost} credits)</span>
+                    )}
+                  </>
                 )}
               </button>
 
               {createJob.error && (
-                <p className="text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-2 border border-red-500/20">
-                  {createJob.error.message}
-                </p>
+                createJob.error.message.includes('Insufficient credits') ? (
+                  <div className="bg-amber-500/10 rounded-xl px-4 py-3 border border-amber-500/20 flex items-center justify-between gap-3">
+                    <p className="text-amber-300 text-xs">{createJob.error.message}</p>
+                    <a
+                      href="/credits"
+                      className="flex-shrink-0 text-xs font-semibold bg-pink-500 hover:bg-pink-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      Buy Credits
+                    </a>
+                  </div>
+                ) : (
+                  <p className="text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-2 border border-red-500/20">
+                    {createJob.error.message}
+                  </p>
+                )
               )}
             </div>
           </div>
