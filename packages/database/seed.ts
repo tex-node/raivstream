@@ -91,6 +91,77 @@ async function main() {
     });
   }
 
+  // Seed Feature Credit Rates
+  // featureKey format: "category:model_or_feature"
+  // 1,000 credits = ₦1,000 — rates reflect relative model cost
+  console.log('Creating feature credit rates...');
+  const creditRates = [
+    // ── AI video generation models ──────────────────────────────────────────
+    {
+      featureKey:     'generate:nano_banana',
+      creditsPerUnit: 50,
+      unitLabel:      'request',
+      description:    'Nano Banana — fast, lightweight video generation (₦50/gen)',
+    },
+    {
+      featureKey:     'generate:grok_imagine',
+      creditsPerUnit: 100,
+      unitLabel:      'request',
+      description:    'Grok Imagine — image-to-video generation (₦100/gen)',
+    },
+    {
+      featureKey:     'generate:ltx2',
+      creditsPerUnit: 150,
+      unitLabel:      'request',
+      description:    'LTX-2 — mid-quality text-to-video (₦150/gen)',
+    },
+    {
+      featureKey:     'generate:wan_25',
+      creditsPerUnit: 200,
+      unitLabel:      'request',
+      description:    'Wan 2.5 — high-quality open-source video model (₦200/gen)',
+    },
+    {
+      featureKey:     'generate:higgsfield',
+      creditsPerUnit: 400,
+      unitLabel:      'request',
+      description:    'Higgsfield — cinematic AI video generation (₦400/gen)',
+    },
+    {
+      featureKey:     'generate:kling',
+      creditsPerUnit: 500,
+      unitLabel:      'request',
+      description:    'Kling — premium quality, longest duration (₦500/gen)',
+    },
+    // ── Other AI features ───────────────────────────────────────────────────
+    {
+      featureKey:     'thumbnail:ai',
+      creditsPerUnit: 20,
+      unitLabel:      'image',
+      description:    'AI-generated video thumbnail (₦20/image)',
+    },
+    {
+      featureKey:     'video:transcribe',
+      creditsPerUnit: 30,
+      unitLabel:      'request',
+      description:    'AI speech-to-text transcription (₦30/video)',
+    },
+    {
+      featureKey:     'video:enhance',
+      creditsPerUnit: 100,
+      unitLabel:      'request',
+      description:    'AI video upscaling / enhancement (₦100/video)',
+    },
+  ];
+
+  for (const rate of creditRates) {
+    await prisma.featureCreditRate.upsert({
+      where:  { featureKey: rate.featureKey },
+      update: rate,
+      create: rate,
+    });
+  }
+
   console.log('✅ Database seeded successfully!');
 }
 
