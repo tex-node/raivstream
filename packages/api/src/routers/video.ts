@@ -14,8 +14,8 @@ function getR2Client() {
     },
     // Disable automatic checksum headers — browsers can't compute them
     // and the mismatch causes the presigned PUT to fail
-    requestChecksumCalculation: 'when_required',
-    responseChecksumValidation: 'when_required',
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   });
 }
 
