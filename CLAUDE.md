@@ -245,6 +245,11 @@ apps/web/src/
 - Veo 3 only supports landscape aspect ratios (`16:9`, `16:10`) — `9:16` causes API error
 - Admin pages use `trpc.admin.*` not `api.admin.*` — web app exports `trpc` not `api`
 - `useAuth()` returns `isLoaded` not `loading`
+- R2 uploads (video upload page): requires **R2 S3 API token** (not a Cloudflare API token). Cloudflare API tokens (`cfat_` prefix) work for server-side S3 SDK calls but NOT for presigned URLs. Create the token via R2 → Manage R2 API Tokens → Create API Token (Object Read & Write, scoped to bucket). The resulting Access Key ID is a 32-char hex string with no prefix.
+- R2 CORS must be configured on the bucket (Cloudflare → R2 → bucket → Settings → CORS Policy) with `AllowedMethods: [GET, PUT, HEAD]` and `AllowedHeaders: [*]` — without this, browser XHR PUT to presigned URLs is blocked
+- R2 presigned URLs: do NOT include `ContentLength` in `PutObjectCommand` — it causes browser signature mismatch. Set `requestChecksumCalculation: 'WHEN_REQUIRED'` and `responseChecksumValidation: 'WHEN_REQUIRED'` on the S3Client to prevent SDK injecting CRC32 checksum headers that browsers can't replicate
+- CSP `connect-src` in `middleware.ts` must include `https://*.r2.cloudflarestorage.com` and `https://generativelanguage.googleapis.com` — missing entries silently block XHR/fetch before they even leave the browser
+- Upload button is `hidden sm:flex` on desktop + in avatar dropdown for mobile — always accessible regardless of screen size
 
 ## Dev Commands
 ```bash
