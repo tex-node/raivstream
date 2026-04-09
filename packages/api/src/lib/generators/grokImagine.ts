@@ -51,7 +51,7 @@ export async function generateImage(input: GrokImagineInput): Promise<GrokImagin
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model:  'grok-2-image',
+      model:  'grok-2-image-1212',
       prompt,
       n: input.n ?? 1,
     }),
