@@ -14,6 +14,9 @@ function getClient() {
       accessKeyId:     process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    // Prevent SDK injecting CRC32 checksum headers that R2 rejects on direct PUTs
+    requestChecksumCalculation:  'WHEN_REQUIRED',
+    responseChecksumValidation:  'WHEN_REQUIRED',
   });
 }
 
