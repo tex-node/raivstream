@@ -16,7 +16,7 @@
 import { mirrorUrlToR2 } from '../r2';
 
 const BASE_URL  = 'https://generativelanguage.googleapis.com/v1beta';
-const VEO_MODEL = process.env.VEO_MODEL ?? 'veo-3.1-generate-preview';
+const VEO_MODEL = process.env.VEO_MODEL ?? 'veo-3.0-generate-preview';
 
 function apiKey(): string {
   const key = process.env.GEMINI_API_KEY;
@@ -50,8 +50,8 @@ export async function submitVeo3(input: Veo3Input): Promise<string> {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: input.prompt,
-        config: {
+        prompt: { text: input.prompt },
+        videoConfig: {
           aspectRatio:    input.aspectRatio ?? '9:16',
           numberOfVideos: 1,
           ...(input.duration ? { durationSeconds: input.duration } : {}),
