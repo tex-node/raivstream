@@ -41,6 +41,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
+        moderationStatus: { not: 'REJECTED' },
         ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -70,6 +71,7 @@ export const feedRouter = router({
         creatorId: { in: followingIds },
         status: 'READY',
         isPublic: true,
+        moderationStatus: { not: 'REJECTED' },
         ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
       },
       orderBy: { publishedAt: 'desc' },
@@ -92,6 +94,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
+        moderationStatus: { not: 'REJECTED' },
         ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -115,6 +118,7 @@ export const feedRouter = router({
         status: 'READY',
         isPublic: true,
         starRatingCount: { gte: 3 },
+        moderationStatus: { not: 'REJECTED' },
         ...(input.cursor ? { avgStarRating: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ avgStarRating: 'desc' }, { starRatingCount: 'desc' }],
@@ -131,7 +135,7 @@ export const feedRouter = router({
     // If not enough rated videos, fall back to trending
     if (videos.length === 0) {
       const fallback = await ctx.prisma.video.findMany({
-        where: { status: 'READY', isPublic: true },
+        where: { status: 'READY', isPublic: true, moderationStatus: { not: 'REJECTED' } },
         orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
         take: input.limit,
         select: videoSelect,
@@ -157,6 +161,7 @@ export const feedRouter = router({
           creatorId: input.creatorId,
           status: 'READY',
           isPublic: true,
+          moderationStatus: { not: 'REJECTED' },
           ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
         },
         orderBy: { publishedAt: 'desc' },

@@ -41,6 +41,13 @@ enum VideoStatus {
   BLOCKED
 }
 
+enum ModerationStatus {
+  PENDING    // newly uploaded, awaiting review
+  APPROVED   // cleared for the feed
+  REJECTED   // removed (not shown in any feed)
+  FLAGGED    // user-reported, needs moderator attention
+}
+
 enum GenerationModel {
   NANO_BANANA
   GROK_IMAGINE
@@ -174,13 +181,19 @@ model Video {
   // Visibility
   isPublic          Boolean       @default(true)
   isPremiumOnly     Boolean       @default(false)
-  
+
+  // Content rating / moderation
+  isKidsSafe        Boolean          @default(false)
+  contentRating     String?          // "G" | "PG" | "PG-13" | "R"
+  moderationStatus  ModerationStatus @default(PENDING)
+
   // Relations
   interactions      VideoInteraction[]
   watchHistory      WatchHistory[]
   badges            VideoBadge[]
   featuredIn        FeaturedContent[]
   generationJob     GenerationJob?
+  moderationLogs    ModerationLog[]
   
   publishedAt       DateTime      @default(now())
   createdAt         DateTime      @default(now())
@@ -194,7 +207,25 @@ model Video {
   @@index([avgStarRating])
   @@index([tags])
   @@index([creatorId, status])
+  @@index([moderationStatus])
   @@map("videos")
+}
+
+model ModerationLog {
+  id           String    @id @default(cuid())
+  videoId      String
+  video        Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  moderatorId  String?   // null = automated action
+  action       String    // "approve" | "reject" | "flag" | "auto_approve" | "auto_reject"
+  reason       String?
+  automated    Boolean   @default(false)
+  confidence   Float?    // AI confidence score (0–1) for automated decisions
+  createdAt    DateTime  @default(now())
+
+  @@index([videoId])
+  @@index([moderatorId])
+  @@index([createdAt])
+  @@map("moderation_logs")
 }
 
 model Category {

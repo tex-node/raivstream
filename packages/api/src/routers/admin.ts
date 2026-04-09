@@ -375,6 +375,120 @@ export const adminRouter = router({
       };
     }),
 
+  // ─── Content Moderation ────────────────────────────────────────────────────
+
+  /**
+   * List videos pending moderation review.
+   * Moderators and admins can access this.
+   */
+  moderationQueue: moderatorProcedure
+    .input(z.object({
+      status:   z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED']).default('PENDING'),
+      page:     z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(50).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const skip = (input.page - 1) * input.pageSize;
+
+      const [videos, total] = await Promise.all([
+        ctx.prisma.video.findMany({
+          where: { moderationStatus: input.status },
+          skip,
+          take: input.pageSize,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            thumbnailUrl: true,
+            mp4Url: true,
+            tags: true,
+            status: true,
+            moderationStatus: true,
+            isKidsSafe: true,
+            contentRating: true,
+            createdAt: true,
+            creator: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true, email: true },
+            },
+            moderationLogs: {
+              orderBy: { createdAt: 'desc' },
+              take: 3,
+            },
+          },
+        }),
+        ctx.prisma.video.count({ where: { moderationStatus: input.status } }),
+      ]);
+
+      return {
+        videos,
+        total,
+        page: input.page,
+        pageSize: input.pageSize,
+        totalPages: Math.ceil(total / input.pageSize),
+      };
+    }),
+
+  /**
+   * Approve / reject / flag a video.
+   */
+  moderateVideo: moderatorProcedure
+    .input(z.object({
+      videoId: z.string(),
+      action:  z.enum(['approve', 'reject', 'flag']),
+      reason:  z.string().max(500).optional(),
+      isKidsSafe:    z.boolean().optional(),
+      contentRating: z.enum(['G', 'PG', 'PG-13', 'R']).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findUnique({ where: { id: input.videoId } });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found' });
+
+      const moderationStatus =
+        input.action === 'approve' ? 'APPROVED' :
+        input.action === 'reject'  ? 'REJECTED'  :
+        'FLAGGED';
+
+      // For rejected videos, also block them from the feed
+      const statusUpdate = input.action === 'reject' ? { status: 'BLOCKED' as const } : {};
+
+      await ctx.prisma.$transaction([
+        ctx.prisma.video.update({
+          where: { id: input.videoId },
+          data: {
+            moderationStatus,
+            ...(input.isKidsSafe    !== undefined ? { isKidsSafe: input.isKidsSafe }       : {}),
+            ...(input.contentRating !== undefined ? { contentRating: input.contentRating } : {}),
+            ...statusUpdate,
+          },
+        }),
+        ctx.prisma.moderationLog.create({
+          data: {
+            videoId:     input.videoId,
+            moderatorId: ctx.user.id,
+            action:      input.action,
+            reason:      input.reason,
+            automated:   false,
+          },
+        }),
+      ]);
+
+      return { success: true, moderationStatus };
+    }),
+
+  /**
+   * Get moderation stats for the overview.
+   */
+  getModerationStats: moderatorProcedure.query(async ({ ctx }) => {
+    const [pending, approved, rejected, flagged] = await Promise.all([
+      ctx.prisma.video.count({ where: { moderationStatus: 'PENDING' } }),
+      ctx.prisma.video.count({ where: { moderationStatus: 'APPROVED' } }),
+      ctx.prisma.video.count({ where: { moderationStatus: 'REJECTED' } }),
+      ctx.prisma.video.count({ where: { moderationStatus: 'FLAGGED' } }),
+    ]);
+    return { pending, approved, rejected, flagged };
+  }),
+
   // ─── Revenue / Transaction History ─────────────────────────────────────────
 
   /**

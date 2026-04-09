@@ -6,11 +6,12 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 
 const NAV = [
-  { href: '/admin',          label: 'Overview',  icon: '◈' },
-  { href: '/admin/users',    label: 'Users',     icon: '👥' },
-  { href: '/admin/credits',  label: 'Credits',   icon: '⚡' },
-  { href: '/admin/jobs',     label: 'AI Jobs',   icon: '🎬' },
-  { href: '/admin/revenue',  label: 'Revenue',   icon: '💳' },
+  { href: '/admin',             label: 'Overview',    icon: '◈' },
+  { href: '/admin/users',       label: 'Users',       icon: '👥' },
+  { href: '/admin/moderation',  label: 'Moderation',  icon: '🛡️' },
+  { href: '/admin/credits',     label: 'Credits',     icon: '⚡' },
+  { href: '/admin/jobs',        label: 'AI Jobs',     icon: '🎬' },
+  { href: '/admin/revenue',     label: 'Revenue',     icon: '💳' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
