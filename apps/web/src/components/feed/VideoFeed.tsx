@@ -14,25 +14,26 @@ interface VideoFeedProps {
 
 export function VideoFeed({ feedType }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isScrolling = useRef(false);
+  const containerRef   = useRef<HTMLDivElement>(null);
+  const isScrolling    = useRef(false);
+  const touchStartY    = useRef<number | null>(null);
   const { isSignedIn, user } = useUser();
 
-  // Episode gate — only query for signed-in FREE users
+  // Episode gate — only for signed-in FREE users
   const gateQuery = trpc.user.episodeGate.useQuery(undefined, {
     enabled: isSignedIn && user?.premiumTier === 'FREE',
   });
-  const gate = gateQuery.data;
+  const gate        = gateQuery.data;
   const showPaywall = gate?.isGated ?? false;
 
-  // Fetch the right feed based on tab
+  // Feed queries
   const forYouQuery = trpc.feed.forYou.useInfiniteQuery(
     { limit: 10 },
     { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'forYou' }
   );
   const followingQuery = trpc.feed.following.useInfiniteQuery(
     { limit: 10 },
-    { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'following' }
+    { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'following' && isSignedIn }
   );
   const trendingQuery = trpc.feed.trending.useInfiniteQuery(
     { limit: 10 },
@@ -44,120 +45,165 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   );
 
   const activeQuery =
-    feedType === 'forYou'
-      ? forYouQuery
-      : feedType === 'following'
-      ? followingQuery
-      : feedType === 'trending'
-      ? trendingQuery
-      : viewersPickQuery;
+    feedType === 'forYou'      ? forYouQuery      :
+    feedType === 'following'   ? followingQuery   :
+    feedType === 'trending'    ? trendingQuery    :
+    viewersPickQuery;
 
-  const videos = activeQuery.data?.pages.flatMap((p) => p.videos) ?? [];
+  const videos    = activeQuery.data?.pages.flatMap((p) => p.videos) ?? [];
   const isLoading = activeQuery.isLoading;
 
-  // Reset active index when feed type changes
+  // Reset when feed type changes
   useEffect(() => {
     setActiveIndex(0);
     containerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [feedType]);
 
-  // Snap scrolling — detect which video is in view
-  const handleScroll = useCallback(() => {
+  // Navigate to a specific index with smooth scroll
+  const goTo = useCallback((index: number) => {
     const container = containerRef.current;
     if (!container || isScrolling.current) return;
+    const clamped = Math.max(0, Math.min(videos.length - 1, index));
+    if (clamped === activeIndex) return;
 
-    const height = container.clientHeight;
-    const scrollTop = container.scrollTop;
-    const newIndex = Math.round(scrollTop / height);
+    isScrolling.current = true;
+    setActiveIndex(clamped);
+    container.scrollTo({ top: clamped * container.clientHeight, behavior: 'smooth' });
+    setTimeout(() => { isScrolling.current = false; }, 650);
 
-    if (newIndex !== activeIndex) {
-      setActiveIndex(newIndex);
-    }
-
-    // Load more when near the end
-    if (newIndex >= videos.length - 3 && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
+    // Prefetch more when near the end
+    if (clamped >= videos.length - 3 && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
       activeQuery.fetchNextPage();
     }
   }, [activeIndex, videos.length, activeQuery]);
 
-  // Wheel-based snapping
-  const handleWheel = useCallback(
-    (e: WheelEvent) => {
-      e.preventDefault();
-      if (isScrolling.current) return;
+  // Scroll position → active index sync
+  const handleScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || isScrolling.current) return;
+    const newIndex = Math.round(container.scrollTop / container.clientHeight);
+    if (newIndex !== activeIndex) setActiveIndex(newIndex);
+  }, [activeIndex]);
 
-      const container = containerRef.current;
-      if (!container) return;
+  // Mouse wheel — one video per tick
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    if (isScrolling.current) return;
+    goTo(activeIndex + (e.deltaY > 0 ? 1 : -1));
+  }, [activeIndex, goTo]);
 
-      const direction = e.deltaY > 0 ? 1 : -1;
-      const nextIndex = Math.max(0, Math.min(videos.length - 1, activeIndex + direction));
+  // Touch swipe — up = next, down = prev
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
 
-      if (nextIndex !== activeIndex) {
-        isScrolling.current = true;
-        setActiveIndex(nextIndex);
-        container.scrollTo({
-          top: nextIndex * container.clientHeight,
-          behavior: 'smooth',
-        });
-        setTimeout(() => { isScrolling.current = false; }, 600);
-      }
-    },
-    [activeIndex, videos.length]
-  );
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const delta = touchStartY.current - e.changedTouches[0].clientY;
+    touchStartY.current = null;
+    if (Math.abs(delta) < 50) return; // ignore tiny swipes
+    goTo(activeIndex + (delta > 0 ? 1 : -1));
+  }, [activeIndex, goTo]);
+
+  // Keyboard — arrow keys
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') goTo(activeIndex + 1);
+    if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  goTo(activeIndex - 1);
+  }, [activeIndex, goTo]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [handleWheel]);
+    container.addEventListener('wheel',      handleWheel,      { passive: false });
+    container.addEventListener('touchstart', handleTouchStart, { passive: true  });
+    container.addEventListener('touchend',   handleTouchEnd,   { passive: true  });
+    window.addEventListener(   'keydown',    handleKeyDown);
+    return () => {
+      container.removeEventListener('wheel',      handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchend',   handleTouchEnd);
+      window.removeEventListener(   'keydown',    handleKeyDown);
+    };
+  }, [handleWheel, handleTouchStart, handleTouchEnd, handleKeyDown]);
+
+  // ── Empty / loading states ────────────────────────────────────────────────
 
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-black">
-        <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 border-white/20 border-t-violet-500 rounded-full animate-spin" />
       </div>
     );
   }
 
   if (videos.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-black text-white gap-3">
-        <div className="text-6xl">📭</div>
-        <p className="text-white/60 text-center text-sm px-8">
+      <div className="flex-1 flex flex-col items-center justify-center bg-black text-white gap-4 px-6">
+        <div className="text-6xl">🎬</div>
+        <p className="text-white/60 text-center text-sm max-w-xs">
           {feedType === 'following'
             ? 'Follow some creators to see their videos here'
-            : 'No videos yet — check back soon!'}
+            : 'No videos yet — be the first to upload or generate one!'}
         </p>
+        {feedType !== 'following' && (
+          <a
+            href="/generate"
+            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white mt-2"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+          >
+            ✨ Generate with AI
+          </a>
+        )}
       </div>
     );
   }
+
+  // ── Feed ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex-1 relative">
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth"
-        style={{ scrollbarWidth: 'none' }}
+        className="h-full overflow-y-scroll snap-y snap-mandatory"
+        style={{ scrollbarWidth: 'none', scrollSnapType: 'y mandatory' }}
       >
         {videos.map((video, i) => (
           <div
             key={`${video.id}-${i}`}
-            className="snap-start w-full h-screen flex-shrink-0"
+            className="snap-start w-full flex-shrink-0"
+            style={{ height: '100dvh', scrollSnapAlign: 'start' }}
           >
-            <VideoCard video={video} isActive={i === activeIndex && !showPaywall} />
+            <VideoCard
+              video={video}
+              isActive={i === activeIndex && !showPaywall}
+            />
           </div>
         ))}
 
         {activeQuery.isFetchingNextPage && (
           <div className="h-20 flex items-center justify-center bg-black">
-            <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-white/20 border-t-violet-500 rounded-full animate-spin" />
           </div>
         )}
       </div>
 
-      {/* Episode gate paywall */}
+      {/* Progress dots — desktop */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-1.5 z-20">
+        {videos.slice(0, 8).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            className="w-1.5 rounded-full transition-all duration-200"
+            style={{
+              height:     i === activeIndex ? '20px' : '6px',
+              background: i === activeIndex ? '#a78bfa' : 'rgba(255,255,255,0.25)',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Paywall overlay */}
       {showPaywall && gate && (
         <PaywallModal watched={gate.watched} limit={gate.limit} />
       )}

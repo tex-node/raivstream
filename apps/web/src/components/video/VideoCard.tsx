@@ -50,7 +50,7 @@ export function VideoCard({ video, isActive }: VideoCardProps) {
     <div className="relative w-full h-full flex">
       {/* Video fills the screen */}
       <div className="flex-1 relative">
-        {/* Prefer HLS (transcoded) → MP4 (MVP) → processing placeholder */}
+        {/* HLS → MP4 → image-only (AI generated) → processing placeholder */}
         {(video.hlsMasterUrl ?? video.mp4Url) ? (
           <VideoPlayer
             videoUrl={(video.hlsMasterUrl ?? video.mp4Url)!}
@@ -58,10 +58,18 @@ export function VideoCard({ video, isActive }: VideoCardProps) {
             isActive={isActive}
             onProgress={handleProgress}
           />
+        ) : video.thumbnailUrl ? (
+          /* Image-only content (AI generated images published to feed) */
+          <div className="w-full h-full bg-black flex items-center justify-center">
+            <img
+              src={video.thumbnailUrl}
+              alt={video.title}
+              className="w-full h-full object-contain"
+            />
+          </div>
         ) : (
           <div className="w-full h-full bg-gray-900 flex items-center justify-center">
-            <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover opacity-60" />
-            <span className="absolute text-white/50 text-sm">Processing…</span>
+            <span className="text-white/50 text-sm">Processing…</span>
           </div>
         )}
 

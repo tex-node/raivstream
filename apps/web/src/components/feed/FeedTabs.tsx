@@ -1,20 +1,23 @@
 'use client';
 
+type Tab = 'forYou' | 'following' | 'trending' | 'viewersPick';
+
 interface FeedTabsProps {
-  activeTab: 'forYou' | 'following' | 'trending' | 'viewersPick';
-  onChange: (tab: 'forYou' | 'following' | 'trending' | 'viewersPick') => void;
+  activeTab: Tab;
+  onChange:  (tab: Tab) => void;
+  signedIn?: boolean;
 }
 
-const tabs = [
-  { id: 'forYou', label: 'For You' },
-  { id: 'following', label: 'Following' },
-  { id: 'trending', label: 'Trending' },
-  { id: 'viewersPick', label: "Viewer's Pick" },
-] as const;
+export function FeedTabs({ activeTab, onChange, signedIn = false }: FeedTabsProps) {
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'forYou',      label: 'For You'       },
+    { id: 'trending',    label: 'Trending'       },
+    { id: 'viewersPick', label: "Viewer's Pick"  },
+    ...(signedIn ? [{ id: 'following' as Tab, label: 'Following' }] : []),
+  ];
 
-export function FeedTabs({ activeTab, onChange }: FeedTabsProps) {
   return (
-    <div className="flex gap-6 justify-center">
+    <div className="flex gap-5 justify-center">
       {tabs.map((tab) => (
         <button
           key={tab.id}
