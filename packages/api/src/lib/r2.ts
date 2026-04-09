@@ -18,6 +18,39 @@ function getClient() {
 }
 
 /**
+ * Upload a raw buffer directly to R2 (used when the provider returns inline data).
+ * Returns the permanent public CDN URL, or null if R2 is not configured.
+ */
+export async function uploadBufferToR2(
+  buffer:      Buffer,
+  key:         string,
+  contentType: string,
+): Promise<string | null> {
+  const bucket    = process.env.R2_BUCKET_NAME;
+  const publicUrl = process.env.R2_PUBLIC_URL;
+
+  if (!bucket || !publicUrl) {
+    console.warn('[r2] R2 env vars not set — cannot store inline image');
+    return null;
+  }
+
+  try {
+    await getClient().send(
+      new PutObjectCommand({
+        Bucket:      bucket,
+        Key:         key,
+        Body:        buffer,
+        ContentType: contentType,
+      }),
+    );
+    return `${publicUrl}/${key}`;
+  } catch (err) {
+    console.warn('[r2] Buffer upload failed:', (err as Error).message);
+    return null;
+  }
+}
+
+/**
  * Download a URL and upload its contents to R2.
  * Returns the permanent public CDN URL.
  */

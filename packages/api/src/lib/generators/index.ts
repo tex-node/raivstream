@@ -96,7 +96,7 @@ export async function pollJobStatus(
 
     case 'NANO_BANANA': {
       const s = await getNanoBananaStatus(providerJobId);
-      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error ?? undefined };
     }
 
     case 'GROK_IMAGINE':
@@ -138,13 +138,13 @@ export const MODEL_META: Record<SupportedModel, {
 }> = {
   NANO_BANANA: {
     label:               'Nano Banana',
-    description:         'Fast, lightweight text-to-video. Great for short clips and quick iterations.',
-    badge:               'beta',
+    description:         'Fast AI image generation. Great for thumbnails, seed frames, and creative concepts.',
+    badge:               'live',
     icon:                '🍌',
-    maxDuration:         8,
-    supportsImageToVideo: true,
-    provider:            'Nano Banana',
-    providerUrl:         'https://nanobanana.ai',
+    maxDuration:         0,
+    supportsImageToVideo: false,
+    provider:            'Google Gemini',
+    providerUrl:         'https://ai.google.dev',
   },
   GROK_IMAGINE: {
     label:               'Grok Imagine',
