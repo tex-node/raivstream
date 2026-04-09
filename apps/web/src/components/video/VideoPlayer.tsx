@@ -24,7 +24,7 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // start muted so browser allows autoplay
   const [isLoading, setIsLoading] = useState(true);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 

@@ -76,35 +76,25 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
     }
   }, [activeIndex, videos.length, activeQuery]);
 
-  // ── IntersectionObserver — tracks which slide is visible (works for native touch + programmatic) ──
+  // ── Track active index via scroll position (simple, reliable on all devices) ──
+  const handleScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || isScrolling.current) return;
+    const newIndex = Math.round(container.scrollTop / container.clientHeight);
+    if (newIndex !== activeIndex) {
+      setActiveIndex(newIndex);
+      if (newIndex >= videos.length - 3 && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
+        activeQuery.fetchNextPage();
+      }
+    }
+  }, [activeIndex, videos.length, activeQuery]);
+
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || videos.length === 0) return;
-
-    const slides = Array.from(container.querySelectorAll<HTMLElement>('[data-slide]'));
-    if (slides.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-            const idx = Number((entry.target as HTMLElement).dataset.slide);
-            if (!Number.isNaN(idx)) {
-              setActiveIndex(idx);
-              // Prefetch more when near end
-              if (idx >= videos.length - 3 && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
-                activeQuery.fetchNextPage();
-              }
-            }
-          }
-        }
-      },
-      { root: container, threshold: 0.6 },
-    );
-
-    slides.forEach((s) => observer.observe(s));
-    return () => observer.disconnect();
-  }, [videos.length, activeQuery]);
+    if (!container) return;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   // ── Desktop: mouse wheel — one video per tick ──────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
