@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { submitGenerationJob, pollJobStatus, MODEL_META, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
+import { moderatePrompt } from '../lib/promptModeration';
 
 const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3'] as const;
 
@@ -44,6 +45,27 @@ export const generationRouter = router({
           message: `${meta.label} is coming soon and not yet available for generation.`,
         });
       }
+
+      // ── Prompt moderation ─────────────────────────────────────────────────────
+      // Runs BEFORE credit deduction — rejected prompts cost the user nothing.
+      const moderation = await moderatePrompt(input.prompt);
+      if (!moderation.allowed) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: moderation.reason ?? 'Your prompt violates our content guidelines.',
+        });
+      }
+      // Also check negative prompt if provided
+      if (input.negativePrompt) {
+        const negMod = await moderatePrompt(input.negativePrompt);
+        if (!negMod.allowed) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: negMod.reason ?? 'Your negative prompt violates our content guidelines.',
+          });
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       // ── Credit gate ──────────────────────────────────────────────────────────
       // Deduct credits BEFORE creating the job so the user sees the balance
