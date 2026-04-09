@@ -89,7 +89,8 @@ export const videoRouter = router({
           Bucket: process.env.R2_BUCKET_NAME!,
           Key: rawKey,
           ContentType: input.contentType,
-          ContentLength: input.fileSizeBytes,
+          // ContentLength intentionally omitted — browser XHR sets it automatically
+          // and including it in the signed headers causes signature mismatch on some browsers
         }),
         { expiresIn: 3600 }
       );
