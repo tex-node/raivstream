@@ -96,13 +96,13 @@ export function Navbar() {
             {/* Upload */}
             <Link
               href="/upload"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Upload
+              <span className="hidden sm:inline">Upload</span>
             </Link>
 
             {/* Avatar + dropdown */}
@@ -132,6 +132,7 @@ export function Navbar() {
                 >
                   {[
                     { href: `/${user?.username}`, label: 'Profile' },
+                    { href: '/upload',            label: '📤 Upload' },
                     { href: '/analytics',         label: 'Analytics' },
                     { href: '/generate',          label: '✨ AI Studio' },
                     { href: '/credits',           label: '⚡ Credits' },
