@@ -9,6 +9,7 @@ const PROTECTED_ROUTES = [
   '/settings',
   '/subscription',
   '/generate',
+  '/admin',
 ];
 
 // ─── Security headers ─────────────────────────────────────────────────────────

@@ -58,8 +58,42 @@ const isAuthed = t.middleware(({ ctx, next }) => {
   });
 });
 
+// Middleware for admin-only routes (ADMIN role required)
+const isAdmin = t.middleware(({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not authenticated' });
+  }
+  if (ctx.user.role !== 'ADMIN') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+// Middleware for admin + moderator routes
+const isAdminOrModerator = t.middleware(({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not authenticated' });
+  }
+  if (ctx.user.role !== 'ADMIN' && ctx.user.role !== 'MODERATOR') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Moderator access required' });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(isAuthed);
+export const adminProcedure = t.procedure.use(isAdmin);
+export const moderatorProcedure = t.procedure.use(isAdminOrModerator);
 export const middleware = t.middleware;

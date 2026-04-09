@@ -136,6 +136,9 @@ export function Navbar() {
                     { href: '/generate',          label: '✨ AI Studio' },
                     { href: '/credits',           label: '⚡ Credits' },
                     { href: '/settings',          label: 'Settings' },
+                    ...(user?.role === 'ADMIN' || user?.role === 'MODERATOR'
+                      ? [{ href: '/admin', label: '🛡️ Admin' }]
+                      : []),
                   ].map(({ href, label }) => (
                     <Link
                       key={href}

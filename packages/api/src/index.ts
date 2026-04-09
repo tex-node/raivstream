@@ -1,6 +1,6 @@
 // Re-export tRPC base helpers from dedicated file (avoids circular deps with routers)
 export type { Context } from './trpc';
-export { router, publicProcedure, protectedProcedure, middleware } from './trpc';
+export { router, publicProcedure, protectedProcedure, adminProcedure, moderatorProcedure, middleware } from './trpc';
 
 import { router } from './trpc';
 
@@ -13,6 +13,7 @@ import { userRouter } from './routers/user';
 import { analyticsRouter } from './routers/analytics';
 import { generationRouter } from './routers/generation';
 import { runpodRouter } from './routers/runpod';
+import { adminRouter } from './routers/admin';
 
 // Root app router
 export const appRouter = router({
@@ -24,6 +25,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   generation: generationRouter,
   runpod: runpodRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;
