@@ -25,7 +25,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://api.x.ai https://api.runpod.ai https://api.stripe.com wss:",
+    "connect-src 'self' https://api.x.ai https://api.runpod.ai https://api.stripe.com https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com wss:",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",
