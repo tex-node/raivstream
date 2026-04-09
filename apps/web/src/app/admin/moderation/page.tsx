@@ -31,7 +31,6 @@ export default function ModerationPage() {
 
   const { data, refetch, isLoading } = trpc.admin.moderationQueue.useQuery(
     { status: activeStatus, page, pageSize: 12 },
-    { keepPreviousData: true }
   );
 
   const moderate = trpc.admin.moderateVideo.useMutation({
