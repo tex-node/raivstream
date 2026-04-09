@@ -14,9 +14,8 @@ interface VideoFeedProps {
 
 export function VideoFeed({ feedType }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const containerRef   = useRef<HTMLDivElement>(null);
-  const isScrolling    = useRef(false);
-  const touchStartY    = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isScrolling  = useRef(false);
   const { isSignedIn, user } = useUser();
 
   // Episode gate — only for signed-in FREE users
@@ -59,7 +58,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
     containerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [feedType]);
 
-  // Navigate to a specific index with smooth scroll
+  // Programmatic navigation (desktop wheel / keyboard / dot buttons)
   const goTo = useCallback((index: number) => {
     const container = containerRef.current;
     if (!container || isScrolling.current) return;
@@ -77,35 +76,44 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
     }
   }, [activeIndex, videos.length, activeQuery]);
 
-  // Scroll position → active index sync
-  const handleScroll = useCallback(() => {
+  // ── IntersectionObserver — tracks which slide is visible (works for native touch + programmatic) ──
+  useEffect(() => {
     const container = containerRef.current;
-    if (!container || isScrolling.current) return;
-    const newIndex = Math.round(container.scrollTop / container.clientHeight);
-    if (newIndex !== activeIndex) setActiveIndex(newIndex);
-  }, [activeIndex]);
+    if (!container || videos.length === 0) return;
 
-  // Mouse wheel — one video per tick
+    const slides = Array.from(container.querySelectorAll<HTMLElement>('[data-slide]'));
+    if (slides.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            const idx = Number((entry.target as HTMLElement).dataset.slide);
+            if (!Number.isNaN(idx)) {
+              setActiveIndex(idx);
+              // Prefetch more when near end
+              if (idx >= videos.length - 3 && activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
+                activeQuery.fetchNextPage();
+              }
+            }
+          }
+        }
+      },
+      { root: container, threshold: 0.6 },
+    );
+
+    slides.forEach((s) => observer.observe(s));
+    return () => observer.disconnect();
+  }, [videos.length, activeQuery]);
+
+  // ── Desktop: mouse wheel — one video per tick ──────────────────────────────
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     if (isScrolling.current) return;
     goTo(activeIndex + (e.deltaY > 0 ? 1 : -1));
   }, [activeIndex, goTo]);
 
-  // Touch swipe — up = next, down = prev
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const delta = touchStartY.current - e.changedTouches[0].clientY;
-    touchStartY.current = null;
-    if (Math.abs(delta) < 50) return; // ignore tiny swipes
-    goTo(activeIndex + (delta > 0 ? 1 : -1));
-  }, [activeIndex, goTo]);
-
-  // Keyboard — arrow keys
+  // ── Keyboard — arrow keys ──────────────────────────────────────────────────
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') goTo(activeIndex + 1);
     if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  goTo(activeIndex - 1);
@@ -114,17 +122,14 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    container.addEventListener('wheel',      handleWheel,      { passive: false });
-    container.addEventListener('touchstart', handleTouchStart, { passive: true  });
-    container.addEventListener('touchend',   handleTouchEnd,   { passive: true  });
-    window.addEventListener(   'keydown',    handleKeyDown);
+    // wheel is non-passive so we can preventDefault (stops browser's native scroll during wheel)
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      container.removeEventListener('wheel',      handleWheel);
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchend',   handleTouchEnd);
-      window.removeEventListener(   'keydown',    handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleWheel, handleTouchStart, handleTouchEnd, handleKeyDown]);
+  }, [handleWheel, handleKeyDown]);
 
   // ── Empty / loading states ────────────────────────────────────────────────
 
@@ -164,13 +169,13 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
     <div className="flex-1 relative">
       <div
         ref={containerRef}
-        onScroll={handleScroll}
         className="h-full overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none', scrollSnapType: 'y mandatory' }}
       >
         {videos.map((video, i) => (
           <div
             key={`${video.id}-${i}`}
+            data-slide={i}
             className="snap-start w-full flex-shrink-0"
             style={{ height: '100dvh', scrollSnapAlign: 'start' }}
           >

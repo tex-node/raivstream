@@ -32,6 +32,11 @@ interface VideoCardProps {
   isActive: boolean;
 }
 
+/** Returns true if the URL points to a static image rather than a video */
+function isImageUrl(url: string): boolean {
+  return /\.(jpg|jpeg|png|webp|gif|avif|bmp|svg)(\?|$)/i.test(url);
+}
+
 export function VideoCard({ video, isActive }: VideoCardProps) {
   const { isSignedIn, user } = useUser();
   const trackProgress = trpc.interaction.trackProgress.useMutation();
@@ -46,23 +51,32 @@ export function VideoCard({ video, isActive }: VideoCardProps) {
     });
   };
 
+  // Determine what to render:
+  // HLS > real MP4 > image (thumbnailUrl or image mp4Url) > processing placeholder
+  const hlsUrl   = video.hlsMasterUrl;
+  const mediaUrl = video.mp4Url;
+  const hasVideo = (hlsUrl || mediaUrl) && !isImageUrl(hlsUrl ?? mediaUrl ?? '');
+  const imageUrl = isImageUrl(hlsUrl ?? mediaUrl ?? '')
+    ? (hlsUrl ?? mediaUrl)!
+    : video.thumbnailUrl;
+
   return (
     <div className="relative w-full h-full flex">
       {/* Video fills the screen */}
       <div className="flex-1 relative">
         {/* HLS → MP4 → image-only (AI generated) → processing placeholder */}
-        {(video.hlsMasterUrl ?? video.mp4Url) ? (
+        {hasVideo ? (
           <VideoPlayer
-            videoUrl={(video.hlsMasterUrl ?? video.mp4Url)!}
+            videoUrl={(hlsUrl ?? mediaUrl)!}
             thumbnailUrl={video.thumbnailUrl}
             isActive={isActive}
             onProgress={handleProgress}
           />
-        ) : video.thumbnailUrl ? (
-          /* Image-only content (AI generated images published to feed) */
+        ) : imageUrl ? (
+          /* Image-only content — AI generated images published to feed */
           <div className="w-full h-full bg-black flex items-center justify-center">
             <img
-              src={video.thumbnailUrl}
+              src={imageUrl}
               alt={video.title}
               className="w-full h-full object-contain"
             />
