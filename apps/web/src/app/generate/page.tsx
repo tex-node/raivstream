@@ -332,8 +332,8 @@ export default function GeneratePage() {
                   </div>
                 ) : activeJob?.outputUrl ? (
                   <div className="space-y-3">
-                    {/* Show image for Grok Imagine, video for others */}
-                    {selectedModel === 'GROK_IMAGINE' ? (
+                    {/* Show image for image-only models (maxDuration === 0), video for others */}
+                    {!isVideoModel ? (
                       <img
                         src={activeJob.outputUrl}
                         alt="Generated"
