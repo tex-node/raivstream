@@ -43,15 +43,20 @@ export async function mirrorUrlToR2(
 
   const buffer = Buffer.from(await res.arrayBuffer());
 
-  await getClient().send(
-    new PutObjectCommand({
-      Bucket:      bucket,
-      Key:         key,
-      Body:        buffer,
-      ContentType: contentType,
-      // Generated assets are public — no ACL needed with R2 public bucket
-    }),
-  );
-
-  return `${publicUrl}/${key}`;
+  try {
+    await getClient().send(
+      new PutObjectCommand({
+        Bucket:      bucket,
+        Key:         key,
+        Body:        buffer,
+        ContentType: contentType,
+        // Generated assets are public — no ACL needed with R2 public bucket
+      }),
+    );
+    return `${publicUrl}/${key}`;
+  } catch (err) {
+    // R2 credentials misconfigured — return source URL so generation still completes
+    console.warn('[r2] Upload failed, falling back to source URL:', (err as Error).message);
+    return sourceUrl;
+  }
 }
