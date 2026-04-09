@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { submitGenerationJob, pollJobStatus, MODEL_META, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
 
-const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD'] as const;
+const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3'] as const;
 
 export const generationRouter = router({
 

@@ -10,6 +10,7 @@ const MODEL_LABELS: Record<string, string> = {
   WAN_25:       'Wan 2.5',
   KLING:        'Kling',
   HIGGSFIELD:   'Higgsfield',
+  VEO3:         'Veo 3',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,7 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 type JobStatus = 'QUEUED' | 'GENERATING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-type JobModel  = 'NANO_BANANA' | 'GROK_IMAGINE' | 'LTX2' | 'WAN_25' | 'KLING' | 'HIGGSFIELD';
+type JobModel  = 'NANO_BANANA' | 'GROK_IMAGINE' | 'LTX2' | 'WAN_25' | 'KLING' | 'HIGGSFIELD' | 'VEO3';
 
 export default function AdminJobsPage() {
   const [status, setStatus] = useState<JobStatus | undefined>();

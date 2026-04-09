@@ -19,6 +19,7 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   WAN_25:       'generate:wan_25',
   KLING:        'generate:kling',
   HIGGSFIELD:   'generate:higgsfield',
+  VEO3:         'generate:veo3',
 };
 
 /**

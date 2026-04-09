@@ -340,7 +340,7 @@ export const adminRouter = router({
   listGenerationJobs: moderatorProcedure
     .input(z.object({
       status:   z.enum(['QUEUED', 'GENERATING', 'COMPLETED', 'FAILED', 'CANCELLED']).optional(),
-      model:    z.enum(['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD']).optional(),
+      model:    z.enum(['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3']).optional(),
       page:     z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(25),
     }))

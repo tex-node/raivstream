@@ -15,6 +15,7 @@ import { generateVideoFromPrompt as submitGrokImagine } from './grokImagine';
 import { submitLTX2, getLTX2Status } from './ltx2';
 import { submitWan25, getWan25Status } from './wan25';
 import { submitKling, getKlingStatus, submitHighgsfield, getHiggsfieldStatus } from './placeholders';
+import { submitVeo3, getVeo3Status } from './veo3';
 
 export type SupportedModel =
   | 'NANO_BANANA'
@@ -22,7 +23,8 @@ export type SupportedModel =
   | 'LTX2'
   | 'WAN_25'
   | 'KLING'
-  | 'HIGGSFIELD';
+  | 'HIGGSFIELD'
+  | 'VEO3';
 
 export interface GenerateInput {
   model:          SupportedModel;
@@ -78,6 +80,11 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
       const jobId = await submitHighgsfield(input);
       return { providerJobId: jobId };
     }
+
+    case 'VEO3': {
+      const operationName = await submitVeo3(input);
+      return { providerJobId: operationName };
+    }
   }
 }
 
@@ -121,6 +128,11 @@ export async function pollJobStatus(
     case 'HIGGSFIELD': {
       const s = await getHiggsfieldStatus(providerJobId);
       return { status: s.status as JobStatusResult['status'], outputUrl: s.outputUrl };
+    }
+
+    case 'VEO3': {
+      const s = await getVeo3Status(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
   }
 }
@@ -195,5 +207,15 @@ export const MODEL_META: Record<SupportedModel, {
     supportsImageToVideo: true,
     provider:            'Higgsfield AI',
     providerUrl:         'https://higgsfield.ai',
+  },
+  VEO3: {
+    label:               'Veo 3',
+    description:         'Google\'s most advanced video model — cinematic realism, dialogue, sound effects, and expressive motion.',
+    badge:               'live',
+    icon:                '🎥',
+    maxDuration:         8,
+    supportsImageToVideo: false,
+    provider:            'Google Gemini',
+    providerUrl:         'https://ai.google.dev',
   },
 };

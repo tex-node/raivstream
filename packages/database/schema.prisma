@@ -48,6 +48,7 @@ enum GenerationModel {
   WAN_25
   KLING
   HIGGSFIELD
+  VEO3
 }
 
 enum GenerationStatus {
