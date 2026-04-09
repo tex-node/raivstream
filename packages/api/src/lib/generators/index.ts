@@ -210,8 +210,8 @@ export const MODEL_META: Record<SupportedModel, {
   },
   VEO3: {
     label:               'Veo 3',
-    description:         'Google\'s most advanced video model — cinematic realism, dialogue, sound effects, and expressive motion.',
-    badge:               'live',
+    description:         'Google\'s most advanced video model — cinematic realism, dialogue, sound effects, and expressive motion. Access coming soon.',
+    badge:               'coming-soon',
     icon:                '🎥',
     maxDuration:         8,
     supportsImageToVideo: false,
