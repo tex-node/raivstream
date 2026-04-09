@@ -159,7 +159,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
     <div className="flex-1 relative">
       <div
         ref={containerRef}
-        className="h-full overflow-y-scroll snap-y snap-mandatory"
+        className="absolute inset-0 overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none', scrollSnapType: 'y mandatory' }}
       >
         {videos.map((video, i) => (
@@ -167,7 +167,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
             key={`${video.id}-${i}`}
             data-slide={i}
             className="snap-start w-full flex-shrink-0"
-            style={{ height: '100dvh', scrollSnapAlign: 'start' }}
+            style={{ height: '100%', scrollSnapAlign: 'start' }}
           >
             <VideoCard
               video={video}
