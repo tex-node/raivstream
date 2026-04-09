@@ -1,17 +1,16 @@
 /**
- * Veo 3 — Google's video generation model via Gemini API.
+ * Veo 3.1 — Google's video generation model via Gemini API.
  *
  * API credentials: GEMINI_API_KEY (same key as Nano Banana / Gemini image)
  * Model:           veo-3.1-generate-preview (configurable via VEO_MODEL env)
- * Docs:            https://ai.google.dev/api/generate-videos
+ * Endpoint:        :predictLongRunning (not :generateVideos)
  *
  * Flow:
- *   1. POST generateVideos → returns a long-running operation name
+ *   1. POST :predictLongRunning → returns a long-running operation name
  *   2. Poll GET operation until done === true
- *   3. Extract video URI from response → download → mirror to R2
+ *   3. Extract video URI → download → mirror to R2
  *
  * Generation takes ~2–5 minutes. The UI polls every 10 seconds.
- *
  * Supported aspect ratios: "16:9" | "16:10"  (portrait 9:16 is NOT supported)
  */
 
@@ -29,14 +28,14 @@ function apiKey(): string {
 /** Veo 3 only supports landscape ratios — map any input to a supported value */
 function normaliseAspectRatio(ratio?: string): '16:9' | '16:10' {
   if (ratio === '16:10') return '16:10';
-  return '16:9'; // default (also covers 9:16, 1:1, etc.)
+  return '16:9';
 }
 
 export interface Veo3Input {
   prompt:          string;
   negativePrompt?: string;
   aspectRatio?:    string;
-  duration?:       number; // seconds (5–8)
+  duration?:       number; // seconds (4–8)
 }
 
 export interface Veo3Status {
@@ -52,24 +51,22 @@ export interface Veo3Status {
 export async function submitVeo3(input: Veo3Input): Promise<string> {
   const key = apiKey();
 
-  const duration = Math.min(8, Math.max(5, input.duration ?? 8));
+  // Clamp duration to supported range (4–8 s)
+  const duration = input.duration ? Math.min(8, Math.max(4, input.duration)) : undefined;
+
+  const parameters: Record<string, unknown> = {
+    aspectRatio: normaliseAspectRatio(input.aspectRatio),
+  };
+  if (duration) parameters.durationSeconds = duration;
 
   const res = await fetch(
-    `${BASE_URL}/models/${VEO_MODEL}:generateVideos?key=${key}`,
+    `${BASE_URL}/models/${VEO_MODEL}:predictLongRunning?key=${key}`,
     {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        source: {
-          prompt: input.prompt,
-        },
-        config: {
-          aspectRatio:      normaliseAspectRatio(input.aspectRatio),
-          numberOfVideos:   1,
-          durationSeconds:  duration,
-          resolution:       '720p',
-          personGeneration: 'allow_adult',
-        },
+        instances:  [{ prompt: input.prompt }],
+        parameters,
       }),
     },
   );
