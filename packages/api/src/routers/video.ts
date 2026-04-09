@@ -12,6 +12,10 @@ function getR2Client() {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    // Disable automatic checksum headers — browsers can't compute them
+    // and the mismatch causes the presigned PUT to fail
+    requestChecksumCalculation: 'when_required',
+    responseChecksumValidation: 'when_required',
   });
 }
 
