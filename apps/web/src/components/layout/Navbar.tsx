@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth, useUser } from '@/lib/auth';
+import { useR16 } from '@/lib/r16';
 
 export function Navbar() {
   const { isSignedIn, user } = useUser();
   const { signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const isR16 = useR16();
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -39,11 +41,15 @@ export function Navbar() {
     >
       {/* Logo */}
       <Link href="/" className="text-white font-extrabold text-lg tracking-tight flex-shrink-0">
-        Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+        {isR16 ? (
+          <>R16 <span style={{ color: '#34d399' }}>Kids</span></>
+        ) : (
+          <>Raiv<span style={{ color: '#a78bfa' }}>stream</span></>
+        )}
       </Link>
 
-      {/* Centre nav — desktop */}
-      {!isFeed && (
+      {/* Centre nav — desktop (hidden on R16) */}
+      {!isFeed && !isR16 && (
         <div className="hidden md:flex items-center gap-1">
           {[
             { href: '/pricing',  label: 'Pricing'   },
@@ -93,17 +99,19 @@ export function Navbar() {
 
         {isSignedIn ? (
           <>
-            {/* Upload */}
-            <Link
-              href="/upload"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="hidden sm:inline">Upload</span>
-            </Link>
+            {/* Upload — hidden on R16 */}
+            {!isR16 && (
+              <Link
+                href="/upload"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Upload</span>
+              </Link>
+            )}
 
             {/* Avatar + dropdown */}
             <div className="relative">
@@ -132,12 +140,14 @@ export function Navbar() {
                 >
                   {[
                     { href: `/${user?.username}`, label: 'Profile' },
-                    { href: '/upload',            label: '📤 Upload' },
-                    { href: '/analytics',         label: 'Analytics' },
-                    { href: '/generate',          label: '✨ AI Studio' },
-                    { href: '/credits',           label: '⚡ Credits' },
-                    { href: '/settings',          label: 'Settings' },
-                    ...(user?.role === 'ADMIN' || user?.role === 'MODERATOR'
+                    ...(!isR16 ? [
+                      { href: '/upload',   label: '📤 Upload'     },
+                      { href: '/analytics',label: 'Analytics'     },
+                      { href: '/generate', label: '✨ AI Studio'  },
+                      { href: '/credits',  label: '⚡ Credits'    },
+                    ] : []),
+                    { href: '/settings', label: 'Settings' },
+                    ...((!isR16 && (user?.role === 'ADMIN' || user?.role === 'MODERATOR'))
                       ? [{ href: '/admin', label: '🛡️ Admin' }]
                       : []),
                   ].map(({ href, label }) => (

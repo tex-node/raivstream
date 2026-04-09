@@ -33,8 +33,17 @@ const SECURITY_HEADERS: Record<string, string> = {
   ].join('; '),
 };
 
+// Routes that are not appropriate for the kids (R16) subdomain
+const R16_BLOCKED_ROUTES = ['/generate', '/upload', '/credits', '/pricing', '/analytics', '/settings', '/subscription', '/admin'];
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const hostname = req.headers.get('host') ?? '';
+
+  // Detect R16 subdomain (r16.raivstream.com in production, or ?r16=1 in dev)
+  const isR16 =
+    hostname.startsWith('r16.') ||
+    req.nextUrl.searchParams.get('r16') === '1';
 
   // ── HTTPS redirect (production only) ──────────────────────────────────────
   if (
@@ -44,6 +53,11 @@ export function middleware(req: NextRequest) {
     const httpsUrl = req.nextUrl.clone();
     httpsUrl.protocol = 'https:';
     return NextResponse.redirect(httpsUrl, 301);
+  }
+
+  // ── R16: block adult-only routes ──────────────────────────────────────────
+  if (isR16 && R16_BLOCKED_ROUTES.some((r) => pathname.startsWith(r))) {
+    return NextResponse.redirect(new URL('/', req.url));
   }
 
   // ── Auth redirect — check httpOnly access token cookie ────────────────────
@@ -60,6 +74,9 @@ export function middleware(req: NextRequest) {
 
   // ── Attach security headers to all page / API responses ───────────────────
   const response = NextResponse.next();
+
+  // Pass R16 flag to server components via request header
+  if (isR16) response.headers.set('x-r16-mode', '1');
 
   Object.entries(SECURITY_HEADERS).forEach(([k, v]) => response.headers.set(k, v));
 

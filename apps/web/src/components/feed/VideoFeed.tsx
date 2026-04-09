@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc';
 import { VideoCard } from '@/components/video/VideoCard';
 import { PaywallModal } from '@/components/feed/PaywallModal';
 import { useUser } from '@/lib/auth';
+import { useR16 } from '@/lib/r16';
 
 type FeedType = 'forYou' | 'following' | 'trending' | 'viewersPick';
 
@@ -17,6 +18,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling  = useRef(false);
   const { isSignedIn, user } = useUser();
+  const isR16 = useR16();
 
   // Episode gate — only for signed-in FREE users
   const gateQuery = trpc.user.episodeGate.useQuery(undefined, {
@@ -27,19 +29,19 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
 
   // Feed queries
   const forYouQuery = trpc.feed.forYou.useInfiniteQuery(
-    { limit: 10 },
+    { limit: 10, kidsOnly: isR16 },
     { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'forYou' }
   );
   const followingQuery = trpc.feed.following.useInfiniteQuery(
     { limit: 10 },
-    { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'following' && isSignedIn }
+    { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'following' && isSignedIn && !isR16 }
   );
   const trendingQuery = trpc.feed.trending.useInfiniteQuery(
-    { limit: 10 },
+    { limit: 10, kidsOnly: isR16 },
     { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'trending' }
   );
   const viewersPickQuery = trpc.feed.viewersPick.useInfiniteQuery(
-    { limit: 10 },
+    { limit: 10, kidsOnly: isR16 },
     { getNextPageParam: (last) => last.nextCursor, enabled: feedType === 'viewersPick' }
   );
 

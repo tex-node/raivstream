@@ -30,9 +30,13 @@ const videoSelect = {
 } as const;
 
 const feedInput = z.object({
-  cursor: z.string().optional(),
-  limit: z.number().min(1).max(50).default(10),
+  cursor:    z.string().optional(),
+  limit:     z.number().min(1).max(50).default(10),
+  kidsOnly:  z.boolean().optional(), // true on r16.raivstream.com — filters isKidsSafe=true
 });
+
+// Extra where clause for kids-only mode
+const kidsFilter = { isKidsSafe: true, moderationStatus: 'APPROVED' as const };
 
 export const feedRouter = router({
   // For You — recent public ready videos (MVP: ordered by publishedAt)
@@ -41,7 +45,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
-        moderationStatus: { not: 'REJECTED' },
+        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
         ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -94,7 +98,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
-        moderationStatus: { not: 'REJECTED' },
+        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
         ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -118,7 +122,7 @@ export const feedRouter = router({
         status: 'READY',
         isPublic: true,
         starRatingCount: { gte: 3 },
-        moderationStatus: { not: 'REJECTED' },
+        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
         ...(input.cursor ? { avgStarRating: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ avgStarRating: 'desc' }, { starRatingCount: 'desc' }],
@@ -135,7 +139,7 @@ export const feedRouter = router({
     // If not enough rated videos, fall back to trending
     if (videos.length === 0) {
       const fallback = await ctx.prisma.video.findMany({
-        where: { status: 'READY', isPublic: true, moderationStatus: { not: 'REJECTED' } },
+        where: { status: 'READY', isPublic: true, ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }) },
         orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
         take: input.limit,
         select: videoSelect,
