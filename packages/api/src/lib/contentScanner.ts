@@ -14,7 +14,7 @@
  * manual review.
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@raivstream/database';
 
 interface OpenAIModerationResult {
   flagged: boolean;
