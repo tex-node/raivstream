@@ -28,10 +28,11 @@ raivstream/
 | Payments (international) | Stripe (USD — Creator plan) |
 | AI generation | xAI Grok Imagine, Wan 2.5, LTX-2, Nano Banana (Google Gemini), Veo 3.1 (Google Gemini) |
 | Credits | Custom credit system — ₦1,000 = 1,000 credits, deducted per AI generation |
+| Content moderation | OpenAI omni-moderation-latest (prompt filter + image scan), manual admin queue |
 | Cache | Upstash Redis (optional) |
 | Monitoring | Sentry, PostHog |
 | Process manager | PM2 (`raivstream-web`) on VPS |
-| Reverse proxy | Caddy — db.raivstream.com → Kong:8000, app.raivstream.com → Next.js:3000 |
+| Reverse proxy | Caddy — db.raivstream.com → Kong:8000, app.raivstream.com → Next.js:3000, r16.raivstream.com → Next.js:3000 |
 | CI/CD | GitHub Actions → SSH deploy on push to main |
 
 ## Key File Paths
@@ -41,6 +42,9 @@ packages/api/src/trpc.ts              — router, publicProcedure, protectedProc
 packages/api/src/lib/jwt.ts           — signAccessToken, verifyAccessToken, signRefreshToken, extractBearerToken
 packages/api/src/lib/credits.ts       — deductCredits(), refundCredits(), MODEL_FEATURE_KEY map
 packages/api/src/lib/authService.ts   — registerUser, loginUser, refreshTokens, logoutUser, requestPasswordReset, resetPassword
+packages/api/src/lib/promptModeration.ts — moderatePrompt() — Layer 1: regex blocklist, Layer 2: OpenAI omni-moderation-latest text
+packages/api/src/lib/contentScanner.ts   — scanAndUpdateVideo() — OpenAI omni-moderation-latest image scan, fire-and-forget
+packages/api/src/lib/r2.ts            — uploadBufferToR2(), mirrorUrlToR2() — server-side R2 uploads for AI generation output
 packages/api/src/lib/generators/
   index.ts                            — submitGenerationJob(), pollJobStatus(), MODEL_META
   grokImagine.ts                      — xAI Grok Imagine (XAI_API_KEY) — image generation (model: grok-2-image-1212)
@@ -51,15 +55,16 @@ packages/api/src/lib/generators/
   placeholders.ts                     — Kling, Higgsfield (coming soon stubs)
 packages/api/src/routers/
   auth.ts                             — register, login, refresh, logout, logoutAll
-  video.ts                            — upload flow, getById, updateMetadata, delete
-  feed.ts                             — forYou, trending, viewersPick, following
+  video.ts                            — upload flow, getById, updateMetadata, delete; fires scanAndUpdateVideo() after publish
+  feed.ts                             — forYou, trending, viewersPick, following; kidsOnly param for R16 mode
   interaction.ts                      — like, dislike, starRating, watchProgress (episode gate enforced)
   user.ts                             — profile, follow, creditBalance, creditHistory, episodeGate
   analytics.ts                        — creator dashboard stats
-  generation.ts                       — create (deducts credits), pollStatus, myJobs, cancel, publish
+  generation.ts                       — create (prompt moderation → credit deduction → submit), pollStatus, myJobs, cancel, publish (fires scanAndUpdateVideo())
   admin.ts                            — getOverview, listUsers, setUserRole, adjustCredits, setUserBan,
                                         listCreditRates, updateCreditRate, createCreditRate,
-                                        listGenerationJobs, listPurchases
+                                        listGenerationJobs, listPurchases,
+                                        moderationQueue, moderateVideo, getModerationStats
 packages/database/schema.prisma       — all DB models (see Database Models section)
 
 apps/mobile/
@@ -77,7 +82,7 @@ apps/mobile/
 
 apps/web/src/
   app/page.tsx                        — TikTok-style feed visible to ALL users (signed-in and guests)
-  app/layout.tsx                      — root layout (TRPCProvider + AuthProvider)
+  app/layout.tsx                      — root layout (async server component — reads x-r16-mode header, injects R16Provider)
   app/upload/page.tsx                 — video upload flow
   app/v/[id]/page.tsx                 — single video view
   app/[username]/page.tsx             — creator profile
@@ -91,6 +96,7 @@ apps/web/src/
   app/admin/layout.tsx                — admin layout (responsive sidebar — mobile drawer, desktop fixed)
   app/admin/page.tsx                  — admin overview (stats, model usage, job status, revenue)
   app/admin/users/page.tsx            — user management (role, credits, ban)
+  app/admin/moderation/page.tsx       — content moderation queue (approve/reject/flag, content rating, kids-safe toggle)
   app/admin/credits/page.tsx          — credit rate management (inline edit + add rate)
   app/admin/jobs/page.tsx             — generation job history (filter by status/model)
   app/admin/revenue/page.tsx          — revenue summary + transaction table
@@ -109,19 +115,20 @@ apps/web/src/
   app/api/paystack/verify/route.ts      — GET  — verify payment reference, credit balance
   app/api/paystack/webhook/route.ts     — POST — Paystack event handler
   app/api/stripe/                       — Stripe webhook + checkout endpoints
-  components/feed/FeedTabs.tsx          — tab switcher (Following tab hidden for guests)
-  components/feed/VideoFeed.tsx         — vertical scroll feed + PaywallModal + scroll/swipe handling
+  components/feed/FeedTabs.tsx          — tab switcher (Following tab hidden for guests; "Kids Feed" label on R16)
+  components/feed/VideoFeed.tsx         — vertical scroll feed + PaywallModal + scroll/swipe handling; passes kidsOnly to feed queries
   components/feed/PaywallModal.tsx      — freemium gate overlay (5 free episodes)
   components/video/VideoCard.tsx        — individual video card (detects image URLs to avoid VideoPlayer spinner)
   components/video/VideoPlayer.tsx      — HTML5 / HLS video player (starts muted for autoplay)
   components/video/VideoInteractions.tsx — like/dislike/star buttons
-  components/layout/Navbar.tsx          — top nav (glass-blur on marketing, transparent on feed; Admin link for ADMIN/MODERATOR)
+  components/layout/Navbar.tsx          — top nav (glass-blur on marketing, transparent on feed; R16 branding on kids subdomain)
   lib/auth.tsx                          — React AuthProvider + useAuth() + useUser()
+  lib/r16.tsx                           — R16Provider + useR16() — kids mode context
   lib/trpc.ts                           — tRPC client setup (Tanstack Query)
   lib/stripe.ts                         — Stripe server client + STRIPE_PLANS
   lib/paystack.ts                       — Paystack helpers + CREDIT_PACKAGES + VIEWER_PLAN
   lib/credits.ts                        — (see packages/api/src/lib/credits.ts — server side)
-  middleware.ts                         — cookie-based redirect for protected routes (includes /admin)
+  middleware.ts                         — cookie-based redirect for protected routes; R16 subdomain detection + blocked route list; x-r16-mode request header forwarding
 ```
 
 ## Auth Pattern (Custom JWT — no Clerk)
@@ -138,12 +145,50 @@ apps/web/src/
 - tRPC `protectedProcedure` enforces auth via `ctx.user != null` (not the cookie)
 
 ## Admin System
-- `UserRole` enum: `VIEWER | CREATOR | MODERATOR | ADMIN` (ADMIN and MODERATOR added)
+- `UserRole` enum: `VIEWER | CREATOR | MODERATOR | ADMIN`
 - `adminProcedure` — requires role === ADMIN
 - `moderatorProcedure` — requires role === ADMIN or MODERATOR
 - Admin routes gated in `middleware.ts` + layout role check → redirect to `/` if unauthorized
-- Navbar shows 🛡️ Admin link for ADMIN/MODERATOR users
+- Navbar shows 🛡️ Admin link for ADMIN/MODERATOR users (hidden on R16 subdomain)
 - To promote a user to ADMIN on VPS, use Node.js one-liner from `packages/database/` with Prisma client
+
+## Content Moderation System
+### Prompt moderation (`packages/api/src/lib/promptModeration.ts`)
+- Runs **before** credit deduction in `generation.create` — rejected prompts cost nothing
+- Layer 1: local regex blocklist (CSAM, extreme gore, non-consensual content) — always active, instant
+- Layer 2: OpenAI `omni-moderation-latest` text scan — active when `OPENAI_API_KEY` is set (free endpoint)
+- Both `prompt` and `negativePrompt` are checked
+- Returns `{ allowed: boolean, reason?: string }` — reason shown to user on rejection
+
+### Upload / publish scanning (`packages/api/src/lib/contentScanner.ts`)
+- `scanAndUpdateVideo(prisma, videoId, imageUrl)` — fire-and-forget (never blocks the response)
+- Triggered in `video.updateMetadata` (after user publish) and `generation.publish` (after AI publish)
+- Sends thumbnail/output URL to OpenAI `omni-moderation-latest` with image input
+- Decisions: `APPROVED` (no flags) → live in feed immediately | `FLAGGED` (any flag) → admin queue | `PENDING` (API down) → manual review
+- Every decision logged to `ModerationLog` with `automated=true` and confidence score
+
+### Admin moderation queue (`/admin/moderation`)
+- `admin.moderationQueue` — paginated list filtered by PENDING / FLAGGED / APPROVED / REJECTED
+- `admin.moderateVideo` — approve / reject / flag with optional content rating (G/PG/PG-13/R), kids-safe flag, reason
+- `admin.getModerationStats` — live counts per status (refreshes every 30s)
+- Reject action also sets `VideoStatus = BLOCKED`
+
+### Feed filtering
+- All feeds exclude `moderationStatus = REJECTED` videos
+- R16 kids feed requires `moderationStatus = APPROVED` AND `isKidsSafe = true`
+
+## R16 Kids Subdomain (r16.raivstream.com)
+- Same Next.js app — subdomain detected in `middleware.ts` via `host` header (`r16.*`)
+- Dev testing: append `?r16=1` to any URL on `app.raivstream.com`
+- Middleware sets `x-r16-mode: 1` on the **request** headers (not response) so server components can read it via `headers()`
+- Root layout (`app/layout.tsx`) is async, reads the header, wraps children in `<R16Provider isR16>`
+- Client components call `useR16()` from `lib/r16.tsx`
+- Blocked routes on R16: `/generate`, `/upload`, `/credits`, `/pricing`, `/analytics`, `/settings`, `/subscription`, `/admin` → redirected to `/`
+- Feed: `kidsOnly=true` param → only `isKidsSafe=true` + `moderationStatus=APPROVED` videos
+- Navbar: "R16 Kids" branding (green accent), hides Upload/AI Studio/Credits/Pricing/Admin
+- FeedTabs: static "Kids Feed" label instead of tab switcher
+- Caddy: `r16.raivstream.com { reverse_proxy localhost:3000 }` — add to /etc/caddy/Caddyfile
+- DNS: A record `r16.raivstream.com → 81.0.246.223`
 
 ## Credit System
 - 1,000 credits = ₦1,000 (configured in `FeatureCreditRate` table via seed.ts or admin UI)
@@ -163,7 +208,8 @@ apps/web/src/
 - **User** — email, username, passwordHash, role (VIEWER|CREATOR|MODERATOR|ADMIN), premiumTier (FREE|VIEWER|CREATOR)
 - **RefreshToken** — userId, tokenHash, family, expiresAt, revokedAt
 - **PasswordResetToken** — userId, tokenHash, expiresAt, usedAt (1-hour TTL, single use)
-- **Video** — rawVideoUrl (R2 private), mp4Url (CDN), hlsMasterUrl, status (UPLOADING→PROCESSING→READY), engagementScore
+- **Video** — rawVideoUrl (R2 private), mp4Url (CDN), hlsMasterUrl, status (UPLOADING→PROCESSING→READY), engagementScore, **isKidsSafe** (Boolean), **contentRating** (String? — G/PG/PG-13/R), **moderationStatus** (ModerationStatus — PENDING/APPROVED/REJECTED/FLAGGED)
+- **ModerationLog** — videoId, moderatorId (null=automated), action, reason, automated (Boolean), confidence (Float?)
 - **VideoInteraction** — liked, disliked, starRating (1–5), watchTime, completed
 - **WatchHistory** — lastPosition, completed, watchedAt
 - **Follow** — followerId ↔ followingId
@@ -180,15 +226,16 @@ apps/web/src/
 1. Client → `video.requestUpload` → creates UPLOADING Video record + R2 presigned PUT URL (1h expiry)
 2. Client → PUT file directly to R2 (bypasses server)
 3. Client → `video.confirmUpload` → sets mp4Url, status → PROCESSING (or READY if no transcode)
-4. Client → `video.updateMetadata` → title, description, tags, thumbnail, categories
+4. Client → `video.updateMetadata` → title, description, tags, thumbnail, categories → fires content scan (async)
 
 ## AI Generation Flow
 1. User selects model + enters prompt on `/generate`
-2. `generation.create` deducts credits atomically (PAYMENT_REQUIRED if insufficient)
-3. Job record created (QUEUED), submitted to provider
-4. If provider fails → credits auto-refunded, job marked FAILED
-5. UI polls `generation.pollStatus` every 3s until COMPLETED or FAILED
-6. User can publish completed job to feed via `generation.publish`
+2. `generation.create` runs prompt moderation (free, no credits deducted on block)
+3. Credits deducted atomically (PAYMENT_REQUIRED if insufficient)
+4. Job record created (QUEUED), submitted to provider
+5. If provider fails → credits auto-refunded, job marked FAILED
+6. UI polls `generation.pollStatus` every 3s until COMPLETED or FAILED
+7. User publishes via `generation.publish` → fires content scan (async) → video enters feed if APPROVED
 
 ## AI Model Details
 | Model | Status | Provider | API | Notes |
@@ -205,11 +252,12 @@ apps/web/src/
 - `forYou` — public, scored by engagementScore + recency
 - `trending` — public, sorted by viewCount window
 - `viewersPick` — public, sorted by avgStarRating
-- `following` — **auth required**, videos from followed creators
+- `following` — **auth required**, videos from followed creators; hidden on R16
 - All feeds visible to guests (no sign-in required to browse)
 - Guests see floating "Sign up free / Sign in" CTA at bottom
-- Following tab hidden for guests in FeedTabs
 - All feeds use **cursor-based pagination** (ISO date strings or float scores as cursor)
+- All feeds exclude `moderationStatus = REJECTED` videos
+- R16 feeds: `kidsOnly=true` → `isKidsSafe=true` + `moderationStatus=APPROVED` only
 
 ## Feed Implementation Details
 - `VideoFeed.tsx`: CSS `scroll-snap-type: y mandatory` handles mobile touch natively — NO custom touch handlers
@@ -224,7 +272,7 @@ apps/web/src/
 - **Server**: Contabo VPS at 81.0.246.223
 - **Supabase**: self-hosted Docker Compose at /root/supabase/docker (16 services)
 - **Postgres**: exposed on 127.0.0.1:5432 (direct, bypassing broken Supavisor)
-- **Caddy**: /etc/caddy/Caddyfile — db.raivstream.com → :8000, app.raivstream.com → :3000
+- **Caddy**: /etc/caddy/Caddyfile — db.raivstream.com → :8000, app.raivstream.com → :3000, r16.raivstream.com → :3000
 - **App**: /root/raivstream — git pull + PM2 (`pm2 restart raivstream-web --update-env`)
 - **Deploy**: GitHub Actions `.github/workflows/deploy.yml` — SSH on push to main
 - **Env file**: /root/raivstream/.env (symlinked to apps/web/.env.local and packages/database/.env)
@@ -233,6 +281,7 @@ apps/web/src/
 ## Common Pitfalls (already fixed)
 - Tanstack Query v5: `onSuccess` removed from `useQuery` → use `useEffect` watching `data` instead
 - Tanstack Query v5: mutation `isLoading` renamed to `isPending`
+- Tanstack Query v5: `keepPreviousData` removed → just omit it (no replacement needed for most cases)
 - Keep tRPC at v11 in both `packages/api` and `apps/web` — mixing v10/v11 breaks the build
 - Prisma `.$extends()` returns `DynamicClientExtensionThis`, not `PrismaClient` — cast with `as unknown as PrismaClient` in `packages/database/index.ts`
 - After schema changes: run `pnpm exec prisma generate` from `packages/database/`, then `pnpm exec prisma db push` on VPS
@@ -248,8 +297,10 @@ apps/web/src/
 - R2 uploads (video upload page): requires **R2 S3 API token** (not a Cloudflare API token). Cloudflare API tokens (`cfat_` prefix) work for server-side S3 SDK calls but NOT for presigned URLs. Create the token via R2 → Manage R2 API Tokens → Create API Token (Object Read & Write, scoped to bucket). The resulting Access Key ID is a 32-char hex string with no prefix.
 - R2 CORS must be configured on the bucket (Cloudflare → R2 → bucket → Settings → CORS Policy) with `AllowedMethods: [GET, PUT, HEAD]` and `AllowedHeaders: [*]` — without this, browser XHR PUT to presigned URLs is blocked
 - R2 presigned URLs: do NOT include `ContentLength` in `PutObjectCommand` — it causes browser signature mismatch. Set `requestChecksumCalculation: 'WHEN_REQUIRED'` and `responseChecksumValidation: 'WHEN_REQUIRED'` on the S3Client to prevent SDK injecting CRC32 checksum headers that browsers can't replicate
+- R2 server-side uploads (`r2.ts`): also needs `requestChecksumCalculation: 'WHEN_REQUIRED'` — same fix applies to non-presigned PUTs
 - CSP `connect-src` in `middleware.ts` must include `https://*.r2.cloudflarestorage.com` and `https://generativelanguage.googleapis.com` — missing entries silently block XHR/fetch before they even leave the browser
-- Upload button is `hidden sm:flex` on desktop + in avatar dropdown for mobile — always accessible regardless of screen size
+- R16 middleware: set `x-r16-mode` on the **request** headers via `NextResponse.next({ request: { headers } })` — setting it on the response headers does NOT make it readable by server components via `headers()`
+- `app/layout.tsx` must be `async` to call `await headers()` for R16 detection
 
 ## Dev Commands
 ```bash
@@ -283,6 +334,9 @@ pnpm build            # build all packages
 - `VEO_MODEL` — Veo model name (default: `veo-3.1-generate-preview`)
 - `RUNPOD_API_KEY` — RunPod key for LTX-2 and Wan 2.5
 
+**Content moderation:**
+- `OPENAI_API_KEY` — sk-... — used for prompt moderation (text) + upload scanning (image). Free moderation endpoint, no per-call cost. Format: `OPENAI_API_KEY=sk-...`
+
 **Storage (required for video upload):**
 - `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL`
 
@@ -301,24 +355,26 @@ pnpm build            # build all packages
 ## Implementation Status
 **Done:**
 - Monorepo structure, Turborepo config, GitHub Actions CI/CD
-- Full Prisma schema (17 models)
+- Full Prisma schema (19 models including ModerationLog)
 - Custom JWT auth (register/login/refresh/logout/forgot-password/reset-password)
 - tRPC routers: auth, video, feed, interaction, user, analytics, generation, admin
-- R2 presigned upload flow
+- R2 presigned upload flow + server-side R2 mirroring for AI generation output
 - Paystack integration (Viewer subscription + credit packages, webhooks)
 - Stripe subscription scaffolding (Creator plan, international)
 - Credit system with atomic deduction, refunds, transaction history
 - AI Video Studio: Grok Imagine (live), Nano Banana (live via Gemini), Veo 3.1 (live via Gemini), Wan 2.5 (beta), LTX-2 (beta), Kling/Higgsfield (placeholders)
 - Freemium episode gate (5 free episodes, PaywallModal)
 - Web pages: feed (public), upload, video view, profile, pricing, credits, generate, analytics, search, settings, sign-in, sign-up, forgot-password, reset-password
-- Admin dashboard: overview, user management, credit rate management, job history, revenue
+- Admin dashboard: overview, user management, credit rate management, job history, revenue, **moderation queue**
 - Admin roles: ADMIN + MODERATOR with gated tRPC procedures
 - Mobile screens: feed, upload, profile, search, video modal, sign-in/sign-up (connected to app.raivstream.com)
 - Mobile auth: Zustand store + SecureStore persistence
-- Navbar: glass-blur on marketing, transparent on feed, avatar dropdown with Admin link
+- Navbar: glass-blur on marketing, transparent on feed, avatar dropdown with Admin link; R16 kids branding
 - UI design: dark navy (#050b18) + violet/purple ambient glow design system
 - Feed: visible to all users (guests + signed-in), smooth CSS snap scroll, muted autoplay, image/video detection
 - Auto-deploy: GitHub Actions SSH deploy on push to main → pm2 restart
+- **Content moderation**: prompt filter (Layer 1 regex + Layer 2 OpenAI), upload/publish image scanning, admin queue, feed filtering
+- **R16 kids subdomain**: r16.raivstream.com — kids-safe feed (isKidsSafe=true + APPROVED only), simplified navbar, blocked adult routes
 
 **Still to build / verify:**
 - Add email service (Resend/SendGrid) for password reset emails — currently logs URL to server console
@@ -326,5 +382,5 @@ pnpm build            # build all packages
 - Creator analytics data pipeline (cron jobs / event writes)
 - Redis caching layer
 - Badge award cron jobs
-- Content moderation system
 - Full test suite
+- Caddy + DNS setup for r16.raivstream.com (instructions in R16 section above)
