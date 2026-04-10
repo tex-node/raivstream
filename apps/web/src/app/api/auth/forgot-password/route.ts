@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
       if (resend) {
         await resend.emails.send({
-          from: 'Raivstream <noreply@raivstream.com>',
+          from: 'Raivstream <onboarding@resend.dev>',
           to: email,
           subject: 'Reset your Raivstream password',
           html: `
