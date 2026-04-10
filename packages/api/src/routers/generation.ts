@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { submitGenerationJob, pollJobStatus, MODEL_META, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
 import { moderatePrompt } from '../lib/promptModeration';
+import { scanAndUpdateVideo } from '../lib/contentScanner';
 
 const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3'] as const;
 
@@ -293,6 +294,12 @@ export const generationRouter = router({
         where: { id: job.id },
         data: { videoId: video.id },
       });
+
+      // Fire-and-forget content scan on the output image/video thumbnail
+      const scanUrl = job.thumbnailUrl ?? job.outputUrl;
+      if (scanUrl) {
+        scanAndUpdateVideo(ctx.prisma as any, video.id, scanUrl).catch(() => {});
+      }
 
       return video;
     }),

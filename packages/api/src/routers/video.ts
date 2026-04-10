@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { scanAndUpdateVideo } from '../lib/contentScanner';
 
 function getR2Client() {
   return new S3Client({
@@ -146,7 +147,7 @@ export const videoRouter = router({
       });
       if (!video) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      return ctx.prisma.video.update({
+      const updated = await ctx.prisma.video.update({
         where: { id: input.videoId },
         data: {
           title: input.title,
@@ -156,8 +157,16 @@ export const videoRouter = router({
           isPremiumOnly: input.isPremiumOnly,
           publishedAt: new Date(),
         },
-        select: { id: true, title: true, status: true },
+        select: { id: true, title: true, status: true, thumbnailUrl: true, mp4Url: true },
       });
+
+      // Fire-and-forget content scan — does not block the response
+      const scanUrl = updated.thumbnailUrl || updated.mp4Url;
+      if (scanUrl) {
+        scanAndUpdateVideo(ctx.prisma as any, updated.id, scanUrl).catch(() => {});
+      }
+
+      return { id: updated.id, title: updated.title, status: updated.status };
     }),
 
   // Creator's own videos list (for settings/analytics)
