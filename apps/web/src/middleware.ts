@@ -73,10 +73,13 @@ export function middleware(req: NextRequest) {
   }
 
   // ── Attach security headers to all page / API responses ───────────────────
-  const response = NextResponse.next();
+  // Forward x-r16-mode on the *request* so server components can read it via headers()
+  const requestHeaders = new Headers(req.headers);
+  if (isR16) requestHeaders.set('x-r16-mode', '1');
 
-  // Pass R16 flag to server components via request header
-  if (isR16) response.headers.set('x-r16-mode', '1');
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   Object.entries(SECURITY_HEADERS).forEach(([k, v]) => response.headers.set(k, v));
 
