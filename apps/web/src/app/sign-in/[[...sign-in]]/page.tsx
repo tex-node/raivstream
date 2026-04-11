@@ -59,7 +59,9 @@ function SignInForm() {
 
       if (data.user) {
         setUser(data.user);
-        router.push(redirectUrl);
+        // Hard redirect so the middleware sees the new raiv_at cookie
+        // on the very next request — router.push() (soft nav) can miss it
+        window.location.href = redirectUrl;
       }
     } catch {
       setError('Network error — please check your connection');
