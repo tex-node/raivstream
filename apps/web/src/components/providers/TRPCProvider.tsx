@@ -40,9 +40,23 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         httpBatchLink({
           url:         `${getBaseUrl()}/api/trpc`,
           transformer: superjson,
-          // Send httpOnly cookies automatically — no localStorage token injection
-          fetch: (url, options) =>
-            fetch(url, { ...options, credentials: 'same-origin' }),
+          // On 401, silently refresh the access token and retry once.
+          // This handles the case where the 15-min token expires during a long
+          // operation (e.g. Veo 3 generation which can take 2–5 minutes).
+          fetch: async (url, options) => {
+            const res = await fetch(url, { ...options, credentials: 'same-origin' });
+            if (res.status === 401) {
+              const refreshed = await fetch('/api/auth/refresh', {
+                method:      'POST',
+                credentials: 'same-origin',
+              });
+              if (refreshed.ok) {
+                // Cookie is now rotated — retry the original request
+                return fetch(url, { ...options, credentials: 'same-origin' });
+              }
+            }
+            return res;
+          },
         }),
       ],
     })
