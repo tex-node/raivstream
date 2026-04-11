@@ -231,14 +231,14 @@ export default function GeneratePage() {
                   </label>
                   <input
                     type="range"
-                    min={1}
+                    min={currentModel?.minDuration ?? 1}
                     max={currentModel?.maxDuration ?? 10}
-                    value={duration}
+                    value={Math.max(currentModel?.minDuration ?? 1, Math.min(currentModel?.maxDuration ?? 10, duration))}
                     onChange={(e) => setDuration(Number(e.target.value))}
                     className="w-full accent-pink-500"
                   />
                   <div className="flex justify-between text-xs text-white/25 mt-1">
-                    <span>1s</span>
+                    <span>{currentModel?.minDuration ?? 1}s</span>
                     <span>{currentModel?.maxDuration ?? 10}s</span>
                   </div>
                 </div>

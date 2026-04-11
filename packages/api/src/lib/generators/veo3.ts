@@ -51,13 +51,12 @@ export interface Veo3Status {
 export async function submitVeo3(input: Veo3Input): Promise<string> {
   const key = apiKey();
 
-  // Clamp duration to supported range (4–8 s)
-  const duration = input.duration ? Math.min(8, Math.max(4, input.duration)) : undefined;
-
   const parameters: Record<string, unknown> = {
     aspectRatio: normaliseAspectRatio(input.aspectRatio),
+    // durationSeconds intentionally omitted — Veo 3 :predictLongRunning does not
+    // support this parameter in the current preview; omitting lets the API use
+    // its default (8 s). Re-add once officially documented.
   };
-  if (duration) parameters.durationSeconds = duration;
 
   const res = await fetch(
     `${BASE_URL}/models/${VEO_MODEL}:predictLongRunning?key=${key}`,

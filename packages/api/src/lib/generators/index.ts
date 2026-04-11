@@ -143,6 +143,7 @@ export const MODEL_META: Record<SupportedModel, {
   description:         string;
   badge:               'live' | 'beta' | 'coming-soon';
   icon:                string;
+  minDuration:         number; // minimum seconds (for UI slider)
   maxDuration:         number; // 0 = image-only
   supportsImageToVideo: boolean;
   provider:            string;
@@ -153,6 +154,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Fast AI image generation. Great for thumbnails, seed frames, and creative concepts.',
     badge:               'live',
     icon:                '🍌',
+    minDuration:         0,
     maxDuration:         0,
     supportsImageToVideo: false,
     provider:            'Google Gemini',
@@ -163,6 +165,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'xAI\'s powerful image generation — creates a stunning seed frame or thumbnail from your prompt.',
     badge:               'live',
     icon:                '✨',
+    minDuration:         0,
     maxDuration:         0,
     supportsImageToVideo: false,
     provider:            'xAI',
@@ -173,6 +176,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Lightricks\' cinematic video model — real-time generation speeds on RunPod GPU.',
     badge:               'beta',
     icon:                '🎬',
+    minDuration:         1,
     maxDuration:         10,
     supportsImageToVideo: true,
     provider:            'RunPod + LTX-Video 2',
@@ -183,6 +187,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Alibaba\'s open video model with fine-grained motion control — running on RunPod GPU.',
     badge:               'beta',
     icon:                '🌊',
+    minDuration:         1,
     maxDuration:         10,
     supportsImageToVideo: true,
     provider:            'RunPod + Wan 2.5',
@@ -193,6 +198,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Kuaishou\'s hyper-realistic video generation model — API access coming soon.',
     badge:               'coming-soon',
     icon:                '⚡',
+    minDuration:         1,
     maxDuration:         10,
     supportsImageToVideo: true,
     provider:            'Kuaishou',
@@ -203,6 +209,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Cinematic, character-consistent video generation — invite-only access coming soon.',
     badge:               'coming-soon',
     icon:                '🎭',
+    minDuration:         1,
     maxDuration:         10,
     supportsImageToVideo: true,
     provider:            'Higgsfield AI',
@@ -213,6 +220,7 @@ export const MODEL_META: Record<SupportedModel, {
     description:         'Google\'s most advanced video model — cinematic realism, dialogue, sound effects, and expressive motion.',
     badge:               'live',
     icon:                '🎥',
+    minDuration:         4,
     maxDuration:         8,
     supportsImageToVideo: false,
     provider:            'Google Gemini',
