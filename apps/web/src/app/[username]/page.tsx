@@ -1,21 +1,85 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 import { Navbar } from '@/components/layout/Navbar';
 
+interface EditState {
+  id: string;
+  title: string;
+  description: string;
+  tags: string;
+}
+
+/** Three-dot menu that closes when clicking outside */
+function VideoMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="absolute top-1 right-1 z-20">
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o); }}
+        className="w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
+        aria-label="Post options"
+      >
+        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-8 right-0 w-32 bg-[#1a1f2e] border border-white/10 rounded-xl shadow-xl overflow-hidden">
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onEdit(); }}
+            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onDelete(); }}
+            className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const params = useParams();
-  // Route is /[username] — strip leading @ if present (links use /@username)
   const raw = params.username as string;
   const username = raw.startsWith('@') ? raw.slice(1) : raw;
 
   const { user: currentUser } = useUser();
 
+  // ── Edit / delete state ───────────────────────────────────────────────────
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
   const profileQuery = trpc.user.getByUsername.useQuery({ username });
-  const videosQuery = trpc.feed.byCreator.useInfiniteQuery(
+  const videosQuery  = trpc.feed.byCreator.useInfiniteQuery(
     { creatorId: profileQuery.data?.id ?? '', limit: 12 },
     { getNextPageParam: (last) => last.nextCursor, enabled: !!profileQuery.data?.id }
   );
@@ -23,8 +87,16 @@ export default function ProfilePage() {
     onSuccess: () => profileQuery.refetch(),
   });
 
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const updateMeta = trpc.video.updateMetadata.useMutation({
+    onSuccess: () => { setEditState(null); videosQuery.refetch(); },
+  });
+  const deleteVideo = trpc.video.delete.useMutation({
+    onSuccess: () => { setDeleteId(null); videosQuery.refetch(); },
+  });
+
   const profile = profileQuery.data;
-  const videos = videosQuery.data?.pages.flatMap((p) => p.videos) ?? [];
+  const videos  = videosQuery.data?.pages.flatMap((p) => p.videos) ?? [];
 
   if (profileQuery.isLoading) {
     return (
@@ -42,7 +114,7 @@ export default function ProfilePage() {
     );
   }
 
-  const isOwnProfile = currentUser && (currentUser.username === profile.username);
+  const isOwnProfile = !!(currentUser && currentUser.username === profile.username);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -126,30 +198,45 @@ export default function ProfilePage() {
           <h2 className="text-xs font-semibold text-white/40 mb-4 uppercase tracking-wider">
             Videos · {videos.length}
           </h2>
+
           {videos.length === 0 ? (
             <div className="text-center py-16 text-white/30 text-sm">
-              {isOwnProfile ? (
-                <>No videos yet. <Link href="/upload" className="text-pink-400 hover:underline">Upload your first one</Link></>
-              ) : 'No videos yet.'}
+              {isOwnProfile
+                ? <><span>No videos yet. </span><Link href="/upload" className="text-pink-400 hover:underline">Upload your first one</Link></>
+                : 'No videos yet.'}
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-1">
               {videos.map((v) => (
-                <Link key={v.id} href={`/v/${v.id}`}
-                  className="relative aspect-[9/16] bg-gray-900 rounded overflow-hidden group">
-                  <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </div>
-                  <div className="absolute bottom-1 left-1 flex items-center gap-1">
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    <span className="text-white text-xs">{v.viewCount.toLocaleString()}</span>
-                  </div>
-                </Link>
+                <div key={v.id} className="relative aspect-[9/16] bg-gray-900 rounded overflow-hidden group">
+                  <Link href={`/v/${v.id}`} className="block w-full h-full">
+                    <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                    <div className="absolute bottom-1 left-1 flex items-center gap-1">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      <span className="text-white text-xs">{v.viewCount.toLocaleString()}</span>
+                    </div>
+                  </Link>
+
+                  {/* Edit / delete menu — own profile only */}
+                  {isOwnProfile && (
+                    <VideoMenu
+                      onEdit={() => setEditState({
+                        id:          v.id,
+                        title:       v.title,
+                        description: (v as any).description ?? '',
+                        tags:        ((v as any).tags as string[] ?? []).join(', '),
+                      })}
+                      onDelete={() => setDeleteId(v.id)}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -162,6 +249,116 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* ── Edit modal ───────────────────────────────────────────────────────── */}
+      {editState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#0d1525] border border-white/10 rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-5">Edit post</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5">Title</label>
+                <input
+                  type="text"
+                  value={editState.title}
+                  onChange={(e) => setEditState({ ...editState, title: e.target.value })}
+                  maxLength={100}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors"
+                  placeholder="Post title"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5">Description</label>
+                <textarea
+                  value={editState.description}
+                  onChange={(e) => setEditState({ ...editState, description: e.target.value })}
+                  maxLength={500}
+                  rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                  placeholder="Add a description…"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5">Tags <span className="text-white/30">(comma-separated)</span></label>
+                <input
+                  type="text"
+                  value={editState.tags}
+                  onChange={(e) => setEditState({ ...editState, tags: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors"
+                  placeholder="funny, dance, viral"
+                />
+              </div>
+            </div>
+
+            {updateMeta.error && (
+              <p className="mt-3 text-xs text-red-400">{updateMeta.error.message}</p>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditState(null)}
+                className="flex-1 py-2.5 rounded-xl border border-white/20 text-sm text-white/70 hover:border-white/40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={updateMeta.isPending || !editState.title.trim()}
+                onClick={() => updateMeta.mutate({
+                  videoId:     editState.id,
+                  title:       editState.title.trim(),
+                  description: editState.description.trim() || undefined,
+                  tags: editState.tags
+                    .split(',')
+                    .map((t) => t.trim().toLowerCase())
+                    .filter(Boolean)
+                    .slice(0, 20),
+                })}
+                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold text-white transition-colors"
+              >
+                {updateMeta.isPending ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation modal ─────────────────────────────────────────── */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-[#0d1525] border border-white/10 rounded-2xl p-6 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-white mb-1">Delete post?</h2>
+            <p className="text-sm text-white/50 mb-6">This will permanently delete the post and all its likes, comments and watch history. This cannot be undone.</p>
+
+            {deleteVideo.error && (
+              <p className="mb-3 text-xs text-red-400">{deleteVideo.error.message}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-white/20 text-sm text-white/70 hover:border-white/40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleteVideo.isPending}
+                onClick={() => deleteVideo.mutate({ videoId: deleteId })}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold text-white transition-colors"
+              >
+                {deleteVideo.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

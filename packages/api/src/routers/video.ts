@@ -201,6 +201,33 @@ export const videoRouter = router({
       return { videos, nextCursor };
     }),
 
+  delete: protectedProcedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found or not yours' });
+
+      // Delete dependent records first to avoid FK constraint errors
+      await ctx.prisma.$transaction(async (tx) => {
+        await tx.videoInteraction.deleteMany({ where: { videoId: input.videoId } });
+        await tx.watchHistory.deleteMany({ where: { videoId: input.videoId } });
+        await tx.moderationLog.deleteMany({ where: { videoId: input.videoId } });
+        await tx.videoCategory.deleteMany({ where: { videoId: input.videoId } });
+        await tx.videoBadge.deleteMany({ where: { videoId: input.videoId } });
+        await tx.featuredContent.deleteMany({ where: { videoId: input.videoId } });
+        // Unlink generation job but keep the job record for audit trail
+        await tx.generationJob.updateMany({
+          where: { videoId: input.videoId },
+          data: { videoId: null },
+        });
+        await tx.video.delete({ where: { id: input.videoId } });
+      });
+
+      return { success: true };
+    }),
+
   search: publicProcedure
     .input(
       z.object({
