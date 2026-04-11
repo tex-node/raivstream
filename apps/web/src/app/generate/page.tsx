@@ -12,6 +12,7 @@ type Model = {
   description: string;
   badge: 'live' | 'beta' | 'coming-soon';
   icon: string;
+  minDuration: number;
   maxDuration: number;
   supportsImageToVideo: boolean;
   creditCost: number | null;
@@ -347,6 +348,34 @@ export default function GeneratePage() {
                         className="w-full rounded-xl"
                       />
                     )}
+
+                    {/* Download button */}
+                    <button
+                      onClick={async () => {
+                        if (!activeJob?.outputUrl) return;
+                        try {
+                          const res = await fetch(activeJob.outputUrl);
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          const ext = isVideoModel ? 'mp4' : 'png';
+                          a.download = `raivstream-${activeJob.id.slice(0, 8)}.${ext}`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        } catch {
+                          window.open(activeJob.outputUrl, '_blank');
+                        }
+                      }}
+                      className="w-full py-2 rounded-xl text-sm font-medium border border-white/20 hover:border-white/40 text-white/70 hover:text-white transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Download
+                    </button>
 
                     {!showPublish ? (
                       <button

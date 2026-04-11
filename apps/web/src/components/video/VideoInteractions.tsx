@@ -25,9 +25,13 @@ interface VideoInteractionsProps {
     disliked: boolean;
     starRating: number | null;
   } | null;
+  /** Whether the current user is already following this creator.
+   *  Defaults to false (e.g. on the feed where we don't pre-fetch follow state).
+   *  After toggling, local state is updated optimistically. */
+  initialIsFollowing?: boolean;
 }
 
-export function VideoInteractions({ video, viewerInteraction }: VideoInteractionsProps) {
+export function VideoInteractions({ video, viewerInteraction, initialIsFollowing = false }: VideoInteractionsProps) {
   const { isSignedIn } = useUser();
   const [liked, setLiked] = useState(viewerInteraction?.liked ?? false);
   const [disliked, setDisliked] = useState(viewerInteraction?.disliked ?? false);
@@ -35,6 +39,7 @@ export function VideoInteractions({ video, viewerInteraction }: VideoInteraction
   const [showStars, setShowStars] = useState(false);
   const [hoveredStar, setHoveredStar] = useState(0);
   const [myRating, setMyRating] = useState(viewerInteraction?.starRating ?? 0);
+  const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
 
   const toggleLike = trpc.interaction.toggleLike.useMutation({
     onMutate: () => {
@@ -63,7 +68,9 @@ export function VideoInteractions({ video, viewerInteraction }: VideoInteraction
     },
   });
 
-  const toggleFollow = trpc.user.toggleFollow.useMutation();
+  const toggleFollow = trpc.user.toggleFollow.useMutation({
+    onSuccess: (data) => setIsFollowing(data.following),
+  });
 
   const handleLike = () => {
     if (!isSignedIn) return;
@@ -80,9 +87,16 @@ export function VideoInteractions({ video, viewerInteraction }: VideoInteraction
     setRating.mutate({ videoId: video.id, rating });
   };
 
+  const handleFollow = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isSignedIn) return;
+    toggleFollow.mutate({ targetUserId: video.creator.id });
+  };
+
   return (
     <div className="flex flex-col items-center gap-5 py-4">
-      {/* Creator avatar */}
+      {/* Creator avatar + follow button */}
       <Link href={`/${video.creator.username}`} className="relative">
         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white">
           {video.creator.avatarUrl ? (
@@ -93,17 +107,27 @@ export function VideoInteractions({ video, viewerInteraction }: VideoInteraction
             </div>
           )}
         </div>
-        {/* Follow + button */}
+
+        {/* Follow button — shows + when not following, ✓ when following */}
         <button
-          onClick={(e) => {
-            e.preventDefault();
-            if (isSignedIn) toggleFollow.mutate({ targetUserId: video.creator.id });
-          }}
-          className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center"
+          onClick={handleFollow}
+          disabled={toggleFollow.isPending}
+          aria-label={isFollowing ? 'Unfollow' : 'Follow'}
+          className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+            isFollowing ? 'bg-green-500' : 'bg-pink-500'
+          }`}
         >
-          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-          </svg>
+          {isFollowing ? (
+            /* Checkmark */
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            /* Plus */
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+            </svg>
+          )}
         </button>
       </Link>
 

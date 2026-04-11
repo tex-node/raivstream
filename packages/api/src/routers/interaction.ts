@@ -24,6 +24,26 @@ export const interactionRouter = router({
         data: { likeCount: { increment: wasLiked ? -1 : 1 } },
       });
 
+      // Fire-and-forget like notification (only when newly liking, not unliking)
+      if (!wasLiked) {
+        ctx.prisma.video.findUnique({
+          where:  { id: input.videoId },
+          select: { creatorId: true },
+        }).then((video) => {
+          // Don't notify yourself
+          if (video && video.creatorId !== ctx.user.id) {
+            return ctx.prisma.notification.create({
+              data: {
+                recipientId: video.creatorId,
+                senderId:    ctx.user.id,
+                type:        'LIKE',
+                videoId:     input.videoId,
+              },
+            });
+          }
+        }).catch(() => {});
+      }
+
       return { liked: !wasLiked };
     }),
 

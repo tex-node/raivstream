@@ -66,6 +66,11 @@ enum GenerationStatus {
   CANCELLED
 }
 
+enum NotificationType {
+  FOLLOW  // someone followed you
+  LIKE    // someone liked your video
+}
+
 enum BadgeType {
   TOP_VIEWED_WEEK
   TOP_LIKED_WEEK
@@ -113,6 +118,8 @@ model User {
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
   passwordResetTokens PasswordResetToken[]
+  notifications       Notification[] @relation("ReceivedNotifications")
+  sentNotifications   Notification[] @relation("SentNotifications")
 
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -194,6 +201,7 @@ model Video {
   featuredIn        FeaturedContent[]
   generationJob     GenerationJob?
   moderationLogs    ModerationLog[]
+  notifications     Notification[]
   
   publishedAt       DateTime      @default(now())
   createdAt         DateTime      @default(now())
@@ -527,4 +535,23 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  recipient   User             @relation("ReceivedNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User             @relation("SentNotifications", fields: [senderId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  videoId     String?
+  video       Video?           @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, read])
+  @@map("notifications")
 }

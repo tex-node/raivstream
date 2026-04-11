@@ -82,6 +82,105 @@ export const userRouter = router({
       return { ...profile, isFollowing };
     }),
 
+  /** Paginated list of followers for a given username */
+  getFollowers: publicProcedure
+    .input(z.object({
+      username: z.string(),
+      limit:    z.number().min(1).max(50).default(20),
+      cursor:   z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const target = await ctx.prisma.user.findUnique({
+        where:  { username: input.username },
+        select: { id: true },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      const follows = await ctx.prisma.follow.findMany({
+        where: {
+          followingId: target.id,
+          ...(input.cursor ? { createdAt: { lt: new Date(input.cursor) } } : {}),
+        },
+        include: {
+          follower: {
+            select: {
+              id: true, username: true, displayName: true,
+              avatarUrl: true, verified: true, followerCount: true, bio: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit + 1,
+      });
+
+      let nextCursor: string | undefined;
+      if (follows.length > input.limit) {
+        nextCursor = follows.pop()!.createdAt.toISOString();
+      }
+
+      return { users: follows.map((f) => f.follower), nextCursor };
+    }),
+
+  /** Paginated list of accounts a given username is following */
+  getFollowing: publicProcedure
+    .input(z.object({
+      username: z.string(),
+      limit:    z.number().min(1).max(50).default(20),
+      cursor:   z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const target = await ctx.prisma.user.findUnique({
+        where:  { username: input.username },
+        select: { id: true },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      const follows = await ctx.prisma.follow.findMany({
+        where: {
+          followerId: target.id,
+          ...(input.cursor ? { createdAt: { lt: new Date(input.cursor) } } : {}),
+        },
+        include: {
+          following: {
+            select: {
+              id: true, username: true, displayName: true,
+              avatarUrl: true, verified: true, followerCount: true, bio: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit + 1,
+      });
+
+      let nextCursor: string | undefined;
+      if (follows.length > input.limit) {
+        nextCursor = follows.pop()!.createdAt.toISOString();
+      }
+
+      return { users: follows.map((f) => f.following), nextCursor };
+    }),
+
+  /** Search users by username or display name */
+  searchUsers: publicProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      if (!input.query.trim()) return [];
+      return ctx.prisma.user.findMany({
+        where: {
+          OR: [
+            { username:    { contains: input.query.trim(), mode: 'insensitive' } },
+            { displayName: { contains: input.query.trim(), mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true, username: true, displayName: true,
+          avatarUrl: true, verified: true, followerCount: true, bio: true,
+        },
+        orderBy: { followerCount: 'desc' },
+        take: 10,
+      });
+    }),
+
   // Current credit balance for the signed-in user
   creditBalance: protectedProcedure.query(async ({ ctx }) => {
     const balance = await ctx.prisma.creditBalance.findUnique({
@@ -173,6 +272,14 @@ export const userRouter = router({
           ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { followingCount: { increment: 1 } } }),
           ctx.prisma.user.update({ where: { id: input.targetUserId }, data: { followerCount: { increment: 1 } } }),
         ]);
+        // Fire-and-forget follow notification
+        ctx.prisma.notification.create({
+          data: {
+            recipientId: input.targetUserId,
+            senderId:    ctx.user.id,
+            type:        'FOLLOW',
+          },
+        }).catch(() => {});
         return { following: true };
       }
     }),

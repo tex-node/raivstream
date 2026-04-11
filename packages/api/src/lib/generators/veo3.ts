@@ -142,7 +142,7 @@ export async function getVeo3Status(operationName: string): Promise<Veo3Status> 
     const permanentUrl = await mirrorUrlToR2(downloadUrl, r2Key, mimeType);
     return { status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
-    console.error('[veo3] R2 mirror failed:', (err as Error).message);
-    return { status: 'completed', outputUrl: downloadUrl };
+    console.error('[veo3] R2 mirror failed — marking job failed:', (err as Error).message);
+    return { status: 'failed', error: 'Failed to save video to storage — please retry' };
   }
 }

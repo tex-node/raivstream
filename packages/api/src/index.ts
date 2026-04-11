@@ -14,6 +14,7 @@ import { analyticsRouter } from './routers/analytics';
 import { generationRouter } from './routers/generation';
 import { runpodRouter } from './routers/runpod';
 import { adminRouter } from './routers/admin';
+import { notificationRouter } from './routers/notification';
 
 // Root app router
 export const appRouter = router({
@@ -26,6 +27,7 @@ export const appRouter = router({
   generation: generationRouter,
   runpod: runpodRouter,
   admin: adminRouter,
+  notification: notificationRouter,
 });
 
 export type AppRouter = typeof appRouter;

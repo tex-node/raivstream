@@ -66,6 +66,111 @@ function VideoMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => v
   );
 }
 
+type FollowListType = 'followers' | 'following' | null;
+
+type SimpleUser = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  followerCount: number;
+  bio: string | null;
+};
+
+/** Modal listing followers or following */
+function FollowListModal({
+  username,
+  type,
+  onClose,
+}: {
+  username: string;
+  type: 'followers' | 'following';
+  onClose: () => void;
+}) {
+  const followers = trpc.user.getFollowers.useInfiniteQuery(
+    { username, limit: 20 },
+    { getNextPageParam: (last) => last.nextCursor, enabled: type === 'followers' }
+  );
+  const following = trpc.user.getFollowing.useInfiniteQuery(
+    { username, limit: 20 },
+    { getNextPageParam: (last) => last.nextCursor, enabled: type === 'following' }
+  );
+
+  const q = type === 'followers' ? followers : following;
+  const users: SimpleUser[] = (q.data?.pages.flatMap((p) => p.users) ?? []) as SimpleUser[];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-[#0d1525] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[75vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <h2 className="font-bold text-white capitalize">{type}</h2>
+          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 py-2">
+          {q.isLoading && (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!q.isLoading && users.length === 0 && (
+            <p className="text-center text-white/30 text-sm py-8">No {type} yet</p>
+          )}
+
+          {users.map((u) => (
+            <Link
+              key={u.id}
+              href={`/${u.username}`}
+              onClick={onClose}
+              className="flex items-center gap-3 px-5 py-3 hover:bg-white/5 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-pink-500 flex items-center justify-center">
+                {u.avatarUrl ? (
+                  <img src={u.avatarUrl} alt={u.displayName} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-white font-bold text-sm">{u.displayName[0]}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold text-white truncate">{u.displayName}</span>
+                  {u.verified && (
+                    <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                  )}
+                </div>
+                <p className="text-xs text-white/40">@{u.username} · {u.followerCount.toLocaleString()} followers</p>
+              </div>
+              <svg className="w-4 h-4 text-white/20 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          ))}
+
+          {q.hasNextPage && (
+            <button
+              onClick={() => q.fetchNextPage()}
+              disabled={q.isFetchingNextPage}
+              className="w-full py-3 text-sm text-white/40 hover:text-white/60 transition-colors"
+            >
+              {q.isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const params = useParams();
   const raw = params.username as string;
@@ -76,6 +181,9 @@ export default function ProfilePage() {
   // ── Edit / delete state ───────────────────────────────────────────────────
   const [editState, setEditState] = useState<EditState | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // ── Follow list modal state ───────────────────────────────────────────────
+  const [followListType, setFollowListType] = useState<FollowListType>(null);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const profileQuery = trpc.user.getByUsername.useQuery({ username });
@@ -147,15 +255,22 @@ export default function ProfilePage() {
 
           {profile.bio && <p className="text-white/80 text-sm max-w-xs">{profile.bio}</p>}
 
+          {/* Follower / following counts — clickable to open list modal */}
           <div className="flex gap-8">
-            <div className="text-center">
+            <button
+              onClick={() => setFollowListType('followers')}
+              className="text-center hover:opacity-70 transition-opacity cursor-pointer"
+            >
               <p className="font-bold text-lg">{profile.followerCount.toLocaleString()}</p>
               <p className="text-white/50 text-xs">Followers</p>
-            </div>
-            <div className="text-center">
+            </button>
+            <button
+              onClick={() => setFollowListType('following')}
+              className="text-center hover:opacity-70 transition-opacity cursor-pointer"
+            >
               <p className="font-bold text-lg">{profile.followingCount.toLocaleString()}</p>
               <p className="text-white/50 text-xs">Following</p>
-            </div>
+            </button>
             <div className="text-center">
               <p className="font-bold text-lg">{profile.totalViews.toLocaleString()}</p>
               <p className="text-white/50 text-xs">Views</p>
@@ -249,6 +364,15 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* ── Followers / Following modal ─────────────────────────────────────── */}
+      {followListType && (
+        <FollowListModal
+          username={username}
+          type={followListType}
+          onClose={() => setFollowListType(null)}
+        />
+      )}
 
       {/* ── Edit modal ───────────────────────────────────────────────────────── */}
       {editState && (
