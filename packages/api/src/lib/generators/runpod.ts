@@ -193,34 +193,74 @@ export function normaliseStatus(raw: RunpodJobStatus): NormalisedStatus {
 }
 
 /**
- * Extract the video URL from a completed RunPod / ComfyUI job output.
- * Handles both custom-handler and ComfyUI serverless output shapes.
+ * Extract the video/image URL from a completed RunPod / ComfyUI job output.
+ *
+ * Handles the full range of shapes produced by RunPod serverless workers:
+ *
+ *   Custom handler (simple):
+ *     { url: "https://..." }
+ *     { video_url: "https://..." }
+ *     { message: "https://..." }
+ *
+ *   ComfyUI serverless (runpod-worker-comfyui):
+ *     { message: "https://runpod-output.s3.amazonaws.com/..." }          ← top-level object
+ *     { videos: [{ url: "...", filename: "..." }] }                       ← VHS_SaveVideo node
+ *     { gifs: [{ url: "...", filename: "..." }] }                         ← VHS_VideoCombine node
+ *     [{ message: "..." }, ...]                                           ← array of node outputs
+ *     [{ videos: [...] }, ...]
+ *     [{ gifs: [...] }, ...]
+ *
+ *   Double-wrapped (RunPod sometimes nests output inside output):
+ *     { output: { message: "..." } }
+ *     { output: [{ videos: [...] }] }
  */
 export function extractOutputUrl(output: unknown): string | undefined {
   if (!output) return undefined;
 
-  // Custom handler: { "url": "https://..." }
-  if (typeof output === 'object' && 'url' in (output as object)) {
-    return (output as { url: string }).url;
+  // ── Unwrap double-nesting { output: ... } ──────────────────────────────────
+  if (
+    typeof output === 'object' &&
+    !Array.isArray(output) &&
+    'output' in (output as object)
+  ) {
+    const inner = extractOutputUrl((output as { output: unknown }).output);
+    if (inner) return inner;
   }
 
-  // Custom handler: { "video_url": "..." }
-  if (typeof output === 'object' && 'video_url' in (output as object)) {
-    return (output as { video_url: string }).video_url;
+  // ── Top-level object shapes ────────────────────────────────────────────────
+
+  if (typeof output === 'object' && !Array.isArray(output)) {
+    const obj = output as Record<string, unknown>;
+
+    // { url: "https://..." }
+    if (typeof obj.url === 'string' && obj.url.startsWith('http')) return obj.url;
+
+    // { video_url: "https://..." }
+    if (typeof obj.video_url === 'string' && obj.video_url.startsWith('http')) return obj.video_url;
+
+    // { message: "https://..." }  (common RunPod ComfyUI output)
+    if (typeof obj.message === 'string' && obj.message.startsWith('http')) return obj.message;
+
+    // { videos: [{ url: "..." }] }  (VHS_SaveVideo)
+    if (Array.isArray(obj.videos) && obj.videos[0]?.url) return obj.videos[0].url as string;
+
+    // { gifs: [{ url: "..." }] }  (VHS_VideoCombine — mis-labels MP4s as gifs)
+    if (Array.isArray(obj.gifs) && obj.gifs[0]?.url) return obj.gifs[0].url as string;
+
+    // { images: [{ url: "..." }] }  (SaveImage)
+    if (Array.isArray(obj.images) && obj.images[0]?.url) return obj.images[0].url as string;
   }
 
-  // ComfyUI serverless: array of node outputs, each with message or videos
+  // ── Array of per-node ComfyUI outputs ─────────────────────────────────────
   if (Array.isArray(output)) {
     for (const item of output) {
-      if (item?.message && typeof item.message === 'string' && item.message.startsWith('http')) {
-        return item.message;
-      }
-      if (Array.isArray(item?.videos) && item.videos[0]?.url) {
-        return item.videos[0].url as string;
-      }
-      if (Array.isArray(item?.gifs) && item.gifs[0]?.url) {
-        return item.gifs[0].url as string;
-      }
+      if (!item || typeof item !== 'object') continue;
+      const node = item as Record<string, unknown>;
+
+      if (typeof node.message === 'string' && node.message.startsWith('http')) return node.message;
+      if (Array.isArray(node.videos) && node.videos[0]?.url) return node.videos[0].url as string;
+      if (Array.isArray(node.gifs)   && node.gifs[0]?.url)   return node.gifs[0].url   as string;
+      if (Array.isArray(node.images) && node.images[0]?.url) return node.images[0].url as string;
     }
   }
 

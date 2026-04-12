@@ -62,6 +62,23 @@ export default function GeneratePage() {
   );
   const balance = balanceData?.balance ?? 0;
 
+  // ── RunPod endpoint health ─────────────────────────────────────────────────
+  const isRunpodModel = selectedModel === 'LTX2' || selectedModel === 'WAN_25';
+  const { data: ltx2Health } = trpc.runpod.ltx2Health.useQuery(undefined, {
+    enabled: isSignedIn && selectedModel === 'LTX2',
+    refetchInterval: 30_000,
+  });
+  const { data: wan25Health } = trpc.runpod.wan25Health.useQuery(undefined, {
+    enabled: isSignedIn && selectedModel === 'WAN_25',
+    refetchInterval: 30_000,
+  });
+  const currentHealth = selectedModel === 'LTX2' ? ltx2Health : selectedModel === 'WAN_25' ? wan25Health : null;
+  const warmUp = trpc.runpod.warmUp.useMutation();
+
+  // Adaptive poll interval: RunPod/Veo3 generation takes 2–10 min → poll every 10s
+  const SLOW_MODELS = ['LTX2', 'WAN_25', 'VEO3'];
+  const pollInterval = SLOW_MODELS.includes(selectedModel) ? 10_000 : 4_000;
+
   const createJob = trpc.generation.create.useMutation({
     onSuccess: (job) => {
       setActiveJobId(job.id);
@@ -73,9 +90,9 @@ export default function GeneratePage() {
       }
     },
   });
-  const { data: jobStatus, refetch: refetchJob } = trpc.generation.pollStatus.useQuery(
+  const { data: jobStatus } = trpc.generation.pollStatus.useQuery(
     { jobId: activeJobId! },
-    { enabled: !!activeJobId && pollEnabled, refetchInterval: 3000 }
+    { enabled: !!activeJobId && pollEnabled, refetchInterval: pollInterval }
   );
   const publishJob = trpc.generation.publish.useMutation({
     onSuccess: (video) => router.push(`/v/${video.id}`),
@@ -156,6 +173,21 @@ export default function GeneratePage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {(models ?? []).map((model) => {
                   const isCS = model.badge === 'coming-soon';
+
+                  // Health dot for RunPod models
+                  const isRunpod = model.id === 'LTX2' || model.id === 'WAN_25';
+                  const health = model.id === 'LTX2' ? ltx2Health : model.id === 'WAN_25' ? wan25Health : null;
+                  let healthDot: React.ReactNode = null;
+                  if (isRunpod && health) {
+                    if (!health.configured) {
+                      healthDot = <span className="w-1.5 h-1.5 rounded-full bg-white/20" title="Not configured" />;
+                    } else if (health.isReady) {
+                      healthDot = <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Workers ready" />;
+                    } else {
+                      healthDot = <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Cold — first job may take 3–4 min" />;
+                    }
+                  }
+
                   return (
                     <button
                       key={model.id}
@@ -169,6 +201,11 @@ export default function GeneratePage() {
                           : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                       }`}
                     >
+                      {/* Health indicator dot (top-right) */}
+                      {healthDot && (
+                        <span className="absolute top-3 right-3 flex items-center">{healthDot}</span>
+                      )}
+
                       <span className="text-2xl mb-2 block">{model.icon}</span>
                       <p className="font-semibold text-sm text-white">{model.label}</p>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -186,6 +223,41 @@ export default function GeneratePage() {
                   );
                 })}
               </div>
+
+              {/* RunPod warm-up banner — shown when selected model is cold */}
+              {isRunpodModel && currentHealth?.configured && !currentHealth?.isReady && (
+                <div className="mt-3 flex items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                    <p className="text-amber-300 text-xs">
+                      GPU workers are cold — first job will take <span className="font-semibold">3–4 min</span> to warm up.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => warmUp.mutate({ model: selectedModel as 'LTX2' | 'WAN_25' })}
+                    disabled={warmUp.isPending}
+                    className="flex-shrink-0 text-[11px] font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-3 py-1 rounded-lg transition-colors"
+                  >
+                    {warmUp.isPending ? 'Pinging…' : '⚡ Wake up'}
+                  </button>
+                </div>
+              )}
+
+              {/* RunPod timing info — shown when selected model is ready or cold */}
+              {isRunpodModel && currentHealth?.configured && (
+                <p className="mt-2 text-xs text-white/25 text-center">
+                  RunPod generation typically takes <span className="text-white/40">2–5 minutes</span>. Progress updates every 10 seconds.
+                </p>
+              )}
+
+              {/* RunPod not configured notice */}
+              {isRunpodModel && currentHealth && !currentHealth.configured && (
+                <div className="mt-3 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5">
+                  <p className="text-white/40 text-xs text-center">
+                    {selectedModel === 'LTX2' ? 'RUNPOD_LTX2_ENDPOINT_ID' : 'RUNPOD_WAN25_ENDPOINT_ID'} is not set in environment variables.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Prompt */}
@@ -322,9 +394,16 @@ export default function GeneratePage() {
                     ✨
                   </div>
                 ) : isGenerating && !activeJob?.outputUrl ? (
-                  <div className="aspect-[9/16] flex flex-col items-center justify-center gap-3 bg-white/5 rounded-xl">
+                  <div className="aspect-[9/16] flex flex-col items-center justify-center gap-3 bg-white/5 rounded-xl px-6">
                     <div className="w-8 h-8 border-2 border-pink-500/30 border-t-pink-500 rounded-full animate-spin" />
                     <p className="text-xs text-white/40 capitalize">{activeJob?.status?.toLowerCase() ?? 'Queued'}…</p>
+                    {SLOW_MODELS.includes(selectedModel) && (
+                      <p className="text-[10px] text-white/25 text-center leading-relaxed">
+                        {selectedModel === 'VEO3'
+                          ? 'Veo 3 typically takes 2–3 minutes'
+                          : 'RunPod generation takes 2–5 minutes.\nUpdating every 10 seconds.'}
+                      </p>
+                    )}
                   </div>
                 ) : activeJob?.status === 'FAILED' ? (
                   <div className="aspect-[9/16] flex flex-col items-center justify-center gap-2 bg-red-500/5 rounded-xl border border-red-500/20">

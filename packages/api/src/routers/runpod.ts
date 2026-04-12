@@ -83,6 +83,37 @@ export const runpodRouter = router({
     }
   }),
 
+  /**
+   * Ping one or both RunPod endpoints to trigger FlashBoot warm-up.
+   * The health-check request causes RunPod to pre-allocate a worker so the
+   * first real generation job starts near-instantly instead of cold-booting.
+   */
+  warmUp: protectedProcedure
+    .input(z.object({ model: z.enum(['LTX2', 'WAN_25', 'both']) }))
+    .mutation(async ({ input }) => {
+      const results: Record<string, string> = {};
+
+      const ping = async (model: 'LTX2' | 'WAN_25') => {
+        const envKey = model === 'LTX2' ? 'RUNPOD_LTX2_ENDPOINT_ID' : 'RUNPOD_WAN25_ENDPOINT_ID';
+        const id = process.env[envKey];
+        if (!id) { results[model] = 'not configured'; return; }
+        try {
+          await getEndpointHealth(id);
+          results[model] = 'pinged';
+        } catch {
+          results[model] = 'error';
+        }
+      };
+
+      if (input.model === 'both') {
+        await Promise.allSettled([ping('LTX2'), ping('WAN_25')]);
+      } else {
+        await ping(input.model);
+      }
+
+      return { results };
+    }),
+
   // ── Pod management (dev pods only) ─────────────────────────────────────────
 
   /**

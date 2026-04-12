@@ -52,6 +52,7 @@ import {
   durationToFrames,
   type NormalisedStatus,
 } from './runpod';
+import { mirrorUrlToR2 } from '../r2';
 
 export interface LTX2Input {
   prompt:        string;
@@ -257,14 +258,31 @@ export async function submitLTX2(input: LTX2Input): Promise<string> {
 
 /**
  * Poll the status of a previously submitted LTX2 job.
+ * When the job completes, the RunPod output URL (temporary S3 presigned) is
+ * mirrored to R2 for permanent storage before being returned.
  */
 export async function getLTX2Status(jobId: string): Promise<LTX2JobResult> {
   const id = endpointId();
   const raw = await getJobStatus(id, jobId);
-  return {
-    jobId,
-    status:    normaliseStatus(raw.status),
-    outputUrl: raw.status === 'COMPLETED' ? extractOutputUrl(raw.output) : undefined,
-    error:     raw.error,
-  };
+  const status = normaliseStatus(raw.status);
+
+  if (status !== 'completed') {
+    return { jobId, status, outputUrl: undefined, error: raw.error };
+  }
+
+  // Job completed — extract and mirror the output URL to R2
+  const rawUrl = extractOutputUrl(raw.output);
+  if (!rawUrl) {
+    console.error('[ltx2] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
+    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+  }
+
+  const r2Key = `generated/ltx2/${jobId}.mp4`;
+  try {
+    const permanentUrl = await mirrorUrlToR2(rawUrl, r2Key, 'video/mp4');
+    return { jobId, status: 'completed', outputUrl: permanentUrl };
+  } catch (err) {
+    console.error('[ltx2] R2 mirror failed — marking job failed:', (err as Error).message);
+    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+  }
 }
