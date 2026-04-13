@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   ViewToken,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/lib/auth';
@@ -59,7 +59,6 @@ function VideoCard({
   const videoRef = useRef<Video>(null);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(item.likeCount);
-
   const videoUrl = item.mp4Url ?? item.hlsMasterUrl ?? null;
 
   const toggleLike = trpc.interaction.toggleLike.useMutation({
@@ -84,28 +83,39 @@ function VideoCard({
     <View style={[styles.card, { width: W, height: H }]}>
       {/* ── Video ── */}
       {videoUrl ? (
-        <Video
-          ref={videoRef}
-          source={{ uri: videoUrl }}
-          style={StyleSheet.absoluteFill}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={isActive}
-          isLooping
-          isMuted={false}
-          onPlaybackStatusUpdate={(status) => {
-            if (!status.isLoaded || !isSignedIn) return;
-            if (status.positionMillis > 0 && status.positionMillis % 5000 < 200) {
-              trackProgress.mutate({
-                videoId: item.id,
-                watchTimeSeconds: Math.floor(status.positionMillis / 1000),
-                completed:
-                  status.durationMillis != null &&
-                  status.positionMillis / status.durationMillis >= 0.9,
-                lastPosition: Math.floor(status.positionMillis / 1000),
-              });
-            }
-          }}
-        />
+        <View style={StyleSheet.absoluteFill}>
+          {/* Blurred thumbnail fills the entire frame behind the video.
+              Covers black bars for landscape videos and slightly-off portrait ratios. */}
+          <Image
+            source={{ uri: item.thumbnailUrl }}
+            style={[StyleSheet.absoluteFill, styles.blurBg]}
+            contentFit="cover"
+            blurRadius={20}
+          />
+          {/* Video always contained so the full frame is visible, never cropped */}
+          <Video
+            ref={videoRef}
+            source={{ uri: videoUrl }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay={isActive}
+            isLooping
+            isMuted={false}
+            onPlaybackStatusUpdate={(status) => {
+              if (!status.isLoaded || !isSignedIn) return;
+              if (status.positionMillis > 0 && status.positionMillis % 5000 < 200) {
+                trackProgress.mutate({
+                  videoId: item.id,
+                  watchTimeSeconds: Math.floor(status.positionMillis / 1000),
+                  completed:
+                    status.durationMillis != null &&
+                    status.positionMillis / status.durationMillis >= 0.9,
+                  lastPosition: Math.floor(status.positionMillis / 1000),
+                });
+              }
+            }}
+          />
+        </View>
       ) : (
         <Image
           source={{ uri: item.thumbnailUrl }}
@@ -209,6 +219,18 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Configure audio session once on mount.
+  // Required on iOS so video audio plays even when the silent switch is on.
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS:      true,
+      allowsRecordingIOS:        false,
+      staysActiveInBackground:   false,
+      shouldDuckAndroid:         false,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
+  }, []);
 
   // Fetch the active tab's feed
   const forYou = trpc.feed.forYou.useInfiniteQuery(
@@ -349,6 +371,7 @@ const styles = StyleSheet.create({
 
   // Card
   card: { position: 'relative', backgroundColor: '#000' },
+  blurBg: { opacity: 0.85 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',

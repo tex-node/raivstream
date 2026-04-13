@@ -2,12 +2,15 @@
  * Central dispatcher — routes a generation request to the correct provider.
  *
  * Provider map:
- *   NANO_BANANA  → custom API (nanoBanana.ts)
- *   GROK_IMAGINE → xAI REST API (grokImagine.ts)
- *   LTX2         → RunPod Serverless + ComfyUI-LTXVideo (ltx2.ts)
- *   WAN_25       → RunPod Serverless + ComfyUI-GGUF / Wan nodes (wan25.ts)
- *   KLING        → Kuaishou API — placeholder until access granted (placeholders.ts)
- *   HIGGSFIELD   → Higgsfield API — placeholder until access granted (placeholders.ts)
+ *   NANO_BANANA   → custom API (nanoBanana.ts)
+ *   GROK_IMAGINE  → xAI REST API (grokImagine.ts)
+ *   LTX2          → RunPod Serverless + ComfyUI-LTXVideo (ltx2.ts)
+ *   WAN_25        → RunPod Serverless + ComfyUI-GGUF / Wan nodes (wan25.ts)
+ *   KLING         → Kuaishou API — placeholder until access granted (placeholders.ts)
+ *   HIGGSFIELD    → Higgsfield API — placeholder until access granted (placeholders.ts)
+ *   FLUX          → RunPod Serverless + ComfyUI Flux.1 (flux.ts)
+ *   HUNYUAN_VIDEO → RunPod Serverless + ComfyUI HunyuanVideoWrapper (hunyuanVideo.ts)
+ *   COG_VIDEO_X   → RunPod Serverless + ComfyUI CogVideoX (cogVideoX.ts)
  */
 
 import { submitGeneration as submitNanoBanana, getJobStatus as getNanoBananaStatus } from './nanoBanana';
@@ -16,6 +19,9 @@ import { submitLTX2, getLTX2Status } from './ltx2';
 import { submitWan25, getWan25Status } from './wan25';
 import { submitKling, getKlingStatus, submitHighgsfield, getHiggsfieldStatus } from './placeholders';
 import { submitVeo3, getVeo3Status } from './veo3';
+import { submitFlux, getFluxStatus } from './flux';
+import { submitHunyuanVideo, getHunyuanVideoStatus } from './hunyuanVideo';
+import { submitCogVideoX, getCogVideoXStatus } from './cogVideoX';
 
 export type SupportedModel =
   | 'NANO_BANANA'
@@ -24,7 +30,10 @@ export type SupportedModel =
   | 'WAN_25'
   | 'KLING'
   | 'HIGGSFIELD'
-  | 'VEO3';
+  | 'VEO3'
+  | 'FLUX'
+  | 'HUNYUAN_VIDEO'
+  | 'COG_VIDEO_X';
 
 export interface GenerateInput {
   model:          SupportedModel;
@@ -85,6 +94,21 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
       const operationName = await submitVeo3(input);
       return { providerJobId: operationName };
     }
+
+    case 'FLUX': {
+      const jobId = await submitFlux(input);
+      return { providerJobId: jobId };
+    }
+
+    case 'HUNYUAN_VIDEO': {
+      const jobId = await submitHunyuanVideo(input);
+      return { providerJobId: jobId };
+    }
+
+    case 'COG_VIDEO_X': {
+      const jobId = await submitCogVideoX(input);
+      return { providerJobId: jobId };
+    }
   }
 }
 
@@ -132,6 +156,21 @@ export async function pollJobStatus(
 
     case 'VEO3': {
       const s = await getVeo3Status(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'FLUX': {
+      const s = await getFluxStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'HUNYUAN_VIDEO': {
+      const s = await getHunyuanVideoStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'COG_VIDEO_X': {
+      const s = await getCogVideoXStatus(providerJobId);
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
   }
@@ -225,5 +264,38 @@ export const MODEL_META: Record<SupportedModel, {
     supportsImageToVideo: false,
     provider:            'Google Gemini',
     providerUrl:         'https://ai.google.dev',
+  },
+  FLUX: {
+    label:               'Flux.1',
+    description:         'Black Forest Labs\' state-of-the-art image model — photorealistic quality, fast on RunPod GPU.',
+    badge:               'beta',
+    icon:                '⚡',
+    minDuration:         0,
+    maxDuration:         0,
+    supportsImageToVideo: false,
+    provider:            'RunPod + Flux.1',
+    providerUrl:         'https://blackforestlabs.ai',
+  },
+  HUNYUAN_VIDEO: {
+    label:               'HunyuanVideo',
+    description:         'Tencent\'s open-source video model — high-fidelity motion, 720p output on A100 GPU.',
+    badge:               'beta',
+    icon:                '🐉',
+    minDuration:         1,
+    maxDuration:         8,
+    supportsImageToVideo: false,
+    provider:            'RunPod + HunyuanVideo',
+    providerUrl:         'https://github.com/Tencent/HunyuanVideo',
+  },
+  COG_VIDEO_X: {
+    label:               'CogVideoX',
+    description:         'Zhipu AI\'s video generation model — smooth motion, strong prompt following, runs on RunPod GPU.',
+    badge:               'beta',
+    icon:                '🧠',
+    minDuration:         1,
+    maxDuration:         6,
+    supportsImageToVideo: false,
+    provider:            'RunPod + CogVideoX',
+    providerUrl:         'https://github.com/THUDM/CogVideo',
   },
 };

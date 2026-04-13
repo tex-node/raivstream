@@ -26,7 +26,7 @@ raivstream/
 | Storage | Cloudflare R2 (S3-compatible, `@aws-sdk/client-s3`) |
 | Payments (primary) | Paystack (NGN — subscriptions + credit purchases) |
 | Payments (international) | Stripe (USD — Creator plan) |
-| AI generation | xAI Grok Imagine, Wan 2.5, LTX-2, Nano Banana (Google Gemini), Veo 3.1 (Google Gemini) |
+| AI generation | xAI Grok Imagine, Wan 2.5, LTX-2, Nano Banana (Google Gemini), Veo 3.1 (Google Gemini), Flux.1 (RunPod), HunyuanVideo (RunPod), CogVideoX (RunPod) |
 | Credits | Custom credit system — ₦1,000 = 1,000 credits, deducted per AI generation |
 | Content moderation | OpenAI omni-moderation-latest (prompt filter + image scan), manual admin queue |
 | Cache | Upstash Redis (optional) |
@@ -50,8 +50,11 @@ packages/api/src/lib/generators/
   grokImagine.ts                      — xAI Grok Imagine (XAI_API_KEY) — image generation (model: grok-2-image-1212)
   nanoBanana.ts                       — Nano Banana image gen via Google Gemini REST API (GEMINI_API_KEY)
   veo3.ts                             — Veo 3.1 video gen via Google Gemini :predictLongRunning endpoint
-  ltx2.ts                             — LTX-Video 2 via RunPod
-  wan25.ts                            — Wan 2.5 via RunPod
+  ltx2.ts                             — LTX-Video 2 via RunPod + ComfyUI-LTXVideo
+  wan25.ts                            — Wan 2.5 via RunPod + ComfyUI-GGUF
+  flux.ts                             — Flux.1 via RunPod + ComfyUI (image, SamplerCustomAdvanced + BasicGuider path)
+  hunyuanVideo.ts                     — HunyuanVideo via RunPod + ComfyUI-HunyuanVideoWrapper (HyVideo* nodes)
+  cogVideoX.ts                        — CogVideoX-5B via RunPod + ComfyUI native nodes
   placeholders.ts                     — Kling, Higgsfield (coming soon stubs)
 packages/api/src/routers/
   auth.ts                             — register, login, refresh, logout, logoutAll
@@ -78,7 +81,8 @@ apps/mobile/
   lib/auth.ts                         — Zustand auth store (SecureStore persistence)
   lib/trpc.ts                         — tRPC client
   components/providers/TRPCProvider.tsx
-  app.json                            — apiUrl: https://app.raivstream.com
+  app.json                            — apiUrl: https://app.raivstream.com, EAS projectId: a836168f-922c-44b6-b42f-fbbe6f15d946
+  metro.config.js                     — monorepo Metro config: watchFolders + nodeModulesPaths + unstable_enablePackageExports
 
 apps/web/src/
   app/page.tsx                        — TikTok-style feed visible to ALL users (signed-in and guests)
@@ -194,7 +198,7 @@ apps/web/src/
 - 1,000 credits = ₦1,000 (configured in `FeatureCreditRate` table via seed.ts or admin UI)
 - `deductCredits()` in `packages/api/src/lib/credits.ts` uses atomic `updateMany WHERE balance >= cost` — race-condition safe
 - `refundCredits()` called automatically if provider submission fails
-- Costs (DB-configurable via /admin/credits): nano_banana=50, grok_imagine=100, ltx2=150, wan_25=200, veo3=300, higgsfield=400, kling=500, thumbnail=20, transcribe=30, enhance=100
+- Costs (DB-configurable via /admin/credits): nano_banana=50, grok_imagine=100, ltx2=150, wan_25=200, veo3=300, flux=80, cog_video_x=250, hunyuan_video=300, higgsfield=400, kling=500, thumbnail=20, transcribe=30, enhance=100
 - Credit packages: starter (1k cr / ₦1k), popular (5k cr / ₦4.5k — best value), pro (10k cr / ₦8k)
 - `generation.create` deducts before job creation; `generation.listModels` returns `creditCost` from DB
 - Feature key format: `generate:model_name` (e.g. `generate:veo3`, `generate:nano_banana`)
@@ -217,7 +221,7 @@ apps/web/src/
 - **CreditBalance** — userId (unique), balance (Int)
 - **CreditTransaction** — userId, amount (+/-), type (PURCHASE|USAGE|BONUS|REFUND), featureKey, balanceBefore, balanceAfter
 - **FeatureCreditRate** — featureKey (unique), creditsPerUnit, isActive — admin-configurable costs
-- **GenerationJob** — userId, model (NANO_BANANA|GROK_IMAGINE|LTX2|WAN_25|KLING|HIGGSFIELD|VEO3), prompt, status, providerJobId, outputUrl, thumbnailUrl, videoId
+- **GenerationJob** — userId, model (NANO_BANANA|GROK_IMAGINE|LTX2|WAN_25|KLING|HIGGSFIELD|VEO3|FLUX|HUNYUAN_VIDEO|COG_VIDEO_X), prompt, status, providerJobId, outputUrl, thumbnailUrl, videoId
 - **Badge / UserBadge / VideoBadge** — weekly achievement badges
 - **FeaturedContent** — curated sections (section, position, week)
 - **Category / VideoCategory** — many-to-many video categorisation
@@ -243,8 +247,11 @@ apps/web/src/
 | Grok Imagine | Live | xAI | `XAI_API_KEY` | Image only. Model: `grok-2-image-1212` |
 | Nano Banana | Live | Google Gemini | `GEMINI_API_KEY` | Image only. REST POST to `gemini-3.1-flash-image-preview:generateContent`. Returns base64 inline data → uploaded to R2 |
 | Veo 3.1 | Live | Google Gemini | `GEMINI_API_KEY` | Video. Endpoint: `:predictLongRunning`. Body: `{instances:[{prompt}], parameters:{aspectRatio}}`. Only supports `16:9` or `16:10` (NOT 9:16). Poll `GET /v1beta/{operationName}`. Video URI in `response.generatedVideos[0].video.uri` |
-| LTX-2 | Beta | RunPod | `RUNPOD_API_KEY` | Video via RunPod Serverless |
-| Wan 2.5 | Beta | RunPod | `RUNPOD_API_KEY` | Video via RunPod Serverless |
+| LTX-2 | Beta | RunPod | `RUNPOD_API_KEY` + `RUNPOD_LTX2_ENDPOINT_ID` | Video via RunPod Serverless + ComfyUI-LTXVideo. GPU: RTX 4090 (24 GB). Resolutions: 576×1024 (9:16), 1024×576 (16:9). Frame constraint: (n-1) % 8 === 0, min 9 |
+| Wan 2.5 | Beta | RunPod | `RUNPOD_API_KEY` + `RUNPOD_WAN25_ENDPOINT_ID` | Video via RunPod Serverless + ComfyUI-GGUF. GPU: RTX 4090 (24 GB). GGUF-quantised weights. Supports image-to-video |
+| Flux.1 | Beta | RunPod | `RUNPOD_API_KEY` + `RUNPOD_FLUX_ENDPOINT_ID` | **Image only** (maxDuration=0). RunPod Serverless + ComfyUI. GPU: RTX 4090 (24 GB). Uses SamplerCustomAdvanced + BasicGuider (NOT standard KSampler). Resolutions: 768×1360 (9:16), 1024×1024 (1:1). Steps default 20, guidance 3.5. Files: flux1-dev.safetensors, ae.safetensors, clip_l.safetensors, t5xxl_fp8_e4m3fn.safetensors |
+| HunyuanVideo | Beta | RunPod | `RUNPOD_API_KEY` + `RUNPOD_HUNYUAN_ENDPOINT_ID` | Video via RunPod Serverless + ComfyUI-HunyuanVideoWrapper (HyVideo* nodes). GPU: **A100 40 GB required**. 720p output. Frame constraint: multiples of 4, max 120. Execution timeout: 20 min. Files: hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors + VAE. Text encoders loaded via DownloadAndLoadHyVideoTextEncoder node |
+| CogVideoX | Beta | RunPod | `RUNPOD_API_KEY` + `RUNPOD_COGVIDEOX_ENDPOINT_ID` | Video via RunPod Serverless + ComfyUI native nodes. GPU: RTX 4090 (24 GB) or A100. 480p output. Frame constraint: (n-1) % 8 === 0, hard cap 49 frames. At 8 fps: max ~6 sec. Files: cogvideox_5b.safetensors, cogvideox_vae.safetensors, t5xxl_fp16.safetensors |
 | Kling | Coming Soon | Kuaishou | — | Placeholder |
 | Higgsfield | Coming Soon | Higgsfield AI | — | Placeholder |
 
@@ -278,6 +285,19 @@ apps/web/src/
 - **Env file**: /root/raivstream/.env (symlinked to apps/web/.env.local and packages/database/.env)
 - **Manual rebuild**: `cd /root/raivstream && git pull && pnpm --filter @raivstream/web build && pm2 restart raivstream-web --update-env`
 
+## RunPod + ComfyUI Notes
+- All RunPod models use `RUNPOD_FLUX_MODE` / `RUNPOD_LTX2_MODE` etc. — `comfyui` (default) sends `{ workflow: {...} }`, `handler` sends flat JSON to a custom handler.py
+- ComfyUI workflow JSON is built server-side in each generator file — node IDs are strings ('1', '2', …), inputs reference other nodes as `['nodeId', outputIndex]`
+- Output URL extraction is handled by `extractOutputUrl()` in `runpod.ts` — handles all ComfyUI output shapes (SaveImage, VHS_VideoCombine, nested arrays)
+- All RunPod outputs are mirrored to R2 via `mirrorUrlToR2()` on job completion — RunPod presigned S3 URLs expire, R2 URLs are permanent
+- `aspectRatioToResolution(ar, preset)` in `runpod.ts` — presets: `ltx2`, `wan25`, `flux`, `hunyuan`, `cogvideox`, `default`
+- `durationToFrames(sec, fps, model)` in `runpod.ts` — model-specific frame constraints: ltx2 `(n-1)%8===0 min 9`, wan25 `multiples of 4 max 121`, cogvideox `(n-1)%8===0 max 49`, hunyuan `multiples of 4 max 120`
+- Flux.1 uses `SamplerCustomAdvanced` + `BasicGuider` + `BasicScheduler` — NOT standard `KSampler` (KSampler does not support Flux's distilled guidance)
+- HunyuanVideo requires `kijai/ComfyUI-HunyuanVideoWrapper` custom nodes for `HyVideoModelLoader`, `HyVideoTextEncode`, `HyVideoEmptyLatent`, `HyVideoSampler`, `HyVideoDecode`
+- CogVideoX uses native ComfyUI nodes (`CogVideoXTransformerLoader`, `CogVideoXTextEncode`, `CogVideoXSampler`, `CogVideoXDecode`)
+- Seeding credit rates on VPS: run node script from `packages/database/` directory (not repo root) — `@raivstream/database` cannot be resolved from `/root/raivstream` directly
+- New RunPod models show as **beta** badge in `/generate` UI; they go live as soon as their `*_ENDPOINT_ID` is set in `.env` and app is restarted
+
 ## Common Pitfalls (already fixed)
 - Tanstack Query v5: `onSuccess` removed from `useQuery` → use `useEffect` watching `data` instead
 - Tanstack Query v5: mutation `isLoading` renamed to `isPending`
@@ -291,8 +311,13 @@ apps/web/src/
 - XAI_API_KEY must be set in .env for Grok Imagine to work — not optional at runtime
 - GitHub Actions deploy runs `pnpm --filter @raivstream/web build` — if build fails, VPS keeps old `.next` and serves stale code. Always check `pm2 logs` + confirm `required-server-files.json` timestamp after deploy
 - Duplicate env vars in `.env` — first occurrence wins in most loaders. Remove placeholder lines like `GEMINI_API_KEY=your_key_here` that override real values below
-- Veo 3 only supports landscape aspect ratios (`16:9`, `16:10`) — `9:16` causes API error
+- Veo 3 only supports landscape aspect ratios (`16:9`, `16:10`) — `9:16` causes API error; `/generate` page auto-switches AR to 16:9 and disables other options when Veo3 is selected
 - Admin pages use `trpc.admin.*` not `api.admin.*` — web app exports `trpc` not `api`
+- Mobile video scaling: always use `ResizeMode.CONTAIN` + always render blurred thumbnail backdrop — detection-based approaches (onReadyForDisplay, isLandscape state) are unreliable due to FlatList reuse and race conditions
+- Mobile iOS audio: requires `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` called once on app mount (in FeedScreen useEffect) — without this, audio is silent when hardware silent switch is on
+- Web landscape videos: `VideoPlayer.tsx` detects `videoWidth > videoHeight` via `loadedmetadata` event, sets `isLandscape` state, renders blurred `<video>` backdrop (blur+scale) with `opacity: isLandscape ? 1 : 0` — always in DOM so bgVideoRef is never null
+- pnpm + Expo monorepo: `.npmrc` at root must have `public-hoist-pattern[]=*expo*` etc. so Metro can find transitive deps. `metro.config.js` in mobile app sets `watchFolders` + `nodeModulesPaths` for monorepo resolution. `superjson` must stay at v1.x (v2 depends on `copy-anything` which is ESM-only and Metro can't resolve it)
+- EAS Update (OTA JS updates): run `npx eas-cli update --branch production --platform android` then `--platform ios` from `apps/mobile` on local machine (NOT VPS). Requires `expo-updates` installed and `app.json` `updates.url` + `runtimeVersion` configured. The `@expo/cli` `node:sea` Windows path bug must be patched in `node_modules/.pnpm/@expo+cli@0.17.13_.../externals.js` — add `!x.includes(':')` to the builtinModules filter
 - `useAuth()` returns `isLoaded` not `loading`
 - R2 uploads (video upload page): requires **R2 S3 API token** (not a Cloudflare API token). Cloudflare API tokens (`cfat_` prefix) work for server-side S3 SDK calls but NOT for presigned URLs. Create the token via R2 → Manage R2 API Tokens → Create API Token (Object Read & Write, scoped to bucket). The resulting Access Key ID is a 32-char hex string with no prefix.
 - R2 CORS must be configured on the bucket (Cloudflare → R2 → bucket → Settings → CORS Policy) with `AllowedMethods: [GET, PUT, HEAD]` and `AllowedHeaders: [*]` — without this, browser XHR PUT to presigned URLs is blocked
@@ -318,6 +343,10 @@ pnpm db:seed          # run packages/database/seed.ts
 pnpm lint             # lint all packages
 pnpm type-check       # TypeScript check across monorepo
 pnpm build            # build all packages
+
+# EAS Update (OTA mobile JS update — run from apps/mobile on LOCAL machine)
+npx eas-cli update --branch production --platform android --message "..."
+npx eas-cli update --branch production --platform ios --message "..."
 ```
 
 ## Environment Variables
@@ -332,7 +361,13 @@ pnpm build            # build all packages
 - `GEMINI_API_KEY` — Google Gemini API key for Nano Banana + Veo 3.1 (aistudio.google.com)
 - `GEMINI_IMAGE_MODEL` — image model name (default: `gemini-3.1-flash-image-preview`)
 - `VEO_MODEL` — Veo model name (default: `veo-3.1-generate-preview`)
-- `RUNPOD_API_KEY` — RunPod key for LTX-2 and Wan 2.5
+- `RUNPOD_API_KEY` — RunPod key for all RunPod models (LTX-2, Wan 2.5, Flux.1, HunyuanVideo, CogVideoX)
+- `RUNPOD_LTX2_ENDPOINT_ID` — LTX-Video 2 serverless endpoint
+- `RUNPOD_WAN25_ENDPOINT_ID` — Wan 2.5 serverless endpoint
+- `RUNPOD_FLUX_ENDPOINT_ID` — Flux.1 serverless endpoint (RTX 4090)
+- `RUNPOD_HUNYUAN_ENDPOINT_ID` — HunyuanVideo serverless endpoint (A100 40 GB)
+- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX serverless endpoint (RTX 4090 / A100)
+- Each model also has optional config vars (mode, checkpoint filename, steps, cfg, fps) — see `.env.example`
 
 **Content moderation:**
 - `OPENAI_API_KEY` — sk-... — used for prompt moderation (text) + upload scanning (image). Free moderation endpoint, no per-call cost. Format: `OPENAI_API_KEY=sk-...`
@@ -362,13 +397,16 @@ pnpm build            # build all packages
 - Paystack integration (Viewer subscription + credit packages, webhooks)
 - Stripe subscription scaffolding (Creator plan, international)
 - Credit system with atomic deduction, refunds, transaction history
-- AI Video Studio: Grok Imagine (live), Nano Banana (live via Gemini), Veo 3.1 (live via Gemini), Wan 2.5 (beta), LTX-2 (beta), Kling/Higgsfield (placeholders)
+- AI Video Studio: Grok Imagine (live), Nano Banana (live via Gemini), Veo 3.1 (live via Gemini), Wan 2.5 (beta), LTX-2 (beta), Flux.1 (beta), HunyuanVideo (beta), CogVideoX (beta), Kling/Higgsfield (placeholders)
 - Freemium episode gate (5 free episodes, PaywallModal)
 - Web pages: feed (public), upload, video view, profile, pricing, credits, generate, analytics, search, settings, sign-in, sign-up, forgot-password, reset-password
 - Admin dashboard: overview, user management, credit rate management, job history, revenue, **moderation queue**
 - Admin roles: ADMIN + MODERATOR with gated tRPC procedures
 - Mobile screens: feed, upload, profile, search, video modal, sign-in/sign-up (connected to app.raivstream.com)
 - Mobile auth: Zustand store + SecureStore persistence
+- Mobile video: always ResizeMode.CONTAIN + blurred thumbnail backdrop (landscape + portrait both correct)
+- Mobile audio: iOS silent switch handled via Audio.setAudioModeAsync({ playsInSilentModeIOS: true })
+- EAS Update configured: expo-updates installed, app.json projectId + updates.url set, OTA deployed to production branch
 - Navbar: glass-blur on marketing, transparent on feed, avatar dropdown with Admin link; R16 kids branding
 - UI design: dark navy (#050b18) + violet/purple ambient glow design system
 - Feed: visible to all users (guests + signed-in), smooth CSS snap scroll, muted autoplay, image/video detection

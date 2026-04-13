@@ -323,7 +323,7 @@ export interface VideoResolution { width: number; height: number }
  */
 export function aspectRatioToResolution(
   ar: string | undefined,
-  preset: 'ltx2' | 'wan25' | 'default' = 'default'
+  preset: 'ltx2' | 'wan25' | 'flux' | 'hunyuan' | 'cogvideox' | 'default' = 'default'
 ): VideoResolution {
   // LTX-Video 2 native resolutions (multiples of 32, T/8+1 frame constraint)
   if (preset === 'ltx2') {
@@ -345,6 +345,36 @@ export function aspectRatioToResolution(
       default:     return { width: 624,  height: 624  }; // 1:1
     }
   }
+  // Flux.1 — 1024px native, multiples of 64
+  if (preset === 'flux') {
+    switch (ar) {
+      case '9:16': return { width: 768,  height: 1360 };
+      case '16:9': return { width: 1360, height: 768  };
+      case '4:3':  return { width: 1024, height: 768  };
+      case '3:4':  return { width: 768,  height: 1024 };
+      default:     return { width: 1024, height: 1024 }; // 1:1
+    }
+  }
+  // HunyuanVideo — 720p, multiples of 16
+  if (preset === 'hunyuan') {
+    switch (ar) {
+      case '9:16': return { width: 720,  height: 1280 };
+      case '16:9': return { width: 1280, height: 720  };
+      case '4:3':  return { width: 960,  height: 720  };
+      case '3:4':  return { width: 720,  height: 960  };
+      default:     return { width: 960,  height: 960  }; // 1:1
+    }
+  }
+  // CogVideoX — 480p native, multiples of 16
+  if (preset === 'cogvideox') {
+    switch (ar) {
+      case '9:16': return { width: 480,  height: 848  };
+      case '16:9': return { width: 848,  height: 480  };
+      case '4:3':  return { width: 640,  height: 480  };
+      case '3:4':  return { width: 480,  height: 640  };
+      default:     return { width: 480,  height: 480  }; // 1:1
+    }
+  }
   // Generic fallback
   switch (ar) {
     case '9:16': return { width: 576,  height: 1024 };
@@ -358,8 +388,16 @@ export function aspectRatioToResolution(
  *
  * LTX-Video 2 constraint: frames must satisfy (n - 1) % 8 === 0
  * Valid values: 1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 105, 113, 121 …
+ *
+ * CogVideoX constraint: same (n - 1) % 8 === 0, hard cap at 49 frames (model limit)
+ *
+ * HunyuanVideo: multiples of 4, up to ~120 frames at 24 fps
  */
-export function durationToFrames(durationSec: number, fps: number, model: 'ltx2' | 'wan25' | 'default'): number {
+export function durationToFrames(
+  durationSec: number,
+  fps: number,
+  model: 'ltx2' | 'wan25' | 'hunyuan' | 'cogvideox' | 'default'
+): number {
   const raw = Math.round(durationSec * fps);
   if (model === 'ltx2') {
     // Round to nearest valid value: (n - 1) % 8 === 0, n >= 9
@@ -370,6 +408,16 @@ export function durationToFrames(durationSec: number, fps: number, model: 'ltx2'
   if (model === 'wan25') {
     // Wan 2.5: multiples of 4 are safe; cap at 121 for VRAM reasons
     return Math.min(121, Math.max(16, Math.round(raw / 4) * 4));
+  }
+  if (model === 'cogvideox') {
+    // CogVideoX: (n - 1) % 8 === 0, hard cap at 49 (model architecture limit)
+    const remainder = (raw - 1) % 8;
+    const adjusted = remainder <= 4 ? raw - remainder : raw + (8 - remainder);
+    return Math.min(49, Math.max(9, adjusted));
+  }
+  if (model === 'hunyuan') {
+    // HunyuanVideo: multiples of 4, cap at 120 frames for 24 GB GPUs
+    return Math.min(120, Math.max(16, Math.round(raw / 4) * 4));
   }
   return Math.max(1, raw);
 }

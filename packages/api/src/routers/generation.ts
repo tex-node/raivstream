@@ -6,7 +6,10 @@ import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits'
 import { moderatePrompt } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 
-const SUPPORTED_MODELS = ['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3'] as const;
+const SUPPORTED_MODELS = [
+  'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3',
+  'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X',
+] as const;
 
 export const generationRouter = router({
 

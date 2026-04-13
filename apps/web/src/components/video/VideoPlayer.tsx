@@ -22,21 +22,30 @@ export function VideoPlayer({
   onProgress,
   onEnded,
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true); // start muted so browser allows autoplay
-  const [isLoading, setIsLoading] = useState(true);
+  const videoRef    = useRef<HTMLVideoElement>(null);
+  const bgVideoRef  = useRef<HTMLVideoElement>(null);
+  const [isPlaying,   setIsPlaying]   = useState(false);
+  const [isMuted,     setIsMuted]     = useState(true); // start muted so browser allows autoplay
+  const [isLoading,   setIsLoading]   = useState(true);
+  const [isLandscape, setIsLandscape] = useState(false); // true when video is wider than it is tall
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Source setup ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const video = videoRef.current;
+    const video   = videoRef.current;
+    const bgVideo = bgVideoRef.current;
     if (!video || !videoUrl) return;
 
     setIsLoading(true);
+    setIsLandscape(false); // reset on new source
+
+    // Always set bg video src (element is always in DOM now)
+    if (bgVideo) {
+      bgVideo.src    = videoUrl;
+      bgVideo.preload = 'auto';
+    }
 
     if (isHlsUrl(videoUrl)) {
-      // HLS path — load hls.js lazily so it doesn't bloat the initial bundle
       import('hls.js').then(({ default: Hls }) => {
         if (Hls.isSupported()) {
           const hls = new Hls({ enableWorker: true, backBufferLength: 30 });
@@ -46,15 +55,24 @@ export function VideoPlayer({
           hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setIsLoading(false); });
           return () => hls.destroy();
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari native HLS
           video.src = videoUrl;
         }
       });
     } else {
-      // Plain MP4 — just set src, browser handles range requests & seeking natively
-      video.src = videoUrl;
+      video.src     = videoUrl;
       video.preload = 'auto';
     }
+  }, [videoUrl]);
+
+  // ── Landscape detection — fires once video dimensions are known ───────────
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onMeta = () => {
+      setIsLandscape(video.videoWidth > video.videoHeight);
+    };
+    video.addEventListener('loadedmetadata', onMeta);
+    return () => video.removeEventListener('loadedmetadata', onMeta);
   }, [videoUrl]);
 
   // ── Loading state ─────────────────────────────────────────────────────────
@@ -68,14 +86,17 @@ export function VideoPlayer({
 
   // ── Play / pause based on active slide ────────────────────────────────────
   useEffect(() => {
-    const video = videoRef.current;
+    const video   = videoRef.current;
+    const bgVideo = bgVideoRef.current;
     if (!video) return;
     if (isActive) {
       video.play().then(() => setIsPlaying(true)).catch(() => {});
+      bgVideo?.play().catch(() => {});
     } else {
       video.pause();
       video.currentTime = 0;
       setIsPlaying(false);
+      if (bgVideo) { bgVideo.pause(); bgVideo.currentTime = 0; }
     }
   }, [isActive]);
 
@@ -104,16 +125,39 @@ export function VideoPlayer({
   };
 
   return (
-    <div className="relative w-full h-full bg-black select-none">
+    <div className="relative w-full h-full bg-black select-none overflow-hidden">
+      {/* ── Blurred backdrop — always in DOM so bgVideoRef is always attached.
+          Visibility toggled via opacity/pointer-events once isLandscape is known.
+          Same src as the foreground video → browser shares the decoded frames.   */}
+      <video
+        ref={bgVideoRef}
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{
+          filter:     'blur(28px)',
+          transform:  'scale(1.15)',
+          opacity:    isLandscape ? 1 : 0,
+          pointerEvents: 'none',
+        }}
+        loop
+        playsInline
+        muted
+        aria-hidden="true"
+        tabIndex={-1}
+      />
+
       {/* Thumbnail — shown until the video can play */}
       {thumbnailUrl && isLoading && (
-        <img src={thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img
+          src={thumbnailUrl}
+          alt=""
+          className={`absolute inset-0 w-full h-full ${isLandscape ? 'object-contain' : 'object-cover'}`}
+        />
       )}
 
-      {/* The video element — MP4 or HLS both use the same <video> */}
+      {/* The video element — object-contain for landscape, object-cover for portrait */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className={`absolute inset-0 w-full h-full ${isLandscape ? 'object-contain' : 'object-cover'}`}
         loop
         playsInline
         muted={isMuted}

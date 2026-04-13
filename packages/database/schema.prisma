@@ -56,6 +56,9 @@ enum GenerationModel {
   KLING
   HIGGSFIELD
   VEO3
+  FLUX
+  HUNYUAN_VIDEO
+  COG_VIDEO_X
 }
 
 enum GenerationStatus {

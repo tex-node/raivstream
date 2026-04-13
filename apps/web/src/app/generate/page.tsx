@@ -112,6 +112,14 @@ export default function GeneratePage() {
   const currentModel = models?.find((m) => m.id === selectedModel);
   const isVideoModel = currentModel?.maxDuration && currentModel.maxDuration > 0;
 
+  // Veo 3 only supports landscape aspect ratios — auto-switch when model changes
+  const VEO3_LANDSCAPE_ONLY = selectedModel === 'VEO3';
+  useEffect(() => {
+    if (VEO3_LANDSCAPE_ONLY && aspectRatio !== '16:9') {
+      setAspectRatio('16:9');
+    }
+  }, [VEO3_LANDSCAPE_ONLY]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleGenerate = () => {
     if (!prompt.trim()) return;
     setActiveJobId(null);
@@ -279,21 +287,36 @@ export default function GeneratePage() {
               <div>
                 <label className="text-xs text-white/50 font-medium uppercase tracking-wider block mb-2">Format</label>
                 <div className="flex gap-2">
-                  {AR_OPTIONS.map((ar) => (
-                    <button
-                      key={ar.value}
-                      onClick={() => setAspectRatio(ar.value)}
-                      className={`flex-1 py-2 rounded-xl border text-xs font-semibold transition-all ${
-                        aspectRatio === ar.value
-                          ? 'border-pink-500 bg-pink-500/20 text-pink-300'
-                          : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
-                      }`}
-                    >
-                      <span className="block text-lg mb-0.5">{ar.icon}</span>
-                      {ar.label}
-                    </button>
-                  ))}
+                  {AR_OPTIONS.map((ar) => {
+                    const blocked = VEO3_LANDSCAPE_ONLY && ar.value !== '16:9';
+                    return (
+                      <button
+                        key={ar.value}
+                        onClick={() => !blocked && setAspectRatio(ar.value)}
+                        disabled={blocked}
+                        title={blocked ? 'Veo 3 only supports landscape (16:9)' : undefined}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                          blocked
+                            ? 'border-white/5 bg-white/[0.02] text-white/20 cursor-not-allowed'
+                            : aspectRatio === ar.value
+                              ? 'border-pink-500 bg-pink-500/20 text-pink-300'
+                              : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
+                        }`}
+                      >
+                        <span className="block text-lg mb-0.5">{ar.icon}</span>
+                        {ar.label}
+                      </button>
+                    );
+                  })}
                 </div>
+                {VEO3_LANDSCAPE_ONLY && (
+                  <p className="text-amber-400/70 text-xs mt-1.5 flex items-center gap-1">
+                    <svg className="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                    Veo 3 only supports Landscape — portrait and square are not available
+                  </p>
+                )}
               </div>
 
               {/* Duration — only for video models */}

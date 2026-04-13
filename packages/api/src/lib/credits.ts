@@ -13,13 +13,16 @@ import type { SupportedModel } from './generators';
 
 // Map each generation model to its FeatureCreditRate featureKey (must match seed.ts)
 export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
-  NANO_BANANA:  'generate:nano_banana',
-  GROK_IMAGINE: 'generate:grok_imagine',
-  LTX2:         'generate:ltx2',
-  WAN_25:       'generate:wan_25',
-  KLING:        'generate:kling',
-  HIGGSFIELD:   'generate:higgsfield',
-  VEO3:         'generate:veo3',
+  NANO_BANANA:    'generate:nano_banana',
+  GROK_IMAGINE:   'generate:grok_imagine',
+  LTX2:           'generate:ltx2',
+  WAN_25:         'generate:wan_25',
+  KLING:          'generate:kling',
+  HIGGSFIELD:     'generate:higgsfield',
+  VEO3:           'generate:veo3',
+  FLUX:           'generate:flux',           // suggested cost: 80 credits
+  HUNYUAN_VIDEO:  'generate:hunyuan_video',  // suggested cost: 300 credits (A100 GPU)
+  COG_VIDEO_X:    'generate:cog_video_x',    // suggested cost: 250 credits
 };
 
 /**
