@@ -47,6 +47,9 @@ type FeedTab = 'forYou' | 'following' | 'trending';
 
 // ── VideoCard ─────────────────────────────────────────────────────────────────
 
+// Global mute state shared across all cards (persists as user scrolls)
+let globalMuted = false;
+
 function VideoCard({
   item,
   isActive,
@@ -59,7 +62,31 @@ function VideoCard({
   const videoRef = useRef<Video>(null);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(item.likeCount);
+  const [isMuted, setIsMuted] = useState(globalMuted);
   const videoUrl = item.mp4Url ?? item.hlsMasterUrl ?? null;
+
+  // Explicitly unmute + set volume whenever this card becomes active.
+  // The isMuted prop alone is not reliably applied by the native layer on
+  // shouldPlay transitions — calling the async methods forces it through.
+  useEffect(() => {
+    if (!isActive || !videoRef.current) return;
+    const applyAudio = async () => {
+      try {
+        await videoRef.current!.setIsMutedAsync(globalMuted);
+        if (!globalMuted) await videoRef.current!.setVolumeAsync(1.0);
+      } catch (_) {}
+    };
+    applyAudio();
+  }, [isActive]);
+
+  const toggleMute = async () => {
+    globalMuted = !globalMuted;
+    setIsMuted(globalMuted);
+    try {
+      await videoRef.current?.setIsMutedAsync(globalMuted);
+      if (!globalMuted) await videoRef.current?.setVolumeAsync(1.0);
+    } catch (_) {}
+  };
 
   const toggleLike = trpc.interaction.toggleLike.useMutation({
     onMutate: () => {
@@ -100,7 +127,8 @@ function VideoCard({
             resizeMode={ResizeMode.CONTAIN}
             shouldPlay={isActive}
             isLooping
-            isMuted={false}
+            isMuted={isMuted}
+            volume={1.0}
             onPlaybackStatusUpdate={(status) => {
               if (!status.isLoaded || !isSignedIn) return;
               if (status.positionMillis > 0 && status.positionMillis % 5000 < 200) {
@@ -199,6 +227,12 @@ function VideoCard({
         >
           <Text style={styles.sideBtnIcon}>↗</Text>
           <Text style={styles.sideBtnLabel}>Share</Text>
+        </TouchableOpacity>
+
+        {/* Mute toggle */}
+        <TouchableOpacity style={styles.sideBtn} onPress={toggleMute}>
+          <Text style={styles.sideBtnIcon}>{isMuted ? '🔇' : '🔊'}</Text>
+          <Text style={styles.sideBtnLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
         </TouchableOpacity>
       </View>
     </View>
