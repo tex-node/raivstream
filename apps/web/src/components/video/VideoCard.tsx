@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoInteractions } from './VideoInteractions';
 import { trpc } from '@/lib/trpc';
@@ -30,6 +31,7 @@ interface VideoCardProps {
     };
   };
   isActive: boolean;
+  onEnded?: () => void;
 }
 
 /** Returns true if the URL points to a static image rather than a video */
@@ -37,9 +39,10 @@ function isImageUrl(url: string): boolean {
   return /\.(jpg|jpeg|png|webp|gif|avif|bmp|svg)(\?|$)/i.test(url);
 }
 
-export function VideoCard({ video, isActive }: VideoCardProps) {
-  const { isSignedIn, user } = useUser();
+export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
+  const { isSignedIn } = useUser();
   const trackProgress = trpc.interaction.trackProgress.useMutation();
+  const imageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleProgress = (currentTime: number, duration: number) => {
     if (!isSignedIn) return;
@@ -59,6 +62,26 @@ export function VideoCard({ video, isActive }: VideoCardProps) {
   const imageUrl = isImageUrl(hlsUrl ?? mediaUrl ?? '')
     ? (hlsUrl ?? mediaUrl)!
     : video.thumbnailUrl;
+  const isImageOnly = !hasVideo;
+
+  // Image autoscroll: 5 s after becoming active
+  useEffect(() => {
+    if (!isImageOnly || !onEnded) return;
+    if (isActive) {
+      imageTimerRef.current = setTimeout(onEnded, 5000);
+    } else {
+      if (imageTimerRef.current) {
+        clearTimeout(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (imageTimerRef.current) {
+        clearTimeout(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
+    };
+  }, [isActive, isImageOnly, onEnded]);
 
   return (
     <div className="relative w-full h-full">
@@ -69,6 +92,7 @@ export function VideoCard({ video, isActive }: VideoCardProps) {
           thumbnailUrl={video.thumbnailUrl}
           isActive={isActive}
           onProgress={handleProgress}
+          onEnded={onEnded}
         />
       ) : imageUrl ? (
         /* Image-only content — AI generated images published to feed */

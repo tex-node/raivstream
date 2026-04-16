@@ -174,6 +174,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
             <VideoCard
               video={video}
               isActive={i === activeIndex && !showPaywall}
+              onEnded={() => goTo(i + 1)}
             />
           </div>
         ))}
