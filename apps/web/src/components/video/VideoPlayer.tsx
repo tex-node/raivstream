@@ -158,7 +158,6 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         className={`absolute inset-0 w-full h-full ${isLandscape ? 'object-contain' : 'object-cover'}`}
-        loop
         playsInline
         muted={isMuted}
         onEnded={onEnded}

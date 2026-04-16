@@ -64,8 +64,9 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   const goTo = useCallback((index: number) => {
     const container = containerRef.current;
     if (!container || isScrolling.current) return;
-    const clamped = Math.max(0, Math.min(videos.length - 1, index));
-    if (clamped === activeIndex) return;
+    // Wrap around: going past last → back to first
+    const clamped = index >= videos.length ? 0 : Math.max(0, index);
+    if (clamped === activeIndex && index < videos.length) return;
 
     isScrolling.current = true;
     setActiveIndex(clamped);
