@@ -64,14 +64,18 @@ function VideoCard({
   const isSignedIn = useAuthStore((s) => s.isSignedIn);
   const videoRef = useRef<Video>(null);
   const imageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didFinishRef = useRef(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(item.likeCount);
   const [isMuted, setIsMuted] = useState(globalMuted);
   const videoUrl = item.mp4Url ?? item.hlsMasterUrl ?? null;
   const isImageOnly = !videoUrl;
 
-  // ── Audio: explicitly set mute + volume when card becomes active ───────────
+  // ── Reset finish guard + apply audio when card becomes active ──────────────
   useEffect(() => {
+    if (isActive) {
+      didFinishRef.current = false; // reset so next play-through can trigger scroll
+    }
     if (!isActive || !videoRef.current) return;
     const applyAudio = async () => {
       try {
@@ -154,8 +158,9 @@ function VideoCard({
             onPlaybackStatusUpdate={(status) => {
               if (!status.isLoaded) return;
 
-              // Autoscroll when video finishes
-              if (status.didJustFinish && isActive) {
+              // Autoscroll when video finishes — guard prevents double-firing
+              if (status.didJustFinish && isActive && !didFinishRef.current) {
+                didFinishRef.current = true;
                 onFinished();
               }
 
@@ -285,7 +290,9 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
   const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
   const flatListRef = useRef<FlatList>(null);
+  const videosLengthRef = useRef(0);
 
   // Configure audio session once on mount.
   // Required on iOS so video audio plays even when the silent switch is on.
@@ -317,10 +324,16 @@ export default function FeedScreen() {
   const active = queries[activeTab];
   const videos: FeedVideo[] = (active.data?.pages.flatMap((p) => p.videos) ?? []) as FeedVideo[];
 
+  // Keep refs up to date so callbacks are never stale
+  useEffect(() => { videosLengthRef.current = videos.length; }, [videos.length]);
+
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const first = viewableItems[0];
-      if (first?.index != null) setActiveIndex(first.index);
+      if (first?.index != null) {
+        setActiveIndex(first.index);
+        activeIndexRef.current = first.index;
+      }
     },
     []
   );
@@ -331,30 +344,23 @@ export default function FeedScreen() {
     }
   };
 
-  // Called by VideoCard when video ends or image timer fires
-  const handleVideoFinished = useCallback((index: number) => {
-    const nextIndex = index + 1;
-    if (nextIndex < videos.length) {
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-    } else if (active.hasNextPage) {
-      // Fetch more then scroll after a short delay
-      active.fetchNextPage().then(() => {
-        setTimeout(() => {
-          flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-        }, 300);
-      });
+  // Scroll to next item using offset (more reliable than scrollToIndex with pagingEnabled)
+  const scrollToNext = useCallback(() => {
+    const next = activeIndexRef.current + 1;
+    if (next < videosLengthRef.current) {
+      flatListRef.current?.scrollToOffset({ offset: next * H, animated: true });
     }
-  }, [videos.length, active]);
+  }, []);
 
   const renderItem = useCallback(
     ({ item, index }: { item: FeedVideo; index: number }) => (
       <VideoCard
         item={item}
         isActive={index === activeIndex}
-        onFinished={() => handleVideoFinished(index)}
+        onFinished={scrollToNext}
       />
     ),
-    [activeIndex, handleVideoFinished]
+    [activeIndex, scrollToNext]
   );
 
   return (
