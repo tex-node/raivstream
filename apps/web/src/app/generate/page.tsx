@@ -535,15 +535,30 @@ export default function GeneratePage() {
                         activeJobId === job.id ? 'border-pink-500' : 'border-white/10 hover:border-white/30'
                       }`}
                     >
-                      {job.thumbnailUrl || job.outputUrl ? (
+                      {job.thumbnailUrl ? (
                         <img
-                          src={job.thumbnailUrl ?? job.outputUrl!}
+                          src={job.thumbnailUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : job.outputUrl && /\.(mp4|webm|mov)(\?|$)/i.test(job.outputUrl) ? (
+                        /* Video job with no separate thumbnail — show first frame via video element */
+                        <video
+                          src={job.outputUrl}
+                          className="w-full h-full object-cover"
+                          preload="metadata"
+                          muted
+                          playsInline
+                        />
+                      ) : job.outputUrl ? (
+                        <img
+                          src={job.outputUrl}
                           alt=""
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div className="w-full h-full bg-white/5 flex items-center justify-center text-xs text-white/20">
-                          {job.status === 'FAILED' ? '✗' : job.status === 'COMPLETED' ? '✓' : '…'}
+                          {job.status === 'FAILED' ? '✗' : job.status === 'COMPLETED' ? '▶' : '…'}
                         </div>
                       )}
                       <div className={`absolute inset-0 flex items-end p-1 ${
