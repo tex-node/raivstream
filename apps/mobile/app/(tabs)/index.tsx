@@ -45,29 +45,32 @@ type FeedVideo = {
 
 type FeedTab = 'forYou' | 'following' | 'trending';
 
-// ── VideoCard ─────────────────────────────────────────────────────────────────
-
-// Global mute state shared across all cards (persists as user scrolls)
+// ── Global mute state ─────────────────────────────────────────────────────────
+// Starts unmuted. Once the user mutes, all subsequent cards start muted.
 let globalMuted = false;
+
+// ── VideoCard ─────────────────────────────────────────────────────────────────
 
 function VideoCard({
   item,
   isActive,
+  onFinished,
 }: {
   item: FeedVideo;
   isActive: boolean;
+  onFinished: () => void;
 }) {
   const router = useRouter();
   const isSignedIn = useAuthStore((s) => s.isSignedIn);
   const videoRef = useRef<Video>(null);
+  const imageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(item.likeCount);
   const [isMuted, setIsMuted] = useState(globalMuted);
   const videoUrl = item.mp4Url ?? item.hlsMasterUrl ?? null;
+  const isImageOnly = !videoUrl;
 
-  // Explicitly unmute + set volume whenever this card becomes active.
-  // The isMuted prop alone is not reliably applied by the native layer on
-  // shouldPlay transitions — calling the async methods forces it through.
+  // ── Audio: explicitly set mute + volume when card becomes active ───────────
   useEffect(() => {
     if (!isActive || !videoRef.current) return;
     const applyAudio = async () => {
@@ -78,6 +81,27 @@ function VideoCard({
     };
     applyAudio();
   }, [isActive]);
+
+  // ── Autoscroll for still images: scroll after 5 s once active ────────────
+  useEffect(() => {
+    if (!isImageOnly) return;
+    if (isActive) {
+      imageTimerRef.current = setTimeout(() => {
+        onFinished();
+      }, 5000);
+    } else {
+      if (imageTimerRef.current) {
+        clearTimeout(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (imageTimerRef.current) {
+        clearTimeout(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
+    };
+  }, [isActive, isImageOnly, onFinished]);
 
   const toggleMute = async () => {
     globalMuted = !globalMuted;
@@ -90,7 +114,6 @@ function VideoCard({
 
   const toggleLike = trpc.interaction.toggleLike.useMutation({
     onMutate: () => {
-      // Optimistic update
       setLiked((prev) => !prev);
       setLikeCount((prev) => (liked ? prev - 1 : prev + 1));
     },
@@ -108,30 +131,36 @@ function VideoCard({
 
   return (
     <View style={[styles.card, { width: W, height: H }]}>
-      {/* ── Video ── */}
+      {/* ── Video / Image ── */}
       {videoUrl ? (
         <View style={StyleSheet.absoluteFill}>
-          {/* Blurred thumbnail fills the entire frame behind the video.
-              Covers black bars for landscape videos and slightly-off portrait ratios. */}
+          {/* Blurred thumbnail backdrop for letterbox bars */}
           <Image
             source={{ uri: item.thumbnailUrl }}
             style={[StyleSheet.absoluteFill, styles.blurBg]}
             contentFit="cover"
             blurRadius={20}
           />
-          {/* Video always contained so the full frame is visible, never cropped */}
+          {/* Video — not looping so didJustFinish fires for autoscroll */}
           <Video
             ref={videoRef}
             source={{ uri: videoUrl }}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.CONTAIN}
             shouldPlay={isActive}
-            isLooping
+            isLooping={false}
             isMuted={isMuted}
             volume={1.0}
             onPlaybackStatusUpdate={(status) => {
-              if (!status.isLoaded || !isSignedIn) return;
-              if (status.positionMillis > 0 && status.positionMillis % 5000 < 200) {
+              if (!status.isLoaded) return;
+
+              // Autoscroll when video finishes
+              if (status.didJustFinish && isActive) {
+                onFinished();
+              }
+
+              // Track watch progress every ~5 s
+              if (isSignedIn && status.positionMillis > 0 && status.positionMillis % 5000 < 200) {
                 trackProgress.mutate({
                   videoId: item.id,
                   watchTimeSeconds: Math.floor(status.positionMillis / 1000),
@@ -154,6 +183,15 @@ function VideoCard({
 
       {/* ── Dark gradient overlay ── */}
       <View style={styles.overlay} pointerEvents="none" />
+
+      {/* ── Mute toggle — centred on screen ── */}
+      <TouchableOpacity
+        style={styles.muteBtn}
+        onPress={toggleMute}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.muteBtnIcon}>{isMuted ? '🔇' : '🔊'}</Text>
+      </TouchableOpacity>
 
       {/* ── Bottom info ── */}
       <View style={styles.bottomInfo}>
@@ -228,12 +266,6 @@ function VideoCard({
           <Text style={styles.sideBtnIcon}>↗</Text>
           <Text style={styles.sideBtnLabel}>Share</Text>
         </TouchableOpacity>
-
-        {/* Mute toggle */}
-        <TouchableOpacity style={styles.sideBtn} onPress={toggleMute}>
-          <Text style={styles.sideBtnIcon}>{isMuted ? '🔇' : '🔊'}</Text>
-          <Text style={styles.sideBtnLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -253,15 +285,16 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
   const [activeIndex, setActiveIndex] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
 
   // Configure audio session once on mount.
   // Required on iOS so video audio plays even when the silent switch is on.
   useEffect(() => {
     Audio.setAudioModeAsync({
-      playsInSilentModeIOS:      true,
-      allowsRecordingIOS:        false,
-      staysActiveInBackground:   false,
-      shouldDuckAndroid:         false,
+      playsInSilentModeIOS:       true,
+      allowsRecordingIOS:         false,
+      staysActiveInBackground:    false,
+      shouldDuckAndroid:          false,
       playThroughEarpieceAndroid: false,
     }).catch(() => {});
   }, []);
@@ -298,11 +331,30 @@ export default function FeedScreen() {
     }
   };
 
+  // Called by VideoCard when video ends or image timer fires
+  const handleVideoFinished = useCallback((index: number) => {
+    const nextIndex = index + 1;
+    if (nextIndex < videos.length) {
+      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+    } else if (active.hasNextPage) {
+      // Fetch more then scroll after a short delay
+      active.fetchNextPage().then(() => {
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+        }, 300);
+      });
+    }
+  }, [videos.length, active]);
+
   const renderItem = useCallback(
     ({ item, index }: { item: FeedVideo; index: number }) => (
-      <VideoCard item={item} isActive={index === activeIndex} />
+      <VideoCard
+        item={item}
+        isActive={index === activeIndex}
+        onFinished={() => handleVideoFinished(index)}
+      />
     ),
-    [activeIndex]
+    [activeIndex, handleVideoFinished]
   );
 
   return (
@@ -336,6 +388,7 @@ export default function FeedScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={videos}
           keyExtractor={(v) => v.id}
           renderItem={renderItem}
@@ -409,9 +462,24 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
-    // Gradient simulation via dark bottom strip
     top: '50%',
   },
+
+  // Mute button — centred on screen
+  muteBtn: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: H * 0.42,
+    left: W / 2 - 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  muteBtnIcon: { fontSize: 22 },
 
   // Bottom info
   bottomInfo: {
