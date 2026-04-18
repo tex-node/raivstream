@@ -1,18 +1,24 @@
 /**
- * Wan 2.5 (Alibaba) — via RunPod Public Endpoint (Image-to-Video)
+ * Wan 2.6 (Alibaba) — via RunPod Public Endpoints
  *
- * Uses the RunPod-hosted public endpoint — no custom serverless setup required.
- * This endpoint is IMAGE-TO-VIDEO: a seed image URL is required.
+ * Automatically routes between two public endpoints:
+ *   wan-2-6-t2v  — text-to-video (no image required)
+ *   wan-2-6-i2v  — image-to-video (seed image required, landscape only)
+ *
+ * The endpoint used is encoded in the returned providerJobId as a prefix:
+ *   "t2v:<runpodJobId>"  or  "i2v:<runpodJobId>"
+ * so the status poller always hits the correct endpoint.
  *
  * Public endpoint docs:
- *   https://docs.runpod.io/public-endpoints/models/wan-2-5
+ *   https://docs.runpod.io/public-endpoints/models/wan-2-6-t2v
+ *   https://docs.runpod.io/public-endpoints/models/wan-2-6-i2v
  *
  * Required env vars:
  *   RUNPOD_API_KEY
  *
- * Optional:
- *   RUNPOD_WAN25_PUBLIC_ENDPOINT   endpoint slug  (default: wan-2-5)
- *   RUNPOD_WAN25_FPS               output FPS     (default: 16)
+ * Optional overrides:
+ *   RUNPOD_WAN26_T2V_ENDPOINT   (default: wan-2-6-t2v)
+ *   RUNPOD_WAN26_I2V_ENDPOINT   (default: wan-2-6-i2v)
  */
 
 import {
@@ -42,57 +48,78 @@ export interface Wan25JobResult {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const ENDPOINT = () => process.env.RUNPOD_WAN25_PUBLIC_ENDPOINT ?? 'wan-2-5';
+const T2V_ENDPOINT = () => process.env.RUNPOD_WAN26_T2V_ENDPOINT ?? 'wan-2-6-t2v';
+const I2V_ENDPOINT = () => process.env.RUNPOD_WAN26_I2V_ENDPOINT ?? 'wan-2-6-i2v';
 
-function getResolution(aspectRatio?: string): { width: number; height: number } {
+// Duration must be 5, 10, or 15 — snap to nearest valid value
+function snapDuration(sec?: number): number {
+  const s = sec ?? 5;
+  if (s <= 7)  return 5;
+  if (s <= 12) return 10;
+  return 15;
+}
+
+// T2V supports portrait; I2V is landscape only
+function getSize(aspectRatio?: string, isI2V = false): string {
+  if (isI2V) return '1280*720'; // I2V: landscape only
   switch (aspectRatio) {
-    case '16:9': return { width: 854,  height: 480 };
-    case '1:1':  return { width: 624,  height: 624 };
-    default:     return { width: 480,  height: 854 };  // 9:16 portrait default
+    case '16:9': return '1280*720';
+    case '1:1':  return '720*720';
+    default:     return '720*1280'; // 9:16 portrait default
   }
+}
+
+// Parse the "t2v:<id>" / "i2v:<id>" prefix stored in providerJobId
+function parseJobId(prefixedId: string): { endpoint: string; runpodJobId: string } {
+  if (prefixedId.startsWith('i2v:')) {
+    return { endpoint: I2V_ENDPOINT(), runpodJobId: prefixedId.slice(4) };
+  }
+  // t2v: prefix or legacy bare ID
+  const runpodJobId = prefixedId.startsWith('t2v:') ? prefixedId.slice(4) : prefixedId;
+  return { endpoint: T2V_ENDPOINT(), runpodJobId };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function submitWan25(input: Wan25Input): Promise<string> {
-  if (!input.seedImageUrl) {
-    throw new Error('Wan 2.5 requires a seed image URL — it is an image-to-video model. Provide a seed image or switch to Seedance for text-to-video.');
-  }
+  const isI2V    = !!input.seedImageUrl;
+  const endpoint = isI2V ? I2V_ENDPOINT() : T2V_ENDPOINT();
+  const prefix   = isI2V ? 'i2v' : 't2v';
 
-  const { width, height } = getResolution(input.aspectRatio);
   const payload: Record<string, unknown> = {
-    prompt:    input.prompt,
-    image:     input.seedImageUrl,
-    width,
-    height,
-    duration:  input.duration ?? 5,
+    prompt:   input.prompt,
+    duration: snapDuration(input.duration),
+    size:     getSize(input.aspectRatio, isI2V),
+    seed:     input.seed ?? -1,
   };
   if (input.negativePrompt) payload.negative_prompt = input.negativePrompt;
+  if (isI2V)                payload.image            = input.seedImageUrl;
 
-  const { jobId } = await submitJob(ENDPOINT(), payload, { executionTimeout: 600_000, ttl: 3_600_000 });
-  return jobId;
+  const { jobId } = await submitJob(endpoint, payload, { executionTimeout: 900_000, ttl: 3_600_000 });
+  return `${prefix}:${jobId}`;
 }
 
-export async function getWan25Status(jobId: string): Promise<Wan25JobResult> {
-  const raw    = await getJobStatus(ENDPOINT(), jobId);
+export async function getWan25Status(prefixedJobId: string): Promise<Wan25JobResult> {
+  const { endpoint, runpodJobId } = parseJobId(prefixedJobId);
+  const raw    = await getJobStatus(endpoint, runpodJobId);
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId, status, error: raw.error };
+    return { jobId: prefixedJobId, status, error: raw.error };
   }
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
-    console.error('[wan25] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    console.error('[wan26] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
+    return { jobId: prefixedJobId, status: 'failed', error: 'Generation completed but produced no output URL' };
   }
 
-  const r2Key = `generated/wan25/${jobId}.mp4`;
+  const r2Key = `generated/wan26/${runpodJobId}.mp4`;
   try {
     const permanentUrl = await mirrorUrlToR2(rawUrl, r2Key, 'video/mp4');
-    return { jobId, status: 'completed', outputUrl: permanentUrl };
+    return { jobId: prefixedJobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
-    console.error('[wan25] R2 mirror failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    console.error('[wan26] R2 mirror failed:', (err as Error).message);
+    return { jobId: prefixedJobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
   }
 }
