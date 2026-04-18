@@ -240,6 +240,7 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'RunPod + LTX-Video 2',
     providerUrl:          'https://huggingface.co/Lightricks/LTX-Video',
     mediaType:            'video',
+    hidden:               true,
   },
   WAN_25: {
     label:                'Wan 2.5',
