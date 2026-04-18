@@ -23,6 +23,7 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   FLUX:           'generate:flux',           // suggested cost: 80 credits
   HUNYUAN_VIDEO:  'generate:hunyuan_video',  // suggested cost: 300 credits (A100 GPU)
   COG_VIDEO_X:    'generate:cog_video_x',    // suggested cost: 250 credits
+  SEEDANCE:       'generate:seedance',       // suggested cost: 200 credits
 };
 
 /**

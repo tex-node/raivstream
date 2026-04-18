@@ -122,6 +122,12 @@ async function main() {
       description:    'Wan 2.5 — high-quality open-source video model (₦200/gen)',
     },
     {
+      featureKey:     'generate:seedance',
+      creditsPerUnit: 200,
+      unitLabel:      'request',
+      description:    'Seedance 1.0 — ByteDance high-quality video model (₦200/gen)',
+    },
+    {
       featureKey:     'generate:higgsfield',
       creditsPerUnit: 400,
       unitLabel:      'request',

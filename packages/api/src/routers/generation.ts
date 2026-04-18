@@ -8,7 +8,7 @@ import { scanAndUpdateVideo } from '../lib/contentScanner';
 
 const SUPPORTED_MODELS = [
   'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3',
-  'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X',
+  'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
 ] as const;
 
 export const generationRouter = router({
@@ -22,11 +22,13 @@ export const generationRouter = router({
     });
     const rateMap = Object.fromEntries(rates.map((r) => [r.featureKey, r.creditsPerUnit]));
 
-    return Object.entries(MODEL_META).map(([id, meta]) => ({
-      id,
-      ...meta,
-      creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
-    }));
+    return Object.entries(MODEL_META)
+      .filter(([, meta]) => !meta.hidden)
+      .map(([id, meta]) => ({
+        id,
+        ...meta,
+        creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
+      }));
   }),
 
   /** Submit a new AI generation job */

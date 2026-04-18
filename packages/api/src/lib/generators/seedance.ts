@@ -1,18 +1,18 @@
 /**
- * Wan 2.5 (Alibaba) — via RunPod Public Endpoint (Image-to-Video)
+ * Seedance 1.0 Pro (ByteDance) — via RunPod Public Endpoint
  *
+ * Supports both text-to-video (T2V) and image-to-video (I2V).
  * Uses the RunPod-hosted public endpoint — no custom serverless setup required.
- * This endpoint is IMAGE-TO-VIDEO: a seed image URL is required.
  *
  * Public endpoint docs:
- *   https://docs.runpod.io/public-endpoints/models/wan-2-5
+ *   https://docs.runpod.io/public-endpoints/models/seedance-1-pro
  *
  * Required env vars:
  *   RUNPOD_API_KEY
  *
  * Optional:
- *   RUNPOD_WAN25_PUBLIC_ENDPOINT   endpoint slug  (default: wan-2-5)
- *   RUNPOD_WAN25_FPS               output FPS     (default: 16)
+ *   RUNPOD_SEEDANCE_PUBLIC_ENDPOINT   endpoint slug  (default: seedance-1-0-pro)
+ *   RUNPOD_SEEDANCE_FPS               output FPS     (default: 24)
  */
 
 import {
@@ -24,7 +24,7 @@ import {
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
 
-export interface Wan25Input {
+export interface SeedanceInput {
   prompt:          string;
   negativePrompt?: string;
   duration?:       number;
@@ -33,7 +33,7 @@ export interface Wan25Input {
   seed?:           number;
 }
 
-export interface Wan25JobResult {
+export interface SeedanceJobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
@@ -42,38 +42,35 @@ export interface Wan25JobResult {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const ENDPOINT = () => process.env.RUNPOD_WAN25_PUBLIC_ENDPOINT ?? 'wan-2-5';
+const ENDPOINT = () => process.env.RUNPOD_SEEDANCE_PUBLIC_ENDPOINT ?? 'seedance-1-0-pro';
+const FPS      = () => parseInt(process.env.RUNPOD_SEEDANCE_FPS ?? '24', 10);
 
-function getResolution(aspectRatio?: string): { width: number; height: number } {
+// Seedance size parameter format: "WIDTHxHEIGHT"
+function getSize(aspectRatio?: string): string {
   switch (aspectRatio) {
-    case '16:9': return { width: 854,  height: 480 };
-    case '1:1':  return { width: 624,  height: 624 };
-    default:     return { width: 480,  height: 854 };  // 9:16 portrait default
+    case '16:9': return '1920x1080';
+    case '1:1':  return '1080x1080';
+    default:     return '1080x1920';  // 9:16 portrait default
   }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function submitWan25(input: Wan25Input): Promise<string> {
-  if (!input.seedImageUrl) {
-    throw new Error('Wan 2.5 requires a seed image URL — it is an image-to-video model. Provide a seed image or switch to Seedance for text-to-video.');
-  }
-
-  const { width, height } = getResolution(input.aspectRatio);
+export async function submitSeedance(input: SeedanceInput): Promise<string> {
   const payload: Record<string, unknown> = {
-    prompt:    input.prompt,
-    image:     input.seedImageUrl,
-    width,
-    height,
-    duration:  input.duration ?? 5,
+    prompt:   input.prompt,
+    duration: input.duration ?? 5,
+    fps:      FPS(),
+    size:     getSize(input.aspectRatio),
   };
-  if (input.negativePrompt) payload.negative_prompt = input.negativePrompt;
+  if (input.seedImageUrl) payload.image = input.seedImageUrl;
+  if (input.seed != null)  payload.seed  = input.seed;
 
-  const { jobId } = await submitJob(ENDPOINT(), payload, { executionTimeout: 600_000, ttl: 3_600_000 });
+  const { jobId } = await submitJob(ENDPOINT(), payload, { executionTimeout: 900_000, ttl: 3_600_000 });
   return jobId;
 }
 
-export async function getWan25Status(jobId: string): Promise<Wan25JobResult> {
+export async function getSeedanceStatus(jobId: string): Promise<SeedanceJobResult> {
   const raw    = await getJobStatus(ENDPOINT(), jobId);
   const status = normaliseStatus(raw.status);
 
@@ -83,16 +80,16 @@ export async function getWan25Status(jobId: string): Promise<Wan25JobResult> {
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
-    console.error('[wan25] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
+    console.error('[seedance] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
     return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
   }
 
-  const r2Key = `generated/wan25/${jobId}.mp4`;
+  const r2Key = `generated/seedance/${jobId}.mp4`;
   try {
     const permanentUrl = await mirrorUrlToR2(rawUrl, r2Key, 'video/mp4');
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
-    console.error('[wan25] R2 mirror failed:', (err as Error).message);
+    console.error('[seedance] R2 mirror failed:', (err as Error).message);
     return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
   }
 }

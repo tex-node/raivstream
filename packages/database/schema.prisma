@@ -59,6 +59,7 @@ enum GenerationModel {
   FLUX
   HUNYUAN_VIDEO
   COG_VIDEO_X
+  SEEDANCE
 }
 
 enum GenerationStatus {

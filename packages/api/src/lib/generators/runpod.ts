@@ -238,6 +238,9 @@ export function extractOutputUrl(output: unknown): string | undefined {
     // { video_url: "https://..." }
     if (typeof obj.video_url === 'string' && obj.video_url.startsWith('http')) return obj.video_url;
 
+    // { image_url: "https://..." }  (RunPod public endpoints — Flux, etc.)
+    if (typeof obj.image_url === 'string' && obj.image_url.startsWith('http')) return obj.image_url;
+
     // { message: "https://..." }  (common RunPod ComfyUI output)
     if (typeof obj.message === 'string' && obj.message.startsWith('http')) return obj.message;
 

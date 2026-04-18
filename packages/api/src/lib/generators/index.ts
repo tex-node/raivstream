@@ -11,6 +11,7 @@
  *   FLUX          → RunPod Serverless + ComfyUI Flux.1 (flux.ts)
  *   HUNYUAN_VIDEO → RunPod Serverless + ComfyUI HunyuanVideoWrapper (hunyuanVideo.ts)
  *   COG_VIDEO_X   → RunPod Serverless + ComfyUI CogVideoX (cogVideoX.ts)
+ *   SEEDANCE      → RunPod Serverless + ComfyUI Seedance 1.0 (seedance.ts)
  */
 
 import { submitGeneration as submitNanoBanana, getJobStatus as getNanoBananaStatus } from './nanoBanana';
@@ -22,6 +23,7 @@ import { submitVeo3, getVeo3Status } from './veo3';
 import { submitFlux, getFluxStatus } from './flux';
 import { submitHunyuanVideo, getHunyuanVideoStatus } from './hunyuanVideo';
 import { submitCogVideoX, getCogVideoXStatus } from './cogVideoX';
+import { submitSeedance, getSeedanceStatus } from './seedance';
 
 export type SupportedModel =
   | 'NANO_BANANA'
@@ -33,7 +35,8 @@ export type SupportedModel =
   | 'VEO3'
   | 'FLUX'
   | 'HUNYUAN_VIDEO'
-  | 'COG_VIDEO_X';
+  | 'COG_VIDEO_X'
+  | 'SEEDANCE';
 
 export interface GenerateInput {
   model:          SupportedModel;
@@ -109,6 +112,11 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
       const jobId = await submitCogVideoX(input);
       return { providerJobId: jobId };
     }
+
+    case 'SEEDANCE': {
+      const jobId = await submitSeedance(input);
+      return { providerJobId: jobId };
+    }
   }
 }
 
@@ -173,129 +181,162 @@ export async function pollJobStatus(
       const s = await getCogVideoXStatus(providerJobId);
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
+
+    case 'SEEDANCE': {
+      const s = await getSeedanceStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
   }
 }
 
 /** Human-readable metadata for each model — drives the UI model selector */
 export const MODEL_META: Record<SupportedModel, {
-  label:               string;
-  description:         string;
-  badge:               'live' | 'beta' | 'coming-soon';
-  icon:                string;
-  minDuration:         number; // minimum seconds (for UI slider)
-  maxDuration:         number; // 0 = image-only
+  label:                string;
+  description:          string;
+  badge:                'live' | 'beta' | 'coming-soon';
+  icon:                 string;
+  minDuration:          number; // minimum seconds (for UI slider)
+  maxDuration:          number; // 0 = image-only
   supportsImageToVideo: boolean;
-  provider:            string;
-  providerUrl:         string;
+  provider:             string;
+  providerUrl:          string;
+  mediaType:            'image' | 'video';
+  hidden?:              true;       // hide from UI entirely
+  requiresSeedImage?:   true;       // model requires a seed image (I2V only)
 }> = {
   NANO_BANANA: {
-    label:               'Nano Banana',
-    description:         'Fast AI image generation. Great for thumbnails, seed frames, and creative concepts.',
-    badge:               'live',
-    icon:                '🍌',
-    minDuration:         0,
-    maxDuration:         0,
+    label:                'Nano Banana',
+    description:          'Fast AI image generation via Google Gemini.',
+    badge:                'live',
+    icon:                 '🍌',
+    minDuration:          0,
+    maxDuration:          0,
     supportsImageToVideo: false,
-    provider:            'Google Gemini',
-    providerUrl:         'https://ai.google.dev',
+    provider:             'Google Gemini',
+    providerUrl:          'https://ai.google.dev',
+    mediaType:            'image',
+    hidden:               true,
   },
   GROK_IMAGINE: {
-    label:               'Grok Imagine',
-    description:         'xAI\'s powerful image generation — creates a stunning seed frame or thumbnail from your prompt.',
-    badge:               'live',
-    icon:                '✨',
-    minDuration:         0,
-    maxDuration:         0,
+    label:                'Grok Imagine',
+    description:          'xAI\'s image generation — photorealistic quality from a single prompt.',
+    badge:                'live',
+    icon:                 '✨',
+    minDuration:          0,
+    maxDuration:          0,
     supportsImageToVideo: false,
-    provider:            'xAI',
-    providerUrl:         'https://x.ai',
+    provider:             'xAI',
+    providerUrl:          'https://x.ai',
+    mediaType:            'image',
   },
   LTX2: {
-    label:               'LTX-Video 2',
-    description:         'Lightricks\' cinematic video model — real-time generation speeds on RunPod GPU.',
-    badge:               'beta',
-    icon:                '🎬',
-    minDuration:         1,
-    maxDuration:         10,
+    label:                'LTX-Video 2',
+    description:          'Lightricks\' cinematic video model — real-time generation speeds on RunPod GPU.',
+    badge:                'beta',
+    icon:                 '🎬',
+    minDuration:          1,
+    maxDuration:          10,
     supportsImageToVideo: true,
-    provider:            'RunPod + LTX-Video 2',
-    providerUrl:         'https://huggingface.co/Lightricks/LTX-Video',
+    provider:             'RunPod + LTX-Video 2',
+    providerUrl:          'https://huggingface.co/Lightricks/LTX-Video',
+    mediaType:            'video',
   },
   WAN_25: {
-    label:               'Wan 2.5',
-    description:         'Alibaba\'s open video model with fine-grained motion control — running on RunPod GPU.',
-    badge:               'beta',
-    icon:                '🌊',
-    minDuration:         1,
-    maxDuration:         10,
+    label:                'Wan 2.5',
+    description:          'Alibaba\'s image-to-video model — fluid motion from a seed image. Requires a seed image URL.',
+    badge:                'beta',
+    icon:                 '🌊',
+    minDuration:          1,
+    maxDuration:          10,
     supportsImageToVideo: true,
-    provider:            'RunPod + Wan 2.5',
-    providerUrl:         'https://github.com/Wan-Video/Wan2.1',
+    provider:             'RunPod Public · Wan 2.5',
+    providerUrl:          'https://docs.runpod.io/public-endpoints/models/wan-2-5',
+    mediaType:            'video',
+    requiresSeedImage:    true,
   },
   KLING: {
-    label:               'Kling',
-    description:         'Kuaishou\'s hyper-realistic video generation model — API access coming soon.',
-    badge:               'coming-soon',
-    icon:                '⚡',
-    minDuration:         1,
-    maxDuration:         10,
+    label:                'Kling',
+    description:          'Kuaishou\'s hyper-realistic video generation — coming soon.',
+    badge:                'coming-soon',
+    icon:                 '⚡',
+    minDuration:          1,
+    maxDuration:          10,
     supportsImageToVideo: true,
-    provider:            'Kuaishou',
-    providerUrl:         'https://klingai.kuaishou.com',
+    provider:             'Kuaishou',
+    providerUrl:          'https://klingai.kuaishou.com',
+    mediaType:            'video',
   },
   HIGGSFIELD: {
-    label:               'Higgsfield',
-    description:         'Cinematic, character-consistent video generation — invite-only access coming soon.',
-    badge:               'coming-soon',
-    icon:                '🎭',
-    minDuration:         1,
-    maxDuration:         10,
+    label:                'Higgsfield',
+    description:          'Cinematic, character-consistent video generation — coming soon.',
+    badge:                'coming-soon',
+    icon:                 '🎭',
+    minDuration:          1,
+    maxDuration:          10,
     supportsImageToVideo: true,
-    provider:            'Higgsfield AI',
-    providerUrl:         'https://higgsfield.ai',
+    provider:             'Higgsfield AI',
+    providerUrl:          'https://higgsfield.ai',
+    mediaType:            'video',
   },
   VEO3: {
-    label:               'Veo 3',
-    description:         'Google\'s most advanced video model — cinematic realism, dialogue, sound effects, and expressive motion.',
-    badge:               'live',
-    icon:                '🎥',
-    minDuration:         4,
-    maxDuration:         8,
+    label:                'Veo 3',
+    description:          'Google\'s cinematic video model with dialogue and sound effects.',
+    badge:                'live',
+    icon:                 '🎥',
+    minDuration:          4,
+    maxDuration:          8,
     supportsImageToVideo: false,
-    provider:            'Google Gemini',
-    providerUrl:         'https://ai.google.dev',
+    provider:             'Google Gemini',
+    providerUrl:          'https://ai.google.dev',
+    mediaType:            'video',
+    hidden:               true,
   },
   FLUX: {
-    label:               'Flux.1',
-    description:         'Black Forest Labs\' state-of-the-art image model — photorealistic quality, fast on RunPod GPU.',
-    badge:               'beta',
-    icon:                '⚡',
-    minDuration:         0,
-    maxDuration:         0,
+    label:                'Flux.1 Dev',
+    description:          'Black Forest Labs\' state-of-the-art image model — photorealistic quality via RunPod public endpoint.',
+    badge:                'live',
+    icon:                 '⚡',
+    minDuration:          0,
+    maxDuration:          0,
     supportsImageToVideo: false,
-    provider:            'RunPod + Flux.1',
-    providerUrl:         'https://blackforestlabs.ai',
+    provider:             'RunPod Public · Flux.1 Dev',
+    providerUrl:          'https://docs.runpod.io/public-endpoints/models/flux-1-dev',
+    mediaType:            'image',
   },
   HUNYUAN_VIDEO: {
-    label:               'HunyuanVideo',
-    description:         'Tencent\'s open-source video model — high-fidelity motion, 720p output on A100 GPU.',
-    badge:               'beta',
-    icon:                '🐉',
-    minDuration:         1,
-    maxDuration:         8,
+    label:                'HunyuanVideo',
+    description:          'Tencent\'s open-source video model — high-fidelity motion, 720p output on A100 GPU.',
+    badge:                'beta',
+    icon:                 '🐉',
+    minDuration:          1,
+    maxDuration:          8,
     supportsImageToVideo: false,
-    provider:            'RunPod + HunyuanVideo',
-    providerUrl:         'https://github.com/Tencent/HunyuanVideo',
+    provider:             'RunPod + HunyuanVideo',
+    providerUrl:          'https://github.com/Tencent/HunyuanVideo',
+    mediaType:            'video',
   },
   COG_VIDEO_X: {
-    label:               'CogVideoX',
-    description:         'Zhipu AI\'s video generation model — smooth motion, strong prompt following, runs on RunPod GPU.',
-    badge:               'beta',
-    icon:                '🧠',
-    minDuration:         1,
-    maxDuration:         6,
+    label:                'CogVideoX',
+    description:          'Zhipu AI\'s video model — smooth motion and strong prompt following on RunPod GPU.',
+    badge:                'beta',
+    icon:                 '🧠',
+    minDuration:          1,
+    maxDuration:          6,
     supportsImageToVideo: false,
-    provider:            'RunPod + CogVideoX',
-    providerUrl:         'https://github.com/THUDM/CogVideo',
+    provider:             'RunPod + CogVideoX',
+    providerUrl:          'https://github.com/THUDM/CogVideo',
+    mediaType:            'video',
+  },
+  SEEDANCE: {
+    label:                'Seedance 1.0',
+    description:          'ByteDance\'s high-quality video model — text-to-video and image-to-video via RunPod public endpoint.',
+    badge:                'live',
+    icon:                 '🌱',
+    minDuration:          1,
+    maxDuration:          10,
+    supportsImageToVideo: true,
+    provider:             'RunPod Public · Seedance 1.0 Pro',
+    providerUrl:          'https://docs.runpod.io/public-endpoints/models/seedance-1-pro',
+    mediaType:            'video',
   },
 };
