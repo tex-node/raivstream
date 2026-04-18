@@ -326,6 +326,7 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'RunPod + CogVideoX',
     providerUrl:          'https://github.com/THUDM/CogVideo',
     mediaType:            'video',
+    hidden:               true,
   },
   SEEDANCE: {
     label:                'Seedance 1.0',
