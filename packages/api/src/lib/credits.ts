@@ -17,13 +17,14 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   GROK_IMAGINE:   'generate:grok_imagine',
   LTX2:           'generate:ltx2',
   WAN_25:         'generate:wan_25',
-  KLING:          'generate:kling',
+  KLING_I2V:      'generate:kling_i2v',      // Kling image-to-video   — 500 credits
+  KLING_R2V:      'generate:kling_r2v',      // Kling reference-to-video — 450 credits
   HIGGSFIELD:     'generate:higgsfield',
   VEO3:           'generate:veo3',
-  FLUX:           'generate:flux',           // suggested cost: 80 credits
-  HUNYUAN_VIDEO:  'generate:hunyuan_video',  // suggested cost: 300 credits (A100 GPU)
-  COG_VIDEO_X:    'generate:cog_video_x',    // suggested cost: 250 credits
-  SEEDANCE:       'generate:seedance',       // suggested cost: 200 credits
+  FLUX:           'generate:flux',           // 80 credits
+  HUNYUAN_VIDEO:  'generate:hunyuan_video',  // 300 credits (A100 GPU)
+  COG_VIDEO_X:    'generate:cog_video_x',    // 250 credits
+  SEEDANCE:       'generate:seedance',       // 200 credits
 };
 
 /**

@@ -7,7 +7,9 @@ import { moderatePrompt } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 
 const SUPPORTED_MODELS = [
-  'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3',
+  'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25',
+  'KLING_I2V', 'KLING_R2V',
+  'HIGGSFIELD', 'VEO3',
   'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
 ] as const;
 

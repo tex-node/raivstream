@@ -53,7 +53,9 @@ enum GenerationModel {
   GROK_IMAGINE
   LTX2
   WAN_25
-  KLING
+  KLING         // legacy — superseded by KLING_I2V / KLING_R2V
+  KLING_I2V     // Kling image-to-video (seed image = opening frame)
+  KLING_R2V     // Kling reference-to-video (seed image guides style/subject)
   HIGGSFIELD
   VEO3
   FLUX

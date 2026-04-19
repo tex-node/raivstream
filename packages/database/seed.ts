@@ -128,16 +128,40 @@ async function main() {
       description:    'Seedance 1.0 — ByteDance high-quality video model (₦200/gen)',
     },
     {
+      featureKey:     'generate:flux',
+      creditsPerUnit: 80,
+      unitLabel:      'request',
+      description:    'Flux.1 Dev — high-quality image generation (₦80/gen)',
+    },
+    {
+      featureKey:     'generate:hunyuan_video',
+      creditsPerUnit: 300,
+      unitLabel:      'request',
+      description:    'HunyuanVideo — 720p video on A100 GPU (₦300/gen)',
+    },
+    {
+      featureKey:     'generate:cog_video_x',
+      creditsPerUnit: 250,
+      unitLabel:      'request',
+      description:    'CogVideoX — smooth motion video generation (₦250/gen)',
+    },
+    {
       featureKey:     'generate:higgsfield',
       creditsPerUnit: 400,
       unitLabel:      'request',
       description:    'Higgsfield — cinematic AI video generation (₦400/gen)',
     },
     {
-      featureKey:     'generate:kling',
+      featureKey:     'generate:kling_i2v',
       creditsPerUnit: 500,
       unitLabel:      'request',
-      description:    'Kling — premium quality, longest duration (₦500/gen)',
+      description:    'Kling I2V — image-to-video, hyper-realistic motion (₦500/gen)',
+    },
+    {
+      featureKey:     'generate:kling_r2v',
+      creditsPerUnit: 450,
+      unitLabel:      'request',
+      description:    'Kling R2V — reference-guided text-to-video (₦450/gen)',
     },
     // ── Other AI features ───────────────────────────────────────────────────
     {

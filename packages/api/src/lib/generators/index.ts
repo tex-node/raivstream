@@ -18,7 +18,8 @@ import { submitGeneration as submitNanoBanana, getJobStatus as getNanoBananaStat
 import { generateVideoFromPrompt as submitGrokImagine } from './grokImagine';
 import { submitLTX2, getLTX2Status } from './ltx2';
 import { submitWan25, getWan25Status } from './wan25';
-import { submitKling, getKlingStatus, submitHighgsfield, getHiggsfieldStatus } from './placeholders';
+import { submitKlingI2V, getKlingI2VStatus, submitKlingR2V, getKlingR2VStatus } from './kling';
+import { submitHighgsfield, getHiggsfieldStatus } from './placeholders';
 import { submitVeo3, getVeo3Status } from './veo3';
 import { submitFlux, getFluxStatus } from './flux';
 import { submitHunyuanVideo, getHunyuanVideoStatus } from './hunyuanVideo';
@@ -30,7 +31,8 @@ export type SupportedModel =
   | 'GROK_IMAGINE'
   | 'LTX2'
   | 'WAN_25'
-  | 'KLING'
+  | 'KLING_I2V'
+  | 'KLING_R2V'
   | 'HIGGSFIELD'
   | 'VEO3'
   | 'FLUX'
@@ -83,8 +85,13 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
       return { providerJobId: jobId };
     }
 
-    case 'KLING': {
-      const jobId = await submitKling(input);
+    case 'KLING_I2V': {
+      const jobId = await submitKlingI2V(input);
+      return { providerJobId: jobId };
+    }
+
+    case 'KLING_R2V': {
+      const jobId = await submitKlingR2V(input);
       return { providerJobId: jobId };
     }
 
@@ -152,9 +159,14 @@ export async function pollJobStatus(
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
 
-    case 'KLING': {
-      const s = await getKlingStatus(providerJobId);
-      return { status: s.status as JobStatusResult['status'], outputUrl: s.outputUrl };
+    case 'KLING_I2V': {
+      const s = await getKlingI2VStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'KLING_R2V': {
+      const s = await getKlingR2VStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
 
     case 'HIGGSFIELD': {
@@ -254,16 +266,29 @@ export const MODEL_META: Record<SupportedModel, {
     providerUrl:          'https://docs.runpod.io/public-endpoints/models/wan-2-6-t2v',
     mediaType:            'video',
   },
-  KLING: {
-    label:                'Kling',
-    description:          'Kuaishou\'s hyper-realistic video generation — coming soon.',
-    badge:                'coming-soon',
+  KLING_I2V: {
+    label:                'Kling I2V',
+    description:          'Kuaishou Kling image-to-video — your image becomes the opening frame, extended into hyper-realistic motion.',
+    badge:                'live',
     icon:                 '⚡',
-    minDuration:          1,
+    minDuration:          5,
     maxDuration:          10,
     supportsImageToVideo: true,
-    provider:             'Kuaishou',
-    providerUrl:          'https://klingai.kuaishou.com',
+    requiresSeedImage:    true,
+    provider:             'Kuaishou Kling',
+    providerUrl:          'https://klingai.com',
+    mediaType:            'video',
+  },
+  KLING_R2V: {
+    label:                'Kling R2V',
+    description:          'Kling reference-to-video — attach a reference image to guide style and subject while text drives the scene.',
+    badge:                'live',
+    icon:                 '🎞️',
+    minDuration:          5,
+    maxDuration:          10,
+    supportsImageToVideo: true,
+    provider:             'Kuaishou Kling',
+    providerUrl:          'https://klingai.com',
     mediaType:            'video',
   },
   HIGGSFIELD: {
