@@ -62,7 +62,6 @@ export async function submitFlux(input: FluxInput): Promise<string> {
     height,
     num_inference_steps: STEPS(),
     guidance:            GUIDANCE(),
-    image_format:        'JPEG',
     seed:                input.seed ?? -1,
   };
   const { jobId } = await submitJob(ENDPOINT(), payload, { executionTimeout: 300_000, ttl: 3_600_000 });

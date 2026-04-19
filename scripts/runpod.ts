@@ -64,7 +64,7 @@ const MODEL_CONFIG: Record<string, {
   flux: {
     label:       'Flux.1 Dev',
     slug:        () => process.env.RUNPOD_FLUX_PUBLIC_ENDPOINT     ?? 'black-forest-labs-flux-1-dev',
-    testPayload: (p) => ({ prompt: p, width: 768, height: 1344, num_inference_steps: 20, guidance: 3.5, image_format: 'JPEG', seed: -1 }),
+    testPayload: (p) => ({ prompt: p, width: 768, height: 1344, num_inference_steps: 20, guidance: 3.5, seed: -1 }),
   },
   wan: {
     label:       'Wan 2.6 T2V',
