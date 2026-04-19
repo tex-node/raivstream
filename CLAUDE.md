@@ -56,7 +56,8 @@ packages/api/src/lib/generators/
   hunyuanVideo.ts                     — HunyuanVideo via RunPod custom serverless + ComfyUI-HunyuanVideoWrapper (HyVideo* nodes) — needs RUNPOD_HUNYUAN_ENDPOINT_ID
   cogVideoX.ts                        — CogVideoX-5B via RunPod custom serverless + ComfyUI native nodes — hidden (needs RUNPOD_COGVIDEOX_ENDPOINT_ID)
   seedance.ts                         — Seedance 1.5 Pro I2V via RunPod public endpoint (seedance-v1-5-pro-i2v); requires seed image
-  placeholders.ts                     — Kling, Higgsfield (coming soon stubs)
+  kling.ts                            — Kling I2V + R2V via Kuaishou API; JWT-signed (HS256, Node crypto — no external dep); KLING_I2V uses /v1/videos/image2video (seed image = opening frame); KLING_R2V uses /v1/videos/text2video with reference_image_list; both mirror output to R2
+  placeholders.ts                     — Higgsfield (coming soon stub); Kling placeholder removed
   runpod.ts                           — RunPod API client: submitJob, getJobStatus, normaliseStatus, extractOutputUrl, aspectRatioToResolution, durationToFrames
 packages/api/src/routers/
   auth.ts                             — register, login, refresh, logout, logoutAll
@@ -201,7 +202,7 @@ apps/web/src/
 - 1,000 credits = ₦1,000 (configured in `FeatureCreditRate` table via seed.ts or admin UI)
 - `deductCredits()` in `packages/api/src/lib/credits.ts` uses atomic `updateMany WHERE balance >= cost` — race-condition safe
 - `refundCredits()` called automatically if provider submission fails
-- Costs (DB-configurable via /admin/credits): grok_imagine=100, flux=80, wan_25=200, seedance=200, hunyuan_video=300, ltx2=150, cog_video_x=250, higgsfield=400, kling=500, thumbnail=20, transcribe=30, enhance=100
+- Costs (DB-configurable via /admin/credits): grok_imagine=100, flux=80, wan_25=200, seedance=200, hunyuan_video=300, ltx2=150, cog_video_x=250, higgsfield=400, kling_i2v=500, kling_r2v=450, thumbnail=20, transcribe=30, enhance=100
 - Credit packages: starter (1k cr / ₦1k), popular (5k cr / ₦4.5k — best value), pro (10k cr / ₦8k)
 - `generation.create` deducts before job creation; `generation.listModels` returns `creditCost` from DB
 - Feature key format: `generate:model_name` (e.g. `generate:flux`, `generate:wan_25`, `generate:seedance`)
@@ -224,7 +225,7 @@ apps/web/src/
 - **CreditBalance** — userId (unique), balance (Int)
 - **CreditTransaction** — userId, amount (+/-), type (PURCHASE|USAGE|BONUS|REFUND), featureKey, balanceBefore, balanceAfter
 - **FeatureCreditRate** — featureKey (unique), creditsPerUnit, isActive — admin-configurable costs
-- **GenerationJob** — userId, model (NANO_BANANA|GROK_IMAGINE|LTX2|WAN_25|KLING|HIGGSFIELD|VEO3|FLUX|HUNYUAN_VIDEO|COG_VIDEO_X|SEEDANCE), prompt, status, providerJobId, outputUrl, thumbnailUrl, videoId
+- **GenerationJob** — userId, model (NANO_BANANA|GROK_IMAGINE|LTX2|WAN_25|KLING(legacy)|KLING_I2V|KLING_R2V|HIGGSFIELD|VEO3|FLUX|HUNYUAN_VIDEO|COG_VIDEO_X|SEEDANCE), prompt, status, providerJobId, outputUrl, thumbnailUrl, videoId
 - **Badge / UserBadge / VideoBadge** — weekly achievement badges
 - **FeaturedContent** — curated sections (section, position, week)
 - **Category / VideoCategory** — many-to-many video categorisation
@@ -256,7 +257,8 @@ apps/web/src/
 | Veo 3.1 | Hidden | Google Gemini | `GEMINI_API_KEY` | hidden=true in MODEL_META |
 | LTX-2 | Hidden | RunPod custom | `RUNPOD_LTX2_ENDPOINT_ID` | hidden=true until endpoint configured |
 | CogVideoX | Hidden | RunPod custom | `RUNPOD_COGVIDEOX_ENDPOINT_ID` | hidden=true until endpoint configured |
-| Kling | Coming Soon | Kuaishou | — | Placeholder |
+| Kling I2V | Live | Kuaishou API | `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | `/v1/videos/image2video` — seed image becomes opening frame. Model: kling-v1-6. Duration: 5s or 10s. providerJobId prefix `i2v:` |
+| Kling R2V | Live | Kuaishou API | `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | `/v1/videos/text2video` with `reference_image_list` — reference image guides style/subject. providerJobId prefix `r2v:` |
 | Higgsfield | Coming Soon | Higgsfield AI | — | Placeholder |
 
 ## AI Studio UI (`/generate`)
@@ -403,9 +405,12 @@ npx eas-cli update --branch production --platform ios --message "..."
 - `XAI_API_KEY` — xAI API key for Grok Imagine (console.x.ai)
 - `GEMINI_API_KEY` — Google Gemini API key for Nano Banana + Veo 3.1 (aistudio.google.com) — models currently hidden
 - `RUNPOD_API_KEY` — required for all RunPod models (public + custom endpoints)
-- `RUNPOD_HUNYUAN_ENDPOINT_ID` — HunyuanVideo custom serverless endpoint (A100 40 GB); model visible in UI when set
+- `RUNPOD_HUNYUAN_ENDPOINT_ID` — HunyuanVideo custom serverless endpoint (AMPERE_80 / A100 40 GB, id: fg28wk2tkqiy6q, workersMin=0, idleTimeout=60s); model weights on raivstream-models volume
+- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX endpoint (ADA_24 / RTX 4090, id: odz4a6rii63dmh, workersMin=0, idleTimeout=60s); model weights on raivstream-models volume; set in .env → visible in UI
 - `RUNPOD_LTX2_ENDPOINT_ID` — LTX-Video 2 custom serverless endpoint; model hidden until set
-- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX custom serverless endpoint; model hidden until set
+- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX custom serverless endpoint (RTX 4090, id: odz4a6rii63dmh); model visible when set
+- `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kuaishou Kling API credentials (klingai.com/developer); required for KLING_I2V and KLING_R2V
+- Optional Kling config: `KLING_MODEL` (default: kling-v1-6), `KLING_MODE` (std|pro, default: std), `KLING_CFG` (0–1, default: 0.5)
 - Optional public endpoint overrides: `RUNPOD_FLUX_PUBLIC_ENDPOINT`, `RUNPOD_WAN26_T2V_ENDPOINT`, `RUNPOD_WAN26_I2V_ENDPOINT`, `RUNPOD_SEEDANCE_PUBLIC_ENDPOINT`
 - Optional Seedance config: `RUNPOD_SEEDANCE_RESOLUTION` (default: 720p), `RUNPOD_SEEDANCE_GENERATE_AUDIO` (default: false), `RUNPOD_SEEDANCE_CAMERA_FIXED` (default: false)
 - Optional Flux config: `RUNPOD_FLUX_STEPS` (default: 28), `RUNPOD_FLUX_GUIDANCE` (default: 3.5)
@@ -458,7 +463,7 @@ npx eas-cli update --branch production --platform ios --message "..."
 
 **Still to build / verify:**
 - Add email service (Resend/SendGrid) for password reset emails — currently logs URL to server console
-- HunyuanVideo: create RunPod custom serverless endpoint, set RUNPOD_HUNYUAN_ENDPOINT_ID
+- Add KLING_ACCESS_KEY + KLING_SECRET_KEY to .env — Kling I2V and R2V show as "live" in UI but return "not configured" error without keys
 - HLS video transcoding worker integration
 - Creator analytics data pipeline (cron jobs / event writes)
 - Redis caching layer
