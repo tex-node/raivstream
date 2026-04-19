@@ -97,59 +97,55 @@ const MODEL_CONFIG: Record<string, {
 
 async function cmdInfo() {
   console.log('\n🔑  RunPod Account\n');
-  const data = await apiGet<{ data: { myself: any } }>(`${REST}/users/myself`);
-  const me   = data?.data?.myself ?? data;
-  fmt('User ID',        me.id        ?? me.userId ?? '—');
-  fmt('Email',          me.email     ?? '—');
-  fmt('Credit balance', me.creditBalance != null ? `$${(me.creditBalance).toFixed(4)} USD` : '—');
+  // RunPod account info is GraphQL only
+  const gql = await apiPost<any>('https://api.runpod.io/graphql', {
+    query: `{ myself { id email creditBalance } }`,
+  });
+  const me = gql?.data?.myself ?? {};
+  fmt('User ID',        me.id            ?? '—');
+  fmt('Email',          me.email         ?? '—');
+  fmt('Credit balance', me.creditBalance != null ? `$${Number(me.creditBalance).toFixed(4)} USD` : '—');
   console.log();
 }
 
 async function cmdEndpoints() {
   console.log('\n📡  Serverless Endpoints\n');
-  try {
-    const data = await apiGet<any>(`${REST}/endpoints`);
-    const list: any[] = Array.isArray(data) ? data : data?.data ?? data?.endpoints ?? [];
-    if (!list.length) { console.log('  No endpoints found.'); }
-    for (const ep of list) {
-      console.log(`  ${ep.name ?? ep.id}`);
-      fmt('  ID',      ep.id);
-      fmt('  GPU',     ep.gpuIds ?? ep.gpu ?? '—');
-      fmt('  Workers', `min ${ep.workersMin ?? 0} / max ${ep.workersMax ?? '?'}`);
-      fmt('  Status',  ep.status ?? '—');
-      console.log();
-    }
-  } catch (err) {
-    // GraphQL fallback
-    const gql = await apiPost<any>('https://api.runpod.io/graphql', {
-      query: `{ myself { endpoints { id name gpuIds workersMin workersMax status } } }`,
-    });
-    const list = gql?.data?.myself?.endpoints ?? [];
-    if (!list.length) { console.log('  No endpoints found.'); return; }
-    for (const ep of list) {
-      console.log(`  ${ep.name ?? ep.id}`);
-      fmt('  ID',      ep.id);
-      fmt('  GPU',     ep.gpuIds ?? '—');
-      fmt('  Workers', `min ${ep.workersMin} / max ${ep.workersMax}`);
-      fmt('  Status',  ep.status ?? '—');
-      console.log();
-    }
+  const gql = await apiPost<any>('https://api.runpod.io/graphql', {
+    query: `{ myself { endpoints { id name gpuIds workersMin workersMax } } }`,
+  });
+  const list: any[] = gql?.data?.myself?.endpoints ?? [];
+  if (!list.length) { console.log('  No custom endpoints found.\n  (Public endpoints like wan-2-6-t2v are not listed here — they are shared infrastructure.)\n'); return; }
+  for (const ep of list) {
+    console.log(`  ${ep.name ?? ep.id}`);
+    fmt('  ID',      ep.id);
+    fmt('  GPU',     (ep.gpuIds ?? []).join(', ') || '—');
+    fmt('  Workers', `min ${ep.workersMin ?? 0} / max ${ep.workersMax ?? '?'}`);
+    console.log();
   }
 }
 
 async function cmdHealth(slug: string) {
   if (!slug) { console.error('Usage: pnpm runpod health <endpoint-slug>'); process.exit(1); }
   console.log(`\n🏥  Health: ${slug}\n`);
-  const data = await apiGet<any>(`${BASE}/${slug}/health`);
-  const j = data.jobs ?? {};
-  const w = data.workers ?? {};
-  fmt('Jobs in queue',    j.inQueue    ?? 0);
-  fmt('Jobs in progress', j.inProgress ?? 0);
-  fmt('Jobs completed',   j.completed  ?? 0);
-  fmt('Jobs failed',      j.failed     ?? 0);
-  fmt('Workers idle',     w.idle       ?? 0);
-  fmt('Workers running',  w.running    ?? 0);
-  fmt('Workers throttled',w.throttled  ?? 0);
+  try {
+    const data = await apiGet<any>(`${BASE}/${slug}/health`);
+    const j = data.jobs    ?? {};
+    const w = data.workers ?? {};
+    fmt('Jobs in queue',     j.inQueue    ?? 0);
+    fmt('Jobs in progress',  j.inProgress ?? 0);
+    fmt('Jobs completed',    j.completed  ?? 0);
+    fmt('Jobs failed',       j.failed     ?? 0);
+    fmt('Workers idle',      w.idle       ?? 0);
+    fmt('Workers running',   w.running    ?? 0);
+    fmt('Workers throttled', w.throttled  ?? 0);
+  } catch (err: any) {
+    if (err.message?.startsWith('401')) {
+      console.log('  ℹ️  Health stats unavailable for public endpoints (401 — shared infrastructure).');
+      console.log('  Use "pnpm runpod test" to verify the endpoint accepts jobs.\n');
+    } else {
+      throw err;
+    }
+  }
   console.log();
 }
 
