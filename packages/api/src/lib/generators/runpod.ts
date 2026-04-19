@@ -238,6 +238,9 @@ export function extractOutputUrl(output: unknown): string | undefined {
     // { url: "https://..." }
     if (typeof obj.url === 'string' && obj.url.startsWith('http')) return obj.url;
 
+    // { result: "https://..." }  (RunPod public endpoints — Wan 2.6, Seedance, etc.)
+    if (typeof obj.result === 'string' && obj.result.startsWith('http')) return obj.result;
+
     // { video_url: "https://..." }
     if (typeof obj.video_url === 'string' && obj.video_url.startsWith('http')) return obj.video_url;
 
