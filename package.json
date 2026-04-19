@@ -36,7 +36,8 @@
     "dev:web": "turbo run dev --filter=@raivstream/web",
     "dev:mobile": "turbo run dev --filter=@raivstream/mobile",
     "deploy:web": "cd apps/web && vercel --prod",
-    "deploy:mobile": "cd apps/mobile && eas build --platform all"
+    "deploy:mobile": "cd apps/mobile && eas build --platform all",
+    "runpod": "tsx scripts/runpod.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
