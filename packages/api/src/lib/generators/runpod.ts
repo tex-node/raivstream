@@ -217,6 +217,9 @@ export function normaliseStatus(raw: RunpodJobStatus): NormalisedStatus {
 export function extractOutputUrl(output: unknown): string | undefined {
   if (!output) return undefined;
 
+  // ── Plain string URL (RunPod public endpoints often return bare URL) ────────
+  if (typeof output === 'string' && output.startsWith('http')) return output;
+
   // ── Unwrap double-nesting { output: ... } ──────────────────────────────────
   if (
     typeof output === 'object' &&
@@ -254,13 +257,19 @@ export function extractOutputUrl(output: unknown): string | undefined {
     if (Array.isArray(obj.images) && obj.images[0]?.url) return obj.images[0].url as string;
   }
 
-  // ── Array of per-node ComfyUI outputs ─────────────────────────────────────
+  // ── Array shapes ──────────────────────────────────────────────────────────
+
   if (Array.isArray(output)) {
+    // ["https://..."]  — plain string array (RunPod public endpoints)
+    if (typeof output[0] === 'string' && output[0].startsWith('http')) return output[0];
+
+    // Array of per-node ComfyUI outputs
     for (const item of output) {
       if (!item || typeof item !== 'object') continue;
       const node = item as Record<string, unknown>;
 
       if (typeof node.message === 'string' && node.message.startsWith('http')) return node.message;
+      if (typeof node.url     === 'string' && node.url.startsWith('http'))     return node.url;
       if (Array.isArray(node.videos) && node.videos[0]?.url) return node.videos[0].url as string;
       if (Array.isArray(node.gifs)   && node.gifs[0]?.url)   return node.gifs[0].url   as string;
       if (Array.isArray(node.images) && node.images[0]?.url) return node.images[0].url as string;
