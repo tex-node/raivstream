@@ -33,6 +33,7 @@ const videoCardSelect = {
   dislikeCount: true,
   avgStarRating: true,
   starRatingCount: true,
+  isPremiumOnly: true,
   tags: true,
   creator: {
     select: {
