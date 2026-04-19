@@ -124,9 +124,9 @@ apps/web/src/
   app/api/paystack/webhook/route.ts     — POST — Paystack event handler
   app/api/stripe/                       — Stripe webhook + checkout endpoints
   components/feed/FeedTabs.tsx          — tab switcher (Following tab hidden for guests; "Kids Feed" label on R16)
-  components/feed/VideoFeed.tsx         — vertical scroll feed + PaywallModal + scroll/swipe handling; passes kidsOnly to feed queries
-  components/feed/PaywallModal.tsx      — freemium gate overlay (5 free episodes)
-  components/video/VideoCard.tsx        — individual video card (detects image URLs to avoid VideoPlayer spinner)
+  components/feed/VideoFeed.tsx         — vertical scroll feed; guest sessionStorage tracking (5 ep) + signed-in episodeGate query (10 ep); sticky upgrade banner + PaywallModal; passes kidsOnly to feed queries
+  components/feed/PaywallModal.tsx      — hard paywall overlay for GUESTS after 5 free episodes; 3 CTAs: sign-up (10 more free) / subscribe / sign-in
+  components/video/VideoCard.tsx        — individual video card; isLocked prop → premium lock overlay; isImageUrl() helper routes to <img> instead of VideoPlayer; landscape images get blurred backdrop (same pattern as landscape videos)
   components/video/VideoPlayer.tsx      — HTML5 / HLS video player (starts muted for autoplay)
   components/video/VideoInteractions.tsx — like/dislike/star buttons
   components/layout/Navbar.tsx          — top nav (glass-blur on marketing, transparent on feed; R16 branding on kids subdomain)
@@ -207,10 +207,28 @@ apps/web/src/
 - `generation.create` deducts before job creation; `generation.listModels` returns `creditCost` from DB
 - Feature key format: `generate:model_name` (e.g. `generate:flux`, `generate:wan_25`, `generate:seedance`)
 
-## Freemium Gate
-- FREE tier users get 5 unique episodes per day before hitting a paywall
-- Enforced server-side in `interaction.trackProgress` (FORBIDDEN error) and client-side in `VideoFeed` via `user.episodeGate`
-- `PaywallModal` overlays the feed; Viewer plan CTA is ₦1,500/month via Paystack
+## Freemium Gate (two-tier)
+**Guest (not signed in)**
+- 5 unique episode IDs tracked in `sessionStorage` (`rv_guest_watched`)
+- After the 5th: `PaywallModal` hard-overlays the feed (videos pause, scroll blocked)
+- Modal CTAs: "Sign up free — get 10 more episodes" → `/sign-up` | "Subscribe — ₦1,500/mo unlimited" → `/pricing` | "Already subscribed? Sign in" → `/sign-in`
+
+**Signed-in FREE tier**
+- 10 unique episodes tracked server-side via `WatchHistory` count
+- `user.episodeGate` query returns `{ watched, limit: 10, isGated, freeContentOnly }`
+- After the 10th: dismissable sticky top banner appears ("🔒 Watching free content · Subscribe for unlimited")
+- `isPremiumOnly=false` content plays forever — never blocked
+- `isPremiumOnly=true` content shows a per-video padlock overlay + "Subscribe — ₦1,500/mo" button
+- `interaction.trackProgress` throws `FORBIDDEN / EPISODE_GATE_REACHED` only for premium-only videos past limit
+
+**VIEWER / CREATOR**
+- `user.episodeGate` returns `freeContentOnly: false` immediately — no gate, no banner, no lock overlays
+
+**`isPremiumOnly` field**
+- Boolean on Video model — creators set this when publishing
+- `false` = free content, always watchable after gate (unmonetised on platform)
+- `true` = premium content, locked for FREE users past 10 episodes
+- Exposed in all feed query selects so client can render lock overlays
 
 ## Database Models (schema.prisma)
 - **User** — email, username, passwordHash, role (VIEWER|CREATOR|MODERATOR|ADMIN), premiumTier (FREE|VIEWER|CREATOR)
@@ -322,6 +340,8 @@ Loads env from `apps/web/.env.local` then `.env`. Useful for debugging new outpu
 - Desktop: progress dots (right side, max 8) click to `goTo()`
 - `VideoPlayer.tsx`: starts **muted** (`isMuted: true`) so browser autoplay policy allows `play()`
 - `VideoCard.tsx`: `isImageUrl()` helper detects image extensions — routes to `<img>` instead of `<VideoPlayer>` to avoid infinite spinner on AI-generated images published to feed
+- `VideoCard.tsx` landscape images: `onLoad` detects `naturalWidth > naturalHeight`, sets `isLandscapeImage` state, renders blurred backdrop `<img>` at `opacity: isLandscapeImage ? 1 : 0` — mirrors the VideoPlayer landscape backdrop pattern
+- `VideoCard.tsx` premium lock: `isLocked` prop overlays padlock + "Subscribe" button (`z-20`) — VideoPlayer `isActive` is also suppressed so locked video never plays
 
 ## VPS Infrastructure
 - **Server**: Contabo VPS at 81.0.246.223
@@ -405,10 +425,9 @@ npx eas-cli update --branch production --platform ios --message "..."
 - `XAI_API_KEY` — xAI API key for Grok Imagine (console.x.ai)
 - `GEMINI_API_KEY` — Google Gemini API key for Nano Banana + Veo 3.1 (aistudio.google.com) — models currently hidden
 - `RUNPOD_API_KEY` — required for all RunPod models (public + custom endpoints)
-- `RUNPOD_HUNYUAN_ENDPOINT_ID` — HunyuanVideo custom serverless endpoint (AMPERE_80 / A100 40 GB, id: fg28wk2tkqiy6q, workersMin=0, idleTimeout=60s); model weights on raivstream-models volume
-- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX endpoint (ADA_24 / RTX 4090, id: odz4a6rii63dmh, workersMin=0, idleTimeout=60s); model weights on raivstream-models volume; set in .env → visible in UI
+- `RUNPOD_HUNYUAN_ENDPOINT_ID` — HunyuanVideo custom serverless endpoint (AMPERE_80 / A100 40 GB, id: fg28wk2tkqiy6q, workersMin=0, idleTimeout=60s); model weights on raivstream-models network volume (id: e16tbuujlv, EU-SE-1, 200 GB)
+- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX custom serverless endpoint (ADA_24 / RTX 4090, id: odz4a6rii63dmh, workersMin=0, idleTimeout=60s); model weights on raivstream-models volume; set in .env → visible in UI
 - `RUNPOD_LTX2_ENDPOINT_ID` — LTX-Video 2 custom serverless endpoint; model hidden until set
-- `RUNPOD_COGVIDEOX_ENDPOINT_ID` — CogVideoX custom serverless endpoint (RTX 4090, id: odz4a6rii63dmh); model visible when set
 - `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` — Kuaishou Kling API credentials (klingai.com/developer); required for KLING_I2V and KLING_R2V
 - Optional Kling config: `KLING_MODEL` (default: kling-v1-6), `KLING_MODE` (std|pro, default: std), `KLING_CFG` (0–1, default: 0.5)
 - Optional public endpoint overrides: `RUNPOD_FLUX_PUBLIC_ENDPOINT`, `RUNPOD_WAN26_T2V_ENDPOINT`, `RUNPOD_WAN26_I2V_ENDPOINT`, `RUNPOD_SEEDANCE_PUBLIC_ENDPOINT`
@@ -443,9 +462,12 @@ npx eas-cli update --branch production --platform ios --message "..."
 - Paystack integration (Viewer subscription + credit packages, webhooks)
 - Stripe subscription scaffolding (Creator plan, international)
 - Credit system with atomic deduction, refunds, transaction history
-- AI Studio (`/generate`): radio + dropdown UI; live models: Flux.1 Dev, Grok Imagine, Wan 2.6 (T2V+I2V), Seedance 1.5 Pro (I2V); HunyuanVideo ready (needs endpoint ID); LTX2/CogVideoX/NanoBanana/Veo3 hidden
+- AI Studio (`/generate`): radio + dropdown UI; live models: Flux.1 Dev, Grok Imagine, Wan 2.6 (T2V+I2V), Seedance 1.5 Pro (I2V), Kling I2V, Kling R2V; HunyuanVideo beta (needs endpoint ID); LTX2/CogVideoX/NanoBanana/Veo3 hidden
+- RunPod custom serverless endpoints created: HunyuanVideo (fg28wk2tkqiy6q, A100 40 GB) + CogVideoX (odz4a6rii63dmh, RTX 4090); both workersMin=0 + idleTimeout=60s; model weights downloaded to raivstream-models network volume (EU-SE-1, 200 GB)
+- Kling I2V + R2V: full implementation via Kuaishou REST API; JWT HS256 signed with Node crypto (no external dep); providerJobId prefixed `i2v:`/`r2v:`; output mirrored to R2
 - RunPod dev CLI (`pnpm runpod`) for testing endpoints and debugging output shapes
-- Freemium episode gate (5 free episodes, PaywallModal)
+- **Two-tier freemium gate**: guest hard-modal after 5 episodes (sessionStorage) + signed-in FREE soft-gate after 10 episodes (server-side); free content (`isPremiumOnly=false`) never blocked; per-video lock overlays + sticky dismissable banner for past-gate FREE users
+- **Landscape image backdrop**: `VideoCard.tsx` detects landscape AI-generated images via `onLoad` and shows blurred backdrop (matches VideoPlayer landscape video behavior)
 - Web pages: feed (public), upload, video view, profile, pricing, credits, generate, analytics, search, settings, sign-in, sign-up, forgot-password, reset-password
 - Admin dashboard: overview, user management, credit rate management, job history, revenue, **moderation queue**
 - Admin roles: ADMIN + MODERATOR with gated tRPC procedures
@@ -463,7 +485,8 @@ npx eas-cli update --branch production --platform ios --message "..."
 
 **Still to build / verify:**
 - Add email service (Resend/SendGrid) for password reset emails — currently logs URL to server console
-- Add KLING_ACCESS_KEY + KLING_SECRET_KEY to .env — Kling I2V and R2V show as "live" in UI but return "not configured" error without keys
+- Add `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` to VPS `.env` — Kling I2V + R2V show as "live" in UI but return "not configured" error without keys
+- Add `RUNPOD_HUNYUAN_ENDPOINT_ID` + `RUNPOD_COGVIDEOX_ENDPOINT_ID` to VPS `.env` to activate those models in UI
 - HLS video transcoding worker integration
 - Creator analytics data pipeline (cron jobs / event writes)
 - Redis caching layer
