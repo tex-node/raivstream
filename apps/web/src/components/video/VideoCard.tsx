@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoInteractions } from './VideoInteractions';
 import { trpc } from '@/lib/trpc';
@@ -42,7 +42,8 @@ function isImageUrl(url: string): boolean {
 export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
   const { isSignedIn } = useUser();
   const trackProgress = trpc.interaction.trackProgress.useMutation();
-  const imageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imageTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isLandscapeImage, setIsLandscapeImage] = useState(false);
 
   const handleProgress = (currentTime: number, duration: number) => {
     if (!isSignedIn) return;
@@ -95,12 +96,31 @@ export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
           onEnded={onEnded}
         />
       ) : imageUrl ? (
-        /* Image-only content — AI generated images published to feed */
-        <div className="w-full h-full bg-black flex items-center justify-center">
+        /* Image-only content — AI generated images published to feed.
+           Landscape images get the same blurred-backdrop treatment as landscape videos:
+           a blurred + scaled copy fills the black letterbox bars behind the main image. */
+        <div className="relative w-full h-full bg-black overflow-hidden">
+          {/* Blurred backdrop — same src, fades in once we know the image is landscape */}
+          <img
+            src={imageUrl}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{
+              filter:    'blur(28px)',
+              transform: 'scale(1.15)',
+              opacity:   isLandscapeImage ? 1 : 0,
+            }}
+          />
+          {/* Main image — always object-contain so it never crops */}
           <img
             src={imageUrl}
             alt={video.title}
-            className="w-full h-full object-contain"
+            className="relative w-full h-full object-contain"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              setIsLandscapeImage(img.naturalWidth > img.naturalHeight);
+            }}
           />
         </div>
       ) : (
