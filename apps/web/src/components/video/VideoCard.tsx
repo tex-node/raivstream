@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoInteractions } from './VideoInteractions';
 import { trpc } from '@/lib/trpc';
@@ -21,6 +22,7 @@ interface VideoCardProps {
     dislikeCount: number;
     avgStarRating: number;
     starRatingCount: number;
+    isPremiumOnly: boolean;
     tags: string[];
     creator: {
       id: string;
@@ -30,8 +32,10 @@ interface VideoCardProps {
       verified: boolean;
     };
   };
-  isActive: boolean;
-  onEnded?: () => void;
+  isActive:        boolean;
+  /** True when the user has hit their free episode limit AND this video is premium-only */
+  isLocked?:       boolean;
+  onEnded?:        () => void;
 }
 
 /** Returns true if the URL points to a static image rather than a video */
@@ -39,9 +43,10 @@ function isImageUrl(url: string): boolean {
   return /\.(jpg|jpeg|png|webp|gif|avif|bmp|svg)(\?|$)/i.test(url);
 }
 
-export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
+export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoCardProps) {
   const { isSignedIn } = useUser();
-  const trackProgress = trpc.interaction.trackProgress.useMutation();
+  const router         = useRouter();
+  const trackProgress  = trpc.interaction.trackProgress.useMutation();
   const imageTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLandscapeImage, setIsLandscapeImage] = useState(false);
 
@@ -91,7 +96,7 @@ export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
         <VideoPlayer
           videoUrl={(hlsUrl ?? mediaUrl)!}
           thumbnailUrl={video.thumbnailUrl}
-          isActive={isActive}
+          isActive={isActive && !isLocked}
           onProgress={handleProgress}
           onEnded={onEnded}
         />
@@ -126,6 +131,31 @@ export function VideoCard({ video, isActive, onEnded }: VideoCardProps) {
       ) : (
         <div className="w-full h-full bg-gray-900 flex items-center justify-center">
           <span className="text-white/50 text-sm">Processing…</span>
+        </div>
+      )}
+
+      {/* Premium lock overlay — shown when user has hit their free episode limit */}
+      {isLocked && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/75 backdrop-blur-sm">
+          <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center">
+            <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div className="text-center px-6">
+            <p className="text-white font-semibold text-base">Premium Content</p>
+            <p className="text-white/50 text-sm mt-1">
+              Subscribe to keep watching
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/pricing')}
+            className="px-6 py-2.5 rounded-2xl text-white text-sm font-semibold transition-colors"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+          >
+            Subscribe — ₦1,500/mo
+          </button>
         </div>
       )}
 

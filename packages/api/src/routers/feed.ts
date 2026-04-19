@@ -16,6 +16,7 @@ const videoSelect = {
   avgStarRating: true,
   starRatingCount: true,
   engagementScore: true,
+  isPremiumOnly: true,  // needed by feed so the client can render lock overlays
   tags: true,
   publishedAt: true,
   creator: {

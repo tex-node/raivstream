@@ -122,7 +122,10 @@ export const interactionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Episode gate — FREE users can watch 5 unique episodes
+      // Episode gate — FREE users can watch 10 unique episodes before only
+      // free content (isPremiumOnly=false) remains accessible.
+      // Free content is NEVER blocked — only premium content throws after the limit.
+      const FREE_LIMIT = 10;
       if (ctx.user.premiumTier === 'FREE') {
         const existing = await ctx.prisma.watchHistory.findUnique({
           where: { userId_videoId: { userId: ctx.user.id, videoId: input.videoId } },
@@ -133,11 +136,18 @@ export const interactionRouter = router({
           const watched = await ctx.prisma.watchHistory.count({
             where: { userId: ctx.user.id },
           });
-          if (watched >= 5) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'EPISODE_GATE_REACHED',
+          if (watched >= FREE_LIMIT) {
+            // Only block premium content — free content remains playable forever
+            const vid = await ctx.prisma.video.findUnique({
+              where:  { id: input.videoId },
+              select: { isPremiumOnly: true },
             });
+            if (vid?.isPremiumOnly) {
+              throw new TRPCError({
+                code:    'FORBIDDEN',
+                message: 'EPISODE_GATE_REACHED',
+              });
+            }
           }
         }
       }

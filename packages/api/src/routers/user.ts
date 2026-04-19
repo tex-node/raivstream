@@ -209,19 +209,27 @@ export const userRouter = router({
   }),
 
   // Returns episode gate status for the current FREE user.
-  // Used by the feed to show a paywall after 5 unique episodes.
+  //
+  // Limits:
+  //   Guest (unauthenticated)  — 5 unique videos, tracked client-side
+  //   FREE tier (signed-in)    — 10 unique videos tracked server-side
+  //   VIEWER / CREATOR         — no limit
+  //
+  // When isGated is true, only isPremiumOnly=false content is still playable.
+  // Premium content throws EPISODE_GATE_REACHED from trackProgress.
   episodeGate: protectedProcedure.query(async ({ ctx }) => {
-    const LIMIT = 5;
+    const LIMIT = 10;
 
     if (ctx.user.premiumTier !== 'FREE') {
-      return { watched: 0, limit: LIMIT, isGated: false };
+      return { watched: 0, limit: LIMIT, isGated: false, freeContentOnly: false };
     }
 
     const watched = await ctx.prisma.watchHistory.count({
       where: { userId: ctx.user.id },
     });
 
-    return { watched, limit: LIMIT, isGated: watched >= LIMIT };
+    const isGated = watched >= LIMIT;
+    return { watched, limit: LIMIT, isGated, freeContentOnly: isGated };
   }),
 
   becomeCreator: protectedProcedure.mutation(async ({ ctx }) => {

@@ -1,11 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { VideoCard } from '@/components/video/VideoCard';
 import { PaywallModal } from '@/components/feed/PaywallModal';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
+
+const GUEST_LIMIT   = 5;
+const STORAGE_KEY   = 'rv_guest_watched';
 
 type FeedType = 'forYou' | 'following' | 'trending' | 'viewersPick';
 
@@ -18,14 +22,42 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling  = useRef(false);
   const { isSignedIn, user } = useUser();
-  const isR16 = useR16();
+  const router  = useRouter();
+  const isR16   = useR16();
 
-  // Episode gate — only for signed-in FREE users
+  // ── Guest episode tracking (sessionStorage — no account needed) ───────────
+  // Track unique video IDs the guest has seen. After GUEST_LIMIT, show modal.
+  const [guestWatched, setGuestWatched] = useState<string[]>([]);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (isSignedIn) return; // not needed once logged in
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) setGuestWatched(JSON.parse(stored));
+    } catch { /* ignore — private browsing */ }
+  }, [isSignedIn]);
+
+  // Record each new video the guest scrolls to
+  useEffect(() => {
+    if (isSignedIn) return;
+    const videoId = videos[activeIndex]?.id;
+    if (!videoId || guestWatched.includes(videoId)) return;
+    const updated = [...guestWatched, videoId];
+    setGuestWatched(updated);
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex, isSignedIn]);
+
+  // ── Signed-in FREE episode gate (server-side count) ───────────────────────
   const gateQuery = trpc.user.episodeGate.useQuery(undefined, {
     enabled: isSignedIn && user?.premiumTier === 'FREE',
   });
-  const gate        = gateQuery.data;
-  const showPaywall = gate?.isGated ?? false;
+  const gate            = gateQuery.data;
+  // Guests: hard modal after GUEST_LIMIT unique videos
+  const showGuestModal  = !isSignedIn && guestWatched.length >= GUEST_LIMIT;
+  // Signed-in FREE past 10: soft gate — free content plays, premium is locked
+  const freeContentOnly = !!(gate?.freeContentOnly);
 
   // Feed queries
   const forYouQuery = trpc.feed.forYou.useInfiniteQuery(
@@ -165,20 +197,24 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
         className="absolute inset-0 overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none', scrollSnapType: 'y mandatory' }}
       >
-        {videos.map((video, i) => (
-          <div
-            key={`${video.id}-${i}`}
-            data-slide={i}
-            className="snap-start w-full flex-shrink-0"
-            style={{ height: '100%', scrollSnapAlign: 'start' }}
-          >
-            <VideoCard
-              video={video}
-              isActive={i === activeIndex && !showPaywall}
-              onEnded={() => goTo(i + 1)}
-            />
-          </div>
-        ))}
+        {videos.map((video, i) => {
+          const locked = freeContentOnly && video.isPremiumOnly;
+          return (
+            <div
+              key={`${video.id}-${i}`}
+              data-slide={i}
+              className="snap-start w-full flex-shrink-0"
+              style={{ height: '100%', scrollSnapAlign: 'start' }}
+            >
+              <VideoCard
+                video={video}
+                isActive={i === activeIndex && !showGuestModal}
+                isLocked={locked}
+                onEnded={() => goTo(i + 1)}
+              />
+            </div>
+          );
+        })}
 
         {activeQuery.isFetchingNextPage && (
           <div className="h-20 flex items-center justify-center bg-black">
@@ -202,9 +238,30 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
         ))}
       </div>
 
-      {/* Paywall overlay */}
-      {showPaywall && gate && (
-        <PaywallModal watched={gate.watched} limit={gate.limit} />
+      {/* Sticky banner — signed-in FREE users past their 10-episode limit */}
+      {freeContentOnly && !bannerDismissed && (
+        <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-2.5 bg-black/90 backdrop-blur-sm border-b border-white/10">
+          <span className="text-white/70 text-sm">🔒 Watching free content · Subscribe for unlimited</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/pricing')}
+              className="text-xs font-semibold text-violet-400 hover:text-violet-300"
+            >
+              Subscribe →
+            </button>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="text-white/30 hover:text-white/60 text-base leading-none"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hard paywall overlay — guests after 5 free episodes */}
+      {showGuestModal && (
+        <PaywallModal watched={guestWatched.length} limit={GUEST_LIMIT} />
       )}
     </div>
   );
