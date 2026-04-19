@@ -99,12 +99,12 @@ async function cmdInfo() {
   console.log('\n🔑  RunPod Account\n');
   // RunPod account info is GraphQL only
   const gql = await apiPost<any>('https://api.runpod.io/graphql', {
-    query: `{ myself { id email creditBalance } }`,
+    query: `{ myself { id email clientBalance } }`,
   });
   const me = gql?.data?.myself ?? {};
   fmt('User ID',        me.id            ?? '—');
   fmt('Email',          me.email         ?? '—');
-  fmt('Credit balance', me.creditBalance != null ? `$${Number(me.creditBalance).toFixed(4)} USD` : '—');
+  fmt('Credit balance', me.clientBalance != null ? `$${Number(me.clientBalance).toFixed(4)} USD` : '—');
   console.log();
 }
 
