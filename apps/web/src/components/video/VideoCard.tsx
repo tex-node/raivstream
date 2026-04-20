@@ -47,8 +47,20 @@ export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoC
   const { isSignedIn } = useUser();
   const router         = useRouter();
   const trackProgress  = trpc.interaction.trackProgress.useMutation();
+  const recordView     = trpc.interaction.recordView.useMutation();
+  // Tracks which videoId we've already pinged so we don't double-count on re-renders
+  const recordedViewId = useRef<string | null>(null);
   const imageTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLandscapeImage, setIsLandscapeImage] = useState(false);
+
+  // Guest view counting — fires once per video activation for non-signed-in users
+  useEffect(() => {
+    if (isActive && !isSignedIn && recordedViewId.current !== video.id) {
+      recordedViewId.current = video.id;
+      recordView.mutate({ videoId: video.id });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, isSignedIn, video.id]);
 
   const handleProgress = (currentTime: number, duration: number) => {
     if (!isSignedIn) return;
