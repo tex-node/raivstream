@@ -338,7 +338,7 @@ Loads env from `apps/web/.env.local` then `.env`. Useful for debugging new outpu
 - Desktop: wheel handler calls `goTo(index)` for one-video-per-tick
 - Desktop: keyboard arrow keys also call `goTo()`
 - Desktop: progress dots (right side, max 8) click to `goTo()`
-- `VideoPlayer.tsx`: starts **muted** (`isMuted: true`) so browser autoplay policy allows `play()`
+- `VideoPlayer.tsx`: starts **muted** (`isMuted: true`) so browser autoplay policy allows `play()`; mute button is `bottom-4 left-4` (bottom-left corner)
 - `VideoCard.tsx`: `isImageUrl()` helper detects image extensions — routes to `<img>` instead of `<VideoPlayer>` to avoid infinite spinner on AI-generated images published to feed
 - `VideoCard.tsx` landscape images: `onLoad` detects `naturalWidth > naturalHeight`, sets `isLandscapeImage` state, renders blurred backdrop `<img>` at `opacity: isLandscapeImage ? 1 : 0` — mirrors the VideoPlayer landscape backdrop pattern
 - `VideoCard.tsx` premium lock: `isLocked` prop overlays padlock + "Subscribe" button (`z-20`) — VideoPlayer `isActive` is also suppressed so locked video never plays
@@ -468,6 +468,9 @@ npx eas-cli update --branch production --platform ios --message "..."
 - RunPod dev CLI (`pnpm runpod`) for testing endpoints and debugging output shapes
 - **Two-tier freemium gate**: guest hard-modal after 5 episodes (sessionStorage) + signed-in FREE soft-gate after 10 episodes (server-side); free content (`isPremiumOnly=false`) never blocked; per-video lock overlays + sticky dismissable banner for past-gate FREE users
 - **Landscape image backdrop**: `VideoCard.tsx` detects landscape AI-generated images via `onLoad` and shows blurred backdrop (matches VideoPlayer landscape video behavior)
+- **View counting fixed**: `trackProgress` checks WatchHistory before upsert — viewCount increments only on first watch per user, not on every 30s progress ping
+- **engagementScore live**: `recomputeEngagementScore()` helper in interaction.ts runs fire-and-forget after every like/dislike/rating/view; formula: `(views×1 + likes×10 + avgStars×starCount×5) × recencyBoost` where `recencyBoost = 1/(1 + ageInDays/7)` (7-day half-life)
+- **Guest view tracking**: `interaction.recordView` public procedure increments viewCount for unauthenticated users; `VideoCard` calls it once per video activation via `recordedViewId` ref
 - Web pages: feed (public), upload, video view, profile, pricing, credits, generate, analytics, search, settings, sign-in, sign-up, forgot-password, reset-password
 - Admin dashboard: overview, user management, credit rate management, job history, revenue, **moderation queue**
 - Admin roles: ADMIN + MODERATOR with gated tRPC procedures
