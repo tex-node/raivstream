@@ -187,7 +187,7 @@ export function VideoPlayer({
       {/* Mute button */}
       <button
         onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-        className="absolute bottom-4 right-4 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center z-10"
+        className="absolute bottom-4 left-4 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center z-10"
         aria-label={isMuted ? 'Unmute' : 'Mute'}
       >
         {isMuted ? (
