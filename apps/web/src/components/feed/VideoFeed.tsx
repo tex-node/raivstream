@@ -8,7 +8,7 @@ import { PaywallModal } from '@/components/feed/PaywallModal';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
 
-const GUEST_LIMIT   = 5;
+const GUEST_LIMIT   = 30;
 const STORAGE_KEY   = 'rv_guest_watched';
 
 type FeedType = 'forYou' | 'following' | 'trending' | 'viewersPick';
