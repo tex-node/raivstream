@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@raivstream/database';
+import { prisma, type PrismaClient } from '@raivstream/database';
 import { verifyTransaction, VIEWER_PLAN, CREDIT_PACKAGES } from '@/lib/paystack';
 
 export async function GET(req: NextRequest) {
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Upsert credit balance and record transaction
-    await prisma.$transaction(async (tx_) => {
+    await prisma.$transaction(async (tx_: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
       const balance = await tx_.creditBalance.upsert({
         where:  { userId },
         create: { userId, balance: creditAmount },

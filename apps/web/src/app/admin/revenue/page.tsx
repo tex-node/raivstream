@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type PurchaseTx = RouterOutputs['admin']['listPurchases']['transactions'][number];
 
 export default function AdminRevenuePage() {
   const [page, setPage] = useState(1);
@@ -55,7 +57,7 @@ export default function AdminRevenuePage() {
               </tr>
             </thead>
             <tbody>
-              {data?.transactions.map((tx, i) => (
+              {data?.transactions.map((tx: PurchaseTx, i: number) => (
                 <tr key={tx.id}
                   className="border-t"
                   style={{

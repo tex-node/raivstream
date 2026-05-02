@@ -279,7 +279,7 @@ export default function AdminCreditsPage() {
               </tr>
             </thead>
             <tbody>
-              {rates?.map((rate) => (
+              {rates?.map((rate: { id: string; featureKey: string; creditsPerUnit: number; unitLabel: string; description: string | null; isActive: boolean }) => (
                 <EditRateRow key={rate.id} rate={rate} isAdmin={isAdmin} />
               ))}
               {rates?.length === 0 && (

@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { useUser } from '@/lib/auth';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type GenerationJobItem = RouterOutputs['generation']['myJobs']['jobs'][number];
 
 type GenerationMode = 'image' | 'video';
 type AspectRatio    = '9:16' | '16:9' | '1:1';
@@ -88,7 +90,7 @@ export default function GeneratePage() {
     }
   }, [jobStatus?.status]);
 
-  const historyJob   = activeJobId ? (myJobs?.jobs.find(j => j.id === activeJobId) ?? null) : null;
+  const historyJob   = activeJobId ? (myJobs?.jobs.find((j: GenerationJobItem) => j.id === activeJobId) ?? null) : null;
   const activeJob    = jobStatus ?? historyJob;
   const isGenerating = createJob.isPending
     || (pollEnabled && activeJob?.status !== 'COMPLETED' && activeJob?.status !== 'FAILED');
@@ -474,7 +476,7 @@ export default function GeneratePage() {
               <div>
                 <h3 className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-3">Recent Generations</h3>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {myJobs.jobs.map((job) => (
+                  {myJobs.jobs.map((job: GenerationJobItem) => (
                     <button key={job.id} onClick={() => setActiveJobId(job.id)}
                       className={`relative aspect-[9/16] rounded-lg overflow-hidden border transition-all ${
                         activeJobId === job.id ? 'border-pink-500' : 'border-white/10 hover:border-white/30'

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type R16Video = RouterOutputs['admin']['r16Queue']['videos'][number];
 
 type View = 'pending' | 'approved';
 type ContentRating = 'G' | 'PG' | 'PG-13' | 'R';
@@ -65,7 +67,7 @@ export default function R16ModerationPage() {
     });
   };
 
-  const selectedVideo = data?.videos.find((v) => v.id === activeVideo);
+  const selectedVideo = data?.videos.find((v: R16Video) => v.id === activeVideo);
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
@@ -151,7 +153,7 @@ export default function R16ModerationPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {data.videos.map((video) => {
+                {data.videos.map((video: R16Video) => {
                   const mediaUrl = video.mp4Url ?? '';
                   const isImg    = isImageUrl(mediaUrl);
                   const isActive = activeVideo === video.id;
@@ -297,7 +299,7 @@ export default function R16ModerationPage() {
               {/* Tags */}
               {selectedVideo.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {selectedVideo.tags.slice(0, 5).map((tag) => (
+                  {selectedVideo.tags.slice(0, 5).map((tag: string) => (
                     <span key={tag} className="text-xs px-1.5 py-0.5 rounded"
                       style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa' }}>
                       #{tag}
@@ -368,7 +370,7 @@ export default function R16ModerationPage() {
               {selectedVideo.moderationLogs.length > 0 && (
                 <div className="border-t pt-3" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                   <div className="text-white/30 text-xs mb-2">History</div>
-                  {selectedVideo.moderationLogs.map((log) => (
+                  {selectedVideo.moderationLogs.map((log: R16Video['moderationLogs'][number]) => (
                     <div key={log.id} className="text-xs text-white/50 mb-1">
                       <span className="font-medium" style={{
                         color: log.action === 'approve' ? '#10b981' : log.action === 'reject' ? '#ef4444' : '#f59e0b',

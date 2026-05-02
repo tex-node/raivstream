@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type CreditTx = RouterOutputs['user']['creditHistory'][number];
 import { useUser } from '@/lib/auth';
 import { CREDIT_PACKAGES } from '@/lib/paystack';
 
@@ -175,7 +177,7 @@ export default function CreditsPage() {
           <p className="text-white/30 text-sm text-center py-8">No transactions yet</p>
         ) : (
           <div className="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
-            {history.map((tx) => (
+            {history.map((tx: CreditTx) => (
               <div key={tx.id} className="flex items-center justify-between px-4 py-3.5">
                 <div>
                   <p className="text-white text-sm font-medium">{tx.description ?? tx.featureKey ?? tx.type}</p>

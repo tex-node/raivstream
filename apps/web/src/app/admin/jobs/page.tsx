@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type GenerationJob = RouterOutputs['admin']['listGenerationJobs']['jobs'][number];
 
 const MODEL_LABELS: Record<string, string> = {
   GROK_IMAGINE: 'Grok Imagine',
@@ -96,7 +98,7 @@ export default function AdminJobsPage() {
               </tr>
             </thead>
             <tbody>
-              {data?.jobs.map((job, i) => (
+              {data?.jobs.map((job: GenerationJob, i: number) => (
                 <tr key={job.id}
                   className="border-t"
                   style={{

@@ -39,6 +39,9 @@ export function validateEnv(): void {
   if (validated) return;
   validated = true;
 
+  // During `next build` the server code runs without real env vars — skip hard checks.
+  if (process.env.NEXT_PHASE === 'phase-production-build') return;
+
   const errors: string[] = [];
 
   // Check required variables are set

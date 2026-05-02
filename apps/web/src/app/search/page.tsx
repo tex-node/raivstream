@@ -3,7 +3,10 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type SearchUser  = RouterOutputs['user']['searchUsers'][number];
+type SearchVideo = RouterOutputs['video']['search']['videos'][number];
 import { Navbar } from '@/components/layout/Navbar';
 
 function SearchResults() {
@@ -52,7 +55,7 @@ function SearchResults() {
         <section className="mb-8">
           <h2 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">People</h2>
           <div className="space-y-2">
-            {users.map((user) => (
+            {users.map((user: SearchUser) => (
               <Link
                 key={user.id}
                 href={`/${user.username}`}
@@ -99,7 +102,7 @@ function SearchResults() {
             <h2 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Videos</h2>
           )}
           <div className="grid grid-cols-2 gap-3">
-            {videos.map((video) => (
+            {videos.map((video: SearchVideo) => (
               <Link key={video.id} href={`/v/${video.id}`} className="group">
                 <div className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden">
                   <img

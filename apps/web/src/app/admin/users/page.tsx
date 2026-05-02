@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
+
+type AdminUser  = RouterOutputs['admin']['listUsers']['users'][number];
+type AdminGetUser = RouterOutputs['admin']['getUser'];
+type AdminUserTx = NonNullable<AdminGetUser>['recentTx'][number];
 import { useAuth } from '@/lib/auth';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -319,7 +323,7 @@ function UserDrawer({ userId, onClose, onOpenCredits }: {
               <div>
                 <div className="text-white/40 text-xs uppercase tracking-wider mb-2">Recent Credit Transactions</div>
                 <div className="space-y-1.5">
-                  {txs.map((tx) => (
+                  {txs.map((tx: AdminUserTx) => (
                     <div key={tx.id} className="flex items-start justify-between text-xs rounded-lg px-3 py-2 gap-2"
                       style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                       <div className="min-w-0">
@@ -504,7 +508,7 @@ export default function AdminUsersPage() {
   const users = data?.users ?? [];
   const stats = data?.stats;
 
-  const selectedUser = users.find((u) => u.id === selectedUserId);
+  const selectedUser = users.find((u: AdminUser) => u.id === selectedUserId);
 
   return (
     <div className="p-4 md:p-6 max-w-full mx-auto space-y-5">
@@ -627,7 +631,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {users.map((u: AdminUser) => (
                 <UserTableRow
                   key={u.id}
                   u={u as UserRow}
