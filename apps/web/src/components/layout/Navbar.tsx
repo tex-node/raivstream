@@ -171,7 +171,7 @@ export function Navbar() {
                       { href: '/credits',  label: '⚡ Credits'    },
                     ] : []),
                     { href: '/settings', label: 'Settings' },
-                    ...((!isR16 && (user?.role === 'ADMIN' || user?.role === 'MODERATOR'))
+                    ...((user?.role === 'ADMIN' || user?.role === 'MODERATOR')
                       ? [{ href: '/admin', label: '🛡️ Admin' }]
                       : []),
                   ].map(({ href, label }) => (

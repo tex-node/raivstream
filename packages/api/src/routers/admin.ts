@@ -114,11 +114,21 @@ export const adminRouter = router({
       search:   z.string().optional(),
       role:     z.enum(['VIEWER', 'CREATOR', 'MODERATOR', 'ADMIN']).optional(),
       tier:     z.enum(['FREE', 'VIEWER', 'CREATOR']).optional(),
+      sortBy:   z.enum(['joined', 'views', 'videos', 'credits', 'followers']).default('joined'),
+      sortDir:  z.enum(['asc', 'desc']).default('desc'),
       page:     z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(25),
     }))
     .query(async ({ ctx, input }) => {
       const skip = (input.page - 1) * input.pageSize;
+      const dir  = input.sortDir;
+
+      const orderBy =
+        input.sortBy === 'views'     ? { totalViews:    dir } :
+        input.sortBy === 'videos'    ? { videos:        { _count: dir } } :
+        input.sortBy === 'credits'   ? { creditBalance: { balance: dir } } :
+        input.sortBy === 'followers' ? { followerCount: dir } :
+                                       { createdAt:     dir };
 
       const where = {
         ...(input.search && {
@@ -136,8 +146,8 @@ export const adminRouter = router({
         ctx.prisma.user.findMany({
           where,
           skip,
-          take: input.pageSize,
-          orderBy: { createdAt: 'desc' },
+          take:     input.pageSize,
+          orderBy,
           select: {
             id:           true,
             email:        true,
@@ -149,6 +159,7 @@ export const adminRouter = router({
             verified:     true,
             followerCount:true,
             totalViews:   true,
+            lockedUntil:  true,
             createdAt:    true,
             creditBalance: { select: { balance: true } },
             _count: {
@@ -159,15 +170,29 @@ export const adminRouter = router({
         ctx.prisma.user.count({ where }),
       ]);
 
+      // Aggregate stats for the header cards
+      const [roleCounts, tierCounts, bannedCount] = await Promise.all([
+        ctx.prisma.user.groupBy({ by: ['role'],        _count: { id: true } }),
+        ctx.prisma.user.groupBy({ by: ['premiumTier'], _count: { id: true } }),
+        ctx.prisma.user.count({ where: { lockedUntil: { gt: new Date() } } }),
+      ]);
+
       return {
         users: users.map((u) => ({
           ...u,
           creditBalance: u.creditBalance?.balance ?? 0,
+          isBanned: !!u.lockedUntil && u.lockedUntil > new Date(),
         })),
         total,
-        page: input.page,
-        pageSize: input.pageSize,
+        page:       input.page,
+        pageSize:   input.pageSize,
         totalPages: Math.ceil(total / input.pageSize),
+        stats: {
+          total,
+          roleCounts:  Object.fromEntries(roleCounts.map((r)  => [r.role,        r._count.id])),
+          tierCounts:  Object.fromEntries(tierCounts.map((t)  => [t.premiumTier, t._count.id])),
+          bannedCount,
+        },
       };
     }),
 
