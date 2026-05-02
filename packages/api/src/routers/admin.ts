@@ -489,6 +489,137 @@ export const adminRouter = router({
     return { pending, approved, rejected, flagged };
   }),
 
+  // ─── R16 Kids Media Moderation ────────────────────────────────────────────
+
+  /**
+   * Queue of AI-generated media awaiting R16 kids-feed approval.
+   * "pending"  → published videos from generation jobs where isKidsSafe = false
+   *              and not already globally rejected.
+   * "approved" → isKidsSafe = true (cleared for R16 feed).
+   */
+  r16Queue: moderatorProcedure
+    .input(z.object({
+      view:     z.enum(['pending', 'approved']).default('pending'),
+      page:     z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(50).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const skip = (input.page - 1) * input.pageSize;
+
+      const where =
+        input.view === 'approved'
+          ? { isKidsSafe: true, generationJob: { isNot: null } }
+          : {
+              isKidsSafe:       false,
+              moderationStatus: { not: 'REJECTED' as const },
+              generationJob:    { isNot: null },
+            };
+
+      const [videos, total] = await Promise.all([
+        ctx.prisma.video.findMany({
+          where,
+          skip,
+          take:     input.pageSize,
+          orderBy:  { createdAt: 'desc' },
+          select: {
+            id:               true,
+            title:            true,
+            description:      true,
+            thumbnailUrl:     true,
+            mp4Url:           true,
+            tags:             true,
+            moderationStatus: true,
+            isKidsSafe:       true,
+            contentRating:    true,
+            createdAt:        true,
+            creator: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+            generationJob: {
+              select: { id: true, model: true, prompt: true, createdAt: true },
+            },
+            moderationLogs: {
+              orderBy: { createdAt: 'desc' },
+              take: 3,
+            },
+          },
+        }),
+        ctx.prisma.video.count({ where }),
+      ]);
+
+      return {
+        videos,
+        total,
+        page:       input.page,
+        pageSize:   input.pageSize,
+        totalPages: Math.ceil(total / input.pageSize),
+      };
+    }),
+
+  /**
+   * Approve or reject a generated video for the R16 kids feed.
+   * Approving sets isKidsSafe = true and ensures moderationStatus = APPROVED.
+   * Rejecting sets isKidsSafe = false and logs the decision.
+   */
+  r16Moderate: moderatorProcedure
+    .input(z.object({
+      videoId:       z.string(),
+      action:        z.enum(['approve', 'reject']),
+      contentRating: z.enum(['G', 'PG', 'PG-13', 'R']).optional(),
+      reason:        z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findUnique({ where: { id: input.videoId } });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found' });
+
+      const isApprove = input.action === 'approve';
+
+      await ctx.prisma.$transaction([
+        ctx.prisma.video.update({
+          where: { id: input.videoId },
+          data: {
+            isKidsSafe: isApprove,
+            ...(isApprove && video.moderationStatus !== 'APPROVED'
+              ? { moderationStatus: 'APPROVED' }
+              : {}),
+            ...(input.contentRating !== undefined
+              ? { contentRating: input.contentRating }
+              : {}),
+          },
+        }),
+        ctx.prisma.moderationLog.create({
+          data: {
+            videoId:     input.videoId,
+            moderatorId: ctx.user.id,
+            action:      isApprove ? 'approve' : 'flag',
+            reason:      input.reason ?? (isApprove ? 'Approved for R16 kids feed' : 'Rejected from R16 kids feed'),
+            automated:   false,
+          },
+        }),
+      ]);
+
+      return { success: true, isKidsSafe: isApprove };
+    }),
+
+  /**
+   * Counts for R16 moderation dashboard.
+   */
+  r16Stats: moderatorProcedure.query(async ({ ctx }) => {
+    const [pending, approved] = await Promise.all([
+      ctx.prisma.video.count({
+        where: {
+          isKidsSafe:       false,
+          moderationStatus: { not: 'REJECTED' },
+          generationJob:    { isNot: null },
+        },
+      }),
+      ctx.prisma.video.count({
+        where: { isKidsSafe: true, generationJob: { isNot: null } },
+      }),
+    ]);
+    return { pending, approved };
+  }),
+
   // ─── Revenue / Transaction History ─────────────────────────────────────────
 
   /**
