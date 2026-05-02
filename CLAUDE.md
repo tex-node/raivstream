@@ -67,10 +67,11 @@ packages/api/src/routers/
   user.ts                             — profile, follow, creditBalance, creditHistory, episodeGate
   analytics.ts                        — creator dashboard stats
   generation.ts                       — create (prompt moderation → credit deduction → submit), pollStatus, myJobs, cancel, publish (fires scanAndUpdateVideo())
-  admin.ts                            — getOverview, listUsers, setUserRole, adjustCredits, setUserBan,
+  admin.ts                            — getOverview, listUsers (sortBy: views/videos/credits/followers/joined), setUserRole, adjustCredits, setUserBan,
                                         listCreditRates, updateCreditRate, createCreditRate,
                                         listGenerationJobs, listPurchases,
-                                        moderationQueue, moderateVideo, getModerationStats
+                                        moderationQueue, moderateVideo, getModerationStats,
+                                        r16Queue, r16Moderate, r16Stats
 packages/database/schema.prisma       — all DB models (see Database Models section)
 scripts/runpod.ts                     — RunPod dev CLI (pnpm runpod info|endpoints|models|health|test|status)
 
@@ -101,10 +102,11 @@ apps/web/src/
   app/generate/page.tsx               — AI Studio: radio (Image/Video) + model dropdown; DEFAULT_IMAGE_MODEL=FLUX, DEFAULT_VIDEO_MODEL=WAN_25; HIDDEN_MODELS=['NANO_BANANA','VEO3']
   app/settings/                       — user settings
   app/search/page.tsx                 — search page
-  app/admin/layout.tsx                — admin layout (responsive sidebar — mobile drawer, desktop fixed)
+  app/admin/layout.tsx                — admin layout (responsive sidebar — mobile drawer, desktop fixed); nav: Overview, Users, Moderation, R16 Kids, Credits, AI Jobs, Revenue
   app/admin/page.tsx                  — admin overview (stats, model usage, job status, revenue)
-  app/admin/users/page.tsx            — user management (role, credits, ban)
+  app/admin/users/page.tsx            — user dashboard: stats bar, sortable columns (views/videos/credits/joined), role selector, ban/unban, credits modal, slide-over detail drawer with credit history
   app/admin/moderation/page.tsx       — content moderation queue (approve/reject/flag, content rating, kids-safe toggle)
+  app/admin/r16/page.tsx              — R16 kids feed moderation: AI-generated media must be approved here (isKidsSafe=true) before appearing on r16.raivstream.com
   app/admin/credits/page.tsx          — credit rate management (inline edit + add rate)
   app/admin/jobs/page.tsx             — generation job history (filter by status/model)
   app/admin/revenue/page.tsx          — revenue summary + transaction table
@@ -124,15 +126,15 @@ apps/web/src/
   app/api/paystack/webhook/route.ts     — POST — Paystack event handler
   app/api/stripe/                       — Stripe webhook + checkout endpoints
   components/feed/FeedTabs.tsx          — tab switcher (Following tab hidden for guests; "Kids Feed" label on R16)
-  components/feed/VideoFeed.tsx         — vertical scroll feed; guest sessionStorage tracking (5 ep) + signed-in episodeGate query (10 ep); sticky upgrade banner + PaywallModal; passes kidsOnly to feed queries
-  components/feed/PaywallModal.tsx      — hard paywall overlay for GUESTS after 5 free episodes; 3 CTAs: sign-up (10 more free) / subscribe / sign-in
+  components/feed/VideoFeed.tsx         — vertical scroll feed; guest sessionStorage tracking (30 ep, GUEST_LIMIT const) + signed-in episodeGate query (10 ep); sticky upgrade banner + PaywallModal; passes kidsOnly to feed queries
+  components/feed/PaywallModal.tsx      — hard paywall overlay for GUESTS after 30 free episodes; 3 CTAs: sign-up (10 more free) / subscribe / sign-in
   components/video/VideoCard.tsx        — individual video card; isLocked prop → premium lock overlay; isImageUrl() helper routes to <img> instead of VideoPlayer; landscape images get blurred backdrop (same pattern as landscape videos)
   components/video/VideoPlayer.tsx      — HTML5 / HLS video player (starts muted for autoplay)
   components/video/VideoInteractions.tsx — like/dislike/star buttons
   components/layout/Navbar.tsx          — top nav (glass-blur on marketing, transparent on feed; R16 branding on kids subdomain)
   lib/auth.tsx                          — React AuthProvider + useAuth() + useUser()
   lib/r16.tsx                           — R16Provider + useR16() — kids mode context
-  lib/trpc.ts                           — tRPC client setup (Tanstack Query)
+  lib/trpc.ts                           — tRPC client setup (Tanstack Query); exports RouterOutputs + RouterInputs for typed callbacks
   lib/stripe.ts                         — Stripe server client + STRIPE_PLANS
   lib/paystack.ts                       — Paystack helpers + CREDIT_PACKAGES + VIEWER_PLAN
   lib/credits.ts                        — (see packages/api/src/lib/credits.ts — server side)
@@ -157,8 +159,12 @@ apps/web/src/
 - `adminProcedure` — requires role === ADMIN
 - `moderatorProcedure` — requires role === ADMIN or MODERATOR
 - Admin routes gated in `middleware.ts` + layout role check → redirect to `/` if unauthorized
-- Navbar shows 🛡️ Admin link for ADMIN/MODERATOR users (hidden on R16 subdomain)
-- To promote a user to ADMIN on VPS, use Node.js one-liner from `packages/database/` with Prisma client
+- `/admin` is accessible on **both** app.raivstream.com and r16.raivstream.com (not in R16_BLOCKED_ROUTES)
+- Navbar shows 🛡️ Admin link for ADMIN/MODERATOR users on both main and R16 subdomains
+- To promote a user to ADMIN on VPS, use Node.js one-liner from `packages/database/` with Prisma client:
+  ```bash
+  node -e "const {PrismaClient}=require('./node_modules/@prisma/client');const p=new PrismaClient();p.user.update({where:{email:'user@example.com'},data:{role:'ADMIN'}}).then(u=>{console.log(u.username,u.role);p.\$disconnect()})"
+  ```
 
 ## Content Moderation System
 ### Prompt moderation (`packages/api/src/lib/promptModeration.ts`)
@@ -181,6 +187,14 @@ apps/web/src/
 - `admin.getModerationStats` — live counts per status (refreshes every 30s)
 - Reject action also sets `VideoStatus = BLOCKED`
 
+### R16 kids media queue (`/admin/r16`)
+- Separate moderation step specifically for R16 feed eligibility — AI-generated videos only
+- `admin.r16Queue` — lists published AI-generated videos (those with a linked `GenerationJob`) filtered by `isKidsSafe`; `view=pending` (isKidsSafe=false, not globally rejected), `view=approved` (isKidsSafe=true)
+- `admin.r16Moderate` — `approve` sets `isKidsSafe=true` + ensures `moderationStatus=APPROVED`; `reject` sets `isKidsSafe=false`; logs to `ModerationLog`
+- `admin.r16Stats` — pending/approved counts (refreshes every 30s)
+- Content rating picker restricted to G/PG/PG-13 (R-rated cannot be approved for R16)
+- A video must pass **both** the general moderation queue (moderationStatus=APPROVED) **and** R16 queue (isKidsSafe=true) to appear on r16.raivstream.com
+
 ### Feed filtering
 - All feeds exclude `moderationStatus = REJECTED` videos
 - R16 kids feed requires `moderationStatus = APPROVED` AND `isKidsSafe = true`
@@ -191,9 +205,9 @@ apps/web/src/
 - Middleware sets `x-r16-mode: 1` on the **request** headers (not response) so server components can read it via `headers()`
 - Root layout (`app/layout.tsx`) is async, reads the header, wraps children in `<R16Provider isR16>`
 - Client components call `useR16()` from `lib/r16.tsx`
-- Blocked routes on R16: `/generate`, `/upload`, `/credits`, `/pricing`, `/analytics`, `/settings`, `/subscription`, `/admin` → redirected to `/`
+- Blocked routes on R16: `/generate`, `/upload`, `/credits`, `/pricing`, `/analytics`, `/settings`, `/subscription` → redirected to `/` (note: `/admin` is **not** blocked — admins can manage R16 content from the subdomain)
 - Feed: `kidsOnly=true` param → only `isKidsSafe=true` + `moderationStatus=APPROVED` videos
-- Navbar: "R16 Kids" branding (green accent), hides Upload/AI Studio/Credits/Pricing/Admin
+- Navbar: "R16 Kids" branding (green accent), hides Upload/AI Studio/Credits/Pricing; shows Admin link for ADMIN/MODERATOR users
 - FeedTabs: static "Kids Feed" label instead of tab switcher
 - Caddy: `r16.raivstream.com { reverse_proxy localhost:3000 }` — add to /etc/caddy/Caddyfile
 - DNS: A record `r16.raivstream.com → 81.0.246.223`
@@ -209,8 +223,8 @@ apps/web/src/
 
 ## Freemium Gate (two-tier)
 **Guest (not signed in)**
-- 5 unique episode IDs tracked in `sessionStorage` (`rv_guest_watched`)
-- After the 5th: `PaywallModal` hard-overlays the feed (videos pause, scroll blocked)
+- 30 unique episode IDs tracked in `sessionStorage` (`rv_guest_watched`); limit controlled by `GUEST_LIMIT` constant in `VideoFeed.tsx`
+- After the 30th: `PaywallModal` hard-overlays the feed (videos pause, scroll blocked)
 - Modal CTAs: "Sign up free — get 10 more episodes" → `/sign-up` | "Subscribe — ₦1,500/mo unlimited" → `/pricing` | "Already subscribed? Sign in" → `/sign-in`
 
 **Signed-in FREE tier**
@@ -386,6 +400,9 @@ Loads env from `apps/web/.env.local` then `.env`. Useful for debugging new outpu
 - Wan 2.6 providerJobId is prefixed `t2v:` or `i2v:` to route status polls to the correct endpoint — never strip this prefix
 - Seeding credit rates on VPS: run node script from `packages/database/` directory (not repo root)
 - New models appear in UI automatically when their `*_ENDPOINT_ID` is set in `.env` and app restarted with `--update-env` (hidden flag removed, badge set appropriately)
+- `lib/env.ts` skips validation when `NEXT_PHASE === 'phase-production-build'` — required so `next build` works without runtime secrets in CI/dev
+- `lib/trpc.ts` exports `RouterOutputs` and `RouterInputs` — always import and use these when typing `.map()`/`.find()` callbacks on tRPC query data, otherwise `strict: true` will fail the build with implicit `any` errors
+- Prisma `$transaction(async (tx) => ...)` callback needs an explicit type: `Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>` — or just cast `tx` with `as any` if the type is too verbose
 
 ## Dev Commands
 ```bash
@@ -466,13 +483,13 @@ npx eas-cli update --branch production --platform ios --message "..."
 - RunPod custom serverless endpoints created: HunyuanVideo (fg28wk2tkqiy6q, A100 40 GB) + CogVideoX (odz4a6rii63dmh, RTX 4090); both workersMin=0 + idleTimeout=60s; model weights downloaded to raivstream-models network volume (EU-SE-1, 200 GB)
 - Kling I2V + R2V: full implementation via Kuaishou REST API; JWT HS256 signed with Node crypto (no external dep); providerJobId prefixed `i2v:`/`r2v:`; output mirrored to R2
 - RunPod dev CLI (`pnpm runpod`) for testing endpoints and debugging output shapes
-- **Two-tier freemium gate**: guest hard-modal after 5 episodes (sessionStorage) + signed-in FREE soft-gate after 10 episodes (server-side); free content (`isPremiumOnly=false`) never blocked; per-video lock overlays + sticky dismissable banner for past-gate FREE users
+- **Two-tier freemium gate**: guest hard-modal after 30 episodes (sessionStorage, `GUEST_LIMIT=30` in VideoFeed.tsx) + signed-in FREE soft-gate after 10 episodes (server-side); free content (`isPremiumOnly=false`) never blocked; per-video lock overlays + sticky dismissable banner for past-gate FREE users
 - **Landscape image backdrop**: `VideoCard.tsx` detects landscape AI-generated images via `onLoad` and shows blurred backdrop (matches VideoPlayer landscape video behavior)
 - **View counting fixed**: `trackProgress` checks WatchHistory before upsert — viewCount increments only on first watch per user, not on every 30s progress ping
 - **engagementScore live**: `recomputeEngagementScore()` helper in interaction.ts runs fire-and-forget after every like/dislike/rating/view; formula: `(views×1 + likes×10 + avgStars×starCount×5) × recencyBoost` where `recencyBoost = 1/(1 + ageInDays/7)` (7-day half-life)
 - **Guest view tracking**: `interaction.recordView` public procedure increments viewCount for unauthenticated users; `VideoCard` calls it once per video activation via `recordedViewId` ref
 - Web pages: feed (public), upload, video view, profile, pricing, credits, generate, analytics, search, settings, sign-in, sign-up, forgot-password, reset-password
-- Admin dashboard: overview, user management, credit rate management, job history, revenue, **moderation queue**
+- Admin dashboard: overview, user management (sortable by views/videos/credits, ban/unban, credit adjustment, role change, detail drawer), credit rate management, job history, revenue, **moderation queue**, **R16 kids queue**
 - Admin roles: ADMIN + MODERATOR with gated tRPC procedures
 - Mobile screens: feed, upload, profile, search, video modal, sign-in/sign-up (connected to app.raivstream.com)
 - Mobile auth: Zustand store + SecureStore persistence
