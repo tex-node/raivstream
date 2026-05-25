@@ -60,6 +60,7 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-1">
           {[
             { href: '/pricing',  label: 'Pricing'   },
+            { href: '/story-studio', label: 'Story Studio' },
             { href: '/generate', label: 'AI Studio' },
             { href: '/credits',  label: 'Credits'   },
           ].map(({ href, label }) => (
@@ -167,6 +168,7 @@ export function Navbar() {
                     ...(!isR16 ? [
                       { href: '/upload',   label: '📤 Upload'     },
                       { href: '/analytics',label: 'Analytics'     },
+                      { href: '/story-studio', label: 'Story Studio' },
                       { href: '/generate', label: '✨ AI Studio'  },
                       { href: '/credits',  label: '⚡ Credits'    },
                     ] : []),

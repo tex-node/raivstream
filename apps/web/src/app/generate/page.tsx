@@ -37,6 +37,9 @@ export default function GeneratePage() {
   const [showPublish,    setShowPublish]    = useState(false);
   const [pubTitle,       setPubTitle]       = useState('');
   const [pubTags,        setPubTags]        = useState('');
+  const [storyProjectId, setStoryProjectId] = useState<string | null>(null);
+  const [storyboardShotId, setStoryboardShotId] = useState<string | null>(null);
+  const [savedStoryboardOutputId, setSavedStoryboardOutputId] = useState<string | null>(null);
 
   const { data: models }                               = trpc.generation.listModels.useQuery();
   const { data: balanceData, refetch: refetchBalance } = trpc.user.creditBalance.useQuery(
@@ -66,6 +69,14 @@ export default function GeneratePage() {
       setActiveJobId(job.id);
       refetchBalance();
       setPollEnabled(job.status !== 'COMPLETED');
+      if (storyProjectId && storyboardShotId) {
+        updateStoryboardShot.mutate({
+          projectId: storyProjectId,
+          shotId: storyboardShotId,
+          generationJobId: job.id,
+          ...(job.outputUrl ? { assetUrl: job.outputUrl, seedImageUrl: job.outputUrl } : {}),
+        });
+      }
     },
   });
 
@@ -78,9 +89,16 @@ export default function GeneratePage() {
     onSuccess: (video) => router.push(`/v/${video.id}`),
   });
 
+  const updateStoryboardShot = trpc.story.updateShot.useMutation();
+
   const { data: myJobs } = trpc.generation.myJobs.useQuery(
     { limit: 12 }, { enabled: isSignedIn }
   );
+
+  const historyJob   = activeJobId ? (myJobs?.jobs.find((j: { id: string }) => j.id === activeJobId) ?? null) : null;
+  const activeJob    = jobStatus ?? historyJob;
+  const isGenerating = createJob.isPending
+    || (pollEnabled && activeJob?.status !== 'COMPLETED' && activeJob?.status !== 'FAILED');
 
   useEffect(() => {
     if (jobStatus?.status === 'COMPLETED' || jobStatus?.status === 'FAILED') {
@@ -88,10 +106,49 @@ export default function GeneratePage() {
     }
   }, [jobStatus?.status]);
 
-  const historyJob   = activeJobId ? (myJobs?.jobs.find(j => j.id === activeJobId) ?? null) : null;
-  const activeJob    = jobStatus ?? historyJob;
-  const isGenerating = createJob.isPending
-    || (pollEnabled && activeJob?.status !== 'COMPLETED' && activeJob?.status !== 'FAILED');
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const promptParam = params.get('prompt');
+    const seedParam = params.get('seedImageUrl');
+    const durationParam = params.get('duration');
+    const aspectParam = params.get('aspectRatio');
+
+    if (mode === 'image' || mode === 'video') {
+      setGenerationMode(mode);
+      setSelectedModel(mode === 'image' ? DEFAULT_IMAGE_MODEL : DEFAULT_VIDEO_MODEL);
+    }
+    if (promptParam) setPrompt(promptParam);
+    if (seedParam) setSeedImageUrl(seedParam);
+    if (durationParam) setDuration(Number(durationParam));
+    if (aspectParam === '9:16' || aspectParam === '16:9' || aspectParam === '1:1') {
+      setAspectRatio(aspectParam);
+    }
+    setStoryProjectId(params.get('storyProjectId'));
+    setStoryboardShotId(params.get('storyboardShotId'));
+  }, []);
+
+  useEffect(() => {
+    if (
+      !storyProjectId ||
+      !storyboardShotId ||
+      !activeJob?.id ||
+      !activeJob.outputUrl ||
+      activeJob.status !== 'COMPLETED' ||
+      savedStoryboardOutputId === activeJob.id
+    ) {
+      return;
+    }
+
+    updateStoryboardShot.mutate({
+      projectId: storyProjectId,
+      shotId: storyboardShotId,
+      assetUrl: activeJob.outputUrl,
+      seedImageUrl: activeJob.outputUrl,
+      generationJobId: activeJob.id,
+    });
+    setSavedStoryboardOutputId(activeJob.id);
+  }, [activeJob, savedStoryboardOutputId, storyboardShotId, storyProjectId, updateStoryboardShot]);
 
   const handleGenerate = () => {
     if (!prompt.trim() || needsSeedImage || isGenerating) return;
@@ -474,7 +531,7 @@ export default function GeneratePage() {
               <div>
                 <h3 className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-3">Recent Generations</h3>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {myJobs.jobs.map((job) => (
+                  {myJobs.jobs.map((job: { id: string; thumbnailUrl: string | null; outputUrl: string | null; status: string; prompt: string }) => (
                     <button key={job.id} onClick={() => setActiveJobId(job.id)}
                       className={`relative aspect-[9/16] rounded-lg overflow-hidden border transition-all ${
                         activeJobId === job.id ? 'border-pink-500' : 'border-white/10 hover:border-white/30'

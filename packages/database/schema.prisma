@@ -72,6 +72,19 @@ enum GenerationStatus {
   CANCELLED
 }
 
+enum StoryProjectStatus {
+  DRAFT
+  STORYBOARDED
+  IN_PRODUCTION
+  PUBLISHED
+  ARCHIVED
+}
+
+enum StoryboardShotType {
+  IMAGE
+  VIDEO
+}
+
 enum NotificationType {
   FOLLOW  // someone followed you
   LIKE    // someone liked your video
@@ -121,6 +134,7 @@ model User {
   subscriptions      Subscription[]
   refreshTokens      RefreshToken[]
   generationJobs     GenerationJob[]
+  storyProjects       StoryProject[]
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
   passwordResetTokens PasswordResetToken[]
@@ -524,6 +538,99 @@ model GenerationJob {
   @@index([model])
   @@index([userId, createdAt])
   @@map("generation_jobs")
+}
+
+model StoryProject {
+  id             String             @id @default(cuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title          String
+  logline        String?
+  synopsis       String?
+  genre          String?
+  tone           String?
+  targetAudience String?
+  visualStyle    String?
+  status         StoryProjectStatus @default(DRAFT)
+
+  characters     StoryCharacter[]
+  environments   StoryEnvironment[]
+  shots          StoryboardShot[]
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, updatedAt])
+  @@map("story_projects")
+}
+
+model StoryCharacter {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name           String
+  role           String?
+  description    String
+  personality    String?
+  visualTraits   String?
+  referenceUrl   String?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([projectId])
+  @@map("story_characters")
+}
+
+model StoryEnvironment {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name           String
+  description    String
+  mood           String?
+  lighting       String?
+  referenceUrl   String?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([projectId])
+  @@map("story_environments")
+}
+
+model StoryboardShot {
+  id             String             @id @default(cuid())
+  projectId      String
+  project        StoryProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  position       Int
+  shotType       StoryboardShotType @default(VIDEO)
+  title          String
+  beat           String
+  camera         String?
+  action         String?
+  dialogue       String?
+  imagePrompt    String
+  videoPrompt    String
+  negativePrompt String?
+  assetUrl       String?
+  seedImageUrl   String?
+  generationJobId String?
+  duration       Float              @default(5)
+  aspectRatio    String             @default("9:16")
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, position])
+  @@map("storyboard_shots")
 }
 
 // One-time tokens for password reset emails.
