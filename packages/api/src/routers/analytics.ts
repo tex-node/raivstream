@@ -128,6 +128,8 @@ export const analyticsRouter = router({
           id: true,
           title: true,
           thumbnailUrl: true,
+          mp4Url: true,
+          hlsMasterUrl: true,
           status: true,
           isPremiumOnly: true,
           viewCount: true,

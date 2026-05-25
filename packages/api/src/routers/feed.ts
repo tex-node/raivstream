@@ -175,6 +175,8 @@ export const feedRouter = router({
           id: true,
           title: true,
           thumbnailUrl: true,
+          mp4Url: true,
+          hlsMasterUrl: true,
           viewCount: true,
           publishedAt: true,
         },

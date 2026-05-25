@@ -53,6 +53,41 @@ function MiniChart({ data }: { data: Array<{ date: string; views: number }> }) {
   );
 }
 
+function VideoThumb({
+  title,
+  thumbnailUrl,
+  mp4Url,
+}: {
+  title: string;
+  thumbnailUrl?: string | null;
+  mp4Url?: string | null;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (thumbnailUrl && !imageFailed) {
+    return (
+      <img
+        src={thumbnailUrl}
+        alt={title}
+        onError={() => setImageFailed(true)}
+        className="w-full h-full object-cover"
+      />
+    );
+  }
+
+  if (mp4Url) {
+    return <video src={mp4Url} muted playsInline preload="metadata" className="w-full h-full object-cover" />;
+  }
+
+  return (
+    <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-zinc-800 flex items-center justify-center">
+      <svg className="w-5 h-5 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const { isSignedIn } = useUser();
   const [sortBy, setSortBy] = useState<
@@ -202,7 +237,11 @@ export default function AnalyticsPage() {
               <div key={v.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/5 transition-colors">
                 {/* Thumbnail */}
                 <div className="w-12 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-900">
-                  <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
+                  <VideoThumb
+                    title={v.title}
+                    thumbnailUrl={v.thumbnailUrl}
+                    mp4Url={(v as { mp4Url?: string | null }).mp4Url}
+                  />
                 </div>
 
                 {/* Title + status */}

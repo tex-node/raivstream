@@ -3,7 +3,7 @@
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
 Last updated: 2026-05-25
-Current GitHub commit deployed to VPS: `66de8e2 docs: add session project record`
+Current GitHub commit deployed to VPS: `1dfc54a fix: raise generation prompt limit`
 
 ## Maintenance Rule
 
@@ -78,6 +78,7 @@ scripts/
 - Signed-in free users have a server-side episode gate for premium-only videos.
 - R16 kids mode filters to approved kids-safe content only.
 - `VideoCard` handles images, vertical videos, landscape image/video backdrop behavior, and premium locks.
+- Creator media-library grids fall back to playable video URLs or placeholders when `thumbnailUrl` is empty or broken.
 
 ### Auth
 
@@ -274,6 +275,19 @@ Changed:
 Reason:
 
 - The 500-character limit was an application-level validation/UI cap, not a database limit or generator dispatcher limit.
+
+### 2026-05-25: Media Library Thumbnail Fallbacks
+
+Changed:
+
+- Added `mp4Url` and `hlsMasterUrl` to creator media-library API responses.
+- Updated web creator profile grids to render a thumbnail image when valid, otherwise fall back to a muted video preview, otherwise a stable placeholder.
+- Updated web analytics video table to use the same thumbnail/video/placeholder fallback.
+- Updated mobile profile media grid to avoid rendering empty thumbnail URLs as broken images.
+
+Reason:
+
+- Uploaded videos can have files that still exist while `thumbnailUrl` is empty or stale, causing broken thumbnails in user media libraries.
 
 ## Known Issues And Follow-Ups
 

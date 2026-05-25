@@ -14,6 +14,49 @@ interface EditState {
   tags: string;
 }
 
+function LibraryThumb({
+  title,
+  thumbnailUrl,
+  mp4Url,
+}: {
+  title: string;
+  thumbnailUrl?: string | null;
+  mp4Url?: string | null;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (thumbnailUrl && !imageFailed) {
+    return (
+      <img
+        src={thumbnailUrl}
+        alt={title}
+        onError={() => setImageFailed(true)}
+        className="w-full h-full object-cover"
+      />
+    );
+  }
+
+  if (mp4Url) {
+    return (
+      <video
+        src={mp4Url}
+        muted
+        playsInline
+        preload="metadata"
+        className="w-full h-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-zinc-800 flex items-center justify-center">
+      <svg className="w-8 h-8 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
+  );
+}
+
 /** Three-dot menu that closes when clicking outside */
 function VideoMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
@@ -325,7 +368,11 @@ export default function ProfilePage() {
               {videos.map((v) => (
                 <div key={v.id} className="relative aspect-[9/16] bg-gray-900 rounded overflow-hidden group">
                   <Link href={`/v/${v.id}`} className="block w-full h-full">
-                    <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
+                    <LibraryThumb
+                      title={v.title}
+                      thumbnailUrl={v.thumbnailUrl}
+                      mp4Url={(v as { mp4Url?: string | null }).mp4Url}
+                    />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                       <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z" />

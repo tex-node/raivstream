@@ -59,7 +59,7 @@ export default function ProfileScreen() {
   }
 
   const p = profile.data;
-  const videos: Array<{ id: string; title: string; thumbnailUrl: string; status: string; viewCount: number; likeCount: number; avgStarRating: number; publishedAt: Date | null }> = myVideos.data?.videos ?? [];
+  const videos: Array<{ id: string; title: string; thumbnailUrl: string | null; mp4Url: string | null; status: string; viewCount: number; likeCount: number; avgStarRating: number; publishedAt: Date | null }> = myVideos.data?.videos ?? [];
 
   const handleSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -141,11 +141,17 @@ export default function ProfileScreen() {
               style={styles.thumbWrap}
               onPress={() => router.push(`/video/${v.id}`)}
             >
-              <Image
-                source={{ uri: v.thumbnailUrl }}
-                style={styles.thumbImg}
-                contentFit="cover"
-              />
+              {v.thumbnailUrl ? (
+                <Image
+                  source={{ uri: v.thumbnailUrl }}
+                  style={styles.thumbImg}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.thumbFallback}>
+                  <Text style={styles.thumbFallbackIcon}>▶</Text>
+                </View>
+              )}
               <View style={styles.statusBadge}>
                 <Text style={styles.statusText}>{v.status}</Text>
               </View>
@@ -261,6 +267,14 @@ const styles = StyleSheet.create({
   },
   thumbWrap: { width: THUMB_W, aspectRatio: 9 / 16 },
   thumbImg: { width: '100%', height: '100%' },
+  thumbFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111827',
+  },
+  thumbFallbackIcon: { color: 'rgba(255,255,255,0.35)', fontSize: 24 },
   statusBadge: {
     position: 'absolute',
     top: 4,
