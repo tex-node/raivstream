@@ -3,7 +3,7 @@
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
 Last updated: 2026-05-25
-Current GitHub commit deployed to VPS: `4bd7eff feat: add story studio workflow`
+Current GitHub commit deployed to VPS: `66de8e2 docs: add session project record`
 
 ## Maintenance Rule
 
@@ -93,6 +93,8 @@ scripts/
 - Main UI: `/generate`.
 - Server router: `packages/api/src/routers/generation.ts`.
 - Prompt moderation happens before credits are deducted.
+- Generation prompts allow up to 2000 characters in API, web AI Studio, and mobile AI Studio.
+- Negative prompts allow up to 500 characters.
 - Credit deduction is atomic and refunded on provider submission failure.
 - Supported visible models include Flux, Grok Imagine, Wan 2.6, Seedance, HunyuanVideo when configured, Kling I2V, and Kling R2V.
 - Hidden/coming soon models are filtered server-side and additionally guarded client-side.
@@ -109,6 +111,7 @@ Added in commit `4bd7eff`.
 - tRPC router: `packages/api/src/routers/story.ts`.
 - UI file: `apps/web/src/app/story-studio/page.tsx`.
 - Users can create story projects, define characters, define environments, break story text into storyboard shots, review generated image/video prompts, and save generated asset URLs as shot references.
+- Storyboard prompt compilation trims generated image/video prompts to the generation prompt limit so AI Studio handoff does not fail on long stories.
 - Story Studio can open `/generate` with prefilled prompt, aspect ratio, duration, project ID, and storyboard shot ID.
 - `/generate` now saves completed generated outputs back to the originating storyboard shot when launched from Story Studio.
 
@@ -257,6 +260,21 @@ Operational fix:
 - Synced `postgres` role password with the existing app `.env` password.
 - Confirmed app health returned to healthy.
 
+### 2026-05-25: Generation Prompt Limit
+
+Changed:
+
+- Raised generation prompt limit from 500 to 2000 characters.
+- Raised negative prompt limit from 300 to 500 characters.
+- Updated web AI Studio prompt and negative prompt textareas.
+- Updated mobile AI Studio prompt and negative prompt text inputs.
+- Updated Story Studio compiled image/video prompts to stay within the generation prompt limit.
+- Improved Story Studio beat splitting for long story text by chunking long beats and allowing up to 24 storyboard shots.
+
+Reason:
+
+- The 500-character limit was an application-level validation/UI cap, not a database limit or generator dispatcher limit.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.
@@ -264,4 +282,3 @@ Operational fix:
 - Storyboard asset storage currently accepts generated output URLs or pasted URLs. A future enhancement should add direct R2 upload/select-from-generation history.
 - `supabase-pooler` is stopped. If another client needs pooled DB access, configure it on a non-conflicting port and verify tenant/user credentials.
 - Root local working tree has unrelated untracked/local files such as `.claude/`, `.codex/`, and `AGENTS.md`; do not stage them unless explicitly requested.
-

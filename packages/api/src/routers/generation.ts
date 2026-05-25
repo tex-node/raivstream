@@ -13,6 +13,9 @@ const SUPPORTED_MODELS = [
   'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
 ] as const;
 
+export const GENERATION_PROMPT_MAX_LENGTH = 2000;
+export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
+
 export const generationRouter = router({
 
   /** List all models with their metadata + credit cost (public — used by the generate page) */
@@ -37,8 +40,8 @@ export const generationRouter = router({
   create: protectedProcedure
     .input(z.object({
       model:          z.enum(SUPPORTED_MODELS),
-      prompt:         z.string().min(3).max(500),
-      negativePrompt: z.string().max(300).optional(),
+      prompt:         z.string().min(3).max(GENERATION_PROMPT_MAX_LENGTH),
+      negativePrompt: z.string().max(NEGATIVE_PROMPT_MAX_LENGTH).optional(),
       duration:       z.number().min(1).max(10).optional(),
       aspectRatio:    z.enum(['9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
       style:          z.string().max(100).optional(),

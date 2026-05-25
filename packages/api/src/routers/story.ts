@@ -1,8 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
+import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
+const MAX_STORYBOARD_SHOTS = 24;
+const MAX_STORY_BEAT_LENGTH = 700;
 
 const projectSelect = {
   id: true,
@@ -26,15 +29,52 @@ const projectSelect = {
 } as const;
 
 function splitBeats(story: string): string[] {
-  return story
+  const beats = story
     .split(/\n+|(?<=[.!?])\s+(?=[A-Z0-9])/)
     .map((beat) => beat.trim())
-    .filter(Boolean)
-    .slice(0, 12);
+    .filter(Boolean);
+
+  return beats.flatMap((beat) => chunkText(beat, MAX_STORY_BEAT_LENGTH)).slice(0, MAX_STORYBOARD_SHOTS);
 }
 
 function compactList(values: Array<string | null | undefined>) {
   return values.map((value) => value?.trim()).filter(Boolean).join(', ');
+}
+
+function chunkText(text: string, maxLength: number) {
+  if (text.length <= maxLength) return [text];
+
+  const chunks: string[] = [];
+  const words = text.split(/\s+/).filter(Boolean);
+  let current = '';
+
+  for (const word of words) {
+    if (!current) {
+      current = word.slice(0, maxLength);
+      continue;
+    }
+    if (`${current} ${word}`.length > maxLength) {
+      chunks.push(current);
+      current = word.slice(0, maxLength);
+    } else {
+      current = `${current} ${word}`;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function limitText(text: string, maxLength: number) {
+  if (text.length <= maxLength) return text;
+  const clipped = text.slice(0, maxLength);
+  const boundary = Math.max(
+    clipped.lastIndexOf('. '),
+    clipped.lastIndexOf('; '),
+    clipped.lastIndexOf(', '),
+    clipped.lastIndexOf(' '),
+  );
+  return clipped.slice(0, boundary > maxLength * 0.65 ? boundary : maxLength).trim();
 }
 
 function buildPrompt(input: {
@@ -58,7 +98,7 @@ function buildPrompt(input: {
   );
   const medium = input.shotType === 'IMAGE' ? 'vertical keyframe image' : 'vertical cinematic video clip';
 
-  return [
+  const prompt = [
     `${medium} for "${input.title}"`,
     `story beat: ${input.beat}`,
     cast ? `characters: ${cast}` : undefined,
@@ -67,6 +107,8 @@ function buildPrompt(input: {
     input.tone ? `tone: ${input.tone}` : undefined,
     'composition: mobile-first 9:16 framing, clear subject silhouette, strong continuity, high production value',
   ].filter(Boolean).join('. ');
+
+  return limitText(prompt, GENERATION_PROMPT_MAX_LENGTH);
 }
 
 async function ensureProject(ctx: { prisma: any; user: { id: string } }, projectId: string) {
@@ -261,9 +303,9 @@ export const storyRouter = router({
       camera: z.string().max(500).optional(),
       action: z.string().max(1000).optional(),
       dialogue: z.string().max(1000).optional(),
-      imagePrompt: z.string().min(1).max(1000).optional(),
-      videoPrompt: z.string().min(1).max(1000).optional(),
-      negativePrompt: z.string().max(500).optional(),
+      imagePrompt: z.string().min(1).max(GENERATION_PROMPT_MAX_LENGTH).optional(),
+      videoPrompt: z.string().min(1).max(GENERATION_PROMPT_MAX_LENGTH).optional(),
+      negativePrompt: z.string().max(NEGATIVE_PROMPT_MAX_LENGTH).optional(),
       assetUrl: z.string().url().optional().or(z.literal('')),
       seedImageUrl: z.string().url().optional().or(z.literal('')),
       generationJobId: z.string().optional(),

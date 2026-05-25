@@ -38,6 +38,9 @@ const AR_OPTIONS: { value: AspectRatio; label: string }[] = [
   { value: '1:1',   label: '1:1' },
 ];
 
+const PROMPT_MAX_LENGTH = 2000;
+const NEGATIVE_PROMPT_MAX_LENGTH = 500;
+
 export default function GenerateScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -168,7 +171,7 @@ export default function GenerateScreen() {
         placeholderTextColor="#6b7280"
         multiline
         numberOfLines={3}
-        maxLength={500}
+        maxLength={PROMPT_MAX_LENGTH}
       />
 
       {/* Aspect ratio */}
@@ -237,7 +240,7 @@ export default function GenerateScreen() {
             placeholderTextColor="#6b7280"
             multiline
             numberOfLines={2}
-            maxLength={300}
+            maxLength={NEGATIVE_PROMPT_MAX_LENGTH}
           />
         </>
       )}

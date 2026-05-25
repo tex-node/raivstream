@@ -19,6 +19,8 @@ const DEFAULT_IMAGE_MODEL = 'FLUX';
 const DEFAULT_VIDEO_MODEL = 'WAN_25';
 const SLOW_MODELS         = ['LTX2', 'WAN_25', 'SEEDANCE', 'HUNYUAN_VIDEO', 'COG_VIDEO_X'];
 const HIDDEN_MODELS       = ['NANO_BANANA', 'VEO3'];
+const PROMPT_MAX_LENGTH   = 2000;
+const NEGATIVE_PROMPT_MAX_LENGTH = 500;
 
 export default function GeneratePage() {
   const router = useRouter();
@@ -303,11 +305,11 @@ export default function GeneratePage() {
                   placeholder={generationMode === 'video'
                     ? 'Describe the video you want to generate…'
                     : 'Describe the image you want to generate…'}
-                  maxLength={500}
-                  rows={3}
+                  maxLength={PROMPT_MAX_LENGTH}
+                  rows={5}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/25 text-sm resize-none focus:outline-none focus:border-pink-500/60 transition-colors"
                 />
-                <p className="text-right text-white/25 text-xs mt-1">{prompt.length}/500</p>
+                <p className="text-right text-white/25 text-xs mt-1">{prompt.length}/{PROMPT_MAX_LENGTH}</p>
               </div>
 
               {/* Seed image URL — video mode only */}
@@ -395,7 +397,7 @@ export default function GeneratePage() {
                     value={negativePrompt}
                     onChange={(e) => setNegativePrompt(e.target.value)}
                     placeholder="What to avoid in the output…"
-                    maxLength={300}
+                    maxLength={NEGATIVE_PROMPT_MAX_LENGTH}
                     rows={2}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/25 text-sm resize-none focus:outline-none focus:border-pink-500/60 transition-colors"
                   />
