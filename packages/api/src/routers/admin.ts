@@ -228,14 +228,76 @@ export const adminRouter = router({
   /**
    * Manually adjust a user's credit balance (add or deduct).
    */
+  findCreditUser: adminProcedure
+    .input(z.object({ lookup: z.string().min(1).max(200) }))
+    .query(async ({ ctx, input }) => {
+      const lookup = input.lookup.trim();
+      const user = await ctx.prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: lookup },
+            { email: { equals: lookup, mode: 'insensitive' } },
+            { username: { equals: lookup.replace(/^@/, ''), mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          displayName: true,
+          creditBalance: { select: { balance: true } },
+        },
+      });
+
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      return {
+        ...user,
+        creditBalance: user.creditBalance?.balance ?? 0,
+      };
+    }),
+
   adjustCredits: adminProcedure
     .input(z.object({
-      userId:      z.string(),
+      userId:      z.string().optional(),
+      lookup:      z.string().max(200).optional(),
       amount:      z.number().int(), // positive = add, negative = deduct
+      action:      z.enum(['gift', 'refund', 'deduct']).optional(),
       description: z.string().min(1, 'Reason required'),
+      referenceId: z.string().max(120).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId, amount, description } = input;
+      const { amount, description } = input;
+      if (!input.userId && !input.lookup?.trim()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'User ID, email, or username is required' });
+      }
+
+      const user = input.userId
+        ? await ctx.prisma.user.findUnique({ where: { id: input.userId }, select: { id: true } })
+        : await ctx.prisma.user.findFirst({
+          where: {
+            OR: [
+              { id: input.lookup!.trim() },
+              { email: { equals: input.lookup!.trim(), mode: 'insensitive' } },
+              { username: { equals: input.lookup!.trim().replace(/^@/, ''), mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true },
+        });
+
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      const userId = user.id;
+      const action = input.action ?? (amount >= 0 ? 'gift' : 'deduct');
+      if (action === 'gift' && amount <= 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Gift amount must be positive' });
+      }
+      if (action === 'refund' && amount <= 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Refund amount must be positive' });
+      }
+      if (action === 'deduct' && amount >= 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Deduction amount must be negative' });
+      }
 
       // Get or create balance record
       const existing = await ctx.prisma.creditBalance.findUnique({ where: { userId } });
@@ -252,8 +314,9 @@ export const adminRouter = router({
           data: {
             userId,
             amount:        after - before, // actual delta (may differ if floored)
-            type:          amount > 0 ? 'BONUS' : 'USAGE',
+            type:          action === 'refund' ? 'REFUND' : amount > 0 ? 'BONUS' : 'USAGE',
             description:   `[Admin: ${ctx.user.username}] ${description}`,
+            referenceId:   input.referenceId,
             balanceBefore: before,
             balanceAfter:  after,
           },

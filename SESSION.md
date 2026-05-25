@@ -3,7 +3,7 @@
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
 Last updated: 2026-05-25
-Current GitHub commit deployed to VPS: `1dfc54a fix: raise generation prompt limit`
+Current GitHub commit deployed to VPS: `77cf7c7 fix: fallback media library thumbnails`
 
 ## Maintenance Rule
 
@@ -121,12 +121,14 @@ Added in commit `4bd7eff`.
 - Admin and moderator roles are enforced by tRPC middleware and web route checks.
 - Admin pages cover overview, users, moderation queue, credit rates, jobs, and revenue.
 - Moderation queue supports approve/reject/flag plus rating and kids-safe metadata.
+- Admin Credits now includes a manual credits/coupons tab for gifting, refunding, or deducting credits by email, username, or user ID.
 
 ### Credits And Payments
 
 - Credit balance is stored per user.
 - Credit transaction ledger records purchases, usage, bonuses, and refunds.
 - Feature credit rates are DB-configurable through admin UI.
+- Manual admin credit adjustments are ledger-backed and can carry coupon, support, or refund reference IDs.
 - Paystack handles local subscriptions and credit purchases.
 - Stripe handles international Creator plan flow.
 
@@ -288,6 +290,22 @@ Changed:
 Reason:
 
 - Uploaded videos can have files that still exist while `thumbnailUrl` is empty or stale, causing broken thumbnails in user media libraries.
+
+### 2026-05-25: Manual Credits / Coupons
+
+Changed:
+
+- Added 5,000 AI credits to `texdevices@gmail.com` in production. Balance changed from 240 to 5,240.
+- Extended `admin.adjustCredits` to accept user lookup by email, username, or ID.
+- Added explicit manual adjustment actions: gift/coupon, refund, and deduct.
+- Added optional reference IDs for coupon codes, support tickets, and refund references.
+- Added a Manual Credits / Coupons tab to `/admin/credits`.
+
+Ledger behavior:
+
+- Gift/coupon grants write `BONUS` transactions.
+- Refund grants write `REFUND` transactions.
+- Deductions write `USAGE` transactions and floor the user balance at zero.
 
 ## Known Issues And Follow-Ups
 
