@@ -3,7 +3,7 @@
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
 Last updated: 2026-05-25
-Current GitHub commit deployed to VPS: `77cf7c7 fix: fallback media library thumbnails`
+Current GitHub commit deployed to VPS: latest pushed `main` verified on 2026-05-25
 
 ## Maintenance Rule
 
