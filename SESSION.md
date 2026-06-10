@@ -234,6 +234,23 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-06-10: UI Prototype Rebuild
+
+Changed:
+
+- Rebuilt the standalone `UI` prototype around a new Raivstream app shell in `UI/src/app/App.tsx`.
+- Added screens for the main feed, R16 Kids feed, AI Studio, Story Studio, media library, analytics, credits, admin console, and reusable blank templates.
+- Added `UI/README.md` with run instructions and backup details.
+
+Backup:
+
+- Original UI export was copied to `C:\Raiv\raivstream\UI_backup_20260610-213131` before edits.
+
+Verification:
+
+- `pnpm build` passes in `UI`.
+- Local preview verified at `http://127.0.0.1:5173`.
+
 ### 2026-05-25: Story Studio
 
 Commit: `4bd7eff feat: add story studio workflow`
