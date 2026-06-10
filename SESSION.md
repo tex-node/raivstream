@@ -74,7 +74,7 @@ scripts/
 
 - Public TikTok-style vertical feed on web and mobile.
 - Feeds support For You, Trending, Viewers Pick, and Following.
-- Guest users can browse with a freemium gate.
+- Guest users can browse with a 50-video freemium gate.
 - Signed-in free users have a server-side episode gate for premium-only videos.
 - R16 kids mode filters to approved kids-safe content only.
 - `VideoCard` handles images, vertical videos, landscape image/video backdrop behavior, and premium locks.
@@ -233,6 +233,14 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-06-10: Guest Free Viewing Limit
+
+Changed:
+
+- Increased the unauthenticated guest viewing allowance from 5 unique videos to 50 unique videos.
+- Updated the live home UI copy and project comments to reflect the new 50-video guest gate.
+- Signed-in FREE account behavior remains unchanged: 10 free episodes before premium-only videos lock.
 
 ### 2026-06-10: UI Prototype Rebuild
 

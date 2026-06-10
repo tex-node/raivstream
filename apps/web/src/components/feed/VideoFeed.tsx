@@ -8,7 +8,7 @@ import { PaywallModal } from '@/components/feed/PaywallModal';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
 
-const GUEST_LIMIT   = 5;
+const GUEST_LIMIT   = 50;
 const STORAGE_KEY   = 'rv_guest_watched';
 
 type FeedType = 'forYou' | 'following' | 'trending' | 'viewersPick';
@@ -259,7 +259,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
         </div>
       )}
 
-      {/* Hard paywall overlay — guests after 5 free episodes */}
+      {/* Hard paywall overlay — guests after 50 free episodes */}
       {showGuestModal && (
         <PaywallModal watched={guestWatched.length} limit={GUEST_LIMIT} />
       )}

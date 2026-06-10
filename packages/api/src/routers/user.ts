@@ -211,7 +211,7 @@ export const userRouter = router({
   // Returns episode gate status for the current FREE user.
   //
   // Limits:
-  //   Guest (unauthenticated)  — 5 unique videos, tracked client-side
+  //   Guest (unauthenticated)  — 50 unique videos, tracked client-side
   //   FREE tier (signed-in)    — 10 unique videos tracked server-side
   //   VIEWER / CREATOR         — no limit
   //

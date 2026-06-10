@@ -20,7 +20,7 @@ enum UserRole {
 }
 
 enum PremiumTier {
-  FREE     // 5 free episodes then paywall
+  FREE     // Guest users get 50 free episodes; signed-in FREE users get 10 before premium-only locks
   VIEWER   // ₦1,500/month — unlimited watching
   CREATOR  // credit-based — buy credits to use AI features
 }

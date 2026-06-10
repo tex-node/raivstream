@@ -132,7 +132,7 @@ export default function HomePage() {
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">{isSignedIn ? user?.displayName ?? user?.username : 'Guest viewer'}</div>
-                <div className="truncate text-xs text-white/40">{isSignedIn ? user?.premiumTier : '5 free episodes'}</div>
+                <div className="truncate text-xs text-white/40">{isSignedIn ? user?.premiumTier : '50 free episodes'}</div>
               </div>
             </Link>
           </div>
@@ -264,7 +264,7 @@ export default function HomePage() {
                 <h2 className="text-sm font-semibold">Episode gate</h2>
               </div>
               <p className="mt-2 text-sm leading-6 text-white/45">
-                Guests get 5 free episodes. Free accounts get 10 before premium-only videos lock.
+                Guests get 50 free episodes. Free accounts get 10 before premium-only videos lock.
               </p>
             </div>
 
