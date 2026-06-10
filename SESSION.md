@@ -241,15 +241,24 @@ Changed:
 - Rebuilt the standalone `UI` prototype around a new Raivstream app shell in `UI/src/app/App.tsx`.
 - Added screens for the main feed, R16 Kids feed, AI Studio, Story Studio, media library, analytics, credits, admin console, and reusable blank templates.
 - Added `UI/README.md` with run instructions and backup details.
+- Deployed the built UI prototype to the VPS as a static Caddy route at `https://app.raivstream.com/ui/`.
 
 Backup:
 
 - Original UI export was copied to `C:\Raiv\raivstream\UI_backup_20260610-213131` before edits.
 
+Production serving:
+
+- Source path on VPS: `/root/raivstream/UI`.
+- Static build path on VPS: `/var/www/raivstream-ui`.
+- Caddy route: `app.raivstream.com` handles `/ui` and `/ui/*` before proxying the rest of the site to Next.js on `localhost:3000`.
+- Build command used on VPS: `pnpm exec vite build --base=/ui/`.
+
 Verification:
 
 - `pnpm build` passes in `UI`.
 - Local preview verified at `http://127.0.0.1:5173`.
+- Production preview verified at `https://app.raivstream.com/ui/`; JS/CSS assets and `app.raivstream.com/api/health` return successfully.
 
 ### 2026-05-25: Story Studio
 

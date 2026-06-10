@@ -25,6 +25,20 @@ Then open:
 http://127.0.0.1:5173
 ```
 
+## Production Preview
+
+The VPS serves the built prototype at:
+
+```text
+https://app.raivstream.com/ui/
+```
+
+The static files are deployed to:
+
+```text
+/var/www/raivstream-ui
+```
+
 ## Current Prototype
 
 The active prototype entry is:
