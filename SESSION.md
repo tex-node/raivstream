@@ -250,7 +250,6 @@ Changed:
 - Added screens for the main feed, R16 Kids feed, AI Studio, Story Studio, media library, analytics, credits, admin console, and reusable blank templates.
 - Added `UI/README.md` with run instructions and backup details.
 - Deployed the built UI prototype to the VPS as a static Caddy route at `https://app.raivstream.com/ui/`.
-- Ported the new shell into the live Next.js home route at `apps/web/src/app/page.tsx` so `https://app.raivstream.com/` visibly uses the rebuilt UI while preserving the real feed, auth, R16, and episode gate behavior.
 
 Backup:
 
@@ -268,7 +267,14 @@ Verification:
 - `pnpm build` passes in `UI`.
 - Local preview verified at `http://127.0.0.1:5173`.
 - Production preview verified at `https://app.raivstream.com/ui/`; JS/CSS assets and `app.raivstream.com/api/health` return successfully.
-- `pnpm --filter @raivstream/web type-check` and `pnpm --filter @raivstream/web build` pass after the live home route redesign.
+
+### 2026-06-11: Live Home UI Revert
+
+Changed:
+
+- Reverted `apps/web/src/app/page.tsx` back to the former feed-first UI shell because the redesigned live home UI was not working well.
+- Kept the standalone prototype available at `https://app.raivstream.com/ui/`.
+- Kept the guest viewing limit change at 50 free videos.
 
 ### 2026-05-25: Story Studio
 
