@@ -38,6 +38,9 @@ const emptyEnvironment = {
   referenceUrl: '',
 };
 
+const defaultVisualStyle = 'cinematic Afrofuturist realism, vibrant Lagos-inspired color, polished short-form vertical video';
+const defaultTone = 'hopeful, suspenseful, emotionally direct';
+
 export default function StoryStudioPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
@@ -47,8 +50,8 @@ export default function StoryStudioPage() {
   const [projectTitle, setProjectTitle] = useState('');
   const [logline, setLogline] = useState('');
   const [storyText, setStoryText] = useState('');
-  const [visualStyle, setVisualStyle] = useState('cinematic Afrofuturist realism, vibrant Lagos-inspired color, polished short-form vertical video');
-  const [tone, setTone] = useState('hopeful, suspenseful, emotionally direct');
+  const [visualStyle, setVisualStyle] = useState(defaultVisualStyle);
+  const [tone, setTone] = useState(defaultTone);
   const [characterForm, setCharacterForm] = useState(emptyCharacter);
   const [environmentForm, setEnvironmentForm] = useState(emptyEnvironment);
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
@@ -112,8 +115,8 @@ export default function StoryStudioPage() {
     setProjectTitle(project.title);
     setLogline(project.logline ?? '');
     setStoryText(project.synopsis ?? '');
-    setVisualStyle(project.visualStyle ?? visualStyle);
-    setTone(project.tone ?? tone);
+    setVisualStyle(project.visualStyle ?? defaultVisualStyle);
+    setTone(project.tone ?? defaultTone);
     setSelectedShotId((current) => current ?? project.shots[0]?.id ?? null);
   }, [project]);
 
@@ -179,6 +182,12 @@ export default function StoryStudioPage() {
             <h1 className="text-3xl font-extrabold">Story Studio</h1>
             <p className="text-white/45 text-sm">Build story worlds, characters, shot prompts, and reusable storyboard references.</p>
           </div>
+          <button
+            onClick={() => router.push('/story-playground')}
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+          >
+            Open Story Playground
+          </button>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {projects?.map((item: { id: string; title: string; _count: { shots: number } }) => (
               <button

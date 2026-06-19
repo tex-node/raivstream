@@ -7,6 +7,7 @@ import type { PrismaClient } from '@raivstream/database';
 export interface Context {
   prisma: PrismaClient;
   userId: string | null;
+  isR16?: boolean;
   user: {
     id: string;
     email: string;

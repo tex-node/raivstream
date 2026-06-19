@@ -99,6 +99,7 @@ apps/web/src/
   app/credits/page.tsx                — credit balance + purchase UI
   app/credits/success/page.tsx        — Paystack callback verification
   app/generate/page.tsx               — AI Studio: radio (Image/Video) + model dropdown; DEFAULT_IMAGE_MODEL=FLUX, DEFAULT_VIDEO_MODEL=WAN_25; HIDDEN_MODELS=['NANO_BANANA','VEO3']
+  app/story-playground/page.tsx       — Story Playground Phase 1: idea → guided questions → short story → continuation
   app/settings/                       — user settings
   app/search/page.tsx                 — search page
   app/admin/layout.tsx                — admin layout (responsive sidebar — mobile drawer, desktop fixed)
@@ -124,8 +125,8 @@ apps/web/src/
   app/api/paystack/webhook/route.ts     — POST — Paystack event handler
   app/api/stripe/                       — Stripe webhook + checkout endpoints
   components/feed/FeedTabs.tsx          — tab switcher (Following tab hidden for guests; "Kids Feed" label on R16)
-  components/feed/VideoFeed.tsx         — vertical scroll feed; guest sessionStorage tracking (5 ep) + signed-in episodeGate query (10 ep); sticky upgrade banner + PaywallModal; passes kidsOnly to feed queries
-  components/feed/PaywallModal.tsx      — hard paywall overlay for GUESTS after 5 free episodes; 3 CTAs: sign-up (10 more free) / subscribe / sign-in
+  components/feed/VideoFeed.tsx         — vertical scroll feed; guest sessionStorage tracking (50 ep) + signed-in episodeGate query (10 ep); sticky upgrade banner + PaywallModal; passes kidsOnly to feed queries
+  components/feed/PaywallModal.tsx      — hard paywall overlay for GUESTS after 50 free episodes; 3 CTAs: sign-up (10 more free) / subscribe / sign-in
   components/video/VideoCard.tsx        — individual video card; isLocked prop → premium lock overlay; isImageUrl() helper routes to <img> instead of VideoPlayer; landscape images get blurred backdrop (same pattern as landscape videos)
   components/video/VideoPlayer.tsx      — HTML5 / HLS video player (starts muted for autoplay)
   components/video/VideoInteractions.tsx — like/dislike/star buttons
@@ -137,6 +138,7 @@ apps/web/src/
   lib/paystack.ts                       — Paystack helpers + CREDIT_PACKAGES + VIEWER_PLAN
   lib/credits.ts                        — (see packages/api/src/lib/credits.ts — server side)
   middleware.ts                         — cookie-based redirect for protected routes; R16 subdomain detection + blocked route list; x-r16-mode request header forwarding
+packages/api/src/lib/storyTextService.ts — Story Playground text provider abstraction with OpenAI-compatible provider + deterministic fallback
 ```
 
 ## Auth Pattern (Custom JWT — no Clerk)
@@ -197,6 +199,46 @@ apps/web/src/
 - FeedTabs: static "Kids Feed" label instead of tab switcher
 - Caddy: `r16.raivstream.com { reverse_proxy localhost:3000 }` — add to /etc/caddy/Caddyfile
 - DNS: A record `r16.raivstream.com → 81.0.246.223`
+
+## Story Playground Phase 1
+- Product direction: Idea → Guided Questions → Short Story → Continue Story → future scene/media generation.
+- Default route: `/story-playground`. Advanced `/story-studio` remains available for non-R16 users but is no longer the main story flow.
+- Main UI hides JSON, prompt engineering, camera fields, negative prompts, and technical shot terminology.
+- Requires sign-in for persisted projects; no guest story-session system exists yet.
+- Story Spark captures a short idea such as "A dog going to school".
+- Guided question flow stores 3-6 simple button-answer questions in `StoryQuestion`.
+- Story generation stores Chapter 1 in `StoryChapter`, updates `StoryProject`, and saves future scene hints in `StorySceneSeed`.
+- Continue Story appends Chapter 2, Chapter 3, etc. while preserving previous context.
+- Phase 2 scene cards use `story.generateScenes` and existing `StorySceneSeed`.
+- School-themed ideas such as "A dog going to school" produce scene cards: Home, Road to School, School Gate, Classroom, Problem, Happy Ending.
+- Story Playground shows a film-strip under the generated story, placeholder thumbnails, an edit-scene modal, and a disabled "Make Pictures" coming-soon button.
+- Phase 3 Character Bible uses `StoryCharacterMemory`, `story.generateCharacterBible`, and `story.updateCharacterMemory`.
+- Named character ideas such as "Max is a young male golden puppy with a blue backpack" must keep Max consistent across all scene cards.
+- Scene cards store reusable character reference objects in `StorySceneSeed.characters`, including `promptIngredient` text for the future hidden prompt compiler.
+- Story Playground shows editable Character Bible cards; editing a character refreshes scene references.
+- Phase 4 Hidden Prompt Composer uses `StoryScenePrompt`, `story.composeScenePrompt`, and `story.composeAllScenePrompts`.
+- Prompt composer turns Scene Card + Character Bible + Mood + Setting into provider-ready prompts for `FLUX`, `WAN_25`, `KLING_I2V`, and `KLING_R2V`.
+- Prompt output types: `IMAGE`, `SHORT_VIDEO`, `COMIC_PANEL`.
+- Prompt versions are saved per scene with provider, output type, prompt, automatic negative prompt, aspect ratio, duration, and metadata.
+- Advanced prompt preview and "Send to AI Studio" are shown only outside R16 and only for CREATOR/MODERATOR/ADMIN users.
+- Phase 4B Scene Image Generation uses `StorySceneAsset`, `story.generateSceneImage`, `story.regenerateSceneImage`, `story.listSceneAssets`, and `story.getSceneAsset`.
+- Scene images use the hidden prompt composer, existing generator abstraction, `GenerationJob`, credit deduction/refund flow, and R2 mirroring.
+- Latest scene image fields live on `StorySceneSeed`: `latestImageAssetId`, `imageStatus`, and `imageUrl`.
+- Story scene image R2 key format: `story-projects/{projectId}/scenes/{sceneId}/assets/{assetId}.png`.
+- Adult/non-R16 users can view image history. R16 copy stays simple and never shows raw prompts or asset metadata/history.
+- Staging runtime test on VPS passed with real RunPod/R2 using isolated staging DB: `A dog going to school` produced Home, Road to School, School Gate, Classroom, Problem, Happy Ending; Max was attached; first image and regenerate both deducted 80 credits, wrote R2 objects, and maintained history/latest links.
+- Production Alpha deployment on 2026-06-19 switched `DATABASE_URL`/`DIRECT_URL` away from the broken Supavisor pooler to direct `supabase-db` container access at `172.18.0.2:5432`.
+- Production DB was backed up at `/root/raivstream/pre_story_playground_alpha_backup_20260619-021103.sql` before schema changes.
+- Supabase DB was not Prisma-migrate baselined, so `migrate deploy` hit `P3005` and `db push` hit the known Supabase cross-schema FK blocker. A controlled Prisma baseline SQL was applied, the three Alpha migrations were resolved as applied, and their idempotent SQL was manually executed once.
+- Production smoke test passed with real RunPod/R2 and production DB. Main app health is clean and `/story-playground` renders.
+- Public R16 is still DNS-blocked: `r16.raivstream.com` resolves to `3.33.251.168` / `15.197.225.128` instead of VPS `81.0.246.223`. Local R16 host-header routing is healthy and hides prompt/history labels.
+- Phase 4C Storybook Viewer adds `/story-playground/[projectId]/storybook` and `/storybook/[projectId]`, with derived `story.getStoryBook`, `story.getStoryBookPage`, and `story.regenerateStoryBook` APIs. No schema changes; pages derive from StorySceneSeed + latest image + chapter text. R16 copy remains simple and hides prompt/provider/model/credit metadata.
+- R16/kids flow must never expose JSON or prompt text.
+- Acceptance example: "Road to School" must include Max's exact visual identity, outdoor school-road setting, and child-safe tone.
+- R16/tRPC context forces `audienceMode=KIDS` based on `x-r16-mode`, `r16.*` host, or `?r16=1`.
+- Text generation goes through `storyTextService`: OpenAI-compatible chat completions when `OPENAI_API_KEY` is configured, deterministic local fallback otherwise.
+- Prompt moderation runs before story generation; KIDS/R16 applies an extra child-safety keyword check.
+- Story Playground now includes scene cards, character bible UI, hidden prompt compiler, and scene image generation; remaining story product work is Storybook Viewer and scene video generation.
 
 ## Credit System
 - 1,000 credits = ₦1,000 (configured in `FeatureCreditRate` table via seed.ts or admin UI)
@@ -485,6 +527,13 @@ npx eas-cli update --branch production --platform ios --message "..."
 - Auto-deploy: GitHub Actions SSH deploy on push to main → pm2 restart
 - **Content moderation**: prompt filter (Layer 1 regex + Layer 2 OpenAI), upload/publish image scanning, admin queue, feed filtering
 - **R16 kids subdomain**: r16.raivstream.com — kids-safe feed (isKidsSafe=true + APPROVED only), simplified navbar, blocked adult routes
+- **Story Playground Phase 1**: `/story-playground`, guided questions, short story generation, continuation chapters, story persistence, R16 kids-safe mode, OpenAI-compatible text provider fallback service
+- **Story Playground Phase 2 scene cards**: `story.generateScenes`, editable `StorySceneSeed` film-strip, placeholder thumbnails, disabled Make Pictures action
+- **Story Playground Phase 3 Character Bible**: deterministic character extraction, editable character cards, visual descriptions, scene-level character references, prompt ingredients for Phase 4
+- **Story Playground Phase 4 Hidden Prompt Composer**: `StoryScenePrompt`, provider-aware prompt templates, automatic negative prompts, advanced preview, Send to AI Studio
+- **Story Playground Phase 4B Scene Images**: `StorySceneAsset`, generate/regenerate scene image, R2 asset path, latest image attachment, non-R16 image history
+- **Story Playground Phase 4C Storybook Viewer**: page-by-page reader from story scenes and latest images, cover page, reading progress, keyboard/swipe navigation, R16-safe reading mode
+- **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**
 - Add email service (Resend/SendGrid) for password reset emails — currently logs URL to server console
@@ -495,4 +544,4 @@ npx eas-cli update --branch production --platform ios --message "..."
 - Redis caching layer
 - Badge award cron jobs
 - Full test suite
-- Caddy + DNS setup for r16.raivstream.com (instructions in R16 section above)
+- Story Playground Phase 2+: visual scene builder, character bible UI, hidden prompt compiler, story-to-media generation, R16 story publishing workflow

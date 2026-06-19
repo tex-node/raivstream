@@ -1,0 +1,14 @@
+.next/
+node_modules/
+coverage/
+dist/
+build/
+.turbo/
+.expo/
+.codex/
+.claude/
+UI/
+UI_backup_*/
+apps/web/.next/
+apps/mobile/.expo/
+packages/database/node_modules/

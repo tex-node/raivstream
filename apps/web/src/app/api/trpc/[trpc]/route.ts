@@ -25,6 +25,9 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 const handler = (req: Request) => {
   const origin = req.headers.get('origin');
+  const host = req.headers.get('host') ?? '';
+  const url = new URL(req.url);
+  const isR16 = req.headers.get('x-r16-mode') === '1' || host.startsWith('r16.') || url.searchParams.get('r16') === '1';
 
   return fetchRequestHandler({
     endpoint: '/api/trpc',
@@ -67,7 +70,7 @@ const handler = (req: Request) => {
         }
       }
 
-      return { prisma, user, userId };
+      return { prisma, user, userId, isR16 };
     },
     responseMeta() {
       return {

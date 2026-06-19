@@ -74,6 +74,8 @@ enum GenerationStatus {
 
 enum StoryProjectStatus {
   DRAFT
+  GENERATED
+  EXTENDED
   STORYBOARDED
   IN_PRODUCTION
   PUBLISHED
@@ -83,6 +85,36 @@ enum StoryProjectStatus {
 enum StoryboardShotType {
   IMAGE
   VIDEO
+}
+
+enum StoryAudienceMode {
+  KIDS
+  GENERAL
+}
+
+enum StoryType {
+  SHORT_STORY
+  PICTURE_BOOK
+  COMIC
+  VIDEO_STORY
+}
+
+enum StoryPromptOutputType {
+  IMAGE
+  SHORT_VIDEO
+  COMIC_PANEL
+}
+
+enum StorySceneAssetType {
+  IMAGE
+  VIDEO
+}
+
+enum StorySceneAssetStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
 }
 
 enum NotificationType {
@@ -546,25 +578,181 @@ model StoryProject {
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title          String
+  originalIdea   String?
   logline        String?
   synopsis       String?
   genre          String?
   tone           String?
   targetAudience String?
+  audienceMode   StoryAudienceMode  @default(GENERAL)
+  storyType      StoryType          @default(SHORT_STORY)
+  ageRange       String?
+  theme          String?
   visualStyle    String?
   status         StoryProjectStatus @default(DRAFT)
 
   characters     StoryCharacter[]
   environments   StoryEnvironment[]
   shots          StoryboardShot[]
+  questions      StoryQuestion[]
+  chapters       StoryChapter[]
+  characterMemory StoryCharacterMemory[]
+  sceneSeeds     StorySceneSeed[]
 
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([audienceMode])
   @@index([userId, updatedAt])
   @@map("story_projects")
+}
+
+model StoryQuestion {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  questionText   String
+  answerOptions  Json
+  selectedAnswer String?
+  orderIndex     Int
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, orderIndex])
+  @@map("story_questions")
+}
+
+model StoryChapter {
+  id               String       @id @default(cuid())
+  projectId        String
+  project          StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  chapterNumber    Int
+  title            String
+  summary          String
+  body             String
+  generationPrompt String?
+  providerMetadata Json?
+
+  sceneSeeds       StorySceneSeed[]
+
+  createdAt        DateTime     @default(now())
+
+  @@unique([projectId, chapterNumber])
+  @@index([projectId])
+  @@index([projectId, chapterNumber])
+  @@map("story_chapters")
+}
+
+model StoryCharacterMemory {
+  id                String       @id @default(cuid())
+  projectId         String
+  project           StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name              String
+  role              String?
+  species           String?
+  ageDescription    String?
+  gender            String?
+  visualDescription String?
+  personality       Json?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, name])
+  @@map("story_character_memory")
+}
+
+model StorySceneSeed {
+  id             String        @id @default(cuid())
+  projectId      String
+  project        StoryProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterId      String?
+  chapter        StoryChapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  orderIndex     Int
+  title          String
+  description    String
+  locationType   String?
+  indoorOutdoor  String?
+  mood           String?
+  characters     Json?
+  prompts        StoryScenePrompt[]
+  assets         StorySceneAsset[]
+  latestImageAssetId String?
+  imageStatus    StorySceneAssetStatus?
+  imageUrl       String?
+
+  createdAt      DateTime      @default(now())
+
+  @@index([projectId])
+  @@index([chapterId])
+  @@index([projectId, orderIndex])
+  @@map("story_scene_seeds")
+}
+
+model StorySceneAsset {
+  id              String                @id @default(cuid())
+  sceneId         String
+  scene           StorySceneSeed        @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  projectId       String
+  userId          String
+
+  assetType       StorySceneAssetType
+  provider        String
+  model           String
+  promptVersionId String?
+  composedPrompt  String?
+  negativePrompt  String?
+  r2Key           String?
+  assetUrl        String?
+  thumbnailUrl    String?
+  width           Int?
+  height          Int?
+  durationSeconds Float?
+  status          StorySceneAssetStatus @default(PENDING)
+  errorMessage    String?
+  generationJobId String?
+  isLatest        Boolean               @default(false)
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([sceneId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([sceneId, isLatest])
+  @@index([status])
+  @@map("story_scene_assets")
+}
+
+model StoryScenePrompt {
+  id             String                @id @default(cuid())
+  sceneId        String
+  scene          StorySceneSeed        @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  outputType     StoryPromptOutputType
+  provider       String
+  prompt         String
+  negativePrompt String?
+  aspectRatio    String                @default("9:16")
+  duration       Float?
+  version        Int
+  metadata       Json?
+
+  createdAt      DateTime              @default(now())
+
+  @@index([sceneId])
+  @@index([sceneId, outputType, provider])
+  @@unique([sceneId, outputType, provider, version])
+  @@map("story_scene_prompts")
 }
 
 model StoryCharacter {

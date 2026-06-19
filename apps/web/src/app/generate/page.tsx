@@ -112,6 +112,7 @@ export default function GeneratePage() {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
     const promptParam = params.get('prompt');
+    const negativePromptParam = params.get('negativePrompt');
     const seedParam = params.get('seedImageUrl');
     const durationParam = params.get('duration');
     const aspectParam = params.get('aspectRatio');
@@ -121,6 +122,7 @@ export default function GeneratePage() {
       setSelectedModel(mode === 'image' ? DEFAULT_IMAGE_MODEL : DEFAULT_VIDEO_MODEL);
     }
     if (promptParam) setPrompt(promptParam);
+    if (negativePromptParam) setNegativePrompt(negativePromptParam);
     if (seedParam) setSeedImageUrl(seedParam);
     if (durationParam) setDuration(Number(durationParam));
     if (aspectParam === '9:16' || aspectParam === '16:9' || aspectParam === '1:1') {
