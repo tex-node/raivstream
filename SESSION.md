@@ -674,6 +674,17 @@ Verification:
 - `pnpm --filter @raivstream/web type-check` passed.
 - `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
 
+Deployment:
+
+- Deployed to VPS on 2026-06-21 from commit `917fbb9`.
+- Pre-migration backup: `/root/raivstream/backups/pre_phase_4_5_analytics_20260621-052213.sql`.
+- `pnpm --filter @raivstream/database exec prisma migrate deploy` applied `20260619130000_story_analytics_events`.
+- `pnpm --filter @raivstream/web build` passed on VPS and `pm2 restart raivstream-web --update-env` completed.
+- Public health checks passed for `https://app.raivstream.com/api/health` and `https://r16.raivstream.com/api/health`.
+- Smoke test created one `story_playground_opened` analytics event through `analytics.trackStoryEvent`, loaded `admin.storyAnalytics`, and confirmed unauthenticated admin analytics access is rejected.
+- `/story-playground`, `/storybook/cmqk6icyf0003f58y94f2l3sc`, and `/admin/story-analytics` route checks passed; `/admin/story-analytics` redirects unauthenticated users to sign-in and R16 redirects admin analytics to `/`.
+- R16 storybook did not expose feedback, prompt, image history, model/provider generation labels, credits, or AI Studio text. Non-R16 storybook showed the Feedback entry.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.
