@@ -104,6 +104,106 @@ export const adminRouter = router({
     };
   }),
 
+  storyAnalytics: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const now = new Date();
+      const startOfToday = new Date(now);
+      startOfToday.setHours(0, 0, 0, 0);
+      const since = new Date(now.getTime() - input.days * 24 * 60 * 60 * 1000);
+
+      const funnelEvents = [
+        'story_playground_opened',
+        'story_generated',
+        'scene_generation_completed',
+        'scene_image_completed',
+        'storybook_opened',
+        'storybook_completed',
+      ];
+
+      const [todaysEvents, allRangeEvents, storyProjects, characterMemory, recentEvents] = await Promise.all([
+        (ctx.prisma as any).analyticsEvent.findMany({
+          where: { createdAt: { gte: startOfToday } },
+          select: { eventName: true, projectId: true, userId: true },
+        }),
+        (ctx.prisma as any).analyticsEvent.findMany({
+          where: { createdAt: { gte: since } },
+          select: { id: true, eventName: true, projectId: true, userId: true, properties: true, createdAt: true },
+        }),
+        (ctx.prisma as any).storyProject.findMany({
+          where: { createdAt: { gte: since } },
+          select: { theme: true, ageRange: true, originalIdea: true, title: true },
+        }),
+        (ctx.prisma as any).storyCharacterMemory.findMany({
+          where: { createdAt: { gte: since } },
+          select: { name: true },
+        }),
+        (ctx.prisma as any).analyticsEvent.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 40,
+          select: { id: true, eventName: true, projectId: true, userId: true, properties: true, createdAt: true },
+        }),
+      ]);
+
+      const countToday = (eventName: string) =>
+        todaysEvents.filter((event: { eventName: string }) => event.eventName === eventName).length;
+      const countRange = (eventName: string) =>
+        allRangeEvents.filter((event: { eventName: string }) => event.eventName === eventName).length;
+      const distinctActors = (eventName: string) => {
+        const ids = new Set<string>();
+        for (const event of allRangeEvents as Array<{ id: string; eventName: string; userId: string | null; projectId: string | null }>) {
+          if (event.eventName !== eventName) continue;
+          ids.add(event.userId ?? event.projectId ?? event.id);
+        }
+        return ids.size;
+      };
+      const topValues = (values: Array<string | null | undefined>, limit = 8) => {
+        const counts = new Map<string, number>();
+        for (const value of values) {
+          const key = value?.trim();
+          if (!key) continue;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return Array.from(counts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, limit)
+          .map(([label, count]) => ({ label, count }));
+      };
+      const inferThemeTerms = (projects: Array<{ originalIdea?: string | null; title?: string | null }>) => {
+        const ignored = new Set(['the', 'and', 'with', 'about', 'going', 'story', 'school', 'for', 'that', 'this', 'from']);
+        return topValues(projects.flatMap((project) =>
+          `${project.originalIdea ?? project.title ?? ''}`
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .split(/\s+/)
+            .filter((word) => word.length > 2 && !ignored.has(word)),
+        ));
+      };
+
+      return {
+        rangeDays: input.days,
+        cards: {
+          storiesCreatedToday: countToday('story_spark_started'),
+          storiesCompleted: countRange('story_generated'),
+          picturesGenerated: countRange('scene_image_completed'),
+          storybooksOpened: countRange('storybook_opened'),
+          storybooksCompleted: countRange('storybook_completed'),
+        },
+        funnel: funnelEvents.map((eventName) => ({
+          eventName,
+          events: countRange(eventName),
+          users: distinctActors(eventName),
+        })),
+        popular: {
+          themes: topValues(storyProjects.map((project: { theme: string | null }) => project.theme)),
+          inferredThemes: inferThemeTerms(storyProjects),
+          ageRanges: topValues(storyProjects.map((project: { ageRange: string | null }) => project.ageRange)),
+          characters: topValues(characterMemory.map((character: { name: string | null }) => character.name)),
+        },
+        recentEvents,
+      };
+    }),
+
   // ─── User Management ────────────────────────────────────────────────────────
 
   /**

@@ -1,8 +1,32 @@
 import { router, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { analytics, STORY_ANALYTICS_EVENTS } from '../lib/analytics';
+
+const storyAnalyticsEventSchema = z.enum(STORY_ANALYTICS_EVENTS);
+const analyticsPropertiesSchema = z.record(z.unknown()).default({});
 
 export const analyticsRouter = router({
+  trackStoryEvent: protectedProcedure
+    .input(z.object({
+      event: storyAnalyticsEventSchema,
+      projectId: z.string().optional(),
+      properties: analyticsPropertiesSchema,
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await analytics.track(ctx.prisma, {
+        event: input.event,
+        userId: ctx.user.id,
+        projectId: input.projectId,
+        properties: {
+          ...input.properties,
+          audienceMode: ctx.isR16 ? 'KIDS' : input.properties.audienceMode,
+        },
+      });
+
+      return { success: true };
+    }),
+
   // Aggregate stats for the creator's channel
   overview: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== 'CREATOR') {

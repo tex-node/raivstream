@@ -6,6 +6,7 @@ import { storyTextService, type StoryAudienceMode } from '../lib/storyTextServic
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
+import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -139,6 +140,26 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
 function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryAudienceMode): StoryAudienceMode {
   if (ctx.isR16) return 'KIDS';
   return requested ?? 'GENERAL';
+}
+
+async function trackStoryAnalytics(
+  ctx: { prisma: any; user?: { id: string } | null; isR16?: boolean },
+  input: {
+    event: StoryAnalyticsEventName;
+    projectId?: string | null;
+    audienceMode?: StoryAudienceMode | string | null;
+    properties?: Record<string, unknown>;
+  },
+) {
+  await analytics.track(ctx.prisma, {
+    event: input.event,
+    userId: ctx.user?.id,
+    projectId: input.projectId,
+    properties: {
+      ...input.properties,
+      audienceMode: ctx.isR16 ? 'KIDS' : input.audienceMode,
+    },
+  });
 }
 
 function assertKidsSafeIdea(idea: string, audienceMode: StoryAudienceMode) {
@@ -451,7 +472,10 @@ function devSceneSvgDataUrl(sceneTitle: string, characterName: string) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-async function generateSceneImageAsset(ctx: any, input: { projectId: string; sceneId: string; model: SceneImageModel }) {
+async function generateSceneImageAsset(
+  ctx: any,
+  input: { projectId: string; sceneId: string; model: SceneImageModel; isRegeneration?: boolean },
+) {
   const project = await ctx.prisma.storyProject.findFirst({
     where: { id: input.projectId, userId: ctx.user.id },
   });
@@ -479,6 +503,12 @@ async function generateSceneImageAsset(ctx: any, input: { projectId: string; sce
   if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
 
   const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
+  await trackStoryAnalytics(ctx, {
+    event: 'scene_image_started',
+    projectId: project.id,
+    audienceMode,
+    properties: { sceneId: scene.id, model: input.model, isRegeneration: Boolean(input.isRegeneration) },
+  });
   const existingPrompt = scene.prompts[0] as any;
   const composed = existingPrompt ?? composeScenePromptText({
     scene,
@@ -592,6 +622,27 @@ async function generateSceneImageAsset(ctx: any, input: { projectId: string; sce
       });
     });
 
+    await trackStoryAnalytics(ctx, {
+      event: 'scene_image_completed',
+      projectId: project.id,
+      audienceMode,
+      properties: {
+        sceneId: scene.id,
+        assetId: asset.id,
+        model: input.model,
+        r2Key,
+        isRegeneration: Boolean(input.isRegeneration),
+      },
+    });
+    if (input.isRegeneration) {
+      await trackStoryAnalytics(ctx, {
+        event: 'scene_image_regenerated',
+        projectId: project.id,
+        audienceMode,
+        properties: { sceneId: scene.id, assetId: asset.id, model: input.model },
+      });
+    }
+
     return {
       scene: await ctx.prisma.storySceneSeed.findFirst({
         where: { id: scene.id },
@@ -601,6 +652,18 @@ async function generateSceneImageAsset(ctx: any, input: { projectId: string; sce
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Picture generation failed. Please try again.';
+    await trackStoryAnalytics(ctx, {
+      event: 'scene_image_failed',
+      projectId: project.id,
+      audienceMode,
+      properties: {
+        sceneId: scene.id,
+        assetId: asset.id,
+        model: input.model,
+        isRegeneration: Boolean(input.isRegeneration),
+        message,
+      },
+    });
     await (ctx.prisma as any).storySceneAsset.update({
       where: { id: asset.id },
       data: { status: 'FAILED', errorMessage: message, isLatest: false },
@@ -840,7 +903,7 @@ export const storyRouter = router({
         });
       }
 
-      return ctx.prisma.storyProject.create({
+      const project = await ctx.prisma.storyProject.create({
         data: {
           userId: ctx.user.id,
           title: idea,
@@ -854,6 +917,13 @@ export const storyRouter = router({
         },
         select: projectSelect,
       });
+      await trackStoryAnalytics(ctx, {
+        event: 'story_spark_started',
+        projectId: project.id,
+        audienceMode,
+        properties: { storyType: input.storyType },
+      });
+      return project;
     }),
 
   generateQuestions: protectedProcedure
@@ -867,7 +937,7 @@ export const storyRouter = router({
       const questions = await storyTextService.generateGuidedQuestions(idea, audienceMode);
 
       await ctx.prisma.storyQuestion.deleteMany({ where: { projectId: project.id } });
-      return ctx.prisma.$transaction(
+      const createdQuestions = await ctx.prisma.$transaction(
         questions.slice(0, 6).map((question, index) =>
           ctx.prisma.storyQuestion.create({
             data: {
@@ -879,6 +949,13 @@ export const storyRouter = router({
           }),
         ),
       );
+      await trackStoryAnalytics(ctx, {
+        event: 'story_questions_generated',
+        projectId: project.id,
+        audienceMode,
+        properties: { questionCount: createdQuestions.length },
+      });
+      return createdQuestions;
     }),
 
   answerQuestion: protectedProcedure
@@ -899,10 +976,29 @@ export const storyRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose one of the answer buttons.' });
       }
 
-      return ctx.prisma.storyQuestion.update({
+      const updatedQuestion = await ctx.prisma.storyQuestion.update({
         where: { id: input.questionId },
         data: { selectedAnswer: input.selectedAnswer },
       });
+      const [answeredCount, totalCount, project] = await Promise.all([
+        ctx.prisma.storyQuestion.count({
+          where: { projectId: input.projectId, selectedAnswer: { not: null } },
+        }),
+        ctx.prisma.storyQuestion.count({ where: { projectId: input.projectId } }),
+        ctx.prisma.storyProject.findFirst({
+          where: { id: input.projectId, userId: ctx.user.id },
+          select: { audienceMode: true },
+        }),
+      ]);
+      if (totalCount > 0 && answeredCount >= totalCount) {
+        await trackStoryAnalytics(ctx, {
+          event: 'story_questions_completed',
+          projectId: input.projectId,
+          audienceMode: project?.audienceMode,
+          properties: { questionCount: totalCount },
+        });
+      }
+      return updatedQuestion;
     }),
 
   generateStory: protectedProcedure
@@ -998,6 +1094,18 @@ export const storyRouter = router({
         return createdChapter;
       });
 
+      await trackStoryAnalytics(ctx, {
+        event: 'story_generated',
+        projectId: project.id,
+        audienceMode,
+        properties: {
+          chapterId: chapter.id,
+          theme: story.theme,
+          ageRange: story.ageRange,
+          sceneHintCount: story.sceneHints.length,
+          characterCount: characterMemory.length,
+        },
+      });
       return chapter;
     }),
 
@@ -1019,19 +1127,19 @@ export const storyRouter = router({
 
       const idea = project.originalIdea ?? project.logline ?? project.title;
       const storyText = project.chapters.map((chapter) => `${chapter.title}\n${chapter.summary}\n${chapter.body}`).join('\n\n');
-      const characters = normaliseCharacterMemory(idea, [
+      const characterSeeds = normaliseCharacterMemory(idea, [
         {
           ...inferCharacterFromIdea(idea),
           visualDescription: `${inferCharacterFromIdea(idea).visualDescription}. Story context: ${limitText(storyText || idea, 220)}`,
         },
       ]);
 
-      return ctx.prisma.$transaction(async (tx: any) => {
+      const characters = await ctx.prisma.$transaction(async (tx: any) => {
         if (input.replaceExisting) {
           await tx.storyCharacterMemory.deleteMany({ where: { projectId: project.id } });
         }
 
-        return Promise.all(characters.map((character) =>
+        return Promise.all(characterSeeds.map((character) =>
           tx.storyCharacterMemory.create({
             data: {
               projectId: project.id,
@@ -1046,6 +1154,13 @@ export const storyRouter = router({
           }),
         ));
       });
+      await trackStoryAnalytics(ctx, {
+        event: 'character_bible_generated',
+        projectId: project.id,
+        audienceMode: project.audienceMode,
+        properties: { characterCount: characters.length, replaceExisting: input.replaceExisting },
+      });
+      return characters;
     }),
 
   updateCharacterMemory: protectedProcedure
@@ -1066,7 +1181,7 @@ export const storyRouter = router({
       });
       if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story character not found' });
 
-      return ctx.prisma.storyCharacterMemory.update({
+      const updatedCharacter = await ctx.prisma.storyCharacterMemory.update({
         where: { id: input.characterId },
         data: {
           name: input.name,
@@ -1077,6 +1192,12 @@ export const storyRouter = router({
           visualDescription: input.visualDescription,
         },
       });
+      await trackStoryAnalytics(ctx, {
+        event: 'character_bible_edited',
+        projectId: input.projectId,
+        properties: { characterId: input.characterId, characterName: input.name },
+      });
+      return updatedCharacter;
     }),
 
   continueStory: protectedProcedure
@@ -1107,7 +1228,7 @@ export const storyRouter = router({
       });
       const nextNumber = project.chapters.length + 1;
 
-      return ctx.prisma.$transaction(async (tx: any) => {
+      const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         const chapter = await tx.storyChapter.create({
           data: {
             projectId: project.id,
@@ -1148,6 +1269,13 @@ export const storyRouter = router({
 
         return chapter;
       });
+      await trackStoryAnalytics(ctx, {
+        event: 'story_continued',
+        projectId: project.id,
+        audienceMode,
+        properties: { chapterId: chapter.id, chapterNumber: nextNumber, sceneHintCount: story.sceneHints.length },
+      });
+      return chapter;
     }),
 
   generateScenes: protectedProcedure
@@ -1169,32 +1297,62 @@ export const storyRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Create the story before making scenes.' });
       }
 
+      await trackStoryAnalytics(ctx, {
+        event: 'scene_generation_started',
+        projectId: project.id,
+        audienceMode: project.audienceMode,
+        properties: { replaceExisting: input.replaceExisting },
+      });
+
       if (!input.replaceExisting && project.sceneSeeds.length > 0) {
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_completed',
+          projectId: project.id,
+          audienceMode: project.audienceMode,
+          properties: { sceneCount: project.sceneSeeds.length, reusedExisting: true },
+        });
         return project.sceneSeeds;
       }
 
       const scenes = buildSimpleScenes(project);
-      return ctx.prisma.$transaction(async (tx: any) => {
-        if (input.replaceExisting) {
-          await tx.storySceneSeed.deleteMany({ where: { projectId: project.id } });
-        }
+      try {
+        const createdScenes = await ctx.prisma.$transaction(async (tx: any) => {
+          if (input.replaceExisting) {
+            await tx.storySceneSeed.deleteMany({ where: { projectId: project.id } });
+          }
 
-        return Promise.all(scenes.map((scene, index) =>
-          tx.storySceneSeed.create({
-            data: {
-              projectId: project.id,
-              chapterId: project.chapters[0]?.id,
-              orderIndex: index + 1,
-              title: scene.title,
-              description: scene.description,
-              locationType: scene.locationType,
-              indoorOutdoor: scene.indoorOutdoor,
-              mood: scene.mood,
-              characters: scene.characters,
-            },
-          }),
-        ));
-      });
+          return Promise.all(scenes.map((scene, index) =>
+            tx.storySceneSeed.create({
+              data: {
+                projectId: project.id,
+                chapterId: project.chapters[0]?.id,
+                orderIndex: index + 1,
+                title: scene.title,
+                description: scene.description,
+                locationType: scene.locationType,
+                indoorOutdoor: scene.indoorOutdoor,
+                mood: scene.mood,
+                characters: scene.characters,
+              },
+            }),
+          ));
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_completed',
+          projectId: project.id,
+          audienceMode: project.audienceMode,
+          properties: { sceneCount: createdScenes.length, reusedExisting: false },
+        });
+        return createdScenes;
+      } catch (error) {
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_failed',
+          projectId: project.id,
+          audienceMode: project.audienceMode,
+          properties: { message: error instanceof Error ? error.message : 'Scene generation failed' },
+        });
+        throw error;
+      }
     }),
 
   updateScene: protectedProcedure
@@ -1385,7 +1543,7 @@ export const storyRouter = router({
       sceneId: z.string(),
       model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
     }))
-    .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, input)),
+    .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
 
   listSceneAssets: protectedProcedure
     .input(z.object({
@@ -1426,12 +1584,19 @@ export const storyRouter = router({
       title: z.string().min(1).max(120).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ensureProject(ctx, input.projectId);
-      return ctx.prisma.storyProject.update({
+      const project = await ensureProject(ctx, input.projectId);
+      const savedProject = await ctx.prisma.storyProject.update({
         where: { id: input.projectId },
         data: input.title ? { title: input.title.trim() } : {},
         select: projectSelect,
       });
+      await trackStoryAnalytics(ctx, {
+        event: 'story_saved',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { renamed: Boolean(input.title) },
+      });
+      return savedProject;
     }),
 
   listMyProjects: protectedProcedure

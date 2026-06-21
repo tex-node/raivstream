@@ -45,6 +45,7 @@ packages/api/src/lib/authService.ts   — registerUser, loginUser, refreshTokens
 packages/api/src/lib/promptModeration.ts — moderatePrompt() — Layer 1: regex blocklist, Layer 2: OpenAI omni-moderation-latest text
 packages/api/src/lib/contentScanner.ts   — scanAndUpdateVideo() — OpenAI omni-moderation-latest image scan, fire-and-forget
 packages/api/src/lib/r2.ts            — uploadBufferToR2(), mirrorUrlToR2() — server-side R2 uploads for AI generation output
+packages/api/src/lib/analytics.ts     - first-party event tracking for Story Playground funnel and feedback
 packages/api/src/lib/generators/
   index.ts                            — submitGenerationJob(), pollJobStatus(), MODEL_META
   grokImagine.ts                      — xAI Grok Imagine (XAI_API_KEY) — image generation (model: grok-imagine-image)
@@ -233,12 +234,13 @@ packages/api/src/lib/storyTextService.ts — Story Playground text provider abst
 - Production smoke test passed with real RunPod/R2 and production DB. Main app health is clean and `/story-playground` renders.
 - Public R16 is still DNS-blocked: `r16.raivstream.com` resolves to `3.33.251.168` / `15.197.225.128` instead of VPS `81.0.246.223`. Local R16 host-header routing is healthy and hides prompt/history labels.
 - Phase 4C Storybook Viewer adds `/story-playground/[projectId]/storybook` and `/storybook/[projectId]`, with derived `story.getStoryBook`, `story.getStoryBookPage`, and `story.regenerateStoryBook` APIs. No schema changes; pages derive from StorySceneSeed + latest image + chapter text. R16 copy remains simple and hides prompt/provider/model/credit metadata.
+- Phase 4.5 Analytics adds `AnalyticsEvent`, `analytics.trackStoryEvent`, server-side story event tracking, Storybook reading events, non-R16 feedback submission, and `/admin/story-analytics` for the Story Completion Funnel.
 - R16/kids flow must never expose JSON or prompt text.
 - Acceptance example: "Road to School" must include Max's exact visual identity, outdoor school-road setting, and child-safe tone.
 - R16/tRPC context forces `audienceMode=KIDS` based on `x-r16-mode`, `r16.*` host, or `?r16=1`.
 - Text generation goes through `storyTextService`: OpenAI-compatible chat completions when `OPENAI_API_KEY` is configured, deterministic local fallback otherwise.
 - Prompt moderation runs before story generation; KIDS/R16 applies an extra child-safety keyword check.
-- Story Playground now includes scene cards, character bible UI, hidden prompt compiler, and scene image generation; remaining story product work is Storybook Viewer and scene video generation.
+- Story Playground now includes scene cards, character bible UI, hidden prompt compiler, scene image generation, storybook viewer, and first-party analytics; remaining story product work is scene video generation and narration.
 
 ## Credit System
 - 1,000 credits = ₦1,000 (configured in `FeatureCreditRate` table via seed.ts or admin UI)
@@ -533,7 +535,8 @@ npx eas-cli update --branch production --platform ios --message "..."
 - **Story Playground Phase 4 Hidden Prompt Composer**: `StoryScenePrompt`, provider-aware prompt templates, automatic negative prompts, advanced preview, Send to AI Studio
 - **Story Playground Phase 4B Scene Images**: `StorySceneAsset`, generate/regenerate scene image, R2 asset path, latest image attachment, non-R16 image history
 - **Story Playground Phase 4C Storybook Viewer**: page-by-page reader from story scenes and latest images, cover page, reading progress, keyboard/swipe navigation, R16-safe reading mode
-- **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
+- **Story Playground Phase 4.5 Analytics**: `AnalyticsEvent`, reusable analytics tracker, Story Completion Funnel, storybook reading events, non-R16 feedback, `/admin/story-analytics`
+- **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, AnalyticsEvent, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**
 - Add email service (Resend/SendGrid) for password reset emails — currently logs URL to server console

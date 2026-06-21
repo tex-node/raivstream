@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, MessageSquare } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
@@ -24,8 +24,17 @@ export default function StoryBookViewerPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasSavedProgress, setHasSavedProgress] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const touchStartX = useRef<number | null>(null);
+  const currentPageRef = useRef(0);
+  const openedTracked = useRef(false);
+  const startedTracked = useRef(false);
+  const completedTracked = useRef(false);
+  const viewedPages = useRef(new Set<number>());
   const storageKey = `raiv_storybook_progress_${projectId}`;
+  const trackStoryEvent = trpc.analytics.trackStoryEvent.useMutation();
 
   const { data: storyBook, isLoading, error } = trpc.story.getStoryBook.useQuery(
     { projectId },
@@ -56,7 +65,64 @@ export default function StoryBookViewerPage() {
   useEffect(() => {
     if (!storyBook) return;
     window.localStorage.setItem(storageKey, String(currentPage));
+    currentPageRef.current = currentPage;
   }, [currentPage, storageKey, storyBook]);
+
+  useEffect(() => {
+    if (!storyBook || openedTracked.current) return;
+    openedTracked.current = true;
+    trackStoryEvent.mutate({
+      event: 'storybook_opened',
+      projectId,
+      properties: {
+        audienceMode: isR16 ? 'KIDS' : 'GENERAL',
+        pageCount: storyBook.pageCount,
+      },
+    });
+  }, [isR16, projectId, storyBook, trackStoryEvent]);
+
+  useEffect(() => {
+    if (!storyBook || currentPage <= 0) return;
+    if (!startedTracked.current) {
+      startedTracked.current = true;
+      trackStoryEvent.mutate({
+        event: 'storybook_started',
+        projectId,
+        properties: { audienceMode: isR16 ? 'KIDS' : 'GENERAL', pageCount: storyBook.pageCount },
+      });
+    }
+    if (!viewedPages.current.has(currentPage)) {
+      viewedPages.current.add(currentPage);
+      trackStoryEvent.mutate({
+        event: 'storybook_page_viewed',
+        projectId,
+        properties: { audienceMode: isR16 ? 'KIDS' : 'GENERAL', pageNumber: currentPage, pageCount: storyBook.pageCount },
+      });
+    }
+    if (currentPage === storyBook.pageCount && !completedTracked.current) {
+      completedTracked.current = true;
+      trackStoryEvent.mutate({
+        event: 'storybook_completed',
+        projectId,
+        properties: { audienceMode: isR16 ? 'KIDS' : 'GENERAL', pageCount: storyBook.pageCount },
+      });
+    }
+  }, [currentPage, isR16, projectId, storyBook, trackStoryEvent]);
+
+  useEffect(() => {
+    return () => {
+      if (!openedTracked.current) return;
+      trackStoryEvent.mutate({
+        event: 'storybook_exit',
+        projectId,
+        properties: {
+          audienceMode: isR16 ? 'KIDS' : 'GENERAL',
+          lastPage: currentPageRef.current,
+          completed: completedTracked.current,
+        },
+      });
+    };
+  }, [isR16, projectId, trackStoryEvent]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -69,6 +135,22 @@ export default function StoryBookViewerPage() {
 
   const goNext = () => setCurrentPage((page) => Math.min(maxPage, page + 1));
   const goBack = () => setCurrentPage((page) => Math.max(0, page - 1));
+  const submitFeedback = () => {
+    if (!feedback.trim()) return;
+    trackStoryEvent.mutate({
+      event: 'story_feedback_submitted',
+      projectId,
+      properties: {
+        audienceMode: isR16 ? 'KIDS' : 'GENERAL',
+        source: 'storybook',
+        pageNumber: currentPage,
+        message: feedback.trim().slice(0, 800),
+      },
+    });
+    setFeedback('');
+    setFeedbackOpen(false);
+    setFeedbackMessage(isR16 ? 'Thank you.' : 'Feedback saved.');
+  };
 
   const onTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -101,7 +183,44 @@ export default function StoryBookViewerPage() {
             <Maximize2 size={16} />
             {isFullscreen ? 'Exit' : 'Fullscreen'}
           </button>
+          {!isR16 && (
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen((value) => !value)}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10"
+            >
+              <MessageSquare size={16} />
+              Feedback
+            </button>
+          )}
         </div>
+
+        {feedbackMessage && !isR16 && (
+          <div className="mb-4 rounded-xl bg-[#dff8e9] px-4 py-3 text-sm font-black text-[#17643a]">{feedbackMessage}</div>
+        )}
+
+        {feedbackOpen && !isR16 && (
+          <section className="mb-4 rounded-2xl border-2 border-[#172033]/10 bg-white p-4">
+            <label className="text-sm font-black uppercase tracking-wide text-[#596070]" htmlFor="storybook-feedback">Storybook feedback</label>
+            <textarea
+              id="storybook-feedback"
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              maxLength={800}
+              rows={3}
+              className="mt-2 w-full rounded-xl border-2 border-[#172033]/10 px-4 py-3 font-semibold outline-none focus:border-[#2f80ed]"
+              placeholder="What should we improve?"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" onClick={() => setFeedbackOpen(false)} className="rounded-xl bg-[#ece4d4] px-4 py-2 text-sm font-black text-[#172033]">
+                Cancel
+              </button>
+              <button type="button" onClick={submitFeedback} disabled={!feedback.trim()} className="rounded-xl bg-[#172033] px-4 py-2 text-sm font-black text-white disabled:opacity-40">
+                Send
+              </button>
+            </div>
+          </section>
+        )}
 
         {isLoading && (
           <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-10 text-center text-xl font-black">

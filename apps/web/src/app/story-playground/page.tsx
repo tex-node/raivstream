@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, ChevronRight, History, ImagePlus, Loader2, Mic, Sparkles, UserRound, Wand2, X } from 'lucide-react';
@@ -95,6 +95,8 @@ export default function StoryPlaygroundPage() {
   const isR16 = useR16();
   const { isSignedIn, isLoaded, user } = useUser();
   const utils = trpc.useUtils();
+  const trackStoryEvent = trpc.analytics.trackStoryEvent.useMutation();
+  const playgroundOpenedTracked = useRef(false);
 
   const [step, setStep] = useState<PlaygroundStep>('spark');
   const [idea, setIdea] = useState('');
@@ -120,6 +122,16 @@ export default function StoryPlaygroundPage() {
     gender: '',
     visualDescription: '',
   });
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    if (playgroundOpenedTracked.current) return;
+    playgroundOpenedTracked.current = true;
+    trackStoryEvent.mutate({
+      event: 'story_playground_opened',
+      properties: { audienceMode: isR16 ? 'KIDS' : 'GENERAL' },
+    });
+  }, [isLoaded, isSignedIn, isR16, trackStoryEvent]);
 
   const { data: project } = trpc.story.getProject.useQuery(
     { projectId: projectId! },

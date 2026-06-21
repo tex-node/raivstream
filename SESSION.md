@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-06-18
+Last updated: 2026-06-19
 Current GitHub commit deployed to VPS: latest pushed `main` verified on 2026-05-25
 
 ## Maintenance Rule
@@ -157,6 +157,7 @@ Important models include:
 - `StorySceneSeed`
 - `StoryScenePrompt`
 - `StorySceneAsset`
+- `AnalyticsEvent`
 
 Story Studio tables currently exist in production:
 
@@ -170,6 +171,7 @@ Story Studio tables currently exist in production:
 - `story_scene_seeds`
 - `story_scene_prompts`
 - `story_scene_assets`
+- `analytics_events`
 
 Story Studio enums currently exist in production:
 
@@ -613,6 +615,7 @@ Production deployment:
 - Follow-up DNS check on 2026-06-19: `r16.raivstream.com` is healthy, but `dig r16.raivstream.com +short` still returns old A records `3.33.251.168` and `15.197.225.128` alongside `81.0.246.223`; remove the old DNS records at the DNS provider.
 - The Alpha DB backup is preserved at `/root/raivstream/pre_story_playground_alpha_backup_20260619-021103.sql` and copied to `/root/raivstream/backups/pre_story_playground_alpha_backup_20260619-021103.sql`; both are read-only and have SHA-256 `07049ee84b12758725a12f965f197b7061dab94baadd50929c8f95257192438e`.
 - Phase 4C Storybook Viewer was implemented locally after Alpha: Story + Scene Images now derive a page-by-page reader without new database tables.
+- Phase 4.5 Story Playground Analytics was implemented locally after Phase 4C: Story Playground, scene generation, scene image, character bible, storybook, and feedback events write to `analytics_events`; admin analytics dashboard lives at `/admin/story-analytics`.
 
 ### 2026-06-19: Story Playground Phase 4C Storybook Viewer
 
@@ -642,11 +645,40 @@ Verification:
 - `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web build` passed with local one-off JWT secrets.
 
+### 2026-06-19: Story Playground Phase 4.5 Analytics And Feedback
+
+Changed:
+
+- Added reusable API analytics service in `packages/api/src/lib/analytics.ts`.
+- Added `AnalyticsEvent` Prisma model mapped to `analytics_events`.
+- Added protected client analytics mutation `analytics.trackStoryEvent`.
+- Story Playground now tracks `story_playground_opened`.
+- Story server mutations now track spark, question, story, continuation, save, scene generation, scene image, regenerate, and character bible events.
+- Storybook now tracks open, start, page viewed, completed, exit, and non-R16 feedback submission.
+- Added admin `storyAnalytics` procedure with completion funnel, count cards, popular themes, popular age ranges, popular characters, and recent raw events.
+- Added `/admin/story-analytics` dashboard and admin nav entry.
+- R16 storybook keeps copy simple and does not expose prompt/provider/model/credit history.
+
+Schema:
+
+- Added migration `20260619130000_story_analytics_events`.
+- New `analytics_events` columns: `id`, `userId`, `projectId`, `eventName`, `properties`, `createdAt`.
+- `userId` is optional and uses `ON DELETE SET NULL`; `projectId` is intentionally a plain optional string to keep analytics decoupled from story table lifecycle.
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/api lint` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.
 - Story Studio currently uses deterministic prompt compilation, not an LLM story planner. Story Playground can use an OpenAI-compatible text provider when configured, otherwise it falls back to deterministic story text.
-- Story Playground now has idea, questions, story, scene cards, character bible, hidden prompt composer, and scene image generation. Remaining story product work is the Storybook Viewer and scene video generation.
+- Story Playground now has idea, questions, story, scene cards, character bible, hidden prompt composer, scene image generation, storybook viewer, and first-party product analytics. Remaining story product work is scene video generation and narration.
 - Story Studio storyboard asset storage still accepts generated output URLs or pasted URLs. Story Playground scene image assets now use R2-backed asset history.
 - `supabase-pooler` is stopped. If another client needs pooled DB access, configure it on a non-conflicting port and verify tenant/user credentials.
 - Root local working tree has unrelated untracked/local files such as `.claude/`, `.codex/`, and `AGENTS.md`; do not stage them unless explicitly requested.

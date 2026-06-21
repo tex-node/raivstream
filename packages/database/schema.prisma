@@ -167,6 +167,7 @@ model User {
   refreshTokens      RefreshToken[]
   generationJobs     GenerationJob[]
   storyProjects       StoryProject[]
+  analyticsEvents     AnalyticsEvent[]
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
   passwordResetTokens PasswordResetToken[]
@@ -180,6 +181,23 @@ model User {
   @@index([premiumTier])
   @@index([role])
   @@map("users")
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectId  String?
+  eventName  String
+  properties Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([eventName])
+  @@index([createdAt])
+  @@index([eventName, createdAt])
+  @@map("analytics_events")
 }
 
 model RefreshToken {
