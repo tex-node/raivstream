@@ -684,6 +684,7 @@ Deployment:
 - Smoke test created one `story_playground_opened` analytics event through `analytics.trackStoryEvent`, loaded `admin.storyAnalytics`, and confirmed unauthenticated admin analytics access is rejected.
 - `/story-playground`, `/storybook/cmqk6icyf0003f58y94f2l3sc`, and `/admin/story-analytics` route checks passed; `/admin/story-analytics` redirects unauthenticated users to sign-in and R16 redirects admin analytics to `/`.
 - R16 storybook did not expose feedback, prompt, image history, model/provider generation labels, credits, or AI Studio text. Non-R16 storybook showed the Feedback entry.
+- Production account `texdevices@gmail.com` was promoted from `VIEWER` to `ADMIN` on 2026-06-21 so `/admin/story-analytics` and other admin pages are usable in browser.
 
 ## Known Issues And Follow-Ups
 
