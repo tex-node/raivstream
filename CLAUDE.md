@@ -235,6 +235,7 @@ packages/api/src/lib/storyTextService.ts — Story Playground text provider abst
 - Public R16 is still DNS-blocked: `r16.raivstream.com` resolves to `3.33.251.168` / `15.197.225.128` instead of VPS `81.0.246.223`. Local R16 host-header routing is healthy and hides prompt/history labels.
 - Phase 4C Storybook Viewer adds `/story-playground/[projectId]/storybook` and `/storybook/[projectId]`, with derived `story.getStoryBook`, `story.getStoryBookPage`, and `story.regenerateStoryBook` APIs. No schema changes; pages derive from StorySceneSeed + latest image + chapter text. R16 copy remains simple and hides prompt/provider/model/credit metadata.
 - Phase 4.5 Analytics adds `AnalyticsEvent`, `analytics.trackStoryEvent`, server-side story event tracking, Storybook reading events, non-R16 feedback submission, and `/admin/story-analytics` for the Story Completion Funnel.
+- Story Playground home now includes a signed-in library/resume section below Story Spark. `story.listMyProjects` returns non-archived recent projects with chapter/question/scene counts and first ready scene image data for progress labels and thumbnails. R16 copy uses `My Stories`, `Keep Going`, `Read Book`, and `Add Pictures`.
 - R16/kids flow must never expose JSON or prompt text.
 - Acceptance example: "Road to School" must include Max's exact visual identity, outdoor school-road setting, and child-safe tone.
 - R16/tRPC context forces `audienceMode=KIDS` based on `x-r16-mode`, `r16.*` host, or `?r16=1`.
@@ -536,6 +537,7 @@ npx eas-cli update --branch production --platform ios --message "..."
 - **Story Playground Phase 4B Scene Images**: `StorySceneAsset`, generate/regenerate scene image, R2 asset path, latest image attachment, non-R16 image history
 - **Story Playground Phase 4C Storybook Viewer**: page-by-page reader from story scenes and latest images, cover page, reading progress, keyboard/swipe navigation, R16-safe reading mode
 - **Story Playground Phase 4.5 Analytics**: `AnalyticsEvent`, reusable analytics tracker, Story Completion Funnel, storybook reading events, non-R16 feedback, `/admin/story-analytics`
+- **Story Playground My Stories library**: `/story-playground` shows recent signed-in user projects with progress labels, first scene thumbnail, Continue/Open Storybook/Add Pictures/Edit/Archive actions, empty state, and R16-safe copy
 - **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, AnalyticsEvent, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**

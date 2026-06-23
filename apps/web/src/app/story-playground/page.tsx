@@ -78,8 +78,40 @@ type StoryCharacterMemory = {
   visualDescription: string | null;
 };
 
+type StoryProjectSummary = {
+  id: string;
+  title: string;
+  originalIdea: string | null;
+  status: string;
+  audienceMode: 'KIDS' | 'GENERAL';
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  _count?: {
+    chapters?: number;
+    questions?: number;
+    sceneSeeds?: number;
+  };
+  sceneSeeds?: Array<{
+    id: string;
+    imageUrl: string | null;
+    imageStatus: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED' | null;
+    assets?: Array<{
+      id: string;
+      assetUrl: string | null;
+      thumbnailUrl: string | null;
+      status: 'READY' | 'PENDING' | 'GENERATING' | 'FAILED';
+    }>;
+  }>;
+};
+
 function toOptions(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function formatStoryDate(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Recently';
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
 const examples = [
@@ -137,6 +169,10 @@ export default function StoryPlaygroundPage() {
     { projectId: projectId! },
     { enabled: !!projectId && isSignedIn },
   );
+  const { data: myProjects, isLoading: myProjectsLoading } = trpc.story.listMyProjects.useQuery(
+    { limit: 12 },
+    { enabled: isSignedIn },
+  );
 
   const createSpark = trpc.story.createSpark.useMutation({
     onSuccess: async (project) => {
@@ -188,6 +224,18 @@ export default function StoryPlaygroundPage() {
     onSuccess: async () => {
       setMessage('Story saved.');
       await utils.story.getProject.invalidate();
+      await utils.story.listMyProjects.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const archiveProject = trpc.story.updateProject.useMutation({
+    onSuccess: async (_updatedProject, variables) => {
+      if (projectId === variables.projectId) {
+        setProjectId(null);
+        setStep('spark');
+      }
+      setMessage(isR16 ? 'Story hidden.' : 'Story archived.');
       await utils.story.listMyProjects.invalidate();
     },
     onError: (error) => setMessage(error.message),
@@ -279,7 +327,7 @@ export default function StoryPlaygroundPage() {
   const answeredCount = questions.filter((question) => question.selectedAnswer).length;
   const canGenerate = questions.length > 0 && answeredCount === questions.length;
   const canUseAdvancedPrompts = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
-  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || generateScenes.isPending || updateScene.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
+  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || generateScenes.isPending || updateScene.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
 
   useEffect(() => {
     if (project?.chapters?.length) setStep('story');
@@ -400,6 +448,58 @@ export default function StoryPlaygroundPage() {
     action.mutate({ projectId, sceneId: scene.id, model: 'FLUX' });
   };
 
+  const recentProjects = ((myProjects ?? []) as StoryProjectSummary[]).slice();
+
+  const projectCounts = (storyProject: StoryProjectSummary) => {
+    const chapterCount = storyProject._count?.chapters ?? 0;
+    const questionCount = storyProject._count?.questions ?? 0;
+    const sceneCount = storyProject._count?.sceneSeeds ?? storyProject.sceneSeeds?.length ?? 0;
+    const readyImageCount = (storyProject.sceneSeeds ?? []).filter((scene) =>
+      (scene.imageStatus === 'READY' && Boolean(scene.imageUrl))
+      || (scene.assets ?? []).some((asset) => asset.status === 'READY' && Boolean(asset.assetUrl || asset.thumbnailUrl)),
+    ).length;
+    return { chapterCount, questionCount, sceneCount, readyImageCount };
+  };
+
+  const projectProgress = (storyProject: StoryProjectSummary) => {
+    const { chapterCount, sceneCount, readyImageCount } = projectCounts(storyProject);
+    if (chapterCount === 0) return 'Draft';
+    if (sceneCount === 0) return isR16 ? 'Story ready' : 'Story written';
+    if (readyImageCount === 0) return 'Picture cards ready';
+    if (readyImageCount < sceneCount) return 'Pictures started';
+    return isR16 ? 'Book ready' : 'Storybook ready';
+  };
+
+  const projectThumbnail = (storyProject: StoryProjectSummary) => {
+    for (const scene of storyProject.sceneSeeds ?? []) {
+      const asset = scene.assets?.find((item) => item.thumbnailUrl || item.assetUrl);
+      if (asset?.thumbnailUrl || asset?.assetUrl) return asset.thumbnailUrl ?? asset.assetUrl;
+      if (scene.imageUrl) return scene.imageUrl;
+    }
+    return null;
+  };
+
+  const resumeProject = (storyProject: StoryProjectSummary) => {
+    const { chapterCount, questionCount } = projectCounts(storyProject);
+    setProjectId(storyProject.id);
+    setMessage(null);
+    setStep(chapterCount > 0 ? 'story' : questionCount > 0 ? 'questions' : 'spark');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const addPicturesToProject = (storyProject: StoryProjectSummary) => {
+    setProjectId(storyProject.id);
+    setMessage(isR16 ? 'Choose a picture card to keep going.' : 'Choose a scene card to add or regenerate pictures.');
+    setStep('story');
+    window.setTimeout(() => {
+      document.getElementById('story-scenes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  const archiveStoryProject = (storyProject: StoryProjectSummary) => {
+    archiveProject.mutate({ projectId: storyProject.id, status: 'ARCHIVED' });
+  };
+
   const sendPromptToAiStudio = (prompt: StoryScenePrompt) => {
     const mode = prompt.outputType === 'SHORT_VIDEO' ? 'video' : 'image';
     const params = new URLSearchParams({
@@ -512,6 +612,118 @@ export default function StoryPlaygroundPage() {
                 ))}
               </div>
             </div>
+          </section>
+        )}
+
+        {isSignedIn && (
+          <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-5 md:p-6">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-wide text-[#2f80ed]">{isR16 ? 'My Stories' : 'Recent Stories'}</p>
+                <h2 className="text-3xl font-black">{isR16 ? 'Keep Going' : 'Continue Your Stories'}</h2>
+                <p className="mt-1 font-semibold text-[#596070]">
+                  {isR16 ? 'Pick a story to keep writing, add pictures, or read your book.' : 'Resume drafts, add scene pictures, or open storybooks that are ready to read.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs font-black uppercase tracking-wide">
+                <span className="rounded-full bg-[#dff8e9] px-3 py-2 text-[#17643a]">{isR16 ? 'Keep Going' : 'Continue Reading'}</span>
+                <span className="rounded-full bg-[#f6fbff] px-3 py-2 text-[#2f80ed]">{isR16 ? 'Read Book' : 'Storybooks Ready'}</span>
+              </div>
+            </div>
+
+            {myProjectsLoading ? (
+              <div className="rounded-xl border-2 border-dashed border-[#172033]/10 bg-[#fffdf8] p-8 text-center font-bold text-[#596070]">
+                {isR16 ? 'Loading your stories...' : 'Loading recent stories...'}
+              </div>
+            ) : recentProjects.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-[#172033]/10 bg-[#fffdf8] p-8 text-center font-bold text-[#596070]">
+                Your stories will appear here after you create one.
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {recentProjects.map((storyProject) => {
+                  const { chapterCount, sceneCount, readyImageCount } = projectCounts(storyProject);
+                  const storybookReady = chapterCount > 0 && sceneCount > 0;
+                  const thumbnail = projectThumbnail(storyProject);
+                  return (
+                    <article key={storyProject.id} className="overflow-hidden rounded-2xl border-2 border-[#172033]/10 bg-[#fffdf8]">
+                      <button
+                        type="button"
+                        onClick={() => resumeProject(storyProject)}
+                        className="block aspect-[16/10] w-full bg-[#f5f1e8] text-left"
+                        aria-label={isR16 ? `Keep going with ${storyProject.title}` : `Continue ${storyProject.title}`}
+                      >
+                        {thumbnail ? (
+                          <img src={thumbnail} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[#2f80ed]">
+                            <BookOpen size={42} />
+                          </div>
+                        )}
+                      </button>
+                      <div className="p-4">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="line-clamp-2 text-xl font-black">{storyProject.title}</h3>
+                            <p className="mt-1 line-clamp-2 text-sm font-bold text-[#596070]">{storyProject.originalIdea || (isR16 ? 'A story made by you.' : 'No original idea saved.')}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-[#dff8e9] px-3 py-1 text-xs font-black text-[#17643a]">
+                            {projectProgress(storyProject)}
+                          </span>
+                        </div>
+                        <div className="mb-4 grid grid-cols-2 gap-2 text-xs font-bold text-[#596070]">
+                          <span>Updated {formatStoryDate(storyProject.updatedAt)}</span>
+                          <span>{storyProject.audienceMode === 'KIDS' ? (isR16 ? 'Kids' : 'R16/Kids') : 'General'}</span>
+                          <span>{isR16 ? `${sceneCount} cards` : `${sceneCount} scene cards`}</span>
+                          <span>{isR16 ? `${readyImageCount} pictures` : `${readyImageCount} ready pictures`}</span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => resumeProject(storyProject)}
+                            className="rounded-xl bg-[#2f80ed] px-4 py-2 text-sm font-black text-white"
+                          >
+                            {isR16 ? 'Keep Going' : 'Continue'}
+                          </button>
+                          {storybookReady ? (
+                            <Link href={`/story-playground/${storyProject.id}/storybook`} className="rounded-xl bg-[#2fbf71] px-4 py-2 text-center text-sm font-black text-white">
+                              {isR16 ? 'Read Book' : 'Open Storybook'}
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => resumeProject(storyProject)}
+                              className="rounded-xl bg-[#ece4d4] px-4 py-2 text-sm font-black text-[#172033]"
+                            >
+                              Edit Story
+                            </button>
+                          )}
+                          {sceneCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => addPicturesToProject(storyProject)}
+                              className="rounded-xl bg-[#ffcf4a] px-4 py-2 text-sm font-black text-[#172033]"
+                            >
+                              Add Pictures
+                            </button>
+                          )}
+                          {!isR16 && (
+                            <button
+                              type="button"
+                              onClick={() => archiveStoryProject(storyProject)}
+                              disabled={archiveProject.isPending && archiveProject.variables?.projectId === storyProject.id}
+                              className="rounded-xl bg-white px-4 py-2 text-sm font-black text-[#b13b63] ring-2 ring-[#b13b63]/15 disabled:opacity-50"
+                            >
+                              {archiveProject.isPending && archiveProject.variables?.projectId === storyProject.id ? 'Archiving...' : 'Archive'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
         )}
 
@@ -667,7 +879,7 @@ export default function StoryPlaygroundPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-5 md:p-6">
+            <section id="story-scenes" className="rounded-2xl border-2 border-[#172033]/10 bg-white p-5 md:p-6">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm font-black uppercase tracking-wide text-[#2f80ed]">{isR16 ? 'Picture cards' : 'Scene film-strip'}</p>

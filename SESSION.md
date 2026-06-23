@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-06-19
+Last updated: 2026-06-23
 Current GitHub commit deployed to VPS: latest pushed `main` verified on 2026-05-25
 
 ## Maintenance Rule
@@ -686,11 +686,37 @@ Deployment:
 - R16 storybook did not expose feedback, prompt, image history, model/provider generation labels, credits, or AI Studio text. Non-R16 storybook showed the Feedback entry.
 - Production account `texdevices@gmail.com` was promoted from `VIEWER` to `ADMIN` on 2026-06-21 so `/admin/story-analytics` and other admin pages are usable in browser.
 
+### 2026-06-23: Story Playground My Stories Library
+
+Changed:
+
+- Added a signed-in Story Playground library section below Story Spark.
+- The section shows recent projects from `story.listMyProjects` as responsive cards with title, original idea, updated date, status/progress, audience mode, scene count, ready picture count, and a thumbnail from the first available scene image.
+- Added smart project actions:
+  - Continue / Keep Going
+  - Open Storybook / Read Book
+  - Add Pictures
+  - Edit Story for projects that are not storybook-ready yet
+  - Archive for non-R16 users
+- R16 copy uses simple labels such as `My Stories`, `Keep Going`, `Read Book`, and `Add Pictures`, and does not expose prompt/model/provider/credit/debug language.
+- Empty state now says `Your stories will appear here after you create one.`
+- `Add Pictures` loads the chosen project and scrolls to the scene cards section.
+- `Continue` resumes drafts, question flows, or written stories based on project progress.
+
+API:
+
+- Extended `story.listMyProjects` to exclude archived projects and include chapter/question/scene counts plus first ready image asset data for progress and thumbnails.
+- Archive uses the existing `story.updateProject` status flow with `ARCHIVED`.
+
+Verification:
+
+- Run type-check, strict lint, and build before deployment from the isolated library/resume worktree.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.
 - Story Studio currently uses deterministic prompt compilation, not an LLM story planner. Story Playground can use an OpenAI-compatible text provider when configured, otherwise it falls back to deterministic story text.
-- Story Playground now has idea, questions, story, scene cards, character bible, hidden prompt composer, scene image generation, storybook viewer, and first-party product analytics. Remaining story product work is scene video generation and narration.
+- Story Playground now has idea, questions, story, My Stories resume library, scene cards, character bible, hidden prompt composer, scene image generation, storybook viewer, and first-party product analytics. Remaining story product work is scene video generation and narration.
 - Story Studio storyboard asset storage still accepts generated output URLs or pasted URLs. Story Playground scene image assets now use R2-backed asset history.
 - `supabase-pooler` is stopped. If another client needs pooled DB access, configure it on a non-conflicting port and verify tenant/user credentials.
 - Root local working tree has unrelated untracked/local files such as `.claude/`, `.codex/`, and `AGENTS.md`; do not stage them unless explicitly requested.

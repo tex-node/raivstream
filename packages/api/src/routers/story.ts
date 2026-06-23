@@ -1602,11 +1602,40 @@ export const storyRouter = router({
   listMyProjects: protectedProcedure
     .input(z.object({ limit: z.number().min(1).max(50).default(20) }).optional())
     .query(({ ctx, input }) => {
-      return ctx.prisma.storyProject.findMany({
-        where: { userId: ctx.user.id },
+      return (ctx.prisma as any).storyProject.findMany({
+        where: { userId: ctx.user.id, status: { not: 'ARCHIVED' } },
         orderBy: { updatedAt: 'desc' },
         take: input?.limit ?? 20,
-        select: projectSelect,
+        include: {
+          _count: {
+            select: {
+              chapters: true,
+              questions: true,
+              sceneSeeds: true,
+            },
+          },
+          sceneSeeds: {
+            orderBy: { orderIndex: 'asc' },
+            select: {
+              id: true,
+              orderIndex: true,
+              imageUrl: true,
+              imageStatus: true,
+              assets: {
+                where: { assetType: 'IMAGE', status: 'READY' },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  assetUrl: true,
+                  thumbnailUrl: true,
+                  status: true,
+                  createdAt: true,
+                },
+              },
+            },
+          },
+        },
       });
     }),
 
