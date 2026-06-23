@@ -23,7 +23,11 @@ export const STORY_ANALYTICS_EVENTS = [
   'storybook_page_viewed',
   'storybook_exit',
   'narration_started',
+  'narration_paused',
+  'narration_resumed',
+  'narration_page_completed',
   'narration_completed',
+  'narration_unavailable',
   'story_feedback_submitted',
 ] as const;
 
