@@ -817,6 +817,53 @@ Verification:
 - Real provider smoke generated and regenerated `A dog going to school` scene images in 3D Animated and Anime styles, confirmed 720x1280 R2 assets, requested model `FLUX`, actual provider model `z-image-turbo`, feedback storage, admin prompt-quality rows, and `regeneration_after_director_change` analytics.
 - Production health remained clean for `https://app.raivstream.com/api/health` and `https://r16.raivstream.com/api/health`.
 
+### 2026-07-13: Phase 6A Character Director
+
+Changed:
+
+- Replaced basic Character Bible editing with Character Director controls in Story Playground.
+- Character memory now supports structured identity and direction:
+  - Personality traits
+  - Motivation
+  - Fear
+  - Goal
+  - Favorite expression
+  - Walking style
+  - Speaking style for future narration
+  - Relationships
+  - Evolution stage and scene-order marker
+- Character updates no longer regenerate scene cards automatically. Future prompt composition reads the latest character memory, preserving previous scene records and image history until the user chooses to regenerate.
+- Added `createCharacterMemory` for adding supporting characters such as Luna.
+- Prompt composition now includes richer character identity, relationships, continuity rules, and internal Story DNA.
+- Added internal `StoryProject.storyDna` with initial fields for theme, tone, visual style, hero, primary goal, conflict, resolution, character arc, mood palette, visual palette, and camera language.
+- Added `/admin/character-insights` with common personalities, goals, fears, relationship types, average characters/story, average images/character, regeneration rate by personality, and successful personality/style combinations.
+- Added analytics events:
+  - `character_created`
+  - `character_updated`
+  - `personality_changed`
+  - `relationship_changed`
+  - `character_evolved`
+  - `character_used_in_generation`
+
+Schema:
+
+- Added nullable `storyDna` JSON field to `StoryProject`.
+- Added nullable Character Director fields to `StoryCharacterMemory`.
+- Migration: `20260713120000_character_director_story_dna`.
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
+- VPS backup created before staging migration: `/root/raivstream/backups/pre_phase_6a_character_director_*.sql`.
+- Staging migration deploy/build passed on `/root/raivstream-phase6a-staging`, served on `127.0.0.1:3014`.
+- Real provider smoke regenerated the `Road to School` scene after directing Max as Curious/Adventurous, motivation Make Friends, walking style Skip, and Luna as a very close friend.
+- Smoke confirmed 720x1280 R2 output, 80 credit deduction, Story DNA metadata, character-aware prompt text, no scene-record rewrite after character update, admin character insights, analytics events, and R16 hiding prompt/provider/model metadata.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.

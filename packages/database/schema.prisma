@@ -607,6 +607,7 @@ model StoryProject {
   ageRange       String?
   theme          String?
   visualStyle    String?
+  storyDna       Json?
   status         StoryProjectStatus @default(DRAFT)
 
   characters     StoryCharacter[]
@@ -679,6 +680,18 @@ model StoryCharacterMemory {
   gender            String?
   visualDescription String?
   personality       Json?
+  personalityTraits Json?
+  motivation        String?
+  fear              String?
+  goal              String?
+  favoriteExpression String?
+  walkingStyle      String?
+  speakingStyle     String?
+  relationships     Json?
+  evolutionStage    String?
+  evolutionNotes    String?
+  evolutionSceneOrder Int?
+  directorChangedAt DateTime?
 
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt

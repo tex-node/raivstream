@@ -36,6 +36,22 @@ const directorSettingsSchema = z.object({
   lighting: z.enum(['BRIGHT', 'WARM', 'SOFT', 'DRAMATIC', 'MOONLIGHT']).nullable().optional(),
   scenePace: z.enum(['CALM', 'NORMAL', 'ENERGETIC']).nullable().optional(),
 });
+const personalityTraitSchema = z.enum(['BRAVE', 'CURIOUS', 'FUNNY', 'KIND', 'SHY', 'CONFIDENT', 'ADVENTUROUS', 'CALM', 'CLEVER', 'ENERGETIC']);
+const motivationSchema = z.enum(['MAKE_FRIENDS', 'LEARN', 'HELP_OTHERS', 'EXPLORE', 'WIN', 'PROTECT_FAMILY', 'FIND_HOME']);
+const fearSchema = z.enum(['DARKNESS', 'HEIGHTS', 'BULLIES', 'BEING_ALONE', 'LOUD_NOISES', 'MONSTERS', 'WATER']);
+const characterGoalSchema = z.enum(['REACH_SCHOOL', 'SAVE_A_FRIEND', 'FIND_TREASURE', 'FINISH_HOMEWORK', 'BECOME_A_HERO']);
+const favoriteExpressionSchema = z.enum(['SMILE', 'BIG_GRIN', 'CURIOUS_FACE', 'DETERMINED_FACE', 'SURPRISED']);
+const walkingStyleSchema = z.enum(['SKIP', 'RUN', 'WALK_PROUDLY', 'WALK_CAREFULLY', 'BOUNCE', 'SNEAK']);
+const speakingStyleSchema = z.enum(['CHEERFUL', 'GENTLE', 'QUIET', 'CONFIDENT', 'FUNNY']);
+const relationshipTypeSchema = z.enum(['FRIEND', 'SIBLING', 'TEACHER', 'ENEMY', 'PARENT', 'PET', 'MENTOR']);
+const relationshipStrengthSchema = z.enum(['DISTANT', 'FRIENDLY', 'CLOSE', 'VERY_CLOSE']);
+const characterRelationshipSchema = z.object({
+  targetCharacterId: z.string().optional().nullable(),
+  targetName: z.string().min(1).max(80),
+  type: relationshipTypeSchema,
+  strength: relationshipStrengthSchema.default('FRIENDLY'),
+  notes: z.string().max(240).optional().nullable(),
+});
 const MAX_STORYBOARD_SHOTS = 24;
 const MAX_STORY_BEAT_LENGTH = 700;
 const STORY_IDEA_MAX_LENGTH = 240;
@@ -54,6 +70,7 @@ const projectSelect = {
   ageRange: true,
   theme: true,
   visualStyle: true,
+  storyDna: true,
   status: true,
   updatedAt: true,
   createdAt: true,
@@ -239,6 +256,17 @@ type CharacterMemoryInput = {
   gender?: string;
   visualDescription?: string;
   personality?: Record<string, unknown>;
+  personalityTraits?: string[];
+  motivation?: string | null;
+  fear?: string | null;
+  goal?: string | null;
+  favoriteExpression?: string | null;
+  walkingStyle?: string | null;
+  speakingStyle?: string | null;
+  relationships?: CharacterRelationship[];
+  evolutionStage?: string | null;
+  evolutionNotes?: string | null;
+  evolutionSceneOrder?: number | null;
 };
 
 type CharacterMemoryRecord = {
@@ -250,6 +278,26 @@ type CharacterMemoryRecord = {
   gender?: string | null;
   visualDescription?: string | null;
   personality?: unknown;
+  personalityTraits?: unknown;
+  motivation?: string | null;
+  fear?: string | null;
+  goal?: string | null;
+  favoriteExpression?: string | null;
+  walkingStyle?: string | null;
+  speakingStyle?: string | null;
+  relationships?: unknown;
+  evolutionStage?: string | null;
+  evolutionNotes?: string | null;
+  evolutionSceneOrder?: number | null;
+  directorChangedAt?: Date | string | null;
+};
+
+type CharacterRelationship = {
+  targetCharacterId?: string | null;
+  targetName: string;
+  type: string;
+  strength?: string;
+  notes?: string | null;
 };
 
 type PromptOutputType = z.infer<typeof promptOutputTypeSchema>;
@@ -275,6 +323,10 @@ type ScenePromptContext = {
     audienceMode?: string;
     visualStyle?: string | null;
     theme?: string | null;
+    tone?: string | null;
+    synopsis?: string | null;
+    storyDna?: unknown;
+    characterMemory?: CharacterMemoryRecord[];
   };
 };
 
@@ -326,6 +378,30 @@ function titleCase(value: string) {
     .join(' ');
 }
 
+function enumLabel(value?: string | null) {
+  return value ? titleCase(value.replace(/_/g, ' ')) : null;
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function asRelationshipList(value: unknown): CharacterRelationship[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.targetName !== 'string' || !record.targetName.trim()) return [];
+    return [{
+      targetCharacterId: typeof record.targetCharacterId === 'string' ? record.targetCharacterId : null,
+      targetName: record.targetName.trim(),
+      type: typeof record.type === 'string' ? record.type : 'FRIEND',
+      strength: typeof record.strength === 'string' ? record.strength : 'FRIENDLY',
+      notes: typeof record.notes === 'string' ? record.notes : null,
+    }];
+  }).slice(0, 12);
+}
+
 function inferCharacterFromIdea(idea: string): CharacterMemoryInput {
   const namedPattern = /\b([A-Z][a-zA-Z'-]{1,40})\s+is\s+(?:a|an|the)?\s*([^,.]+)/;
   const named = idea.match(namedPattern);
@@ -344,6 +420,7 @@ function inferCharacterFromIdea(idea: string): CharacterMemoryInput {
       ageDescription,
       visualDescription: description,
       personality: { traits: ['kind', 'curious', 'brave'] },
+      personalityTraits: ['KIND', 'CURIOUS', 'BRAVE'],
     };
   }
 
@@ -358,6 +435,7 @@ function inferCharacterFromIdea(idea: string): CharacterMemoryInput {
     species,
     visualDescription: `${defaultName} is a friendly ${lowerNoun}, expressive and easy to recognize in every scene.`,
     personality: { traits: ['kind', 'curious', 'brave'] },
+    personalityTraits: ['KIND', 'CURIOUS', 'BRAVE'],
   };
 }
 
@@ -377,6 +455,17 @@ function normaliseCharacterMemory(idea: string, generated: CharacterMemoryInput[
       gender: character.gender ?? existing?.gender,
       visualDescription: character.visualDescription ?? existing?.visualDescription,
       personality: character.personality ?? existing?.personality,
+      personalityTraits: character.personalityTraits ?? existing?.personalityTraits,
+      motivation: character.motivation ?? existing?.motivation,
+      fear: character.fear ?? existing?.fear,
+      goal: character.goal ?? existing?.goal,
+      favoriteExpression: character.favoriteExpression ?? existing?.favoriteExpression,
+      walkingStyle: character.walkingStyle ?? existing?.walkingStyle,
+      speakingStyle: character.speakingStyle ?? existing?.speakingStyle,
+      relationships: character.relationships ?? existing?.relationships,
+      evolutionStage: character.evolutionStage ?? existing?.evolutionStage,
+      evolutionNotes: character.evolutionNotes ?? existing?.evolutionNotes,
+      evolutionSceneOrder: character.evolutionSceneOrder ?? existing?.evolutionSceneOrder,
     });
   }
 
@@ -384,6 +473,10 @@ function normaliseCharacterMemory(idea: string, generated: CharacterMemoryInput[
 }
 
 function characterPromptIngredient(character: CharacterMemoryRecord) {
+  const traits = asStringList(character.personalityTraits).map(enumLabel).filter(Boolean).join(', ');
+  const relationships = asRelationshipList(character.relationships)
+    .map((relationship) => `${enumLabel(relationship.type) ?? 'Friend'} to ${relationship.targetName}${relationship.strength ? ` (${enumLabel(relationship.strength)})` : ''}`)
+    .join('; ');
   return [
     `${character.name}`,
     character.role ? `role: ${character.role}` : undefined,
@@ -391,16 +484,39 @@ function characterPromptIngredient(character: CharacterMemoryRecord) {
     character.ageDescription ? `age: ${character.ageDescription}` : undefined,
     character.gender ? `gender: ${character.gender}` : undefined,
     character.visualDescription ? `same look every scene: ${character.visualDescription}` : undefined,
+    traits ? `personality: ${traits}` : undefined,
+    character.motivation ? `motivation: ${enumLabel(character.motivation)}` : undefined,
+    character.fear ? `fear to respect gently: ${enumLabel(character.fear)}` : undefined,
+    character.goal ? `current goal: ${enumLabel(character.goal)}` : undefined,
+    character.favoriteExpression ? `favorite expression: ${enumLabel(character.favoriteExpression)}` : undefined,
+    character.walkingStyle ? `walking style: ${enumLabel(character.walkingStyle)}` : undefined,
+    character.speakingStyle ? `speaking style for future narration: ${enumLabel(character.speakingStyle)}` : undefined,
+    relationships ? `relationships: ${relationships}` : undefined,
+    character.evolutionStage ? `current evolution stage: ${character.evolutionStage}` : undefined,
+    character.evolutionNotes ? `intentional evolution from selected scene onward: ${character.evolutionNotes}` : undefined,
+    'consistency rules: keep fur or hair, eye color, clothing, backpack, accessories, height, and species unchanged unless this character record explicitly changes them',
   ].filter(Boolean).join(', ');
 }
 
-function characterReferencesFromScene(scene: { characters?: unknown }): Array<{ name: string; promptIngredient: string }> {
-  if (!Array.isArray(scene.characters)) return [];
-  return scene.characters.flatMap((character) => {
+function characterReferencesFromScene(
+  scene: { characters?: unknown; orderIndex?: number | null },
+  currentCharacters?: CharacterMemoryRecord[],
+): Array<{ name: string; promptIngredient: string }> {
+  const currentByName = new Map((currentCharacters ?? []).map((character) => [character.name.toLowerCase(), character]));
+  const currentReferences = (currentCharacters ?? []).map((character) => ({
+    name: character.name,
+    promptIngredient: characterPromptIngredient(character),
+  }));
+  if (!Array.isArray(scene.characters)) return currentReferences.slice(0, 4);
+  const references = scene.characters.flatMap((character) => {
     if (typeof character === 'string') return [{ name: character, promptIngredient: character }];
     if (!character || typeof character !== 'object') return [];
     const record = character as { name?: unknown; promptIngredient?: unknown; visualDescription?: unknown };
     if (typeof record.name !== 'string') return [];
+    const current = currentByName.get(record.name.toLowerCase());
+    if (current) {
+      return [{ name: current.name, promptIngredient: characterPromptIngredient(current) }];
+    }
     return [{
       name: record.name,
       promptIngredient: typeof record.promptIngredient === 'string'
@@ -408,6 +524,7 @@ function characterReferencesFromScene(scene: { characters?: unknown }): Array<{ 
         : [record.name, typeof record.visualDescription === 'string' ? record.visualDescription : undefined].filter(Boolean).join(', '),
     }];
   });
+  return references.length ? references : currentReferences.slice(0, 4);
 }
 
 function outputTypeLabel(outputType: PromptOutputType) {
@@ -448,6 +565,61 @@ function effectiveVisualStyle(project: { visualStyle?: string | null; audienceMo
   return project.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE);
 }
 
+function storyDnaPromptText(value: unknown) {
+  if (!value || typeof value !== 'object') return '';
+  const dna = value as Record<string, unknown>;
+  return [
+    typeof dna.theme === 'string' ? `theme ${dna.theme}` : undefined,
+    typeof dna.tone === 'string' ? `tone ${dna.tone}` : undefined,
+    typeof dna.hero === 'string' ? `hero ${dna.hero}` : undefined,
+    typeof dna.primaryGoal === 'string' ? `primary goal ${dna.primaryGoal}` : undefined,
+    typeof dna.conflict === 'string' ? `conflict ${dna.conflict}` : undefined,
+    typeof dna.resolution === 'string' ? `resolution ${dna.resolution}` : undefined,
+    typeof dna.characterArc === 'string' ? `character arc ${dna.characterArc}` : undefined,
+    Array.isArray(dna.moodPalette) ? `mood palette ${(dna.moodPalette as unknown[]).filter((item): item is string => typeof item === 'string').join(', ')}` : undefined,
+    Array.isArray(dna.visualPalette) ? `visual palette ${(dna.visualPalette as unknown[]).filter((item): item is string => typeof item === 'string').join(', ')}` : undefined,
+    typeof dna.cameraLanguage === 'string' ? `camera language ${dna.cameraLanguage}` : undefined,
+  ].filter(Boolean).join('; ');
+}
+
+function buildStoryDna(project: {
+  title: string;
+  originalIdea?: string | null;
+  synopsis?: string | null;
+  theme?: string | null;
+  tone?: string | null;
+  visualStyle?: string | null;
+}, characters: CharacterMemoryRecord[], scenes: Array<{ title: string; description: string; mood?: string | null }>) {
+  const hero = characters[0]?.name ?? inferCharacterFromIdea(project.originalIdea ?? project.title).name;
+  return {
+    theme: project.theme ?? 'growth through a small adventure',
+    tone: project.tone ?? 'warm, hopeful, child-safe',
+    visualStyle: normaliseStoryVisualStyle(project.visualStyle),
+    hero,
+    primaryGoal: characters[0]?.goal ? enumLabel(characters[0].goal) : 'complete the story journey',
+    conflict: scenes.find((scene) => /problem|challenge|trouble/i.test(`${scene.title} ${scene.description}`))?.description ?? 'a gentle obstacle to overcome',
+    resolution: scenes.find((scene) => /ending|happy|finish|home/i.test(`${scene.title} ${scene.description}`))?.description ?? 'a positive ending with learning',
+    characterArc: characters[0]?.evolutionStage ?? `${hero} grows in confidence while staying visually consistent`,
+    moodPalette: Array.from(new Set(scenes.map((scene) => scene.mood).filter(Boolean))).slice(0, 6),
+    visualPalette: [styleLabel(project.visualStyle), 'portrait 9:16', 'clear character silhouette'],
+    cameraLanguage: 'simple readable storybook framing with stable character continuity',
+  };
+}
+
+async function refreshStoryDna(ctx: any, projectId: string) {
+  const project = await (ctx.prisma as any).storyProject.findUnique({
+    where: { id: projectId },
+    include: {
+      characterMemory: { orderBy: { createdAt: 'asc' } },
+      sceneSeeds: { orderBy: { orderIndex: 'asc' }, select: { title: true, description: true, mood: true } },
+    },
+  });
+  if (!project) return null;
+  const storyDna = buildStoryDna(project, project.characterMemory, project.sceneSeeds);
+  await (ctx.prisma as any).storyProject.update({ where: { id: projectId }, data: { storyDna } });
+  return storyDna;
+}
+
 function composeScenePromptText(input: {
   scene: ScenePromptContext;
   outputType: PromptOutputType;
@@ -455,7 +627,7 @@ function composeScenePromptText(input: {
   audienceMode: StoryAudienceMode;
 }) {
   const meta = PROMPT_PROVIDER_META[input.provider];
-  const characters = characterReferencesFromScene(input.scene);
+  const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
   const characterText = characters.length
     ? characters.map((character) => character.promptIngredient).join('; ')
     : 'use the established main character design from the story';
@@ -488,6 +660,7 @@ function composeScenePromptText(input: {
     director.lighting ? `lighting: ${director.lighting}` : undefined,
     director.scenePace ? `scene pace for future video: ${director.scenePace}` : undefined,
     `characters, keep exact identity: ${characterText}`,
+    input.scene.project.storyDna ? `story DNA: ${storyDnaPromptText(input.scene.project.storyDna)}` : undefined,
     `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
     input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
     `safety: ${r16Rules}`,
@@ -525,7 +698,7 @@ async function composeEnhancedScenePrompt(
 ) {
   const base = composeScenePromptText(input);
   const meta = PROMPT_PROVIDER_META[input.provider];
-  const characters = characterReferencesFromScene(input.scene);
+  const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
   const characterIdentity = characters.length
     ? characters.map((character) => character.promptIngredient).join('; ')
     : 'use the established main character design from the story';
@@ -592,6 +765,8 @@ async function composeEnhancedScenePrompt(
       prompt: enhanced.enhancedPrompt,
       negativePrompt: enhanced.negativePrompt,
       styleUsed: enhanced.styleUsed,
+      characterIdentity,
+      storyDna: input.scene.project.storyDna ?? null,
       providerHints: enhanced.providerHints,
       enhancerProvider: enhanced.provider,
       enhancerModel: enhanced.model,
@@ -614,6 +789,8 @@ async function composeEnhancedScenePrompt(
     return {
       ...base,
       deterministicPrompt: base.prompt,
+      characterIdentity,
+      storyDna: input.scene.project.storyDna ?? null,
       enhancerProvider: 'deterministic-fallback',
       enhancerModel: undefined,
       safetyNotes: 'Prompt enhancer failed; deterministic prompt composer used.',
@@ -705,6 +882,10 @@ async function generateSceneImageAsset(
           audienceMode: true,
           visualStyle: true,
           theme: true,
+          tone: true,
+          synopsis: true,
+          storyDna: true,
+          characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
       prompts: {
@@ -780,6 +961,21 @@ async function generateSceneImageAsset(
         enhancerProvider: composed.enhancerProvider,
       },
     });
+    const charactersUsed = characterReferencesFromScene(scene, scene.project.characterMemory);
+    await Promise.all(charactersUsed.map((character) =>
+      trackStoryAnalytics(ctx, {
+        event: 'character_used_in_generation',
+        projectId: project.id,
+        audienceMode,
+        properties: {
+          sceneId: scene.id,
+          assetId: asset.id,
+          characterName: character.name,
+          model: input.model,
+          style: composed.styleUsed,
+        },
+      }),
+    ));
 
     const generationJob = await ctx.prisma.generationJob.create({
       data: {
@@ -796,6 +992,8 @@ async function generateSceneImageAsset(
           storySceneId: scene.id,
           storySceneAssetId: asset.id,
           deterministicPrompt: composed.deterministicPrompt,
+          characterIdentity: composed.characterIdentity,
+          storyDna: composed.storyDna,
           visualStyle: normaliseStoryVisualStyle(project.visualStyle),
           visualStyleLabel: composed.styleUsed,
           director: composed.director,
@@ -810,7 +1008,7 @@ async function generateSceneImageAsset(
     let providerJobId: string | undefined;
     if (!process.env.RUNPOD_API_KEY && input.model === 'FLUX' && process.env.NODE_ENV !== 'production') {
       providerJobId = `dev-placeholder-${asset.id}`;
-      providerOutputUrl = devSceneSvgDataUrl(scene.title, characterReferencesFromScene(scene)[0]?.name ?? 'Story Friend');
+      providerOutputUrl = devSceneSvgDataUrl(scene.title, characterReferencesFromScene(scene, scene.project.characterMemory)[0]?.name ?? 'Story Friend');
     } else {
       const submitted = await submitGenerationJob({
         model: input.model as SupportedModel,
@@ -1347,6 +1545,17 @@ export const storyRouter = router({
                 gender: character.gender,
                 visualDescription: character.visualDescription,
                 personality: character.personality ?? {},
+                personalityTraits: character.personalityTraits ?? [],
+                motivation: character.motivation ?? null,
+                fear: character.fear ?? null,
+                goal: character.goal ?? null,
+                favoriteExpression: character.favoriteExpression ?? null,
+                walkingStyle: character.walkingStyle ?? null,
+                speakingStyle: character.speakingStyle ?? null,
+                relationships: character.relationships ?? [],
+                evolutionStage: character.evolutionStage ?? null,
+                evolutionNotes: character.evolutionNotes ?? null,
+                evolutionSceneOrder: character.evolutionSceneOrder ?? null,
               },
             }),
           ),
@@ -1375,6 +1584,18 @@ export const storyRouter = router({
             ageRange: story.ageRange,
             theme: story.theme,
             targetAudience: audienceMode === 'KIDS' ? `Kids ${story.ageRange}` : story.ageRange,
+            storyDna: buildStoryDna(
+              {
+                title: story.title,
+                originalIdea: idea,
+                synopsis: story.summary,
+                theme: story.theme,
+                tone: project.tone ?? story.theme,
+                visualStyle: project.visualStyle,
+              },
+              characterMemory,
+              story.sceneHints,
+            ),
             status: 'GENERATED',
           },
         });
@@ -1438,6 +1659,17 @@ export const storyRouter = router({
               gender: character.gender,
               visualDescription: character.visualDescription,
               personality: character.personality ?? {},
+              personalityTraits: character.personalityTraits ?? [],
+              motivation: character.motivation ?? null,
+              fear: character.fear ?? null,
+              goal: character.goal ?? null,
+              favoriteExpression: character.favoriteExpression ?? null,
+              walkingStyle: character.walkingStyle ?? null,
+              speakingStyle: character.speakingStyle ?? null,
+              relationships: character.relationships ?? [],
+              evolutionStage: character.evolutionStage ?? null,
+              evolutionNotes: character.evolutionNotes ?? null,
+              evolutionSceneOrder: character.evolutionSceneOrder ?? null,
             },
           }),
         ));
@@ -1461,13 +1693,26 @@ export const storyRouter = router({
       ageDescription: z.string().max(120).optional(),
       gender: z.string().max(80).optional(),
       visualDescription: z.string().min(1).max(500),
+      personalityTraits: z.array(personalityTraitSchema).max(10).optional(),
+      motivation: motivationSchema.nullable().optional(),
+      fear: fearSchema.nullable().optional(),
+      goal: characterGoalSchema.nullable().optional(),
+      favoriteExpression: favoriteExpressionSchema.nullable().optional(),
+      walkingStyle: walkingStyleSchema.nullable().optional(),
+      speakingStyle: speakingStyleSchema.nullable().optional(),
+      relationships: z.array(characterRelationshipSchema).max(12).optional(),
+      evolutionStage: z.string().max(120).optional().nullable(),
+      evolutionNotes: z.string().max(500).optional().nullable(),
+      evolutionSceneOrder: z.number().int().min(1).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ensureProject(ctx, input.projectId);
+      const project = await ensureProject(ctx, input.projectId);
       const character = await ctx.prisma.storyCharacterMemory.findFirst({
         where: { id: input.characterId, projectId: input.projectId },
       });
       if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story character not found' });
+      const previousTraits = asStringList((character as CharacterMemoryRecord).personalityTraits);
+      const previousRelationships = asRelationshipList((character as CharacterMemoryRecord).relationships);
 
       const updatedCharacter = await ctx.prisma.storyCharacterMemory.update({
         where: { id: input.characterId },
@@ -1478,14 +1723,122 @@ export const storyRouter = router({
           ageDescription: input.ageDescription || null,
           gender: input.gender || null,
           visualDescription: input.visualDescription,
+          personalityTraits: input.personalityTraits ?? previousTraits,
+          motivation: input.motivation ?? null,
+          fear: input.fear ?? null,
+          goal: input.goal ?? null,
+          favoriteExpression: input.favoriteExpression ?? null,
+          walkingStyle: input.walkingStyle ?? null,
+          speakingStyle: input.speakingStyle ?? null,
+          relationships: input.relationships ?? previousRelationships,
+          evolutionStage: input.evolutionStage || null,
+          evolutionNotes: input.evolutionNotes || null,
+          evolutionSceneOrder: input.evolutionSceneOrder ?? null,
+          directorChangedAt: new Date(),
+        },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'character_updated',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: {
+          characterId: input.characterId,
+          characterName: input.name,
+          traits: input.personalityTraits,
+          motivation: input.motivation,
+          fear: input.fear,
+          goal: input.goal,
+          walkingStyle: input.walkingStyle,
         },
       });
       await trackStoryAnalytics(ctx, {
         event: 'character_bible_edited',
         projectId: input.projectId,
+        audienceMode: project.audienceMode,
         properties: { characterId: input.characterId, characterName: input.name },
       });
+      if (input.personalityTraits && input.personalityTraits.join('|') !== previousTraits.join('|')) {
+        await trackStoryAnalytics(ctx, {
+          event: 'personality_changed',
+          projectId: input.projectId,
+          audienceMode: project.audienceMode,
+          properties: { characterId: input.characterId, characterName: input.name, traits: input.personalityTraits },
+        });
+      }
+      if (input.relationships && JSON.stringify(input.relationships) !== JSON.stringify(previousRelationships)) {
+        await trackStoryAnalytics(ctx, {
+          event: 'relationship_changed',
+          projectId: input.projectId,
+          audienceMode: project.audienceMode,
+          properties: { characterId: input.characterId, characterName: input.name, relationshipCount: input.relationships.length },
+        });
+      }
+      if (input.evolutionStage || input.evolutionNotes || input.evolutionSceneOrder) {
+        await trackStoryAnalytics(ctx, {
+          event: 'character_evolved',
+          projectId: input.projectId,
+          audienceMode: project.audienceMode,
+          properties: {
+            characterId: input.characterId,
+            characterName: input.name,
+            evolutionStage: input.evolutionStage,
+            evolutionSceneOrder: input.evolutionSceneOrder,
+          },
+        });
+      }
+      await refreshStoryDna(ctx, input.projectId);
       return updatedCharacter;
+    }),
+
+  createCharacterMemory: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      name: z.string().min(1).max(80),
+      role: z.string().max(80).optional(),
+      species: z.string().max(80).optional(),
+      ageDescription: z.string().max(120).optional(),
+      gender: z.string().max(80).optional(),
+      visualDescription: z.string().min(1).max(500),
+      personalityTraits: z.array(personalityTraitSchema).max(10).default([]),
+      motivation: motivationSchema.nullable().optional(),
+      fear: fearSchema.nullable().optional(),
+      goal: characterGoalSchema.nullable().optional(),
+      favoriteExpression: favoriteExpressionSchema.nullable().optional(),
+      walkingStyle: walkingStyleSchema.nullable().optional(),
+      speakingStyle: speakingStyleSchema.nullable().optional(),
+      relationships: z.array(characterRelationshipSchema).max(12).default([]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const character = await ctx.prisma.storyCharacterMemory.create({
+        data: {
+          projectId: input.projectId,
+          name: input.name,
+          role: input.role || null,
+          species: input.species || null,
+          ageDescription: input.ageDescription || null,
+          gender: input.gender || null,
+          visualDescription: input.visualDescription,
+          personality: { traits: input.personalityTraits.map(enumLabel).filter(Boolean) },
+          personalityTraits: input.personalityTraits,
+          motivation: input.motivation ?? null,
+          fear: input.fear ?? null,
+          goal: input.goal ?? null,
+          favoriteExpression: input.favoriteExpression ?? null,
+          walkingStyle: input.walkingStyle ?? null,
+          speakingStyle: input.speakingStyle ?? null,
+          relationships: input.relationships,
+          directorChangedAt: new Date(),
+        },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'character_created',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { characterId: character.id, characterName: character.name, traits: input.personalityTraits },
+      });
+      await refreshStoryDna(ctx, input.projectId);
+      return character;
     }),
 
   continueStory: protectedProcedure
@@ -1740,6 +2093,10 @@ export const storyRouter = router({
               audienceMode: true,
               visualStyle: true,
               theme: true,
+              tone: true,
+              synopsis: true,
+              storyDna: true,
+              characterMemory: { orderBy: { createdAt: 'asc' } },
             },
           },
         },
@@ -1794,6 +2151,8 @@ export const storyRouter = router({
             audienceMode,
             hiddenFromKids: true,
             deterministicPrompt: composed.deterministicPrompt,
+            characterIdentity: composed.characterIdentity,
+            storyDna: composed.storyDna,
             visualStyle: composed.styleUsed,
             director: composed.director,
             promptEnhancerProvider: composed.enhancerProvider,
@@ -1824,6 +2183,10 @@ export const storyRouter = router({
               audienceMode: true,
               visualStyle: true,
               theme: true,
+              tone: true,
+              synopsis: true,
+              storyDna: true,
+              characterMemory: { orderBy: { createdAt: 'asc' } },
             },
           },
         },
@@ -1868,6 +2231,8 @@ export const storyRouter = router({
               audienceMode,
               hiddenFromKids: true,
               deterministicPrompt: composed.deterministicPrompt,
+              characterIdentity: composed.characterIdentity,
+              storyDna: composed.storyDna,
               visualStyle: composed.styleUsed,
               director: composed.director,
               promptEnhancerProvider: composed.enhancerProvider,

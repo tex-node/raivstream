@@ -359,6 +359,129 @@ export const adminRouter = router({
       return { rangeDays: input.days, rows, summaries };
     }),
 
+  characterInsights: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30), limit: z.number().int().min(10).max(200).default(120) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const [characters, projects, assets, feedback] = await Promise.all([
+        (ctx.prisma as any).storyCharacterMemory.findMany({
+          where: { createdAt: { gte: since } },
+          orderBy: { updatedAt: 'desc' },
+          take: input.limit,
+          include: { project: { select: { id: true, title: true, visualStyle: true, audienceMode: true } } },
+        }),
+        (ctx.prisma as any).storyProject.findMany({
+          where: { createdAt: { gte: since } },
+          select: { id: true, title: true, visualStyle: true, _count: { select: { characterMemory: true } } },
+        }),
+        (ctx.prisma as any).storySceneAsset.findMany({
+          where: { createdAt: { gte: since }, assetType: { in: ['IMAGE', 'VIDEO'] } },
+          select: { id: true, projectId: true, sceneId: true, assetType: true, isLatest: true },
+        }),
+        (ctx.prisma as any).promptQualityFeedback.findMany({
+          where: { createdAt: { gte: since } },
+          select: { assetId: true, rating: true },
+        }),
+      ]);
+
+      const label = (value?: string | null) =>
+        value ? value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (match) => match.toUpperCase()) : null;
+      const topValues = (values: Array<string | null | undefined>, limit = 10) => {
+        const counts = new Map<string, number>();
+        for (const value of values) {
+          const key = value?.trim();
+          if (!key) continue;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name, count]) => ({ name, count }));
+      };
+      const characterTraits = (character: any) =>
+        Array.isArray(character.personalityTraits) ? character.personalityTraits.filter((item: unknown): item is string => typeof item === 'string') : [];
+      const relationships = (character: any) =>
+        Array.isArray(character.relationships) ? character.relationships.filter((item: unknown): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : [];
+      const assetIdsByProject = assets.reduce((map: Map<string, string[]>, asset: any) => {
+        const list = map.get(asset.projectId) ?? [];
+        list.push(asset.id);
+        map.set(asset.projectId, list);
+        return map;
+      }, new Map<string, string[]>());
+      const feedbackByAsset = feedback.reduce((map: Map<string, number[]>, item: any) => {
+        const list = map.get(item.assetId) ?? [];
+        list.push(item.rating);
+        map.set(item.assetId, list);
+        return map;
+      }, new Map<string, number[]>());
+      const combinationMap = new Map<string, { personality: string; visualStyle: string; count: number; ratingTotal: number; ratingCount: number }>();
+      for (const character of characters) {
+        for (const trait of characterTraits(character)) {
+          const visualStyle = character.project?.visualStyle ?? 'Unknown';
+          const key = `${trait}|${visualStyle}`;
+          const entry = combinationMap.get(key) ?? { personality: label(trait) ?? trait, visualStyle, count: 0, ratingTotal: 0, ratingCount: 0 };
+          entry.count += 1;
+          for (const assetId of assetIdsByProject.get(character.projectId) ?? []) {
+            for (const rating of feedbackByAsset.get(assetId) ?? []) {
+              entry.ratingTotal += rating;
+              entry.ratingCount += 1;
+            }
+          }
+          combinationMap.set(key, entry);
+        }
+      }
+
+      const totalCharacters = characters.length;
+      const totalProjects = projects.length || 1;
+      const averageCharactersPerStory = projects.reduce((sum: number, project: any) => sum + (project._count?.characterMemory ?? 0), 0) / totalProjects;
+      const averageImagesPerCharacter = totalCharacters ? assets.filter((asset: any) => asset.assetType === 'IMAGE').length / totalCharacters : 0;
+      const regenerationRateByPersonality = topValues(characters.flatMap(characterTraits)).map((item) => {
+        const matchingCharacters = characters.filter((character: any) => characterTraits(character).includes(item.name));
+        const projectIds = new Set(matchingCharacters.map((character: any) => character.projectId));
+        const projectAssets = assets.filter((asset: any) => projectIds.has(asset.projectId));
+        const scenes = new Map<string, number>();
+        for (const asset of projectAssets) scenes.set(asset.sceneId, (scenes.get(asset.sceneId) ?? 0) + 1);
+        const regeneratedScenes = Array.from(scenes.values()).filter((count) => count > 1).length;
+        return { personality: label(item.name) ?? item.name, count: item.count, regenerationRate: scenes.size ? regeneratedScenes / scenes.size : 0 };
+      });
+
+      return {
+        rangeDays: input.days,
+        cards: {
+          totalCharacters,
+          averageCharactersPerStory,
+          averageImagesPerCharacter,
+          totalRelationships: characters.reduce((sum: number, character: any) => sum + relationships(character).length, 0),
+        },
+        popular: {
+          personalities: topValues(characters.flatMap(characterTraits)).map((item) => ({ ...item, name: label(item.name) ?? item.name })),
+          goals: topValues(characters.map((character: any) => character.goal)).map((item) => ({ ...item, name: label(item.name) ?? item.name })),
+          fears: topValues(characters.map((character: any) => character.fear)).map((item) => ({ ...item, name: label(item.name) ?? item.name })),
+          relationshipTypes: topValues(characters.flatMap((character: any) => relationships(character).map((relationship: Record<string, unknown>) => typeof relationship.type === 'string' ? relationship.type : null))).map((item) => ({ ...item, name: label(item.name) ?? item.name })),
+        },
+        regenerationRateByPersonality,
+        successfulCombinations: Array.from(combinationMap.values())
+          .map((item) => ({
+            personality: item.personality,
+            visualStyle: item.visualStyle,
+            count: item.count,
+            averageRating: item.ratingCount ? item.ratingTotal / item.ratingCount : null,
+          }))
+          .sort((a, b) => (b.averageRating ?? -Infinity) - (a.averageRating ?? -Infinity))
+          .slice(0, 12),
+        recentCharacters: characters.slice(0, 30).map((character: any) => ({
+          id: character.id,
+          name: character.name,
+          projectTitle: character.project?.title ?? 'Untitled story',
+          visualStyle: character.project?.visualStyle ?? null,
+          traits: characterTraits(character).map((trait: string) => label(trait) ?? trait),
+          goal: label(character.goal),
+          fear: label(character.fear),
+          motivation: label(character.motivation),
+          walkingStyle: label(character.walkingStyle),
+          relationships: relationships(character).length,
+          evolutionStage: character.evolutionStage,
+        })),
+      };
+    }),
+
   // ─── User Management ────────────────────────────────────────────────────────
 
   /**

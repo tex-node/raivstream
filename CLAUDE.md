@@ -110,6 +110,7 @@ apps/web/src/
   app/admin/credits/page.tsx          — credit rate management (inline edit + add rate)
   app/admin/jobs/page.tsx             — generation job history (filter by status/model)
   app/admin/prompt-quality/page.tsx   — admin prompt QA dashboard (style/provider quality, ratings, expandable prompt metadata)
+  app/admin/character-insights/page.tsx — admin Character Director insights (traits, goals, fears, relationships, ratings)
   app/admin/revenue/page.tsx          — revenue summary + transaction table
   app/sign-in/[[...sign-in]]/page.tsx — JWT sign-in (reveal password, forgot password link)
   app/sign-up/[[...sign-up]]/page.tsx — JWT sign-up (reveal password, confirm password, strength bar)
@@ -214,10 +215,11 @@ packages/api/src/lib/storyTextService.ts — Story Playground text provider abst
 - Phase 2 scene cards use `story.generateScenes` and existing `StorySceneSeed`.
 - School-themed ideas such as "A dog going to school" produce scene cards: Home, Road to School, School Gate, Classroom, Problem, Happy Ending.
 - Story Playground shows a film-strip under the generated story, placeholder thumbnails, an edit-scene modal, and a disabled "Make Pictures" coming-soon button.
-- Phase 3 Character Bible uses `StoryCharacterMemory`, `story.generateCharacterBible`, and `story.updateCharacterMemory`.
+- Phase 6A Character Director uses `StoryCharacterMemory`, `story.generateCharacterBible`, `story.updateCharacterMemory`, and `story.createCharacterMemory`.
 - Named character ideas such as "Max is a young male golden puppy with a blue backpack" must keep Max consistent across all scene cards.
 - Scene cards store reusable character reference objects in `StorySceneSeed.characters`, including `promptIngredient` text for the future hidden prompt compiler.
-- Story Playground shows editable Character Bible cards; editing a character refreshes scene references.
+- Story Playground shows editable Character Director cards. Character updates do not regenerate scene cards automatically; future prompt composition reads the latest character memory while previous scene/image records remain unchanged.
+- `StoryProject.storyDna` stores internal Story DNA: theme, tone, visual style, hero, primary goal, conflict, resolution, character arc, mood palette, visual palette, and camera language. Do not expose this to R16 users.
 - Phase 4 Hidden Prompt Composer uses `StoryScenePrompt`, `story.composeScenePrompt`, and `story.composeAllScenePrompts`.
 - Prompt composer turns Scene Card + Character Bible + Mood + Setting into provider-ready prompts for `FLUX`, `WAN_25`, `KLING_I2V`, and `KLING_R2V`.
 - Prompt output types: `IMAGE`, `SHORT_VIDEO`, `COMIC_PANEL`.
@@ -543,6 +545,7 @@ npx eas-cli update --branch production --platform ios --message "..."
 - **Story Playground Phase 4.5 Analytics**: `AnalyticsEvent`, reusable analytics tracker, Story Completion Funnel, storybook reading events, non-R16 feedback, `/admin/story-analytics`
 - **Story Playground My Stories library**: `/story-playground` shows recent signed-in user projects with progress labels, first scene thumbnail, Continue/Open Storybook/Add Pictures/Edit/Archive actions, empty state, and R16-safe copy
 - **Story Playground Prompt Quality Upgrade**: selectable visual styles, Story Director scene controls, style-aware prompt composer, `promptEnhancerService`, enhanced prompt preview for non-R16 creator/admin users, deterministic fallback, no-text/no-UI negative prompts, prompt quality feedback, `/admin/prompt-quality`
+- **Story Playground Character Director**: structured character traits, goals, fears, relationships, walking/speaking style, evolution stage, internal Story DNA, character-aware prompt enhancement, `/admin/character-insights`
 - **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, AnalyticsEvent, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**

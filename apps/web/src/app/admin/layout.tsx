@@ -13,6 +13,7 @@ const NAV = [
   { href: '/admin/jobs',        label: 'AI Jobs',     icon: '🎬' },
   { href: '/admin/story-analytics', label: 'Story Analytics', icon: 'A' },
   { href: '/admin/prompt-quality', label: 'Prompt Quality', icon: 'P' },
+  { href: '/admin/character-insights', label: 'Character Insights', icon: 'C' },
   { href: '/admin/revenue',     label: 'Revenue',     icon: '💳' },
 ];
 

@@ -29,6 +29,8 @@ export type PromptEnhancerInput = {
     originalIdea?: string | null;
     theme?: string | null;
     visualStyle?: string | null;
+    tone?: string | null;
+    storyDna?: unknown;
   };
   characterIdentity: string;
   selectedVisualStyle?: string | null;
@@ -135,6 +137,7 @@ function deterministicEnhancement(input: PromptEnhancerInput): PromptEnhancerOut
     input.scene.lighting ? `Lighting: ${input.scene.lighting}` : undefined,
     input.scene.scenePace ? `Scene pace for future video: ${input.scene.scenePace}` : undefined,
     `Character continuity, preserve exact identity: ${input.characterIdentity}`,
+    input.project.storyDna ? `Story DNA, keep this consistent: ${JSON.stringify(input.project.storyDna)}` : undefined,
     input.project.theme ? `Story purpose/theme: ${input.project.theme}` : undefined,
     `Tone and safety: ${safety}`,
     `Provider-ready direction: ${motion}`,
@@ -200,7 +203,9 @@ class PromptEnhancerService {
                 `Selected style label: ${styleLabel(input.selectedVisualStyle)}`,
                 `Selected style block: ${stylePromptBlock(input.selectedVisualStyle)}`,
                 `Character identity to preserve exactly: ${input.characterIdentity}`,
+                'Character identity includes appearance, personality, goal, fear, relationships, evolution stage, and consistency rules. Preserve unchanged traits exactly across scenes.',
                 'The scene JSON may include director controls: emotion, cameraStyle, timeOfDay, weather, environmentMood, lighting, and scenePace. Incorporate them naturally and explicitly into the prompt without exposing control labels in the generated image.',
+                `Internal Story DNA: ${JSON.stringify(input.project.storyDna ?? {})}`,
                 `Scene JSON: ${JSON.stringify(input.scene)}`,
                 `Project JSON: ${JSON.stringify(input.project)}`,
                 `Base prompt: ${input.basePrompt}`,

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Camera, ChevronRight, Clock, CloudSun, History, ImagePlus, Lamp, Loader2, Mic, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
+import { BookOpen, Camera, ChevronRight, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
@@ -84,6 +84,25 @@ type StoryCharacterMemory = {
   ageDescription: string | null;
   gender: string | null;
   visualDescription: string | null;
+  personalityTraits?: string[] | null;
+  motivation?: string | null;
+  fear?: string | null;
+  goal?: string | null;
+  favoriteExpression?: string | null;
+  walkingStyle?: string | null;
+  speakingStyle?: string | null;
+  relationships?: CharacterRelationship[] | null;
+  evolutionStage?: string | null;
+  evolutionNotes?: string | null;
+  evolutionSceneOrder?: number | null;
+};
+
+type CharacterRelationship = {
+  targetCharacterId?: string | null;
+  targetName: string;
+  type: string;
+  strength?: string;
+  notes?: string | null;
 };
 
 type StoryProjectSummary = {
@@ -305,6 +324,20 @@ const DIRECTOR_OPTION_GROUPS: DirectorOptionGroup[] = [
   },
 ];
 
+const PERSONALITY_OPTIONS = ['BRAVE', 'CURIOUS', 'FUNNY', 'KIND', 'SHY', 'CONFIDENT', 'ADVENTUROUS', 'CALM', 'CLEVER', 'ENERGETIC'] as const;
+const MOTIVATION_OPTIONS = ['MAKE_FRIENDS', 'LEARN', 'HELP_OTHERS', 'EXPLORE', 'WIN', 'PROTECT_FAMILY', 'FIND_HOME'] as const;
+const FEAR_OPTIONS = ['DARKNESS', 'HEIGHTS', 'BULLIES', 'BEING_ALONE', 'LOUD_NOISES', 'MONSTERS', 'WATER'] as const;
+const CHARACTER_GOAL_OPTIONS = ['REACH_SCHOOL', 'SAVE_A_FRIEND', 'FIND_TREASURE', 'FINISH_HOMEWORK', 'BECOME_A_HERO'] as const;
+const EXPRESSION_OPTIONS = ['SMILE', 'BIG_GRIN', 'CURIOUS_FACE', 'DETERMINED_FACE', 'SURPRISED'] as const;
+const WALKING_STYLE_OPTIONS = ['SKIP', 'RUN', 'WALK_PROUDLY', 'WALK_CAREFULLY', 'BOUNCE', 'SNEAK'] as const;
+const SPEAKING_STYLE_OPTIONS = ['CHEERFUL', 'GENTLE', 'QUIET', 'CONFIDENT', 'FUNNY'] as const;
+const RELATIONSHIP_TYPE_OPTIONS = ['FRIEND', 'SIBLING', 'TEACHER', 'ENEMY', 'PARENT', 'PET', 'MENTOR'] as const;
+const RELATIONSHIP_STRENGTH_OPTIONS = ['DISTANT', 'FRIENDLY', 'CLOSE', 'VERY_CLOSE'] as const;
+
+function characterOptionLabel(value?: string | null) {
+  return value ? value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
+}
+
 function directorOptionLabel(key: DirectorSettingKey, value?: string | null, isR16 = false) {
   const option = DIRECTOR_OPTION_GROUPS.find((group) => group.key === key)?.options.find((item) => item.value === value);
   return option ? (isR16 && option.r16Label ? option.r16Label : option.label) : null;
@@ -326,6 +359,7 @@ export default function StoryPlaygroundPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [editingScene, setEditingScene] = useState<StoryScene | null>(null);
   const [editingCharacter, setEditingCharacter] = useState<StoryCharacterMemory | null>(null);
+  const [isCreatingCharacter, setIsCreatingCharacter] = useState(false);
   const [previewPrompt, setPreviewPrompt] = useState<StoryScenePrompt | null>(null);
   const [historyScene, setHistoryScene] = useState<StoryScene | null>(null);
   const [openDirectorSceneIds, setOpenDirectorSceneIds] = useState<string[]>([]);
@@ -345,6 +379,20 @@ export default function StoryPlaygroundPage() {
     ageDescription: '',
     gender: '',
     visualDescription: '',
+    personalityTraits: [] as string[],
+    motivation: '',
+    fear: '',
+    goal: '',
+    favoriteExpression: '',
+    walkingStyle: '',
+    speakingStyle: '',
+    relationshipTargetName: '',
+    relationshipType: 'FRIEND',
+    relationshipStrength: 'FRIENDLY',
+    relationshipNotes: '',
+    evolutionStage: '',
+    evolutionNotes: '',
+    evolutionSceneOrder: '',
   });
 
   useEffect(() => {
@@ -517,8 +565,18 @@ export default function StoryPlaygroundPage() {
   const updateCharacterMemory = trpc.story.updateCharacterMemory.useMutation({
     onSuccess: async (_character, variables) => {
       setEditingCharacter(null);
-      await generateScenes.mutateAsync({ projectId: variables.projectId, replaceExisting: true });
-      setMessage('Character saved. Scene references refreshed.');
+      setIsCreatingCharacter(false);
+      setMessage(isR16 ? 'Character saved. Make a new picture when ready.' : 'Character Director saved. Future generations will use this memory.');
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const createCharacterMemory = trpc.story.createCharacterMemory.useMutation({
+    onSuccess: async () => {
+      setEditingCharacter(null);
+      setIsCreatingCharacter(false);
+      setMessage(isR16 ? 'New friend added.' : 'Character added to the director.');
       await utils.story.getProject.invalidate();
     },
     onError: (error) => setMessage(error.message),
@@ -544,7 +602,7 @@ export default function StoryPlaygroundPage() {
   const answeredCount = questions.filter((question) => question.selectedAnswer).length;
   const canGenerate = questions.length > 0 && answeredCount === questions.length;
   const canUseAdvancedPrompts = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
-  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || updateSceneDirector.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
+  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || updateSceneDirector.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || createCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
 
   useEffect(() => {
     if (project?.chapters?.length) setStep('story');
@@ -628,6 +686,8 @@ export default function StoryPlaygroundPage() {
 
   const openCharacterEditor = (character: StoryCharacterMemory) => {
     setEditingCharacter(character);
+    setIsCreatingCharacter(false);
+    const relationship = character.relationships?.[0];
     setCharacterForm({
       name: character.name,
       role: character.role ?? '',
@@ -635,21 +695,108 @@ export default function StoryPlaygroundPage() {
       ageDescription: character.ageDescription ?? '',
       gender: character.gender ?? '',
       visualDescription: character.visualDescription ?? '',
+      personalityTraits: Array.isArray(character.personalityTraits) ? character.personalityTraits : [],
+      motivation: character.motivation ?? '',
+      fear: character.fear ?? '',
+      goal: character.goal ?? '',
+      favoriteExpression: character.favoriteExpression ?? '',
+      walkingStyle: character.walkingStyle ?? '',
+      speakingStyle: character.speakingStyle ?? '',
+      relationshipTargetName: relationship?.targetName ?? '',
+      relationshipType: relationship?.type ?? 'FRIEND',
+      relationshipStrength: relationship?.strength ?? 'FRIENDLY',
+      relationshipNotes: relationship?.notes ?? '',
+      evolutionStage: character.evolutionStage ?? '',
+      evolutionNotes: character.evolutionNotes ?? '',
+      evolutionSceneOrder: character.evolutionSceneOrder ? String(character.evolutionSceneOrder) : '',
     });
+  };
+
+  const openNewCharacterEditor = () => {
+    setEditingCharacter({
+      id: 'new',
+      name: '',
+      role: '',
+      species: '',
+      ageDescription: '',
+      gender: '',
+      visualDescription: '',
+      personalityTraits: [],
+      relationships: [],
+    });
+    setIsCreatingCharacter(true);
+    setCharacterForm({
+      name: '',
+      role: '',
+      species: '',
+      ageDescription: '',
+      gender: '',
+      visualDescription: '',
+      personalityTraits: [],
+      motivation: '',
+      fear: '',
+      goal: '',
+      favoriteExpression: '',
+      walkingStyle: '',
+      speakingStyle: '',
+      relationshipTargetName: '',
+      relationshipType: 'FRIEND',
+      relationshipStrength: 'FRIENDLY',
+      relationshipNotes: '',
+      evolutionStage: '',
+      evolutionNotes: '',
+      evolutionSceneOrder: '',
+    });
+  };
+
+  const relationshipsFromForm = (): CharacterRelationship[] => {
+    if (!characterForm.relationshipTargetName.trim()) return [];
+    const target = characterMemory.find((character) => character.name.toLowerCase() === characterForm.relationshipTargetName.trim().toLowerCase());
+    return [{
+      targetCharacterId: target?.id ?? null,
+      targetName: characterForm.relationshipTargetName.trim(),
+      type: characterForm.relationshipType,
+      strength: characterForm.relationshipStrength,
+      notes: characterForm.relationshipNotes.trim() || null,
+    }];
   };
 
   const saveCharacter = () => {
     if (!projectId || !editingCharacter) return;
-    updateCharacterMemory.mutate({
+    const payload = {
       projectId,
-      characterId: editingCharacter.id,
       name: characterForm.name.trim(),
       role: characterForm.role.trim() || undefined,
       species: characterForm.species.trim() || undefined,
       ageDescription: characterForm.ageDescription.trim() || undefined,
       gender: characterForm.gender.trim() || undefined,
       visualDescription: characterForm.visualDescription.trim(),
-    });
+      personalityTraits: characterForm.personalityTraits as any,
+      motivation: characterForm.motivation ? characterForm.motivation as any : null,
+      fear: characterForm.fear ? characterForm.fear as any : null,
+      goal: characterForm.goal ? characterForm.goal as any : null,
+      favoriteExpression: characterForm.favoriteExpression ? characterForm.favoriteExpression as any : null,
+      walkingStyle: characterForm.walkingStyle ? characterForm.walkingStyle as any : null,
+      speakingStyle: characterForm.speakingStyle ? characterForm.speakingStyle as any : null,
+      relationships: relationshipsFromForm() as any,
+      evolutionStage: characterForm.evolutionStage.trim() || null,
+      evolutionNotes: characterForm.evolutionNotes.trim() || null,
+      evolutionSceneOrder: characterForm.evolutionSceneOrder ? Number(characterForm.evolutionSceneOrder) : null,
+    };
+    if (isCreatingCharacter) {
+      createCharacterMemory.mutate(payload);
+      return;
+    }
+    updateCharacterMemory.mutate({ ...payload, characterId: editingCharacter.id });
+  };
+
+  const togglePersonalityTrait = (trait: string) => {
+    setCharacterForm((current) => ({
+      ...current,
+      personalityTraits: current.personalityTraits.includes(trait)
+        ? current.personalityTraits.filter((item) => item !== trait)
+        : [...current.personalityTraits, trait],
+    }));
   };
 
   const sceneCharacterLabels = (value: unknown) => {
@@ -1154,20 +1301,30 @@ export default function StoryPlaygroundPage() {
             <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-5 md:p-6">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-wide text-[#2fbf71]">{isR16 ? 'Story friends' : 'Character Bible'}</p>
-                  <h3 className="text-3xl font-black">{isR16 ? 'Keep everyone looking the same' : 'Consistent character references'}</h3>
+                  <p className="text-sm font-black uppercase tracking-wide text-[#2fbf71]">{isR16 ? 'My Characters' : 'Character Director'}</p>
+                  <h3 className="text-3xl font-black">{isR16 ? 'Who is in the story?' : 'Direct character identity and arcs'}</h3>
                   <p className="mt-1 font-semibold text-[#596070]">
-                    {isR16 ? 'These cards help Max or any friend look the same in every picture.' : 'These descriptions become reusable prompt ingredients for every scene in Phase 4.'}
+                    {isR16 ? 'Choose what they are like, what they want, and who their friends are.' : 'Character memory now drives future prompts, image consistency, relationships, and evolution from this point forward.'}
                   </p>
                 </div>
-                <button
-                  onClick={() => projectId && generateCharacterBible.mutate({ projectId, replaceExisting: true })}
-                  disabled={!projectId || generateCharacterBible.isPending || generateScenes.isPending}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-50"
-                >
-                  <UserRound size={18} />
-                  {generateCharacterBible.isPending ? 'Refreshing...' : 'Refresh Characters'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={openNewCharacterEditor}
+                    disabled={!projectId}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffcf4a] px-5 py-3 font-black text-[#172033] disabled:opacity-50"
+                  >
+                    <Plus size={18} />
+                    {isR16 ? 'Add Friend' : 'Add Character'}
+                  </button>
+                  <button
+                    onClick={() => projectId && generateCharacterBible.mutate({ projectId, replaceExisting: true })}
+                    disabled={!projectId || generateCharacterBible.isPending || generateScenes.isPending}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-50"
+                  >
+                    <UserRound size={18} />
+                    {generateCharacterBible.isPending ? 'Refreshing...' : isR16 ? 'Refresh Friends' : 'Refresh Characters'}
+                  </button>
+                </div>
               </div>
 
               {characterMemory.length === 0 ? (
@@ -1192,6 +1349,22 @@ export default function StoryPlaygroundPage() {
                       <p className="mt-3 line-clamp-3 text-sm font-semibold text-[#596070]">
                         {character.visualDescription || 'Add a clear visual description.'}
                       </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {(character.personalityTraits ?? []).slice(0, 3).map((trait) => (
+                          <span key={trait} className="rounded-full bg-[#dff8e9] px-3 py-1 text-xs font-black text-[#145c37]">
+                            {characterOptionLabel(trait)}
+                          </span>
+                        ))}
+                        {character.goal && (
+                          <span className="rounded-full bg-[#e8f0ff] px-3 py-1 text-xs font-black text-[#1d4c8f]">
+                            {characterOptionLabel(character.goal)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-[#596070]">
+                        <span>{isR16 ? 'Pictures' : 'Pictures Generated'}: {scenes.filter((scene) => sceneCharacterLabels(scene.characters).includes(character.name) && scene.imageUrl).length}</span>
+                        <span>{isR16 ? 'Friends' : 'Relationships'}: {character.relationships?.length ?? 0}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -1514,7 +1687,7 @@ export default function StoryPlaygroundPage() {
 
       {editingCharacter && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-5 text-[#172033] shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 text-[#172033] shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[#2fbf71]">{isR16 ? 'Edit friend' : 'Edit character reference'}</p>
@@ -1579,6 +1752,94 @@ export default function StoryPlaygroundPage() {
                   className="w-full resize-none rounded-xl border-2 border-[#172033]/10 px-4 py-3 font-bold outline-none focus:border-[#2fbf71]"
                 />
               </label>
+              <div className="rounded-2xl border-2 border-[#172033]/10 bg-[#fffdf8] p-4">
+                <p className="mb-3 text-sm font-black text-[#596070]">{isR16 ? 'What are they like?' : 'Personality'}</p>
+                <div className="flex flex-wrap gap-2">
+                  {PERSONALITY_OPTIONS.map((trait) => {
+                    const selected = characterForm.personalityTraits.includes(trait);
+                    return (
+                      <button
+                        key={trait}
+                        type="button"
+                        onClick={() => togglePersonalityTrait(trait)}
+                        className={`rounded-full px-3 py-2 text-sm font-black ${selected ? 'bg-[#2fbf71] text-white' : 'bg-white text-[#596070] ring-2 ring-[#172033]/10'}`}
+                      >
+                        {characterOptionLabel(trait)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">{isR16 ? 'What do they want?' : 'Motivation'}</span>
+                  <select value={characterForm.motivation} onChange={(event) => setCharacterForm({ ...characterForm, motivation: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {MOTIVATION_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">{isR16 ? 'What feels scary?' : 'Fear'}</span>
+                  <select value={characterForm.fear} onChange={(event) => setCharacterForm({ ...characterForm, fear: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {FEAR_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">Goal</span>
+                  <select value={characterForm.goal} onChange={(event) => setCharacterForm({ ...characterForm, goal: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {CHARACTER_GOAL_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">{isR16 ? 'Favorite face' : 'Favorite Expression'}</span>
+                  <select value={characterForm.favoriteExpression} onChange={(event) => setCharacterForm({ ...characterForm, favoriteExpression: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {EXPRESSION_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">Walking Style</span>
+                  <select value={characterForm.walkingStyle} onChange={(event) => setCharacterForm({ ...characterForm, walkingStyle: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {WALKING_STYLE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-black text-[#596070]">{isR16 ? 'Talking style' : 'Speaking Style'}</span>
+                  <select value={characterForm.speakingStyle} onChange={(event) => setCharacterForm({ ...characterForm, speakingStyle: event.target.value })} className="w-full rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    <option value="">Choose</option>
+                    {SPEAKING_STYLE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="rounded-2xl border-2 border-[#172033]/10 bg-[#fffdf8] p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-black text-[#596070]">
+                  <HeartHandshake size={18} />
+                  {isR16 ? 'Who are their friends?' : 'Relationship'}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input value={characterForm.relationshipTargetName} onChange={(event) => setCharacterForm({ ...characterForm, relationshipTargetName: event.target.value })} placeholder={isR16 ? 'Friend name' : 'Target character name'} className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]" />
+                  <select value={characterForm.relationshipType} onChange={(event) => setCharacterForm({ ...characterForm, relationshipType: event.target.value })} className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    {RELATIONSHIP_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                  <select value={characterForm.relationshipStrength} onChange={(event) => setCharacterForm({ ...characterForm, relationshipStrength: event.target.value })} className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]">
+                    {RELATIONSHIP_STRENGTH_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
+                  </select>
+                  {!isR16 && <input value={characterForm.relationshipNotes} onChange={(event) => setCharacterForm({ ...characterForm, relationshipNotes: event.target.value })} placeholder="Relationship notes" className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]" />}
+                </div>
+              </div>
+              {!isR16 && (
+                <div className="rounded-2xl border-2 border-[#172033]/10 bg-[#fffdf8] p-4">
+                  <p className="mb-3 text-sm font-black text-[#596070]">Character Evolution</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <input value={characterForm.evolutionStage} onChange={(event) => setCharacterForm({ ...characterForm, evolutionStage: event.target.value })} placeholder="Stage, e.g. braver" className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]" />
+                    <input value={characterForm.evolutionSceneOrder} onChange={(event) => setCharacterForm({ ...characterForm, evolutionSceneOrder: event.target.value })} placeholder="From scene #" type="number" min={1} className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]" />
+                    <input value={characterForm.evolutionNotes} onChange={(event) => setCharacterForm({ ...characterForm, evolutionNotes: event.target.value })} placeholder="Evolution notes" className="rounded-xl border-2 border-[#172033]/10 px-3 py-3 font-bold outline-none focus:border-[#2fbf71]" />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -1587,10 +1848,10 @@ export default function StoryPlaygroundPage() {
               </button>
               <button
                 onClick={saveCharacter}
-                disabled={!characterForm.name.trim() || !characterForm.visualDescription.trim() || updateCharacterMemory.isPending}
+                disabled={!characterForm.name.trim() || !characterForm.visualDescription.trim() || updateCharacterMemory.isPending || createCharacterMemory.isPending}
                 className="rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-50"
               >
-                {updateCharacterMemory.isPending ? 'Saving...' : 'Save Character'}
+                {updateCharacterMemory.isPending || createCharacterMemory.isPending ? 'Saving...' : isR16 ? 'Save Friend' : 'Save Character'}
               </button>
             </div>
           </div>
