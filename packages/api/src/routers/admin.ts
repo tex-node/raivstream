@@ -204,6 +204,161 @@ export const adminRouter = router({
       };
     }),
 
+  promptQuality: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30), limit: z.number().int().min(10).max(200).default(80) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const assets = await (ctx.prisma as any).storySceneAsset.findMany({
+        where: { createdAt: { gte: since }, assetType: { in: ['IMAGE', 'VIDEO'] } },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit,
+        include: {
+          scene: {
+            include: {
+              project: {
+                select: {
+                  id: true,
+                  title: true,
+                  audienceMode: true,
+                  visualStyle: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      const assetIds = assets.map((asset: any) => asset.id);
+      const jobIds = assets.map((asset: any) => asset.generationJobId).filter(Boolean);
+      const sceneIds = Array.from(new Set(assets.map((asset: any) => asset.sceneId)));
+      const [jobs, feedback, sceneAssetCounts] = await Promise.all([
+        jobIds.length
+          ? ctx.prisma.generationJob.findMany({ where: { id: { in: jobIds } } })
+          : Promise.resolve([]),
+        assetIds.length
+          ? (ctx.prisma as any).promptQualityFeedback.findMany({ where: { assetId: { in: assetIds } }, orderBy: { createdAt: 'desc' } })
+          : Promise.resolve([]),
+        sceneIds.length
+          ? (ctx.prisma as any).storySceneAsset.groupBy({ by: ['sceneId'], where: { sceneId: { in: sceneIds }, assetType: { in: ['IMAGE', 'VIDEO'] } }, _count: { id: true } })
+          : Promise.resolve([]),
+      ]);
+
+      const jobById = new Map(jobs.map((job) => [job.id, job]));
+      const feedbackByAsset = new Map<string, Array<{ rating: number; comment?: string | null; createdAt: Date }>>();
+      for (const item of feedback as Array<{ assetId: string; rating: number; comment?: string | null; createdAt: Date }>) {
+        const list = feedbackByAsset.get(item.assetId) ?? [];
+        list.push(item);
+        feedbackByAsset.set(item.assetId, list);
+      }
+      const countByScene = new Map((sceneAssetCounts as Array<{ sceneId: string; _count: { id: number } }>).map((item) => [item.sceneId, item._count.id]));
+      const rows = assets.map((asset: any) => {
+        const job = asset.generationJobId ? jobById.get(asset.generationJobId) : null;
+        const metadata = (job?.metadata ?? {}) as Record<string, any>;
+        const assetFeedback = feedbackByAsset.get(asset.id) ?? [];
+        const averageRating = assetFeedback.length
+          ? assetFeedback.reduce((sum, item) => sum + item.rating, 0) / assetFeedback.length
+          : null;
+        const generationTimeMs = job ? new Date(job.updatedAt).getTime() - new Date(job.createdAt).getTime() : null;
+        return {
+          id: asset.id,
+          storyTitle: asset.scene?.project?.title ?? 'Untitled story',
+          projectId: asset.projectId,
+          sceneId: asset.sceneId,
+          sceneTitle: asset.scene?.title ?? 'Scene',
+          visualStyle: metadata.visualStyleLabel ?? asset.scene?.project?.visualStyle ?? null,
+          provider: asset.provider,
+          actualProviderModel: metadata.actualProviderModel ?? asset.model,
+          requestedModel: metadata.requestedModel ?? job?.model ?? asset.model,
+          enhancerProvider: metadata.promptEnhancerProvider ?? null,
+          enhancerModel: metadata.promptEnhancerModel ?? null,
+          promptEnhancementEnabled: Boolean(metadata.promptEnhancerProvider),
+          promptLength: asset.composedPrompt?.length ?? job?.prompt?.length ?? 0,
+          generationTimeMs,
+          creditsUsed: job?.creditsUsed ?? 0,
+          regenerated: (countByScene.get(asset.sceneId) ?? 0) > 1,
+          finalAssetSelected: asset.isLatest,
+          audienceMode: asset.scene?.project?.audienceMode ?? null,
+          storyCompleted: ['STORYBOARDED', 'IN_PRODUCTION', 'PUBLISHED'].includes(asset.scene?.project?.status ?? ''),
+          status: asset.status,
+          createdAt: asset.createdAt,
+          ratingCount: assetFeedback.length,
+          averageRating,
+          latestComment: assetFeedback.find((item) => item.comment)?.comment ?? null,
+          result: {
+            assetUrl: asset.assetUrl,
+            thumbnailUrl: asset.thumbnailUrl,
+            width: asset.width,
+            height: asset.height,
+            errorMessage: asset.errorMessage,
+          },
+          expanded: {
+            deterministicPrompt: metadata.deterministicPrompt ?? null,
+            enhancedPrompt: job?.prompt ?? asset.composedPrompt ?? null,
+            negativePrompt: asset.negativePrompt ?? job?.negativePrompt ?? null,
+            providerMetadata: metadata,
+            generationResult: {
+              providerJobId: job?.providerJobId ?? null,
+              outputUrl: job?.outputUrl ?? asset.assetUrl,
+              thumbnailUrl: job?.thumbnailUrl ?? asset.thumbnailUrl,
+              status: job?.status ?? asset.status,
+            },
+          },
+        };
+      });
+
+      const summaryMap = new Map<string, {
+        visualStyle: string;
+        enhancerProvider: string;
+        actualProviderModel: string;
+        count: number;
+        ratingTotal: number;
+        ratingCount: number;
+        regenerationTotal: number;
+        generationTimeTotal: number;
+        generationTimeCount: number;
+      }>();
+
+      for (const row of rows) {
+        const key = `${row.visualStyle ?? 'Unknown'}|${row.enhancerProvider ?? 'none'}|${row.actualProviderModel ?? 'unknown'}`;
+        const existing = summaryMap.get(key) ?? {
+          visualStyle: row.visualStyle ?? 'Unknown',
+          enhancerProvider: row.enhancerProvider ?? 'none',
+          actualProviderModel: row.actualProviderModel ?? 'unknown',
+          count: 0,
+          ratingTotal: 0,
+          ratingCount: 0,
+          regenerationTotal: 0,
+          generationTimeTotal: 0,
+          generationTimeCount: 0,
+        };
+        existing.count += 1;
+        if (row.averageRating !== null) {
+          existing.ratingTotal += row.averageRating;
+          existing.ratingCount += 1;
+        }
+        existing.regenerationTotal += row.regenerated ? 1 : 0;
+        if (row.generationTimeMs !== null) {
+          existing.generationTimeTotal += row.generationTimeMs;
+          existing.generationTimeCount += 1;
+        }
+        summaryMap.set(key, existing);
+      }
+
+      const summaries = Array.from(summaryMap.values())
+        .map((item) => ({
+          visualStyle: item.visualStyle,
+          enhancerProvider: item.enhancerProvider,
+          actualProviderModel: item.actualProviderModel,
+          count: item.count,
+          averageRating: item.ratingCount ? item.ratingTotal / item.ratingCount : null,
+          averageRegenerations: item.count ? item.regenerationTotal / item.count : 0,
+          averageGenerationTimeMs: item.generationTimeCount ? item.generationTimeTotal / item.generationTimeCount : null,
+        }))
+        .sort((a, b) => (b.averageRating ?? -Infinity) - (a.averageRating ?? -Infinity));
+
+      return { rangeDays: input.days, rows, summaries };
+    }),
+
   // ─── User Management ────────────────────────────────────────────────────────
 
   /**

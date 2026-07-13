@@ -701,9 +701,18 @@ model StorySceneSeed {
   locationType   String?
   indoorOutdoor  String?
   mood           String?
+  emotion        String?
+  cameraStyle    String?
+  timeOfDay      String?
+  weather        String?
+  environmentMood String?
+  lighting       String?
+  scenePace      String?
+  directorChangedAt DateTime?
   characters     Json?
   prompts        StoryScenePrompt[]
   assets         StorySceneAsset[]
+  promptFeedback PromptQualityFeedback[]
   latestImageAssetId String?
   imageStatus    StorySceneAssetStatus?
   imageUrl       String?
@@ -749,6 +758,28 @@ model StorySceneAsset {
   @@index([sceneId, isLatest])
   @@index([status])
   @@map("story_scene_assets")
+}
+
+model PromptQualityFeedback {
+  id        String          @id @default(cuid())
+  projectId String
+  sceneId   String
+  scene     StorySceneSeed  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  assetId   String
+  userId    String?
+
+  rating    Int
+  comment   String?
+
+  createdAt DateTime        @default(now())
+
+  @@unique([assetId, userId])
+  @@index([projectId])
+  @@index([sceneId])
+  @@index([assetId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("prompt_quality_feedback")
 }
 
 model StoryScenePrompt {

@@ -27,6 +27,15 @@ const storyVisualStyleSchema = z.enum([
   'CINEMATIC_FANTASY',
   'AFRICAN_FOLKTALE_ILLUSTRATION',
 ]);
+const directorSettingsSchema = z.object({
+  emotion: z.enum(['HAPPY', 'EXCITED', 'CURIOUS', 'BRAVE', 'CALM', 'SAD', 'SURPRISED']).nullable().optional(),
+  cameraStyle: z.enum(['CLOSE_UP', 'MEDIUM_SHOT', 'WIDE_SHOT', 'OVER_THE_SHOULDER', 'BIRDS_EYE_VIEW', 'EYE_LEVEL']).nullable().optional(),
+  timeOfDay: z.enum(['MORNING', 'AFTERNOON', 'SUNSET', 'NIGHT']).nullable().optional(),
+  weather: z.enum(['SUNNY', 'RAINY', 'SNOWY', 'WINDY', 'FOGGY']).nullable().optional(),
+  environmentMood: z.enum(['PEACEFUL', 'BUSY', 'MAGICAL', 'FUTURISTIC', 'COZY', 'ADVENTUROUS']).nullable().optional(),
+  lighting: z.enum(['BRIGHT', 'WARM', 'SOFT', 'DRAMATIC', 'MOONLIGHT']).nullable().optional(),
+  scenePace: z.enum(['CALM', 'NORMAL', 'ENERGETIC']).nullable().optional(),
+});
 const MAX_STORYBOARD_SHOTS = 24;
 const MAX_STORY_BEAT_LENGTH = 700;
 const STORY_IDEA_MAX_LENGTH = 240;
@@ -190,6 +199,27 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function directorLabel(value?: string | null) {
+  if (!value) return undefined;
+  return value
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function directorSettingsFromScene(scene: Pick<ScenePromptContext, 'emotion' | 'cameraStyle' | 'timeOfDay' | 'weather' | 'environmentMood' | 'lighting' | 'scenePace'>) {
+  return {
+    emotion: directorLabel(scene.emotion),
+    cameraStyle: directorLabel(scene.cameraStyle),
+    timeOfDay: directorLabel(scene.timeOfDay),
+    weather: directorLabel(scene.weather),
+    environmentMood: directorLabel(scene.environmentMood),
+    lighting: directorLabel(scene.lighting),
+    scenePace: directorLabel(scene.scenePace),
+  };
+}
+
 function chapterSelect() {
   return {
     id: true,
@@ -231,6 +261,13 @@ type ScenePromptContext = {
   locationType?: string | null;
   indoorOutdoor?: string | null;
   mood?: string | null;
+  emotion?: string | null;
+  cameraStyle?: string | null;
+  timeOfDay?: string | null;
+  weather?: string | null;
+  environmentMood?: string | null;
+  lighting?: string | null;
+  scenePace?: string | null;
   characters?: unknown;
   project: {
     title: string;
@@ -435,6 +472,7 @@ function composeScenePromptText(input: {
       ? 'smooth natural motion, stable character identity, clear subject continuity'
       : 'cinematic but gentle movement, stable character identity, simple action';
   const compositionAspect = 'mobile-first 9:16 framing';
+  const director = directorSettingsFromScene(input.scene);
 
   const prompt = [
     `${outputTypeLabel(input.outputType)} for "${input.scene.project.title}"`,
@@ -442,6 +480,13 @@ function composeScenePromptText(input: {
     `action: ${input.scene.description}`,
     settingText || undefined,
     input.scene.mood ? `mood: ${input.scene.mood}` : undefined,
+    director.emotion ? `directed emotion: ${director.emotion}` : undefined,
+    director.cameraStyle ? `camera style: ${director.cameraStyle}` : undefined,
+    director.timeOfDay ? `time of day: ${director.timeOfDay}` : undefined,
+    director.weather ? `weather: ${director.weather}` : undefined,
+    director.environmentMood ? `environment feeling: ${director.environmentMood}` : undefined,
+    director.lighting ? `lighting: ${director.lighting}` : undefined,
+    director.scenePace ? `scene pace for future video: ${director.scenePace}` : undefined,
     `characters, keep exact identity: ${characterText}`,
     `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
     input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
@@ -458,6 +503,7 @@ function composeScenePromptText(input: {
     maxPromptLength: meta.maxPromptLength,
     providerLabel: meta.label,
     styleUsed: styleLabel(effectiveVisualStyle(input.scene.project, input.audienceMode)),
+    director,
     providerHints: {
       camera: input.outputType === 'SHORT_VIDEO' ? 'stable gentle motion' : 'single clean keyframe',
       lighting: 'warm, clear, style-consistent lighting',
@@ -502,7 +548,7 @@ async function composeEnhancedScenePrompt(
       baseNegativePrompt: base.negativePrompt,
       maxPromptLength: base.maxPromptLength,
       maxNegativePromptLength: meta.maxNegativePromptLength,
-      scene: input.scene,
+      scene: { ...input.scene, ...base.director },
       project: input.scene.project,
       characterIdentity,
       selectedVisualStyle: effectiveVisualStyle(input.scene.project, input.audienceMode),
@@ -542,6 +588,7 @@ async function composeEnhancedScenePrompt(
 
     return {
       ...base,
+      deterministicPrompt: base.prompt,
       prompt: enhanced.enhancedPrompt,
       negativePrompt: enhanced.negativePrompt,
       styleUsed: enhanced.styleUsed,
@@ -566,6 +613,7 @@ async function composeEnhancedScenePrompt(
     });
     return {
       ...base,
+      deterministicPrompt: base.prompt,
       enhancerProvider: 'deterministic-fallback',
       enhancerModel: undefined,
       safetyNotes: 'Prompt enhancer failed; deterministic prompt composer used.',
@@ -747,8 +795,10 @@ async function generateSceneImageAsset(
           storyProjectId: project.id,
           storySceneId: scene.id,
           storySceneAssetId: asset.id,
+          deterministicPrompt: composed.deterministicPrompt,
           visualStyle: normaliseStoryVisualStyle(project.visualStyle),
           visualStyleLabel: composed.styleUsed,
+          director: composed.director,
           promptEnhancerProvider: composed.enhancerProvider,
           promptEnhancerModel: composed.enhancerModel,
           providerHints: composed.providerHints,
@@ -856,6 +906,21 @@ async function generateSceneImageAsset(
         audienceMode,
         properties: { sceneId: scene.id, assetId: asset.id, model: input.model },
       });
+      if (scene.directorChangedAt) {
+        await trackStoryAnalytics(ctx, {
+          event: 'regeneration_after_director_change',
+          projectId: project.id,
+          audienceMode,
+          properties: {
+            sceneId: scene.id,
+            assetId: asset.id,
+            requestedModel: input.model,
+            model: providerInfo.model,
+            provider: providerInfo.provider,
+            director: composed.director,
+          },
+        });
+      }
     }
 
     return {
@@ -1607,6 +1672,54 @@ export const storyRouter = router({
       });
     }),
 
+  updateSceneDirector: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      settings: directorSettingsSchema,
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const scene = await ctx.prisma.storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+
+      const settings = input.settings;
+      const updated = await ctx.prisma.storySceneSeed.update({
+        where: { id: input.sceneId },
+        data: {
+          emotion: settings.emotion ?? null,
+          cameraStyle: settings.cameraStyle ?? null,
+          timeOfDay: settings.timeOfDay ?? null,
+          weather: settings.weather ?? null,
+          environmentMood: settings.environmentMood ?? null,
+          lighting: settings.lighting ?? null,
+          scenePace: settings.scenePace ?? null,
+          directorChangedAt: new Date(),
+        },
+      });
+
+      await trackStoryAnalytics(ctx, {
+        event: 'director_setting_changed',
+        projectId: project.id,
+        audienceMode: project.audienceMode,
+        properties: {
+          sceneId: scene.id,
+          emotion: settings.emotion,
+          camera: settings.cameraStyle,
+          lighting: settings.lighting,
+          weather: settings.weather,
+          environment: settings.environmentMood,
+          timeOfDay: settings.timeOfDay,
+          scenePace: settings.scenePace,
+          style: project.visualStyle,
+        },
+      });
+
+      return updated;
+    }),
+
   composeScenePrompt: protectedProcedure
     .input(z.object({
       projectId: z.string(),
@@ -1680,7 +1793,9 @@ export const storyRouter = router({
             maxPromptLength: composed.maxPromptLength,
             audienceMode,
             hiddenFromKids: true,
+            deterministicPrompt: composed.deterministicPrompt,
             visualStyle: composed.styleUsed,
+            director: composed.director,
             promptEnhancerProvider: composed.enhancerProvider,
             promptEnhancerModel: composed.enhancerModel,
             providerHints: composed.providerHints,
@@ -1752,7 +1867,9 @@ export const storyRouter = router({
               maxPromptLength: composed.maxPromptLength,
               audienceMode,
               hiddenFromKids: true,
+              deterministicPrompt: composed.deterministicPrompt,
               visualStyle: composed.styleUsed,
+              director: composed.director,
               promptEnhancerProvider: composed.enhancerProvider,
               promptEnhancerModel: composed.enhancerModel,
               providerHints: composed.providerHints,
@@ -1779,6 +1896,64 @@ export const storyRouter = router({
       model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
+
+  submitPromptQualityFeedback: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      assetId: z.string(),
+      rating: z.enum(['UP', 'DOWN']),
+      comment: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: {
+          id: input.assetId,
+          sceneId: input.sceneId,
+          projectId: input.projectId,
+          userId: ctx.user.id,
+        },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene image not found' });
+
+      const feedback = await (ctx.prisma as any).promptQualityFeedback.upsert({
+        where: {
+          assetId_userId: {
+            assetId: input.assetId,
+            userId: ctx.user.id,
+          },
+        },
+        update: {
+          rating: input.rating === 'UP' ? 1 : -1,
+          comment: input.comment?.trim() || null,
+        },
+        create: {
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          assetId: input.assetId,
+          userId: ctx.user.id,
+          rating: input.rating === 'UP' ? 1 : -1,
+          comment: input.comment?.trim() || null,
+        },
+      });
+
+      await trackStoryAnalytics(ctx, {
+        event: 'prompt_quality_feedback',
+        projectId: input.projectId,
+        audienceMode: ctx.isR16 ? 'KIDS' : undefined,
+        properties: {
+          sceneId: input.sceneId,
+          assetId: input.assetId,
+          rating: input.rating,
+          hasComment: Boolean(input.comment?.trim()),
+          model: asset.model,
+          provider: asset.provider,
+        },
+      });
+
+      return feedback;
+    }),
 
   listSceneAssets: protectedProcedure
     .input(z.object({

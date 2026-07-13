@@ -776,6 +776,47 @@ Reason:
 - The current `apps/web` lint script is `eslint . --ext .js,.jsx,.ts,.tsx`.
 - With this script, the extra `--` separator is forwarded to ESLint, which can make `--max-warnings=0` behave like a file pattern instead of a flag.
 
+### 2026-07-13: Phase 5C Story Director And Prompt Quality Dashboard
+
+Changed:
+
+- Added per-scene Story Director controls for:
+  - Emotion
+  - Camera style
+  - Time of day
+  - Weather
+  - Environment mood
+  - Lighting
+  - Scene pace
+- Director choices are saved on `StorySceneSeed` and do not automatically regenerate images.
+- Prompt composition now includes director choices along with character bible, visual style, scene action, setting, story purpose, and safety rules.
+- The Story Playground UI shows a collapsible `Direct This Scene` panel inside each scene card.
+- R16 copy remains simple and hides prompt, provider, model, credits, and metadata language.
+- Added thumbs-up/thumbs-down prompt quality feedback after generated images, with optional non-R16 improvement comment.
+- Added admin-only `/admin/prompt-quality` for prompt QA:
+  - Shows story, scene, visual style, requested model, actual provider model, provider, prompt enhancement status, prompt length, generation time, credits, regeneration state, latest asset state, audience mode, completion state, ratings, and comments.
+  - Raw deterministic/enhanced/negative prompts and provider metadata are hidden until an admin expands a row.
+  - Summarizes style/enhancer/provider combinations by rating, regeneration rate, and generation time.
+
+Schema:
+
+- Added nullable director fields to `StorySceneSeed`.
+- Added `PromptQualityFeedback` table.
+- Migration: `20260713090000_story_director_prompt_quality`.
+
+Verification:
+
+- VPS backup created before migration: `/root/raivstream/backups/pre_phase_5c_story_director_20260713-100604.sql`.
+- `pnpm --filter @raivstream/database exec prisma migrate deploy` passed on staging after removing a UTF-8 BOM from the migration file and resolving the failed no-op migration attempt as rolled back.
+- `pnpm --filter @raivstream/database exec prisma validate` passed.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with read-aloud disabled.
+- Phase 5C staging ran on `127.0.0.1:3013` with healthy database status.
+- Real provider smoke generated and regenerated `A dog going to school` scene images in 3D Animated and Anime styles, confirmed 720x1280 R2 assets, requested model `FLUX`, actual provider model `z-image-turbo`, feedback storage, admin prompt-quality rows, and `regeneration_after_director_change` analytics.
+- Production health remained clean for `https://app.raivstream.com/api/health` and `https://r16.raivstream.com/api/health`.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.

@@ -109,6 +109,7 @@ apps/web/src/
   app/admin/moderation/page.tsx       — content moderation queue (approve/reject/flag, content rating, kids-safe toggle)
   app/admin/credits/page.tsx          — credit rate management (inline edit + add rate)
   app/admin/jobs/page.tsx             — generation job history (filter by status/model)
+  app/admin/prompt-quality/page.tsx   — admin prompt QA dashboard (style/provider quality, ratings, expandable prompt metadata)
   app/admin/revenue/page.tsx          — revenue summary + transaction table
   app/sign-in/[[...sign-in]]/page.tsx — JWT sign-in (reveal password, forgot password link)
   app/sign-up/[[...sign-up]]/page.tsx — JWT sign-up (reveal password, confirm password, strength bar)
@@ -541,7 +542,7 @@ npx eas-cli update --branch production --platform ios --message "..."
 - **Story Playground Phase 4C Storybook Viewer**: page-by-page reader from story scenes and latest images, cover page, reading progress, keyboard/swipe navigation, R16-safe reading mode
 - **Story Playground Phase 4.5 Analytics**: `AnalyticsEvent`, reusable analytics tracker, Story Completion Funnel, storybook reading events, non-R16 feedback, `/admin/story-analytics`
 - **Story Playground My Stories library**: `/story-playground` shows recent signed-in user projects with progress labels, first scene thumbnail, Continue/Open Storybook/Add Pictures/Edit/Archive actions, empty state, and R16-safe copy
-- **Story Playground Prompt Quality Upgrade**: selectable visual styles, style-aware prompt composer, `promptEnhancerService`, enhanced prompt preview for non-R16 creator/admin users, deterministic fallback, no-text/no-UI negative prompts
+- **Story Playground Prompt Quality Upgrade**: selectable visual styles, Story Director scene controls, style-aware prompt composer, `promptEnhancerService`, enhanced prompt preview for non-R16 creator/admin users, deterministic fallback, no-text/no-UI negative prompts, prompt quality feedback, `/admin/prompt-quality`
 - **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, AnalyticsEvent, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**

@@ -15,6 +15,13 @@ export type PromptEnhancerInput = {
     locationType?: string | null;
     indoorOutdoor?: string | null;
     mood?: string | null;
+    emotion?: string | null;
+    cameraStyle?: string | null;
+    timeOfDay?: string | null;
+    weather?: string | null;
+    environmentMood?: string | null;
+    lighting?: string | null;
+    scenePace?: string | null;
     characters?: unknown;
   };
   project: {
@@ -120,6 +127,13 @@ function deterministicEnhancement(input: PromptEnhancerInput): PromptEnhancerOut
     input.scene.locationType ? `Location: ${input.scene.locationType}` : undefined,
     input.scene.indoorOutdoor ? `Space: ${input.scene.indoorOutdoor}` : undefined,
     input.scene.mood ? `Mood: ${input.scene.mood}` : undefined,
+    input.scene.emotion ? `Directed emotion: ${input.scene.emotion}` : undefined,
+    input.scene.cameraStyle ? `Camera: ${input.scene.cameraStyle}` : undefined,
+    input.scene.timeOfDay ? `Time of day: ${input.scene.timeOfDay}` : undefined,
+    input.scene.weather ? `Weather: ${input.scene.weather}` : undefined,
+    input.scene.environmentMood ? `Environment mood: ${input.scene.environmentMood}` : undefined,
+    input.scene.lighting ? `Lighting: ${input.scene.lighting}` : undefined,
+    input.scene.scenePace ? `Scene pace for future video: ${input.scene.scenePace}` : undefined,
     `Character continuity, preserve exact identity: ${input.characterIdentity}`,
     input.project.theme ? `Story purpose/theme: ${input.project.theme}` : undefined,
     `Tone and safety: ${safety}`,
@@ -186,6 +200,7 @@ class PromptEnhancerService {
                 `Selected style label: ${styleLabel(input.selectedVisualStyle)}`,
                 `Selected style block: ${stylePromptBlock(input.selectedVisualStyle)}`,
                 `Character identity to preserve exactly: ${input.characterIdentity}`,
+                'The scene JSON may include director controls: emotion, cameraStyle, timeOfDay, weather, environmentMood, lighting, and scenePace. Incorporate them naturally and explicitly into the prompt without exposing control labels in the generated image.',
                 `Scene JSON: ${JSON.stringify(input.scene)}`,
                 `Project JSON: ${JSON.stringify(input.project)}`,
                 `Base prompt: ${input.basePrompt}`,

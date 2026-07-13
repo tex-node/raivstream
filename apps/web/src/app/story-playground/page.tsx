@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, ChevronRight, History, ImagePlus, Loader2, Mic, Sparkles, UserRound, Wand2, X } from 'lucide-react';
+import { BookOpen, Camera, ChevronRight, Clock, CloudSun, History, ImagePlus, Lamp, Loader2, Mic, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
@@ -35,6 +35,14 @@ type StoryScene = {
   locationType: string | null;
   indoorOutdoor: string | null;
   mood: string | null;
+  emotion: DirectorSettingValue | null;
+  cameraStyle: DirectorSettingValue | null;
+  timeOfDay: DirectorSettingValue | null;
+  weather: DirectorSettingValue | null;
+  environmentMood: DirectorSettingValue | null;
+  lighting: DirectorSettingValue | null;
+  scenePace: DirectorSettingValue | null;
+  directorChangedAt?: string | Date | null;
   characters: unknown;
   imageUrl: string | null;
   imageStatus: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED' | null;
@@ -130,6 +138,43 @@ type VisualStyleOption = {
   description: string;
 };
 
+type DirectorSettingValue =
+  | 'HAPPY'
+  | 'EXCITED'
+  | 'CURIOUS'
+  | 'BRAVE'
+  | 'CALM'
+  | 'SAD'
+  | 'SURPRISED'
+  | 'CLOSE_UP'
+  | 'MEDIUM_SHOT'
+  | 'WIDE_SHOT'
+  | 'OVER_THE_SHOULDER'
+  | 'BIRDS_EYE_VIEW'
+  | 'EYE_LEVEL'
+  | 'MORNING'
+  | 'AFTERNOON'
+  | 'SUNSET'
+  | 'NIGHT'
+  | 'SUNNY'
+  | 'RAINY'
+  | 'SNOWY'
+  | 'WINDY'
+  | 'FOGGY'
+  | 'PEACEFUL'
+  | 'BUSY'
+  | 'MAGICAL'
+  | 'FUTURISTIC'
+  | 'COZY'
+  | 'ADVENTUROUS'
+  | 'BRIGHT'
+  | 'WARM'
+  | 'SOFT'
+  | 'DRAMATIC'
+  | 'MOONLIGHT'
+  | 'NORMAL'
+  | 'ENERGETIC';
+
 type VisualStyleValue =
   | 'STORYBOOK_ILLUSTRATION'
   | 'THREE_D_ANIMATED'
@@ -155,6 +200,116 @@ const VISUAL_STYLE_OPTIONS: VisualStyleOption[] = [
 
 const R16_STYLE_VALUES = new Set(['STORYBOOK_ILLUSTRATION', 'THREE_D_ANIMATED', 'ANIME', 'COMIC_BOOK', 'WATERCOLOR']);
 
+type DirectorSettingKey = 'emotion' | 'cameraStyle' | 'timeOfDay' | 'weather' | 'environmentMood' | 'lighting' | 'scenePace';
+
+type DirectorOptionGroup = {
+  key: DirectorSettingKey;
+  label: string;
+  r16Label: string;
+  icon: typeof Smile;
+  options: Array<{ value: DirectorSettingValue; label: string; r16Label?: string }>;
+};
+
+const DIRECTOR_OPTION_GROUPS: DirectorOptionGroup[] = [
+  {
+    key: 'emotion',
+    label: 'Scene Emotion',
+    r16Label: 'How should everyone feel?',
+    icon: Smile,
+    options: [
+      { value: 'HAPPY', label: 'Happy' },
+      { value: 'EXCITED', label: 'Excited' },
+      { value: 'CURIOUS', label: 'Curious' },
+      { value: 'BRAVE', label: 'Brave' },
+      { value: 'CALM', label: 'Calm' },
+      { value: 'SAD', label: 'Sad' },
+      { value: 'SURPRISED', label: 'Surprised' },
+    ],
+  },
+  {
+    key: 'cameraStyle',
+    label: 'Camera Style',
+    r16Label: 'How should we look at the scene?',
+    icon: Camera,
+    options: [
+      { value: 'CLOSE_UP', label: 'Close-Up' },
+      { value: 'MEDIUM_SHOT', label: 'Medium Shot' },
+      { value: 'WIDE_SHOT', label: 'Wide Shot' },
+      { value: 'OVER_THE_SHOULDER', label: 'Over the Shoulder' },
+      { value: 'BIRDS_EYE_VIEW', label: "Bird's Eye View" },
+      { value: 'EYE_LEVEL', label: 'Eye Level' },
+    ],
+  },
+  {
+    key: 'timeOfDay',
+    label: 'Time Of Day',
+    r16Label: 'When is it?',
+    icon: Clock,
+    options: [
+      { value: 'MORNING', label: 'Morning' },
+      { value: 'AFTERNOON', label: 'Afternoon' },
+      { value: 'SUNSET', label: 'Sunset' },
+      { value: 'NIGHT', label: 'Night' },
+    ],
+  },
+  {
+    key: 'weather',
+    label: 'Weather',
+    r16Label: 'What is the weather?',
+    icon: CloudSun,
+    options: [
+      { value: 'SUNNY', label: 'Sunny' },
+      { value: 'RAINY', label: 'Rainy' },
+      { value: 'SNOWY', label: 'Snowy' },
+      { value: 'WINDY', label: 'Windy' },
+      { value: 'FOGGY', label: 'Foggy' },
+    ],
+  },
+  {
+    key: 'environmentMood',
+    label: 'Environment Mood',
+    r16Label: 'How should the place feel?',
+    icon: Sparkles,
+    options: [
+      { value: 'PEACEFUL', label: 'Peaceful' },
+      { value: 'BUSY', label: 'Busy' },
+      { value: 'MAGICAL', label: 'Magical' },
+      { value: 'FUTURISTIC', label: 'Futuristic' },
+      { value: 'COZY', label: 'Cozy' },
+      { value: 'ADVENTUROUS', label: 'Adventurous' },
+    ],
+  },
+  {
+    key: 'lighting',
+    label: 'Lighting',
+    r16Label: 'How should the light look?',
+    icon: Lamp,
+    options: [
+      { value: 'BRIGHT', label: 'Bright' },
+      { value: 'WARM', label: 'Warm' },
+      { value: 'SOFT', label: 'Soft' },
+      { value: 'DRAMATIC', label: 'Dramatic' },
+      { value: 'MOONLIGHT', label: 'Moonlight' },
+    ],
+  },
+  {
+    key: 'scenePace',
+    label: 'Scene Pace',
+    r16Label: 'How fast should it feel?',
+    icon: Wand2,
+    options: [
+      { value: 'CALM', label: 'Calm' },
+      { value: 'NORMAL', label: 'Normal' },
+      { value: 'ENERGETIC', label: 'Energetic' },
+    ],
+  },
+];
+
+function directorOptionLabel(key: DirectorSettingKey, value?: string | null, isR16 = false) {
+  const option = DIRECTOR_OPTION_GROUPS.find((group) => group.key === key)?.options.find((item) => item.value === value);
+  return option ? (isR16 && option.r16Label ? option.r16Label : option.label) : null;
+}
+
 export default function StoryPlaygroundPage() {
   const router = useRouter();
   const isR16 = useR16();
@@ -173,6 +328,9 @@ export default function StoryPlaygroundPage() {
   const [editingCharacter, setEditingCharacter] = useState<StoryCharacterMemory | null>(null);
   const [previewPrompt, setPreviewPrompt] = useState<StoryScenePrompt | null>(null);
   const [historyScene, setHistoryScene] = useState<StoryScene | null>(null);
+  const [openDirectorSceneIds, setOpenDirectorSceneIds] = useState<string[]>([]);
+  const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({});
+  const [feedbackRatings, setFeedbackRatings] = useState<Record<string, 'UP' | 'DOWN'>>({});
   const [sceneForm, setSceneForm] = useState({
     title: '',
     description: '',
@@ -340,6 +498,22 @@ export default function StoryPlaygroundPage() {
     onError: (error) => setMessage(error.message),
   });
 
+  const updateSceneDirector = trpc.story.updateSceneDirector.useMutation({
+    onSuccess: async () => {
+      setMessage(isR16 ? 'Scene choices saved. Make a new picture when ready.' : 'Director settings saved. Regenerate when you are ready.');
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const submitPromptQualityFeedback = trpc.story.submitPromptQualityFeedback.useMutation({
+    onSuccess: (_feedback, variables) => {
+      setFeedbackRatings((current) => ({ ...current, [variables.assetId]: variables.rating }));
+      setMessage(isR16 ? 'Thanks for helping.' : 'Prompt quality feedback saved.');
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
   const updateCharacterMemory = trpc.story.updateCharacterMemory.useMutation({
     onSuccess: async (_character, variables) => {
       setEditingCharacter(null);
@@ -370,7 +544,7 @@ export default function StoryPlaygroundPage() {
   const answeredCount = questions.filter((question) => question.selectedAnswer).length;
   const canGenerate = questions.length > 0 && answeredCount === questions.length;
   const canUseAdvancedPrompts = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
-  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
+  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || updateSceneDirector.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
 
   useEffect(() => {
     if (project?.chapters?.length) setStep('story');
@@ -505,6 +679,52 @@ export default function StoryPlaygroundPage() {
     if (!projectId) return;
     const action = scene.imageUrl ? regenerateSceneImage : generateSceneImage;
     action.mutate({ projectId, sceneId: scene.id, model: 'FLUX' });
+  };
+
+  const toggleDirectorPanel = (sceneId: string) => {
+    setOpenDirectorSceneIds((current) =>
+      current.includes(sceneId) ? current.filter((id) => id !== sceneId) : [...current, sceneId],
+    );
+  };
+
+  const chooseDirectorSetting = (scene: StoryScene, key: DirectorSettingKey, value: DirectorSettingValue) => {
+    if (!projectId) return;
+    const nextSettings = {
+      emotion: scene.emotion,
+      cameraStyle: scene.cameraStyle,
+      timeOfDay: scene.timeOfDay,
+      weather: scene.weather,
+      environmentMood: scene.environmentMood,
+      lighting: scene.lighting,
+      scenePace: scene.scenePace,
+      [key]: scene[key] === value ? null : value,
+    };
+    updateSceneDirector.mutate({ projectId, sceneId: scene.id, settings: nextSettings as Parameters<typeof updateSceneDirector.mutate>[0]['settings'] });
+  };
+
+  const directorSummary = (scene: StoryScene) => {
+    const parts = DIRECTOR_OPTION_GROUPS
+      .map((group) => directorOptionLabel(group.key, scene[group.key], isR16))
+      .filter(Boolean);
+    return parts.length ? parts.join(' / ') : (isR16 ? 'Choose how this picture should feel.' : 'No director choices yet.');
+  };
+
+  const latestReadyAsset = (scene: StoryScene) =>
+    scene.assets?.find((asset) => asset.isLatest && asset.status === 'READY' && asset.assetUrl)
+    ?? scene.assets?.find((asset) => asset.status === 'READY' && asset.assetUrl)
+    ?? null;
+
+  const rateSceneImage = (scene: StoryScene, rating: 'UP' | 'DOWN') => {
+    if (!projectId) return;
+    const asset = latestReadyAsset(scene);
+    if (!asset) return;
+    submitPromptQualityFeedback.mutate({
+      projectId,
+      sceneId: scene.id,
+      assetId: asset.id,
+      rating,
+      comment: feedbackComments[asset.id]?.trim() || undefined,
+    });
   };
 
   const recentProjects = ((myProjects ?? []) as StoryProjectSummary[]).slice();
@@ -1041,6 +1261,55 @@ export default function StoryPlaygroundPage() {
                             </p>
                           )}
                         </button>
+                        <div className="mt-3 rounded-xl border-2 border-[#172033]/10 bg-white p-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleDirectorPanel(scene.id)}
+                            className="flex w-full items-center justify-between gap-2 text-left text-xs font-black text-[#172033]"
+                          >
+                            <span>{isR16 ? 'Make it special' : 'Direct This Scene'}</span>
+                            <ChevronRight className={`transition-transform ${openDirectorSceneIds.includes(scene.id) ? 'rotate-90' : ''}`} size={15} />
+                          </button>
+                          <p className="mt-2 line-clamp-2 text-xs font-bold text-[#596070]">{directorSummary(scene)}</p>
+                          {openDirectorSceneIds.includes(scene.id) && (
+                            <div className="mt-3 space-y-3">
+                              {DIRECTOR_OPTION_GROUPS.map((group) => {
+                                const Icon = group.icon;
+                                return (
+                                  <div key={`${scene.id}-${group.key}`}>
+                                    <div className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-[#596070]">
+                                      <Icon size={13} />
+                                      {isR16 ? group.r16Label : group.label}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {group.options.map((option) => {
+                                        const selected = scene[group.key] === option.value;
+                                        return (
+                                          <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => chooseDirectorSetting(scene, group.key, option.value)}
+                                            disabled={updateSceneDirector.isPending && updateSceneDirector.variables?.sceneId === scene.id}
+                                            className={`rounded-full border px-2.5 py-1 text-[11px] font-black transition-colors ${
+                                              selected
+                                                ? 'border-[#2fbf71] bg-[#dff8e9] text-[#145c37]'
+                                                : 'border-[#172033]/10 bg-[#fffdf8] text-[#596070] hover:border-[#2f80ed]'
+                                            }`}
+                                          >
+                                            {isR16 && option.r16Label ? option.r16Label : option.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              <p className="rounded-lg bg-[#f6fbff] px-2 py-2 text-[11px] font-bold text-[#2f80ed]">
+                                {isR16 ? 'Make a new picture when you are ready.' : 'Settings are saved only. Regenerate to apply them to the next image.'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                         <div className="mt-3 grid gap-2">
                           <button
                             type="button"
@@ -1068,6 +1337,37 @@ export default function StoryPlaygroundPage() {
                             >
                               {isR16 ? 'Read Story' : 'Open Storybook'}
                             </Link>
+                          )}
+                          {scene.imageUrl && latestReadyAsset(scene) && (
+                            <div className="rounded-xl border-2 border-[#172033]/10 bg-white p-2">
+                              <p className="mb-2 text-xs font-black text-[#596070]">{isR16 ? 'Do you like it?' : 'Rate this image'}</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => rateSceneImage(scene, 'UP')}
+                                  disabled={submitPromptQualityFeedback.isPending}
+                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'UP' ? 'bg-[#dff8e9] text-[#145c37]' : 'bg-[#f6fbff] text-[#2f80ed]'}`}
+                                >
+                                  <ThumbsUp size={16} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => rateSceneImage(scene, 'DOWN')}
+                                  disabled={submitPromptQualityFeedback.isPending}
+                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'DOWN' ? 'bg-[#fff0f4] text-[#b13b63]' : 'bg-[#fffdf8] text-[#596070]'}`}
+                                >
+                                  <ThumbsDown size={16} />
+                                </button>
+                              </div>
+                              {!isR16 && (
+                                <input
+                                  value={feedbackComments[latestReadyAsset(scene)!.id] ?? ''}
+                                  onChange={(event) => setFeedbackComments((current) => ({ ...current, [latestReadyAsset(scene)!.id]: event.target.value }))}
+                                  placeholder="What would you improve?"
+                                  className="mt-2 w-full rounded-lg border border-[#172033]/10 bg-[#fffdf8] px-2 py-2 text-xs font-semibold outline-none focus:border-[#2f80ed]"
+                                />
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
