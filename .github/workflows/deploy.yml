@@ -38,6 +38,8 @@ jobs:
             pnpm install --frozen-lockfile
             echo '==> Regenerating Prisma client...'
             cd packages/database && pnpm exec prisma generate && cd /root/raivstream
+            echo '==> Running strict web lint...'
+            pnpm --filter @raivstream/web lint --max-warnings=0
             echo '==> Building web app...'
             pnpm --filter @raivstream/web build
             echo '==> Restarting PM2...'

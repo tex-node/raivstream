@@ -479,11 +479,11 @@ Changed:
 Lint:
 
 - Fixed the remaining web lint warning in `/story-studio`.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 
 Verification:
 
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web type-check` passed.
 - `pnpm --filter @raivstream/database exec prisma validate` passed when local placeholder `DATABASE_URL` and `DIRECT_URL` were supplied.
 - `pnpm --filter @raivstream/web build` passed when local one-off JWT secrets were supplied.
@@ -533,7 +533,7 @@ Verification:
 - `pnpm --filter @raivstream/database db:generate` passed.
 - `pnpm --filter @raivstream/database exec prisma validate` passed when local placeholder `DATABASE_URL` and `DIRECT_URL` were supplied.
 - `pnpm --filter @raivstream/web type-check` passed.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web build` passed when local one-off JWT secrets were supplied.
 
 ### 2026-06-18: Story Playground Phase 4B Scene Image Generation
@@ -569,7 +569,7 @@ Verification:
 - `pnpm --filter @raivstream/database db:generate` passed.
 - `pnpm --filter @raivstream/database exec prisma validate` passed when local placeholder `DATABASE_URL` and `DIRECT_URL` were supplied.
 - `pnpm --filter @raivstream/web type-check` passed.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web build` passed when local one-off JWT secrets were supplied.
 
 Staging runtime verification:
@@ -642,7 +642,7 @@ Verification:
 
 - `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
 - `pnpm --filter @raivstream/web type-check` passed.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web build` passed with local one-off JWT secrets.
 
 ### 2026-06-19: Story Playground Phase 4.5 Analytics And Feedback
@@ -672,7 +672,7 @@ Verification:
 - `pnpm --filter @raivstream/api type-check` passed.
 - `pnpm --filter @raivstream/api lint` passed.
 - `pnpm --filter @raivstream/web type-check` passed.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 
 Deployment:
 
@@ -755,11 +755,26 @@ Verification:
 - `pnpm --filter @raivstream/database db:generate` passed.
 - `pnpm --filter @raivstream/api type-check` passed.
 - `pnpm --filter @raivstream/web type-check` passed.
-- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
 - `pnpm --filter @raivstream/api lint` passed with the existing React-version detection warning from shared ESLint config.
 - `pnpm --filter @raivstream/web build` passed with local dummy JWT secrets and `NEXT_PUBLIC_STORYBOOK_READ_ALOUD_ENABLED=false`.
 - Real provider image generation was not run in this pass.
+
+### 2026-07-13: Strict Web Lint Command Standardized
+
+Changed:
+
+- Standardized strict web lint usage in project docs and deploy CI to:
+  - `pnpm --filter @raivstream/web lint --max-warnings=0`
+- Removed the obsolete command form:
+  - `pnpm --filter @raivstream/web lint -- --max-warnings=0`
+- Added strict web lint to `.github/workflows/deploy.yml` before the production web build.
+
+Reason:
+
+- The current `apps/web` lint script is `eslint . --ext .js,.jsx,.ts,.tsx`.
+- With this script, the extra `--` separator is forwarded to ESLint, which can make `--max-warnings=0` behave like a file pattern instead of a flag.
 
 ## Known Issues And Follow-Ups
 

@@ -411,6 +411,7 @@ Loads env from `apps/web/.env.local` then `.env`. Useful for debugging new outpu
 - R2 / Stripe env vars are optional at build time (warn, don't crash) — see `lib/env.ts`
 - XAI_API_KEY must be set in .env for Grok Imagine to work — not optional at runtime
 - Grok Imagine model name: `grok-imagine-image` — `grok-2-image-1212` was deprecated 2026-02-24
+- GitHub Actions deploy runs strict lint with `pnpm --filter @raivstream/web lint --max-warnings=0` before `pnpm --filter @raivstream/web build`. Do not use `pnpm --filter @raivstream/web lint -- --max-warnings=0`; the extra `--` is passed to ESLint as a file pattern by the current script.
 - GitHub Actions deploy runs `pnpm --filter @raivstream/web build` — if build fails, VPS keeps old `.next` and serves stale code. Always check `pm2 logs` + confirm `required-server-files.json` timestamp after deploy
 - Duplicate env vars in `.env` — first occurrence wins in most loaders. Remove placeholder lines like `GEMINI_API_KEY=your_key_here` that override real values below
 - Admin pages use `trpc.admin.*` not `api.admin.*` — web app exports `trpc` not `api`
@@ -439,6 +440,7 @@ pnpm install          # install all workspace deps
 pnpm dev              # start all apps (turbo)
 pnpm dev:web          # web only (port 3000)
 pnpm dev:mobile       # Expo mobile only
+pnpm --filter @raivstream/web lint --max-warnings=0  # strict web lint; no extra "--"
 
 pnpm db:push          # push schema to Supabase VPS (requires DATABASE_URL)
 pnpm db:migrate       # create a tracked migration
