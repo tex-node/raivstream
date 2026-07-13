@@ -712,11 +712,60 @@ Verification:
 
 - Run type-check, strict lint, and build before deployment from the isolated library/resume worktree.
 
+### 2026-07-04: Story Playground Prompt Quality Upgrade
+
+Changed:
+
+- Added creator-selectable visual styles on `/story-playground` before image generation:
+  - Storybook Illustration
+  - 3D Animated
+  - Anime
+  - Comic Book
+  - Photorealistic
+  - Watercolor
+  - Claymation
+  - Cinematic Fantasy
+  - African Folktale Illustration
+- R16 shows simplified style copy and limits choices to Storybook, 3D Cartoon, Anime, Comic, and Watercolor.
+- New stories save the selected style to existing `StoryProject.visualStyle`; resumed stories load their saved style.
+- Existing projects can update visual style through the Story Playground selector using `story.updateProject`.
+- Hidden prompt composition now includes the selected style block, character bible identity, scene action, location, mood, story purpose/theme, child-safety constraints, and no-text/no-UI/no-social-overlay instructions.
+- Added `promptEnhancerService`:
+  - Uses OpenAI-compatible chat completions when `OPENAI_API_KEY` is configured.
+  - Uses `OPENAI_PROMPT_ENHANCER_MODEL`, then `OPENAI_TEXT_MODEL`, then `STORY_TEXT_MODEL`, then `gpt-4o-mini`.
+  - Falls back to deterministic prompt enhancement if no key is configured or the provider fails.
+  - Returns structured JSON internally only; R16 never sees raw prompts or JSON.
+- Enhanced prompt metadata is saved on `StoryScenePrompt.metadata` for non-R16 prompt preview and on `GenerationJob.metadata` for generated scene images.
+- Image generation composes/enhances a fresh style-aware prompt at generation time so style changes are respected.
+- The existing `SHORT_VIDEO` prompt composer path is style-aware for future scene-video generation, but movie stitching was not continued in this pass.
+- Negative prompts now include text overlays, visible words, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, watermarks, captions, speech bubbles, and logos.
+- Added analytics events:
+  - `visual_style_selected`
+  - `prompt_enhancement_started`
+  - `prompt_enhancement_completed`
+  - `prompt_enhancement_failed`
+  - `generation_started_with_enhanced_prompt`
+
+Schema:
+
+- No schema changes. `StoryProject.visualStyle` already existed.
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint -- --max-warnings=0` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api lint` passed with the existing React-version detection warning from shared ESLint config.
+- `pnpm --filter @raivstream/web build` passed with local dummy JWT secrets and `NEXT_PUBLIC_STORYBOOK_READ_ALOUD_ENABLED=false`.
+- Real provider image generation was not run in this pass.
+
 ## Known Issues And Follow-Ups
 
 - Prisma `db push` is blocked by Supabase cross-schema FK metadata. Use controlled SQL or update Prisma datasource multi-schema configuration before relying on `db push`.
 - Story Studio currently uses deterministic prompt compilation, not an LLM story planner. Story Playground can use an OpenAI-compatible text provider when configured, otherwise it falls back to deterministic story text.
-- Story Playground now has idea, questions, story, My Stories resume library, scene cards, character bible, hidden prompt composer, scene image generation, storybook viewer, and first-party product analytics. Remaining story product work is scene video generation and narration.
+- Story Playground now has idea, questions, story, My Stories resume library, scene cards, character bible, visual style selection, enhanced hidden prompt composer, scene image generation, storybook viewer, and first-party product analytics. Remaining story product work is scene video generation and narration.
 - Story Studio storyboard asset storage still accepts generated output URLs or pasted URLs. Story Playground scene image assets now use R2-backed asset history.
 - `supabase-pooler` is stopped. If another client needs pooled DB access, configure it on a non-conflicting port and verify tenant/user credentials.
 - Root local working tree has unrelated untracked/local files such as `.claude/`, `.codex/`, and `AGENTS.md`; do not stage them unless explicitly requested.

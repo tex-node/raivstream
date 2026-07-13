@@ -82,6 +82,7 @@ type StoryProjectSummary = {
   id: string;
   title: string;
   originalIdea: string | null;
+  visualStyle?: string | null;
   status: string;
   audienceMode: 'KIDS' | 'GENERAL';
   createdAt: string | Date;
@@ -122,6 +123,38 @@ const examples = [
   'A boy who finds a magic pencil',
 ];
 
+type VisualStyleOption = {
+  value: VisualStyleValue;
+  label: string;
+  r16Label: string;
+  description: string;
+};
+
+type VisualStyleValue =
+  | 'STORYBOOK_ILLUSTRATION'
+  | 'THREE_D_ANIMATED'
+  | 'ANIME'
+  | 'COMIC_BOOK'
+  | 'PHOTOREALISTIC'
+  | 'WATERCOLOR'
+  | 'CLAYMATION'
+  | 'CINEMATIC_FANTASY'
+  | 'AFRICAN_FOLKTALE_ILLUSTRATION';
+
+const VISUAL_STYLE_OPTIONS: VisualStyleOption[] = [
+  { value: 'STORYBOOK_ILLUSTRATION', label: 'Storybook Illustration', r16Label: 'Storybook', description: 'Soft colors and warm picture-book charm.' },
+  { value: 'THREE_D_ANIMATED', label: '3D Animated', r16Label: '3D Cartoon', description: 'Polished family-film look with expressive characters.' },
+  { value: 'ANIME', label: 'Anime', r16Label: 'Anime', description: 'Clean animated frames with colorful backgrounds.' },
+  { value: 'COMIC_BOOK', label: 'Comic Book', r16Label: 'Comic', description: 'Bright line art and panel-ready action.' },
+  { value: 'PHOTOREALISTIC', label: 'Photorealistic', r16Label: 'Realistic', description: 'Cinematic realism and natural lighting.' },
+  { value: 'WATERCOLOR', label: 'Watercolor', r16Label: 'Watercolor', description: 'Gentle painted texture and soft washes.' },
+  { value: 'CLAYMATION', label: 'Claymation', r16Label: 'Clay', description: 'Handmade sculpted character style.' },
+  { value: 'CINEMATIC_FANTASY', label: 'Cinematic Fantasy', r16Label: 'Fantasy', description: 'Rich magical scenes with safe wonder.' },
+  { value: 'AFRICAN_FOLKTALE_ILLUSTRATION', label: 'African Folktale Illustration', r16Label: 'Folktale', description: 'Rich colors, patterned textiles, handcrafted feel.' },
+];
+
+const R16_STYLE_VALUES = new Set(['STORYBOOK_ILLUSTRATION', 'THREE_D_ANIMATED', 'ANIME', 'COMIC_BOOK', 'WATERCOLOR']);
+
 export default function StoryPlaygroundPage() {
   const router = useRouter();
   const isR16 = useR16();
@@ -132,6 +165,7 @@ export default function StoryPlaygroundPage() {
 
   const [step, setStep] = useState<PlaygroundStep>('spark');
   const [idea, setIdea] = useState('');
+  const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyleValue>('STORYBOOK_ILLUSTRATION');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -241,6 +275,15 @@ export default function StoryPlaygroundPage() {
     onError: (error) => setMessage(error.message),
   });
 
+  const updateVisualStyle = trpc.story.updateProject.useMutation({
+    onSuccess: async () => {
+      setMessage(isR16 ? 'Story look saved.' : 'Visual style saved.');
+      await utils.story.getProject.invalidate();
+      await utils.story.listMyProjects.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
   const generateScenes = trpc.story.generateScenes.useMutation({
     onSuccess: async () => {
       await utils.story.getProject.invalidate();
@@ -327,11 +370,17 @@ export default function StoryPlaygroundPage() {
   const answeredCount = questions.filter((question) => question.selectedAnswer).length;
   const canGenerate = questions.length > 0 && answeredCount === questions.length;
   const canUseAdvancedPrompts = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
-  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || generateScenes.isPending || updateScene.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
+  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
 
   useEffect(() => {
     if (project?.chapters?.length) setStep('story');
   }, [project?.chapters?.length]);
+
+  useEffect(() => {
+    if (project?.visualStyle && typeof project.visualStyle === 'string' && VISUAL_STYLE_OPTIONS.some((option) => option.value === project.visualStyle)) {
+      setSelectedVisualStyle(project.visualStyle as VisualStyleValue);
+    }
+  }, [project?.visualStyle]);
 
   const startStory = () => {
     if (!isSignedIn) {
@@ -346,7 +395,17 @@ export default function StoryPlaygroundPage() {
       idea: idea.trim(),
       audienceMode: isR16 ? 'KIDS' : 'GENERAL',
       storyType: 'SHORT_STORY',
+      visualStyle: selectedVisualStyle,
     });
+  };
+
+  const visibleStyleOptions = isR16 ? VISUAL_STYLE_OPTIONS.filter((option) => R16_STYLE_VALUES.has(option.value)) : VISUAL_STYLE_OPTIONS;
+
+  const chooseVisualStyle = (value: VisualStyleValue) => {
+    setSelectedVisualStyle(value);
+    if (projectId) {
+      updateVisualStyle.mutate({ projectId, visualStyle: value });
+    }
   };
 
   const chooseAnswer = async (question: StoryQuestion, answer: string) => {
@@ -482,6 +541,9 @@ export default function StoryPlaygroundPage() {
   const resumeProject = (storyProject: StoryProjectSummary) => {
     const { chapterCount, questionCount } = projectCounts(storyProject);
     setProjectId(storyProject.id);
+    if (storyProject.visualStyle && VISUAL_STYLE_OPTIONS.some((option) => option.value === storyProject.visualStyle)) {
+      setSelectedVisualStyle(storyProject.visualStyle as VisualStyleValue);
+    }
     setMessage(null);
     setStep(chapterCount > 0 ? 'story' : questionCount > 0 ? 'questions' : 'spark');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -564,6 +626,43 @@ export default function StoryPlaygroundPage() {
               <ChevronRight size={18} />
             </Link>
           </div>
+        )}
+
+        {isSignedIn && (
+          <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-5 md:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-wide text-[#2fbf71]">{isR16 ? 'Choose a look' : 'Visual Style'}</p>
+                <h2 className="text-2xl font-black">{isR16 ? 'What should your story look like?' : 'Choose a generation look'}</h2>
+              </div>
+              {project?.visualStyle && (
+                <p className="rounded-full bg-[#f6fbff] px-3 py-2 text-xs font-black text-[#2f80ed]">
+                  {visibleStyleOptions.find((option) => option.value === selectedVisualStyle)?.[isR16 ? 'r16Label' : 'label'] ?? 'Storybook'}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {visibleStyleOptions.map((option) => {
+                const selected = selectedVisualStyle === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => chooseVisualStyle(option.value)}
+                    disabled={updateVisualStyle.isPending && selected}
+                    className={`min-h-24 rounded-xl border-2 p-3 text-left transition-all ${
+                      selected
+                        ? 'border-[#2fbf71] bg-[#dff8e9] text-[#145c37]'
+                        : 'border-[#172033]/10 bg-[#fffdf8] text-[#172033] hover:border-[#2f80ed]'
+                    }`}
+                  >
+                    <span className="block text-sm font-black">{isR16 ? option.r16Label : option.label}</span>
+                    {!isR16 && <span className="mt-1 block text-xs font-semibold text-[#596070]">{option.description}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {step === 'spark' && (
@@ -982,10 +1081,10 @@ export default function StoryPlaygroundPage() {
               <section className="rounded-2xl border-2 border-[#172033]/10 bg-[#172033] p-5 text-white md:p-6">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-sm font-black uppercase tracking-wide text-[#ffcf4a]">Advanced prompt composer</p>
+                    <p className="text-sm font-black uppercase tracking-wide text-[#ffcf4a]">Enhanced prompt composer</p>
                     <h3 className="text-3xl font-black">Hidden prompts for AI Studio</h3>
                     <p className="mt-1 font-semibold text-white/60">
-                      Scene + character bible + mood + setting becomes provider-ready prompts. This is hidden on R16.
+                      Scene + character bible + mood + setting + visual style becomes provider-ready prompts. This is hidden on R16.
                     </p>
                   </div>
                   <button
@@ -993,7 +1092,7 @@ export default function StoryPlaygroundPage() {
                     disabled={!projectId || scenes.length === 0 || composeAllScenePrompts.isPending}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffcf4a] px-5 py-3 font-black text-[#172033] disabled:opacity-50"
                   >
-                    {composeAllScenePrompts.isPending ? 'Saving...' : 'Compose All'}
+                    {composeAllScenePrompts.isPending ? 'Saving...' : 'Enhance All'}
                   </button>
                 </div>
 
@@ -1011,14 +1110,14 @@ export default function StoryPlaygroundPage() {
                             disabled={!projectId || composeScenePrompt.isPending}
                             className="rounded-xl bg-white/10 px-3 py-2 text-sm font-black text-white hover:bg-white/15 disabled:opacity-50"
                           >
-                            Compose Image Prompt
+                            Regenerate Prompt
                           </button>
                           <button
                             onClick={() => latest && setPreviewPrompt(latest)}
                             disabled={!latest}
                             className="rounded-xl border border-white/15 px-3 py-2 text-sm font-black text-white/75 hover:text-white disabled:opacity-40"
                           >
-                            Preview Advanced Prompt
+                            Preview Enhanced Prompt
                           </button>
                           <button
                             onClick={() => latest && sendPromptToAiStudio(latest)}
@@ -1203,7 +1302,7 @@ export default function StoryPlaygroundPage() {
           <div className="w-full max-w-3xl rounded-2xl bg-[#101827] p-5 text-white shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#ffcf4a]">Advanced prompt preview</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[#ffcf4a]">Enhanced prompt preview</p>
                 <h3 className="text-2xl font-black">{previewPrompt.provider} v{previewPrompt.version}</h3>
               </div>
               <button onClick={() => setPreviewPrompt(null)} className="rounded-full bg-white/10 p-2">

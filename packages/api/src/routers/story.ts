@@ -7,6 +7,8 @@ import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
+import { promptEnhancerService } from '../lib/promptEnhancerService';
+import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock } from '../lib/storyVisualStyles';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -14,6 +16,17 @@ const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
 const storyTypeSchema = z.enum(['SHORT_STORY', 'PICTURE_BOOK', 'COMIC', 'VIDEO_STORY']);
 const promptOutputTypeSchema = z.enum(['IMAGE', 'SHORT_VIDEO', 'COMIC_PANEL']);
 const promptProviderSchema = z.enum(['FLUX', 'WAN_25', 'KLING_I2V', 'KLING_R2V']);
+const storyVisualStyleSchema = z.enum([
+  'STORYBOOK_ILLUSTRATION',
+  'THREE_D_ANIMATED',
+  'ANIME',
+  'COMIC_BOOK',
+  'PHOTOREALISTIC',
+  'WATERCOLOR',
+  'CLAYMATION',
+  'CINEMATIC_FANTASY',
+  'AFRICAN_FOLKTALE_ILLUSTRATION',
+]);
 const MAX_STORYBOARD_SHOTS = 24;
 const MAX_STORY_BEAT_LENGTH = 700;
 const STORY_IDEA_MAX_LENGTH = 240;
@@ -234,33 +247,33 @@ const PROMPT_PROVIDER_META: Record<PromptProvider, {
   label: string;
   maxPromptLength: number;
   maxNegativePromptLength: number;
-  defaultAspectRatio: '9:16' | '16:9' | '1:1';
+  defaultAspectRatio: '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   defaultDuration?: number;
 }> = {
   FLUX: {
     label: 'Flux.1 Dev',
     maxPromptLength: 1800,
-    maxNegativePromptLength: 500,
+    maxNegativePromptLength: 900,
     defaultAspectRatio: '9:16',
   },
   WAN_25: {
     label: 'Wan 2.6',
-    maxPromptLength: 1600,
-    maxNegativePromptLength: 500,
+    maxPromptLength: 1400,
+    maxNegativePromptLength: 900,
     defaultAspectRatio: '9:16',
     defaultDuration: 5,
   },
   KLING_I2V: {
     label: 'Kling I2V',
     maxPromptLength: 1200,
-    maxNegativePromptLength: 500,
+    maxNegativePromptLength: 900,
     defaultAspectRatio: '9:16',
     defaultDuration: 5,
   },
   KLING_R2V: {
     label: 'Kling R2V',
     maxPromptLength: 1200,
-    maxNegativePromptLength: 500,
+    maxNegativePromptLength: 900,
     defaultAspectRatio: '9:16',
     defaultDuration: 5,
   },
@@ -377,12 +390,25 @@ function automaticNegativePrompt(audienceMode: StoryAudienceMode, outputType: Pr
     'inconsistent character identity',
     'extra limbs',
     'scary faces',
+    'phone UI',
+    'social media UI',
+    'gallery UI',
+    'shot labels',
+    '9:16 labels',
+    'watermarks',
+    'captions',
+    'speech bubbles',
+    'visible words',
   ];
   const kids = audienceMode === 'KIDS'
     ? ['violence', 'blood', 'weapons', 'adult themes', 'dark horror', 'sexual content', 'unsafe behavior']
     : ['graphic violence', 'sexual content'];
   const media = outputType === 'SHORT_VIDEO' ? ['flicker', 'warped motion', 'jump cuts'] : ['cropped subject'];
   return [...base, ...kids, ...media].join(', ');
+}
+
+function effectiveVisualStyle(project: { visualStyle?: string | null; audienceMode?: string | null }, audienceMode: StoryAudienceMode) {
+  return project.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE);
 }
 
 function composeScenePromptText(input: {
@@ -408,6 +434,7 @@ function composeScenePromptText(input: {
     : input.provider.startsWith('KLING')
       ? 'smooth natural motion, stable character identity, clear subject continuity'
       : 'cinematic but gentle movement, stable character identity, simple action';
+  const compositionAspect = 'mobile-first 9:16 framing';
 
   const prompt = [
     `${outputTypeLabel(input.outputType)} for "${input.scene.project.title}"`,
@@ -416,11 +443,11 @@ function composeScenePromptText(input: {
     settingText || undefined,
     input.scene.mood ? `mood: ${input.scene.mood}` : undefined,
     `characters, keep exact identity: ${characterText}`,
-    input.scene.project.visualStyle ? `visual style: ${input.scene.project.visualStyle}` : 'visual style: bright storybook realism, soft natural light, expressive faces',
+    `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
     input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
     `safety: ${r16Rules}`,
     `provider guidance: ${providerHint}`,
-    'composition: mobile-first 9:16 framing, clear foreground subject, uncluttered background',
+    `composition: ${compositionAspect}, clear foreground subject, uncluttered background`,
   ].filter(Boolean).join('. ');
 
   return {
@@ -430,13 +457,152 @@ function composeScenePromptText(input: {
     duration: input.outputType === 'SHORT_VIDEO' ? meta.defaultDuration ?? 5 : undefined,
     maxPromptLength: meta.maxPromptLength,
     providerLabel: meta.label,
+    styleUsed: styleLabel(effectiveVisualStyle(input.scene.project, input.audienceMode)),
+    providerHints: {
+      camera: input.outputType === 'SHORT_VIDEO' ? 'stable gentle motion' : 'single clean keyframe',
+      lighting: 'warm, clear, style-consistent lighting',
+      composition: 'mobile-first 9:16 framing, no text or UI',
+    },
   };
 }
 
+async function composeEnhancedScenePrompt(
+  ctx: any,
+  input: {
+    scene: ScenePromptContext;
+    outputType: PromptOutputType;
+    provider: PromptProvider;
+    audienceMode: StoryAudienceMode;
+    projectId: string;
+    analyticsSource: 'preview' | 'generation';
+  },
+) {
+  const base = composeScenePromptText(input);
+  const meta = PROMPT_PROVIDER_META[input.provider];
+  const characters = characterReferencesFromScene(input.scene);
+  const characterIdentity = characters.length
+    ? characters.map((character) => character.promptIngredient).join('; ')
+    : 'use the established main character design from the story';
+  await trackStoryAnalytics(ctx, {
+    event: 'prompt_enhancement_started',
+    projectId: input.projectId,
+    audienceMode: input.audienceMode,
+    properties: {
+      style: base.styleUsed,
+      provider: input.provider,
+      generationType: input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE',
+      source: input.analyticsSource,
+      enhancerConfigured: promptEnhancerService.isConfigured,
+    },
+  });
+
+  try {
+    const enhanced = await promptEnhancerService.enhance({
+      basePrompt: base.prompt,
+      baseNegativePrompt: base.negativePrompt,
+      maxPromptLength: base.maxPromptLength,
+      maxNegativePromptLength: meta.maxNegativePromptLength,
+      scene: input.scene,
+      project: input.scene.project,
+      characterIdentity,
+      selectedVisualStyle: effectiveVisualStyle(input.scene.project, input.audienceMode),
+      audienceMode: input.audienceMode,
+      provider: input.provider,
+      generationType: input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE',
+    });
+
+    if (enhanced.fallbackReason && promptEnhancerService.isConfigured) {
+      await trackStoryAnalytics(ctx, {
+        event: 'prompt_enhancement_failed',
+        projectId: input.projectId,
+        audienceMode: input.audienceMode,
+        properties: {
+          style: base.styleUsed,
+          provider: input.provider,
+          generationType: input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE',
+          source: input.analyticsSource,
+          message: enhanced.fallbackReason,
+        },
+      });
+    }
+
+    await trackStoryAnalytics(ctx, {
+      event: 'prompt_enhancement_completed',
+      projectId: input.projectId,
+      audienceMode: input.audienceMode,
+      properties: {
+        style: enhanced.styleUsed,
+        provider: input.provider,
+        generationType: input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE',
+        source: input.analyticsSource,
+        enhancerProvider: enhanced.provider,
+        enhancerModel: enhanced.model,
+      },
+    });
+
+    return {
+      ...base,
+      prompt: enhanced.enhancedPrompt,
+      negativePrompt: enhanced.negativePrompt,
+      styleUsed: enhanced.styleUsed,
+      providerHints: enhanced.providerHints,
+      enhancerProvider: enhanced.provider,
+      enhancerModel: enhanced.model,
+      safetyNotes: enhanced.safetyNotes,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Prompt enhancement failed';
+    await trackStoryAnalytics(ctx, {
+      event: 'prompt_enhancement_failed',
+      projectId: input.projectId,
+      audienceMode: input.audienceMode,
+      properties: {
+        style: base.styleUsed,
+        provider: input.provider,
+        generationType: input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE',
+        source: input.analyticsSource,
+        message,
+      },
+    });
+    return {
+      ...base,
+      enhancerProvider: 'deterministic-fallback',
+      enhancerModel: undefined,
+      safetyNotes: 'Prompt enhancer failed; deterministic prompt composer used.',
+    };
+  }
+}
+
 function imageDimensions(aspectRatio: string) {
+  if (aspectRatio === '9:16') return { width: 720, height: 1280 };
   if (aspectRatio === '16:9') return { width: 1344, height: 768 };
+  if (aspectRatio === '4:3') return { width: 1024, height: 768 };
+  if (aspectRatio === '3:4') return { width: 768, height: 1024 };
   if (aspectRatio === '1:1') return { width: 1024, height: 1024 };
-  return { width: 768, height: 1344 };
+  return { width: 720, height: 1280 };
+}
+
+function sceneImageProviderInfo(requestedModel: SceneImageModel, providerJobId?: string | null) {
+  if (requestedModel === 'FLUX') {
+    if (providerJobId?.startsWith('portrait:')) {
+      return {
+        provider: 'RunPod',
+        model: process.env.RUNPOD_FLUX_PORTRAIT_ENDPOINT ?? 'z-image-turbo',
+        requestedModel,
+      };
+    }
+    return {
+      provider: 'RunPod',
+      model: process.env.RUNPOD_FLUX_PUBLIC_ENDPOINT ?? 'black-forest-labs-flux-1-dev',
+      requestedModel,
+    };
+  }
+
+  return {
+    provider: requestedModel,
+    model: requestedModel,
+    requestedModel,
+  };
 }
 
 async function waitForGenerationOutput(model: SupportedModel, providerJobId: string, immediateUrl?: string) {
@@ -509,12 +675,13 @@ async function generateSceneImageAsset(
     audienceMode,
     properties: { sceneId: scene.id, model: input.model, isRegeneration: Boolean(input.isRegeneration) },
   });
-  const existingPrompt = scene.prompts[0] as any;
-  const composed = existingPrompt ?? composeScenePromptText({
+  const composed = await composeEnhancedScenePrompt(ctx, {
     scene,
     outputType: 'IMAGE',
     provider: 'FLUX',
     audienceMode,
+    projectId: project.id,
+    analyticsSource: 'generation',
   });
 
   const moderation = await moderatePrompt(composed.prompt);
@@ -530,7 +697,7 @@ async function generateSceneImageAsset(
       assetType: 'IMAGE',
       provider: input.model === 'FLUX' ? 'RunPod' : input.model,
       model: input.model,
-      promptVersionId: existingPrompt?.id ?? null,
+      promptVersionId: null,
       composedPrompt: composed.prompt,
       negativePrompt: composed.negativePrompt,
       status: 'GENERATING',
@@ -552,6 +719,20 @@ async function generateSceneImageAsset(
       creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene image: ${scene.title}`);
     }
 
+    await trackStoryAnalytics(ctx, {
+      event: 'generation_started_with_enhanced_prompt',
+      projectId: project.id,
+      audienceMode,
+      properties: {
+        sceneId: scene.id,
+        assetId: asset.id,
+        style: composed.styleUsed,
+        provider: input.model,
+        generationType: 'IMAGE',
+        enhancerProvider: composed.enhancerProvider,
+      },
+    });
+
     const generationJob = await ctx.prisma.generationJob.create({
       data: {
         userId: ctx.user.id,
@@ -562,7 +743,16 @@ async function generateSceneImageAsset(
         aspectRatio: composed.aspectRatio ?? '9:16',
         status: 'QUEUED',
         creditsUsed: creditsUsed || 0,
-        metadata: { storyProjectId: project.id, storySceneId: scene.id, storySceneAssetId: asset.id },
+        metadata: {
+          storyProjectId: project.id,
+          storySceneId: scene.id,
+          storySceneAssetId: asset.id,
+          visualStyle: normaliseStoryVisualStyle(project.visualStyle),
+          visualStyleLabel: composed.styleUsed,
+          promptEnhancerProvider: composed.enhancerProvider,
+          promptEnhancerModel: composed.enhancerModel,
+          providerHints: composed.providerHints,
+        },
       },
     });
 
@@ -579,6 +769,7 @@ async function generateSceneImageAsset(
         aspectRatio: composed.aspectRatio,
       });
       providerJobId = submitted.providerJobId;
+      const providerInfo = sceneImageProviderInfo(input.model, providerJobId);
       await ctx.prisma.generationJob.update({
         where: { id: generationJob.id },
         data: {
@@ -586,10 +777,17 @@ async function generateSceneImageAsset(
           status: submitted.outputUrl ? 'COMPLETED' : 'GENERATING',
           outputUrl: submitted.outputUrl,
           thumbnailUrl: submitted.thumbnailUrl,
+          metadata: {
+            ...(generationJob.metadata as Record<string, unknown>),
+            requestedModel: providerInfo.requestedModel,
+            actualProvider: providerInfo.provider,
+            actualProviderModel: providerInfo.model,
+          },
         },
       });
       providerOutputUrl = await waitForGenerationOutput(input.model as SupportedModel, providerJobId, submitted.outputUrl);
     }
+    const providerInfo = sceneImageProviderInfo(input.model, providerJobId);
 
     const r2Key = `story-projects/${project.id}/scenes/${scene.id}/assets/${asset.id}.png`;
     const assetUrl = providerOutputUrl.startsWith('data:')
@@ -606,6 +804,8 @@ async function generateSceneImageAsset(
           assetUrl,
           thumbnailUrl: assetUrl,
           r2Key,
+          provider: providerInfo.provider,
+          model: providerInfo.model,
           width: dimensions.width,
           height: dimensions.height,
           generationJobId: generationJob.id,
@@ -618,7 +818,18 @@ async function generateSceneImageAsset(
       });
       await tx.generationJob.update({
         where: { id: generationJob.id },
-        data: { providerJobId, outputUrl: assetUrl, thumbnailUrl: assetUrl, status: 'COMPLETED' },
+        data: {
+          providerJobId,
+          outputUrl: assetUrl,
+          thumbnailUrl: assetUrl,
+          status: 'COMPLETED',
+          metadata: {
+            ...(generationJob.metadata as Record<string, unknown>),
+            requestedModel: providerInfo.requestedModel,
+            actualProvider: providerInfo.provider,
+            actualProviderModel: providerInfo.model,
+          },
+        },
       });
     });
 
@@ -629,9 +840,13 @@ async function generateSceneImageAsset(
       properties: {
         sceneId: scene.id,
         assetId: asset.id,
-        model: input.model,
+        requestedModel: input.model,
+        model: providerInfo.model,
+        provider: providerInfo.provider,
         r2Key,
         isRegeneration: Boolean(input.isRegeneration),
+        style: composed.styleUsed,
+        enhancerProvider: composed.enhancerProvider,
       },
     });
     if (input.isRegeneration) {
@@ -889,6 +1104,7 @@ export const storyRouter = router({
       idea: z.string().min(3).max(STORY_IDEA_MAX_LENGTH),
       audienceMode: audienceModeSchema.optional(),
       storyType: storyTypeSchema.default('SHORT_STORY'),
+      visualStyle: storyVisualStyleSchema.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const idea = input.idea.trim();
@@ -913,6 +1129,7 @@ export const storyRouter = router({
           targetAudience: audienceMode === 'KIDS' ? 'children and families' : 'general audience',
           audienceMode,
           storyType: input.storyType,
+          visualStyle: normaliseStoryVisualStyle(input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE)),
           status: 'DRAFT',
         },
         select: projectSelect,
@@ -921,7 +1138,13 @@ export const storyRouter = router({
         event: 'story_spark_started',
         projectId: project.id,
         audienceMode,
-        properties: { storyType: input.storyType },
+        properties: { storyType: input.storyType, style: styleLabel(input.visualStyle) },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'visual_style_selected',
+        projectId: project.id,
+        audienceMode,
+        properties: { style: styleLabel(input.visualStyle), source: 'story_spark' },
       });
       return project;
     }),
@@ -1411,11 +1634,13 @@ export const storyRouter = router({
       if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
 
       const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
-      const composed = composeScenePromptText({
+      const composed = await composeEnhancedScenePrompt(ctx, {
         scene,
         outputType: input.outputType,
         provider: input.provider,
         audienceMode,
+        projectId: project.id,
+        analyticsSource: 'preview',
       });
 
       if (!input.saveVersion) {
@@ -1455,6 +1680,11 @@ export const storyRouter = router({
             maxPromptLength: composed.maxPromptLength,
             audienceMode,
             hiddenFromKids: true,
+            visualStyle: composed.styleUsed,
+            promptEnhancerProvider: composed.enhancerProvider,
+            promptEnhancerModel: composed.enhancerModel,
+            providerHints: composed.providerHints,
+            safetyNotes: composed.safetyNotes,
           },
         },
       });
@@ -1488,45 +1718,50 @@ export const storyRouter = router({
       }
 
       const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
-      return ctx.prisma.$transaction(async (tx: any) => {
-        const created = [];
-        for (const scene of scenes) {
-          const composed = composeScenePromptText({
-            scene,
+      const created = [];
+      for (const scene of scenes) {
+        const composed = await composeEnhancedScenePrompt(ctx, {
+          scene,
+          outputType: input.outputType,
+          provider: input.provider,
+          audienceMode,
+          projectId: project.id,
+          analyticsSource: 'preview',
+        });
+        const latest = await (ctx.prisma as any).storyScenePrompt.findFirst({
+          where: {
+            sceneId: scene.id,
             outputType: input.outputType,
             provider: input.provider,
-            audienceMode,
-          });
-          const latest = await tx.storyScenePrompt.findFirst({
-            where: {
-              sceneId: scene.id,
-              outputType: input.outputType,
-              provider: input.provider,
+          },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        created.push(await (ctx.prisma as any).storyScenePrompt.create({
+          data: {
+            sceneId: scene.id,
+            outputType: input.outputType,
+            provider: input.provider,
+            prompt: composed.prompt,
+            negativePrompt: composed.negativePrompt,
+            aspectRatio: composed.aspectRatio,
+            duration: composed.duration,
+            version: (latest?.version ?? 0) + 1,
+            metadata: {
+              providerLabel: composed.providerLabel,
+              maxPromptLength: composed.maxPromptLength,
+              audienceMode,
+              hiddenFromKids: true,
+              visualStyle: composed.styleUsed,
+              promptEnhancerProvider: composed.enhancerProvider,
+              promptEnhancerModel: composed.enhancerModel,
+              providerHints: composed.providerHints,
+              safetyNotes: composed.safetyNotes,
             },
-            orderBy: { version: 'desc' },
-            select: { version: true },
-          });
-          created.push(await tx.storyScenePrompt.create({
-            data: {
-              sceneId: scene.id,
-              outputType: input.outputType,
-              provider: input.provider,
-              prompt: composed.prompt,
-              negativePrompt: composed.negativePrompt,
-              aspectRatio: composed.aspectRatio,
-              duration: composed.duration,
-              version: (latest?.version ?? 0) + 1,
-              metadata: {
-                providerLabel: composed.providerLabel,
-                maxPromptLength: composed.maxPromptLength,
-                audienceMode,
-                hiddenFromKids: true,
-              },
-            },
-          }));
-        }
-        return created;
-      });
+          },
+        }));
+      }
+      return created;
     }),
 
   generateSceneImage: protectedProcedure
@@ -1807,13 +2042,26 @@ export const storyRouter = router({
       status: z.enum(['DRAFT', 'GENERATED', 'EXTENDED', 'STORYBOARDED', 'IN_PRODUCTION', 'PUBLISHED', 'ARCHIVED']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ensureProject(ctx, input.projectId);
+      const project = await ensureProject(ctx, input.projectId);
       const { projectId, ...data } = input;
-      return ctx.prisma.storyProject.update({
+      const updateData = {
+        ...data,
+        visualStyle: data.visualStyle ? normaliseStoryVisualStyle(data.visualStyle) : data.visualStyle,
+      };
+      const updated = await ctx.prisma.storyProject.update({
         where: { id: projectId },
-        data,
+        data: updateData,
         select: projectSelect,
       });
+      if (data.visualStyle) {
+        await trackStoryAnalytics(ctx, {
+          event: 'visual_style_selected',
+          projectId,
+          audienceMode: project.audienceMode,
+          properties: { style: styleLabel(data.visualStyle) },
+        });
+      }
+      return updated;
     }),
 
   upsertCharacter: protectedProcedure

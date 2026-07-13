@@ -101,6 +101,185 @@ function inferHero(idea: string) {
   return subject.charAt(0).toUpperCase() + subject.slice(1).toLowerCase();
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
+function clampText(value: string, maxLength: number) {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return trimmed.slice(0, maxLength).replace(/\s+\S*$/, '').trim() || trimmed.slice(0, maxLength);
+}
+
+function stringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    const single = stringValue(value);
+    return single ? [clampText(single, 80)] : [];
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      const record = asRecord(item);
+      if (!record) return '';
+      return stringValue(record.name ?? record.title ?? record.character ?? record.role);
+    })
+    .map((item) => clampText(item, 80))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function coerceTextBlock(value: unknown, fallback = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => stringValue(item)).filter(Boolean).join('\n\n') || fallback;
+  }
+  return stringValue(value, fallback);
+}
+
+function firstValue(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function normaliseSceneHints(value: unknown): GeneratedStory['sceneHints'] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index): GeneratedStory['sceneHints'][number] | null => {
+      if (typeof item === 'string') {
+        return {
+          title: titleFromIdea(item || `Scene ${index + 1}`),
+          description: item,
+        };
+      }
+
+      const record = asRecord(item);
+      if (!record) return null;
+
+      const title = clampText(stringValue(
+        firstValue(record, ['title', 'name', 'sceneTitle', 'heading']),
+        `Scene ${index + 1}`,
+      ), 120);
+      const description = clampText(stringValue(
+        firstValue(record, ['description', 'summary', 'action', 'text', 'body']),
+        title,
+      ), 500);
+
+      return {
+        title,
+        description,
+        locationType: clampText(stringValue(firstValue(record, ['locationType', 'location', 'setting'])), 80) || undefined,
+        indoorOutdoor: clampText(stringValue(firstValue(record, ['indoorOutdoor', 'indoor_outdoor', 'environment'])), 40) || undefined,
+        mood: clampText(stringValue(firstValue(record, ['mood', 'tone', 'emotion'])), 80) || undefined,
+        characters: stringArrayValue(firstValue(record, ['characters', 'characterNames', 'cast'])),
+      };
+    })
+    .filter((scene): scene is GeneratedStory['sceneHints'][number] => !!scene)
+    .slice(0, 8);
+}
+
+function characterRecordFromValue(value: unknown, fallbackName: string): GeneratedStory['characterMemory'][number] | null {
+  if (typeof value === 'string') {
+    const name = clampText(value, 80);
+    return name ? { name, role: 'character' } : null;
+  }
+
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const name = clampText(stringValue(firstValue(record, ['name', 'characterName', 'character', 'title']), fallbackName), 80);
+  if (!name) return null;
+
+  const personality = asRecord(record.personality ?? record.traits) ?? undefined;
+  return {
+    name,
+    role: clampText(stringValue(record.role), 80) || undefined,
+    species: clampText(stringValue(record.species ?? record.type), 80) || undefined,
+    ageDescription: clampText(stringValue(record.ageDescription ?? record.age ?? record.ageRange), 120) || undefined,
+    gender: clampText(stringValue(record.gender), 80) || undefined,
+    visualDescription: clampText(stringValue(
+      record.visualDescription ?? record.description ?? record.appearance ?? record.looks,
+    ), 500) || undefined,
+    personality,
+  };
+}
+
+function normaliseCharacterMemory(value: unknown, mainCharacterName: string): GeneratedStory['characterMemory'] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => characterRecordFromValue(item, mainCharacterName))
+      .filter((character): character is GeneratedStory['characterMemory'][number] => !!character)
+      .slice(0, 12);
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    const single = characterRecordFromValue(value, mainCharacterName);
+    return single ? [single] : [];
+  }
+
+  const objectEntries = Object.entries(record)
+    .map(([key, item]) => {
+      const character = characterRecordFromValue(item, key);
+      if (!character) return null;
+      return { ...character, name: character.name || key };
+    })
+    .filter((character): character is GeneratedStory['characterMemory'][number] => !!character);
+
+  if (objectEntries.length > 0 && !('name' in record || 'characterName' in record)) {
+    return objectEntries.slice(0, 12);
+  }
+
+  const single = characterRecordFromValue(record, mainCharacterName);
+  return single ? [single] : [];
+}
+
+function normaliseGeneratedStoryPayload(raw: unknown, sourceIdea: string): z.input<typeof generatedStorySchema> {
+  const record = asRecord(raw);
+  if (!record) throw new Error('Story provider response was not a JSON object');
+
+  const body = clampText(coerceTextBlock(firstValue(record, ['body', 'story', 'text', 'content', 'narrative'])), 6000);
+  const title = clampText(stringValue(firstValue(record, ['title', 'name', 'storyTitle']), titleFromIdea(sourceIdea)), 120);
+  const summary = clampText(stringValue(firstValue(record, ['summary', 'logline', 'synopsis']), body.slice(0, 400) || title), 500);
+  const mainCharacterName = clampText(stringValue(
+    firstValue(record, ['mainCharacterName', 'main_character', 'mainCharacter', 'hero']),
+    inferHero(`${sourceIdea} ${title} ${body}`),
+  ), 80);
+  const sceneHints = normaliseSceneHints(
+    firstValue(record, ['sceneHints', 'scene_hints', 'scenes', 'storyScenes', 'pages']),
+  );
+  const characterMemory = normaliseCharacterMemory(
+    firstValue(record, ['characterMemory', 'character_memory', 'characters', 'characterBible', 'character_bible']),
+    mainCharacterName,
+  );
+
+  return {
+    title,
+    summary,
+    body,
+    ageRange: clampText(stringValue(firstValue(record, ['ageRange', 'age_range', 'audienceAge']), 'All ages'), 80),
+    mainCharacterName,
+    supportingCharacters: stringArrayValue(firstValue(record, ['supportingCharacters', 'supporting_characters', 'friends'])),
+    theme: clampText(stringValue(firstValue(record, ['theme', 'moral', 'message']), 'friendship, courage, kindness'), 120),
+    sceneHints: sceneHints.length > 0
+      ? sceneHints
+      : [{ title: 'Story Moment', description: summary || body.slice(0, 300) || title }],
+    characterMemory: characterMemory.length > 0
+      ? characterMemory
+      : [{ name: mainCharacterName, role: 'main character' }],
+  };
+}
+
 function fallbackQuestions(idea: string, audienceMode: StoryAudienceMode): GuidedQuestion[] {
   const hero = inferHero(idea).toLowerCase();
   const kidsOptions = audienceMode === 'KIDS'
@@ -315,7 +494,7 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
           'Return JSON with title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints, and characterMemory.',
         ].join('\n'),
       );
-      const parsed = generatedStorySchema.parse(parseJsonObject(content));
+      const parsed = generatedStorySchema.parse(normaliseGeneratedStoryPayload(parseJsonObject(content), input));
       return { ...parsed, providerMetadata: { provider: 'openai-compatible', model: this.model } };
     } catch (error) {
       console.warn('[storyTextService] story fallback:', error);
@@ -345,7 +524,9 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
           `Write chapter ${params.previousChapters.length + 1}. Return JSON with title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints, and characterMemory.`,
         ].join('\n'),
       );
-      const parsed = generatedStorySchema.parse(parseJsonObject(content));
+      const parsed = generatedStorySchema.parse(
+        normaliseGeneratedStoryPayload(parseJsonObject(content), params.originalIdea || params.projectTitle),
+      );
       return { ...parsed, providerMetadata: { provider: 'openai-compatible', model: this.model } };
     } catch (error) {
       console.warn('[storyTextService] continuation fallback:', error);

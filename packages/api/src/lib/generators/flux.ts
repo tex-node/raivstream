@@ -27,6 +27,7 @@ import { mirrorUrlToR2 } from '../r2';
 
 export interface FluxInput {
   prompt:       string;
+  negativePrompt?: string;
   aspectRatio?: string;
   seed?:        number;
 }
@@ -41,35 +42,66 @@ export interface FluxJobResult {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ENDPOINT = () => process.env.RUNPOD_FLUX_PUBLIC_ENDPOINT ?? 'black-forest-labs-flux-1-dev';
+const PORTRAIT_ENDPOINT = () => process.env.RUNPOD_FLUX_PORTRAIT_ENDPOINT ?? 'z-image-turbo';
 const STEPS    = () => parseInt(process.env.RUNPOD_FLUX_STEPS    ?? '28', 10);
 const GUIDANCE = () => parseFloat(process.env.RUNPOD_FLUX_GUIDANCE ?? '3.5');
+const PORTRAIT_PREFIX = 'portrait:';
 
 function getResolution(aspectRatio?: string): { width: number; height: number } {
   switch (aspectRatio) {
+    case '9:16': return { width: 720,  height: 1280 };
     case '16:9': return { width: 1344, height: 768 };
+    case '4:3':  return { width: 1024, height: 768 };
+    case '3:4':  return { width: 768,  height: 1024 };
     case '1:1':  return { width: 1024, height: 1024 };
-    default:     return { width: 768,  height: 1344 };  // 9:16 portrait default
+    default:     return { width: 720,  height: 1280 };  // 9:16 portrait default
   }
+}
+
+function shouldUsePortraitEndpoint(aspectRatio?: string) {
+  return !aspectRatio || aspectRatio === '9:16';
+}
+
+function splitProviderJobId(jobId: string) {
+  if (jobId.startsWith(PORTRAIT_PREFIX)) {
+    return { endpoint: PORTRAIT_ENDPOINT(), jobId: jobId.slice(PORTRAIT_PREFIX.length), isPortrait: true };
+  }
+  return { endpoint: ENDPOINT(), jobId, isPortrait: false };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function submitFlux(input: FluxInput): Promise<string> {
   const { width, height } = getResolution(input.aspectRatio);
+  if (shouldUsePortraitEndpoint(input.aspectRatio)) {
+    const { jobId } = await submitJob(PORTRAIT_ENDPOINT(), {
+      prompt: input.prompt,
+      size: `${width}*${height}`,
+      seed: input.seed ?? -1,
+      output_format: 'png',
+      enable_safety_checker: true,
+    }, { executionTimeout: 300_000, ttl: 3_600_000 });
+    return `${PORTRAIT_PREFIX}${jobId}`;
+  }
+
   const payload = {
     prompt:              input.prompt,
+    negative_prompt:     input.negativePrompt,
+    size:                `${width}*${height}`,
     width,
     height,
     num_inference_steps: STEPS(),
     guidance:            GUIDANCE(),
     seed:                input.seed ?? -1,
+    output_format:       'png',
   };
   const { jobId } = await submitJob(ENDPOINT(), payload, { executionTimeout: 300_000, ttl: 3_600_000 });
   return jobId;
 }
 
 export async function getFluxStatus(jobId: string): Promise<FluxJobResult> {
-  const raw    = await getJobStatus(ENDPOINT(), jobId);
+  const providerJob = splitProviderJobId(jobId);
+  const raw    = await getJobStatus(providerJob.endpoint, providerJob.jobId);
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
@@ -82,9 +114,10 @@ export async function getFluxStatus(jobId: string): Promise<FluxJobResult> {
     return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
   }
 
-  const r2Key = `generated/flux/${jobId}.jpg`;
+  const safeJobId = jobId.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const r2Key = `generated/flux/${safeJobId}.${providerJob.isPortrait ? 'png' : 'jpg'}`;
   try {
-    const permanentUrl = await mirrorUrlToR2(rawUrl, r2Key, 'image/jpeg');
+    const permanentUrl = await mirrorUrlToR2(rawUrl, r2Key, providerJob.isPortrait ? 'image/png' : 'image/jpeg');
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[flux] R2 mirror failed:', (err as Error).message);
