@@ -859,10 +859,92 @@ Verification:
 - `pnpm --filter @raivstream/web type-check` passed.
 - `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
 - `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
+- Seed script parse check passed with `tsc --noEmit`.
+- VPS staging gate passed in `/root/raivstream-phase7a-staging`: backup, migration deploy, Prisma validate, API type-check, web type-check, strict lint, web build, PM2 start on port 3027, and health check.
+- Staging smoke passed: instructor duplicated the filmmaking course template, created a class, two students joined by invite code, student completed a lesson, instructor created four template assignments, student submitted a linked Story Workspace project, instructor opened read-only review context, added a character comment, requested revision, student resubmitted, instructor graded, analytics events were created, and a second student was denied access to the submission.
+- Production health remained clean for `https://app.raivstream.com/api/health` and `https://r16.raivstream.com/api/health`.
+- Backup preserved: `/root/raivstream/backups/pre_phase_7a_academy_20260724-234614.sql`.
+- Staging VPS gate passed in `/root/raivstream-phase6b-staging`: migration deploy, Prisma validate, API type-check, web type-check, strict lint, web build, PM2 restart, and health check.
+- Staging smoke created "A dog going to school", generated three Road to School image versions, confirmed 720x1280 R2 story-project asset URLs, marked one favorite, set a non-latest asset as active, soft-removed a non-active asset, confirmed Storybook used the active asset instead of latest, and verified asset analytics events.
+- Production health remained clean for `https://app.raivstream.com/api/health` and `https://r16.raivstream.com/api/health`.
+- R16 path remains simple-copy only in the workspace UI; prompt/provider/model/metadata/debug labels are gated out of the R16 render path.
 - VPS backup created before staging migration: `/root/raivstream/backups/pre_phase_6a_character_director_*.sql`.
 - Staging migration deploy/build passed on `/root/raivstream-phase6a-staging`, served on `127.0.0.1:3014`.
 - Real provider smoke regenerated the `Road to School` scene after directing Max as Curious/Adventurous, motivation Make Friends, walking style Skip, and Luna as a very close friend.
 - Smoke confirmed 720x1280 R2 output, 80 credit deduction, Story DNA metadata, character-aware prompt text, no scene-record rewrite after character update, admin character insights, analytics events, and R16 hiding prompt/provider/model metadata.
+
+### 2026-07-13: Phase 6B Story Workspace And Asset Manager
+
+Changed:
+
+- Added dedicated workspace route: `/story-playground/[projectId]`.
+- Workspace tabs:
+  - Overview
+  - Story
+  - Characters
+  - Scenes
+  - Assets
+  - Storybook
+- Updated `/story-playground` My Stories actions:
+  - Continue opens `/story-playground/{projectId}`.
+  - Add Pictures opens `/story-playground/{projectId}?tab=scenes`.
+  - Read Storybook keeps existing storybook route.
+- Added project workspace payload API with project details, Story DNA, chapters, questions, characters, scenes, latest assets, active assets, asset counts, storybook readiness, audience mode, and visual style.
+- Added Asset Manager grouped by scene with:
+  - active image
+  - latest image
+  - version labels
+  - favorite marker
+  - preview
+  - compare for non-R16
+  - set active image
+  - soft remove for non-R16
+  - regenerate from current scene settings
+- Storybook image selection now uses:
+  1. active image
+  2. latest ready image
+  3. `scene.imageUrl`
+  4. placeholder
+- Existing first-image behavior remains backward compatible: when a scene has no active image, the first generated ready image becomes active automatically. Later regenerations become latest but do not override the active image.
+- R16 workspace labels remain simple and hide provider/model/prompt/metadata/credit/debug language.
+
+Schema:
+
+- Added `StorySceneSeed.activeImageAssetId`.
+- Added `StorySceneAsset.isFavorite`.
+- Added `StorySceneAsset.selectedForStorybookAt`.
+- Added `StorySceneAsset.deletedAt` for soft removal.
+- Migration: `20260713150000_story_workspace_asset_manager`.
+
+APIs:
+
+- `story.getWorkspace`
+- `story.trackWorkspaceTab`
+- `story.setActiveSceneImage`
+- `story.favoriteSceneAsset`
+- `story.trackAssetCompared`
+- `story.deleteSceneAsset`
+- Existing `story.listSceneAssets` and `story.getSceneAsset` now ignore soft-deleted assets.
+
+Analytics:
+
+- `story_workspace_opened`
+- `story_workspace_tab_changed`
+- `asset_manager_opened`
+- `asset_set_active`
+- `asset_favorited`
+- `asset_compared`
+- `asset_removed`
+- `storybook_image_selection_changed`
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
 
 ## Known Issues And Follow-Ups
 
@@ -872,3 +954,68 @@ Verification:
 - Story Studio storyboard asset storage still accepts generated output URLs or pasted URLs. Story Playground scene image assets now use R2-backed asset history.
 - `supabase-pooler` is stopped. If another client needs pooled DB access, configure it on a non-conflicting port and verify tenant/user credentials.
 - Root local working tree has unrelated untracked/local files such as `.claude/`, `.codex/`, and `AGENTS.md`; do not stage them unless explicitly requested.
+
+### 2026-07-24: Phase 7A Raivstream Academy Foundation
+
+Implemented the Academy foundation as a learning layer around existing Story Workspace projects. Studio and Story Playground behavior remain unchanged.
+
+Routes:
+
+- `/academy`
+- `/academy/student`
+- `/academy/instructor`
+- `/academy/classes`
+- `/academy/classes/[classId]`
+- `/academy/classes/[classId]/lessons/[lessonId]`
+- `/academy/classes/[classId]/assignments/[assignmentId]`
+- `/academy/submissions/[submissionId]`
+- `/admin/academy`
+
+Schema:
+
+- Added course-scoped Academy enums for course/class/membership/lesson/assignment/submission/comment/progress states.
+- Added `AcademyCourse`, `AcademyClass`, `AcademyClassMembership`, `AcademyCourseModule`, `AcademyLesson`, `AcademyAssignment`, `AcademySubmission`, `AcademyRubricScore`, `AcademyComment`, and `AcademyLessonProgress`.
+- Added Academy notification enum values.
+- Submission references `StoryProject` and stores only a lightweight snapshot for audit.
+- Migration: `20260724120000_academy_foundation`.
+
+APIs:
+
+- Added `academy` tRPC router with course template duplication, course/class creation, invite-code join, student dashboard, instructor dashboard, class detail, lesson progress, assignment creation/templates, assignment context for Story Workspace, submission, review, comments, project listing, and admin overview.
+- Authorization helpers enforce course owner, class instructor/TA, enrolled student, platform admin, submission owner, and linked project owner boundaries.
+- A student cannot view another student's submission unless peer review is added later.
+
+Academy UX:
+
+- Student dashboard shows classes, assignments, submissions, feedback, and Story Workspace entry.
+- Instructor dashboard shows classes, roster summary, assignments, and review queue.
+- Class page shows lessons, assignments, invite code, and roster.
+- Lesson page marks progress only when the student explicitly saves/completes.
+- Assignment page lets students attach existing Story Workspace projects and deep-link to the relevant workspace tab.
+- Submission page supports read-only review context, instructor comments, revision requests, approval, grading, and rubric score persistence.
+- Story Workspace shows an Academy task banner when opened with `academyAssignment`.
+- Main nav adds Academy for signed-in non-R16 users; R16 nav is unchanged.
+
+Analytics:
+
+- Tracks `academy_opened`, `course_created`, `class_created`, `student_joined_class`, `lesson_opened`, `lesson_completed`, `assignment_opened`, `assignment_started`, `assignment_submitted`, `submission_revision_requested`, `assignment_resubmitted`, `submission_approved`, `submission_graded`, `instructor_comment_added`, and `academy_workspace_opened`.
+- No private lesson text, feedback body, or prompt text is stored in analytics properties.
+
+Seed/demo:
+
+- Added `pnpm db:seed:academy-demo`.
+- Seeds one 4-week filmmaking course, one active class, one instructor, two students, eight lessons, four assignments, one draft submission, one submitted assignment, and one revision-request submission.
+- The script refuses production seeding unless `ALLOW_PRODUCTION_DEMO_SEED=true`.
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
+
+Deferred:
+
+- Peer critique, AI Film Mentor, certificates, institution billing, live classes, video conferencing, timeline editor, movie stitching, read-aloud, narration, final public showcase, portfolio publishing, and course marketplace.

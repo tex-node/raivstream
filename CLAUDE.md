@@ -46,6 +46,7 @@ packages/api/src/lib/promptModeration.ts — moderatePrompt() — Layer 1: regex
 packages/api/src/lib/contentScanner.ts   — scanAndUpdateVideo() — OpenAI omni-moderation-latest image scan, fire-and-forget
 packages/api/src/lib/r2.ts            — uploadBufferToR2(), mirrorUrlToR2() — server-side R2 uploads for AI generation output
 packages/api/src/lib/analytics.ts     - first-party event tracking for Story Playground funnel and feedback
+packages/api/src/lib/academyTemplates.ts - reusable Academy filmmaking course and rubric templates
 packages/api/src/lib/generators/
   index.ts                            — submitGenerationJob(), pollJobStatus(), MODEL_META
   grokImagine.ts                      — xAI Grok Imagine (XAI_API_KEY) — image generation (model: grok-imagine-image)
@@ -72,7 +73,9 @@ packages/api/src/routers/
                                         listCreditRates, updateCreditRate, createCreditRate,
                                         listGenerationJobs, listPurchases,
                                         moderationQueue, moderateVideo, getModerationStats
+  academy.ts                          - Academy courses, classes, lessons, assignments, submissions, comments, progress
 packages/database/schema.prisma       — all DB models (see Database Models section)
+scripts/seed-academy-demo.ts          - development-only Academy demo data seed
 scripts/runpod.ts                     — RunPod dev CLI (pnpm runpod info|endpoints|models|health|test|status)
 
 apps/mobile/
@@ -101,6 +104,9 @@ apps/web/src/
   app/credits/success/page.tsx        — Paystack callback verification
   app/generate/page.tsx               — AI Studio: radio (Image/Video) + model dropdown; DEFAULT_IMAGE_MODEL=FLUX, DEFAULT_VIDEO_MODEL=WAN_25; HIDDEN_MODELS=['NANO_BANANA','VEO3']
   app/story-playground/page.tsx       — Story Playground Phase 1: idea → guided questions → short story → continuation
+  app/story-playground/[projectId]/page.tsx — Story Workspace + Asset Manager (Overview/Story/Characters/Scenes/Assets/Storybook tabs)
+  app/academy/                        - Academy dashboards, classes, lessons, assignments, submissions
+  app/admin/academy/page.tsx          - admin Academy diagnostics
   app/settings/                       — user settings
   app/search/page.tsx                 — search page
   app/admin/layout.tsx                — admin layout (responsive sidebar — mobile drawer, desktop fixed)
@@ -228,6 +234,8 @@ packages/api/src/lib/storyTextService.ts — Story Playground text provider abst
 - Phase 4B Scene Image Generation uses `StorySceneAsset`, `story.generateSceneImage`, `story.regenerateSceneImage`, `story.listSceneAssets`, and `story.getSceneAsset`.
 - Scene images use the hidden prompt composer, existing generator abstraction, `GenerationJob`, credit deduction/refund flow, and R2 mirroring.
 - Latest scene image fields live on `StorySceneSeed`: `latestImageAssetId`, `imageStatus`, and `imageUrl`.
+- Phase 6B Story Workspace uses `StorySceneSeed.activeImageAssetId` for Storybook image selection. Do not overload `latestImageAssetId`; latest generated and active Storybook image are separate.
+- Storybook image fallback order is active image, latest ready image, scene imageUrl, placeholder.
 - Story scene image R2 key format: `story-projects/{projectId}/scenes/{sceneId}/assets/{assetId}.png`.
 - Adult/non-R16 users can view image history. R16 copy stays simple and never shows raw prompts or asset metadata/history.
 - Staging runtime test on VPS passed with real RunPod/R2 using isolated staging DB: `A dog going to school` produced Home, Road to School, School Gate, Classroom, Problem, Happy Ending; Max was attached; first image and regenerate both deducted 80 credits, wrote R2 objects, and maintained history/latest links.
@@ -546,6 +554,7 @@ npx eas-cli update --branch production --platform ios --message "..."
 - **Story Playground My Stories library**: `/story-playground` shows recent signed-in user projects with progress labels, first scene thumbnail, Continue/Open Storybook/Add Pictures/Edit/Archive actions, empty state, and R16-safe copy
 - **Story Playground Prompt Quality Upgrade**: selectable visual styles, Story Director scene controls, style-aware prompt composer, `promptEnhancerService`, enhanced prompt preview for non-R16 creator/admin users, deterministic fallback, no-text/no-UI negative prompts, prompt quality feedback, `/admin/prompt-quality`
 - **Story Playground Character Director**: structured character traits, goals, fears, relationships, walking/speaking style, evolution stage, internal Story DNA, character-aware prompt enhancement, `/admin/character-insights`
+- **Story Workspace + Asset Manager**: `/story-playground/[projectId]` workspace tabs, active-vs-latest image selection, image favorites, soft asset removal, compare view, storybook active-image fallback
 - **Story data model expansion**: StoryQuestion, StoryChapter, StoryCharacterMemory, StorySceneSeed, StoryScenePrompt, StorySceneAsset, AnalyticsEvent, StoryAudienceMode, StoryType, GENERATED/EXTENDED statuses
 
 **Still to build / verify:**

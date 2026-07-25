@@ -61,6 +61,7 @@ export function Navbar() {
           {[
             { href: '/pricing',  label: 'Pricing'   },
             { href: '/story-playground', label: 'Story Playground' },
+            { href: '/academy', label: 'Academy' },
             { href: '/generate', label: 'AI Studio' },
             { href: '/credits',  label: 'Credits'   },
           ].map(({ href, label }) => (
@@ -166,6 +167,9 @@ export function Navbar() {
                   {[
                     { href: `/${user?.username}`, label: 'Profile' },
                     { href: '/story-playground', label: 'Story Playground' },
+                    ...(!isR16 ? [
+                      { href: '/academy', label: 'Academy' },
+                    ] : []),
                     ...(!isR16 ? [
                       { href: '/upload',   label: '📤 Upload'     },
                       { href: '/analytics',label: 'Analytics'     },

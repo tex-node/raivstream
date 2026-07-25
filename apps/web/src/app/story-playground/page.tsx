@@ -906,23 +906,11 @@ export default function StoryPlaygroundPage() {
   };
 
   const resumeProject = (storyProject: StoryProjectSummary) => {
-    const { chapterCount, questionCount } = projectCounts(storyProject);
-    setProjectId(storyProject.id);
-    if (storyProject.visualStyle && VISUAL_STYLE_OPTIONS.some((option) => option.value === storyProject.visualStyle)) {
-      setSelectedVisualStyle(storyProject.visualStyle as VisualStyleValue);
-    }
-    setMessage(null);
-    setStep(chapterCount > 0 ? 'story' : questionCount > 0 ? 'questions' : 'spark');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    router.push(`/story-playground/${storyProject.id}`);
   };
 
   const addPicturesToProject = (storyProject: StoryProjectSummary) => {
-    setProjectId(storyProject.id);
-    setMessage(isR16 ? 'Choose a picture card to keep going.' : 'Choose a scene card to add or regenerate pictures.');
-    setStep('story');
-    window.setTimeout(() => {
-      document.getElementById('story-scenes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    router.push(`/story-playground/${storyProject.id}?tab=scenes`);
   };
 
   const archiveStoryProject = (storyProject: StoryProjectSummary) => {

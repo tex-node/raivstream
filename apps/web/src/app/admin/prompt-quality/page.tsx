@@ -19,6 +19,10 @@ type PromptQualityRow = {
   creditsUsed: number;
   regenerated: boolean;
   finalAssetSelected: boolean;
+  activeForStorybook?: boolean;
+  latestAsset?: boolean;
+  favoriteAsset?: boolean;
+  assetVersionCount?: number;
   audienceMode: string | null;
   storyCompleted: boolean;
   status: string;
@@ -154,7 +158,10 @@ export default function AdminPromptQualityPage() {
                         <td className="px-4 py-3 text-white/55">
                           <p>{formatMs(row.generationTimeMs)}</p>
                           <p className="text-xs text-white/35">{row.creditsUsed} credits</p>
-                          <p className="text-xs text-white/35">{row.regenerated ? 'Regenerated' : 'First generation'} / {row.finalAssetSelected ? 'latest' : 'history'}</p>
+                          <p className="text-xs text-white/35">{row.regenerated ? 'Regenerated' : 'First generation'} / {row.latestAsset ? 'latest' : 'history'}</p>
+                          <p className="text-xs text-white/35">
+                            {row.activeForStorybook ? 'active' : 'not active'} / {row.favoriteAsset ? 'favorite' : 'not favorite'} / {row.assetVersionCount ?? 0} versions
+                          </p>
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-white/65">{ratingLabel(row.averageRating, row.ratingCount)}</p>

@@ -120,6 +120,99 @@ enum StorySceneAssetStatus {
 enum NotificationType {
   FOLLOW  // someone followed you
   LIKE    // someone liked your video
+  ACADEMY_STUDENT_JOINED
+  ACADEMY_ASSIGNMENT_PUBLISHED
+  ACADEMY_SUBMISSION_RECEIVED
+  ACADEMY_REVISION_REQUESTED
+  ACADEMY_SUBMISSION_APPROVED
+  ACADEMY_GRADE_RELEASED
+  ACADEMY_COMMENT_ADDED
+}
+
+enum AcademyCourseStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum AcademyClassStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum AcademyMembershipRole {
+  INSTRUCTOR
+  TEACHING_ASSISTANT
+  STUDENT
+}
+
+enum AcademyMembershipStatus {
+  INVITED
+  ACTIVE
+  REMOVED
+  COMPLETED
+}
+
+enum AcademyLessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AcademyLessonType {
+  CLASSROOM
+  WORKSPACE
+  LAB
+  CRITIQUE
+  PRODUCTION
+}
+
+enum AcademyAssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum AcademyDeliverableType {
+  STORY_IDEA
+  STORY_DNA
+  CHARACTER_PROFILE
+  SCENE_PLAN
+  STORYBOARD
+  IMAGE_SEQUENCE
+  STORYBOOK
+  FINAL_VIDEO
+  ADVERT
+  SHORT_FILM
+  PSA
+  REFLECTION
+}
+
+enum AcademySubmissionStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  REVISION_REQUESTED
+  RESUBMITTED
+  APPROVED
+  GRADED
+}
+
+enum AcademyCommentTargetType {
+  STORY
+  CHARACTER
+  SCENE
+  ASSET
+  STORYBOOK
+  SUBMISSION
+}
+
+enum AcademyLessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
 }
 
 enum BadgeType {
@@ -167,6 +260,12 @@ model User {
   refreshTokens      RefreshToken[]
   generationJobs     GenerationJob[]
   storyProjects       StoryProject[]
+  academyCoursesOwned AcademyCourse[] @relation("AcademyCourseOwner")
+  academyClassesInstructing AcademyClass[] @relation("AcademyClassInstructor")
+  academyMemberships  AcademyClassMembership[]
+  academySubmissions  AcademySubmission[] @relation("AcademySubmissionStudent")
+  academyComments     AcademyComment[] @relation("AcademyCommentAuthor")
+  academyLessonProgress AcademyLessonProgress[]
   analyticsEvents     AnalyticsEvent[]
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
@@ -617,6 +716,7 @@ model StoryProject {
   chapters       StoryChapter[]
   characterMemory StoryCharacterMemory[]
   sceneSeeds     StorySceneSeed[]
+  academySubmissions AcademySubmission[]
 
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -626,6 +726,245 @@ model StoryProject {
   @@index([audienceMode])
   @@index([userId, updatedAt])
   @@map("story_projects")
+}
+
+model AcademyCourse {
+  id                     String              @id @default(cuid())
+  ownerId                String
+  owner                  User                @relation("AcademyCourseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  title                  String
+  description            String?
+  learningOutcome        String?
+  audienceDescription    String?
+  durationWeeks          Int?
+  sessionsPerWeek        Int?
+  sessionDurationMinutes Int?
+  status                 AcademyCourseStatus @default(DRAFT)
+  coverImageUrl          String?
+
+  modules                AcademyCourseModule[]
+  classes                AcademyClass[]
+
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@map("academy_courses")
+}
+
+model AcademyClass {
+  id              String              @id @default(cuid())
+  courseId        String
+  course          AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title           String
+  instructorId    String
+  instructor      User                @relation("AcademyClassInstructor", fields: [instructorId], references: [id], onDelete: Cascade)
+  startDate       DateTime?
+  endDate         DateTime?
+  inviteCode      String              @unique
+  enrollmentOpen  Boolean             @default(true)
+  maximumStudents Int?
+  status          AcademyClassStatus  @default(UPCOMING)
+
+  memberships     AcademyClassMembership[]
+  assignments     AcademyAssignment[]
+  lessonProgress  AcademyLessonProgress[]
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([courseId])
+  @@index([instructorId])
+  @@index([status])
+  @@index([inviteCode])
+  @@map("academy_classes")
+}
+
+model AcademyClassMembership {
+  id              String                  @id @default(cuid())
+  classId         String
+  class           AcademyClass            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            AcademyMembershipRole
+  status          AcademyMembershipStatus @default(ACTIVE)
+  progressPercent Int                     @default(0)
+  lastActiveAt    DateTime?
+  joinedAt        DateTime                @default(now())
+
+  @@unique([classId, userId])
+  @@index([classId, role])
+  @@index([userId])
+  @@index([status])
+  @@map("academy_class_memberships")
+}
+
+model AcademyCourseModule {
+  id          String          @id @default(cuid())
+  courseId    String
+  course      AcademyCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  orderIndex  Int
+  lessons     AcademyLesson[]
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([courseId])
+  @@index([courseId, orderIndex])
+  @@map("academy_course_modules")
+}
+
+model AcademyLesson {
+  id                 String                      @id @default(cuid())
+  moduleId           String
+  module             AcademyCourseModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title              String
+  summary            String?
+  learningObjectives Json?
+  lessonContent      String?
+  estimatedMinutes   Int?
+  orderIndex         Int
+  status             AcademyLessonStatus         @default(DRAFT)
+  lessonType         AcademyLessonType           @default(CLASSROOM)
+
+  assignments        AcademyAssignment[]
+  progress           AcademyLessonProgress[]
+
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([moduleId])
+  @@index([moduleId, orderIndex])
+  @@index([status])
+  @@map("academy_lessons")
+}
+
+model AcademyAssignment {
+  id                     String                  @id @default(cuid())
+  classId                String
+  class                  AcademyClass            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  lessonId               String?
+  lesson                 AcademyLesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title                  String
+  brief                  String
+  instructions           String?
+  deliverableType        AcademyDeliverableType
+  dueAt                  DateTime?
+  maximumScore           Int                     @default(100)
+  rubric                 Json?
+  allowResubmission      Boolean                 @default(true)
+  maximumAttempts        Int?
+  requiredWorkspaceStage String?
+  status                 AcademyAssignmentStatus @default(DRAFT)
+
+  submissions            AcademySubmission[]
+
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([classId])
+  @@index([lessonId])
+  @@index([status])
+  @@index([dueAt])
+  @@map("academy_assignments")
+}
+
+model AcademySubmission {
+  id                String                  @id @default(cuid())
+  assignmentId      String
+  assignment        AcademyAssignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           User                    @relation("AcademySubmissionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  projectId         String?
+  project           StoryProject?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  submittedAssetId  String?
+  submissionText    String?
+  snapshot          Json?
+  status            AcademySubmissionStatus @default(DRAFT)
+  attemptNumber     Int                     @default(1)
+  submittedAt       DateTime?
+  reviewedAt        DateTime?
+  score             Float?
+  instructorSummary String?
+
+  rubricScores      AcademyRubricScore[]
+  comments          AcademyComment[]
+
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([projectId])
+  @@index([status])
+  @@index([submittedAt])
+  @@map("academy_submissions")
+}
+
+model AcademyRubricScore {
+  id              String             @id @default(cuid())
+  submissionId    String
+  submission      AcademySubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  criterionId     String
+  title           String
+  maximumPoints   Float
+  score           Float
+  notes           String?
+  orderIndex      Int
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([submissionId, criterionId])
+  @@index([submissionId])
+  @@map("academy_rubric_scores")
+}
+
+model AcademyComment {
+  id           String                   @id @default(cuid())
+  submissionId String
+  submission   AcademySubmission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User                     @relation("AcademyCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  targetType   AcademyCommentTargetType
+  targetId     String?
+  body         String
+  resolvedAt   DateTime?
+
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([submissionId])
+  @@index([authorId])
+  @@index([targetType, targetId])
+  @@index([resolvedAt])
+  @@map("academy_comments")
+}
+
+model AcademyLessonProgress {
+  id           String                      @id @default(cuid())
+  lessonId     String
+  lesson       AcademyLesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classId      String
+  class        AcademyClass                @relation(fields: [classId], references: [id], onDelete: Cascade)
+  status       AcademyLessonProgressStatus @default(NOT_STARTED)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  lastPosition String?
+  updatedAt    DateTime                    @updatedAt
+
+  @@unique([lessonId, userId, classId])
+  @@index([lessonId])
+  @@index([userId])
+  @@index([classId])
+  @@index([status])
+  @@map("academy_lesson_progress")
 }
 
 model StoryQuestion {
@@ -727,6 +1066,7 @@ model StorySceneSeed {
   assets         StorySceneAsset[]
   promptFeedback PromptQualityFeedback[]
   latestImageAssetId String?
+  activeImageAssetId String?
   imageStatus    StorySceneAssetStatus?
   imageUrl       String?
 
@@ -761,6 +1101,9 @@ model StorySceneAsset {
   errorMessage    String?
   generationJobId String?
   isLatest        Boolean               @default(false)
+  isFavorite      Boolean               @default(false)
+  selectedForStorybookAt DateTime?
+  deletedAt       DateTime?
 
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -769,6 +1112,8 @@ model StorySceneAsset {
   @@index([projectId])
   @@index([userId])
   @@index([sceneId, isLatest])
+  @@index([sceneId, isFavorite])
+  @@index([deletedAt])
   @@index([status])
   @@map("story_scene_assets")
 }

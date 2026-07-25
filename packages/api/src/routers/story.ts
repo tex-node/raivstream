@@ -1062,7 +1062,12 @@ async function generateSceneImageAsset(
       });
       await tx.storySceneSeed.update({
         where: { id: scene.id },
-        data: { latestImageAssetId: asset.id, imageStatus: 'READY', imageUrl: assetUrl },
+        data: {
+          latestImageAssetId: asset.id,
+          activeImageAssetId: scene.activeImageAssetId ?? asset.id,
+          imageStatus: 'READY',
+          imageUrl: scene.activeImageAssetId ? scene.imageUrl ?? assetUrl : assetUrl,
+        },
       });
       await tx.generationJob.update({
         where: { id: generationJob.id },
@@ -1331,13 +1336,18 @@ function buildStoryBookResponse(project: any) {
   const chapters = [...(project.chapters ?? [])].sort((a, b) => a.chapterNumber - b.chapterNumber);
   const textSegments = textSegmentsFromChapters(chapters, scenes.length);
   const pages = scenes.map((scene, index) => {
-    const latestAsset = scene.assets?.find((asset: any) => asset.isLatest && asset.status === 'READY')
-      ?? scene.assets?.find((asset: any) => asset.status === 'READY')
+    const readyAssets = (scene.assets ?? []).filter((asset: any) => asset.status === 'READY' && !asset.deletedAt);
+    const activeAsset = readyAssets.find((asset: any) => asset.id === scene.activeImageAssetId) ?? null;
+    const latestAsset = readyAssets.find((asset: any) => asset.isLatest)
+      ?? readyAssets[0]
       ?? null;
-    const imageUrl = scene.imageUrl ?? latestAsset?.assetUrl ?? null;
+    const selectedAsset = activeAsset ?? latestAsset;
+    const imageUrl = selectedAsset?.assetUrl ?? scene.imageUrl ?? null;
     return {
       pageNumber: index + 1,
       sceneId: scene.id,
+      assetId: selectedAsset?.id ?? null,
+      imageSource: activeAsset ? 'ACTIVE' : latestAsset ? 'LATEST' : scene.imageUrl ? 'SCENE' : 'PLACEHOLDER',
       imageUrl,
       title: scene.title,
       text: textSegments[index] || scene.description,
@@ -2262,6 +2272,194 @@ export const storyRouter = router({
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
 
+  getWorkspace: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const project = await (ctx.prisma as any).storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        include: {
+          questions: { orderBy: { orderIndex: 'asc' } },
+          chapters: { orderBy: { chapterNumber: 'asc' }, select: chapterSelect() },
+          characterMemory: { orderBy: { createdAt: 'asc' } },
+          sceneSeeds: {
+            orderBy: { orderIndex: 'asc' },
+            include: {
+              assets: {
+                where: { deletedAt: null },
+                orderBy: { createdAt: 'desc' },
+                take: 24,
+              },
+              prompts: {
+                orderBy: { createdAt: 'desc' },
+                take: 4,
+              },
+              promptFeedback: {
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+              },
+            },
+          },
+        },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      const readyImageCount = project.sceneSeeds.reduce((sum: number, scene: any) =>
+        sum + scene.assets.filter((asset: any) => asset.assetType === 'IMAGE' && asset.status === 'READY').length, 0);
+      const coverAsset = project.sceneSeeds
+        .flatMap((scene: any) => scene.assets.map((asset: any) => ({ ...asset, sceneId: scene.id, activeImageAssetId: scene.activeImageAssetId })))
+        .find((asset: any) => asset.id === asset.activeImageAssetId && asset.status === 'READY')
+        ?? project.sceneSeeds.flatMap((scene: any) => scene.assets).find((asset: any) => asset.isLatest && asset.status === 'READY')
+        ?? null;
+      await trackStoryAnalytics(ctx, {
+        event: 'story_workspace_opened',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { visualStyle: project.visualStyle, sceneCount: project.sceneSeeds.length, readyImageCount },
+      });
+      return {
+        project,
+        summary: {
+          chapterCount: project.chapters.length,
+          characterCount: project.characterMemory.length,
+          sceneCount: project.sceneSeeds.length,
+          readyImageCount,
+          storybookReady: project.sceneSeeds.length > 0 && readyImageCount > 0,
+          coverThumbnail: coverAsset?.thumbnailUrl ?? coverAsset?.assetUrl ?? project.sceneSeeds.find((scene: any) => scene.imageUrl)?.imageUrl ?? null,
+        },
+      };
+    }),
+
+  trackWorkspaceTab: protectedProcedure
+    .input(z.object({ projectId: z.string(), tab: z.string().min(1).max(40) }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      await trackStoryAnalytics(ctx, {
+        event: input.tab === 'assets' ? 'asset_manager_opened' : 'story_workspace_tab_changed',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { tab: input.tab, visualStyle: project.visualStyle },
+      });
+      return { ok: true };
+    }),
+
+  setActiveSceneImage: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: {
+          id: input.assetId,
+          sceneId: input.sceneId,
+          projectId: input.projectId,
+          userId: ctx.user.id,
+          assetType: 'IMAGE',
+          status: 'READY',
+          deletedAt: null,
+        },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ready scene image not found' });
+      const scene = await (ctx.prisma as any).storySceneSeed.update({
+        where: { id: input.sceneId },
+        data: {
+          activeImageAssetId: asset.id,
+          imageUrl: asset.assetUrl,
+        },
+      });
+      await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: asset.id },
+        data: { selectedForStorybookAt: new Date() },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_set_active',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: input.sceneId, assetId: input.assetId, visualStyle: project.visualStyle },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'storybook_image_selection_changed',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: input.sceneId, assetId: input.assetId, visualStyle: project.visualStyle },
+      });
+      return { scene, asset };
+    }),
+
+  favoriteSceneAsset: protectedProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string(), isFavorite: z.boolean().default(true) }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, projectId: input.projectId, userId: ctx.user.id, deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene asset not found' });
+      const updated = await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: input.assetId },
+        data: { isFavorite: input.isFavorite },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_favorited',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: asset.sceneId, assetId: input.assetId, isFavorite: input.isFavorite, visualStyle: project.visualStyle },
+      });
+      return updated;
+    }),
+
+  trackAssetCompared: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      assetIds: z.array(z.string()).min(2).max(2),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const assets = await (ctx.prisma as any).storySceneAsset.findMany({
+        where: {
+          id: { in: input.assetIds },
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          userId: ctx.user.id,
+          assetType: 'IMAGE',
+          status: 'READY',
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (assets.length !== 2) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ready scene images not found' });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_compared',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: input.sceneId, assetIds: input.assetIds, visualStyle: project.visualStyle },
+      });
+      return { ok: true };
+    }),
+
+  deleteSceneAsset: protectedProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, projectId: input.projectId, userId: ctx.user.id, deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene asset not found' });
+      const scene = await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: asset.sceneId, projectId: input.projectId } });
+      if (scene?.activeImageAssetId === asset.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose another active picture before removing this one.' });
+      }
+      const updated = await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: input.assetId },
+        data: { deletedAt: new Date(), isFavorite: false, isLatest: false },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_removed',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: asset.sceneId, assetId: input.assetId, visualStyle: project.visualStyle },
+      });
+      return updated;
+    }),
+
   submitPromptQualityFeedback: protectedProcedure
     .input(z.object({
       projectId: z.string(),
@@ -2333,7 +2531,7 @@ export const storyRouter = router({
       });
       if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
       return (ctx.prisma as any).storySceneAsset.findMany({
-        where: { sceneId: input.sceneId, projectId: input.projectId },
+        where: { sceneId: input.sceneId, projectId: input.projectId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         take: input.limit,
       });
@@ -2347,7 +2545,7 @@ export const storyRouter = router({
     .query(async ({ ctx, input }) => {
       await ensureProject(ctx, input.projectId);
       const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
-        where: { id: input.assetId, projectId: input.projectId },
+        where: { id: input.assetId, projectId: input.projectId, deletedAt: null },
       });
       if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene asset not found' });
       return asset;
@@ -2468,7 +2666,7 @@ export const storyRouter = router({
             orderBy: { orderIndex: 'asc' },
             include: {
               assets: {
-                where: { assetType: 'IMAGE' },
+                where: { assetType: 'IMAGE', deletedAt: null },
                 orderBy: { createdAt: 'desc' },
                 take: 8,
               },
@@ -2496,7 +2694,7 @@ export const storyRouter = router({
             orderBy: { orderIndex: 'asc' },
             include: {
               assets: {
-                where: { assetType: 'IMAGE' },
+                where: { assetType: 'IMAGE', deletedAt: null },
                 orderBy: { createdAt: 'desc' },
                 take: 8,
               },
@@ -2534,7 +2732,7 @@ export const storyRouter = router({
             orderBy: { orderIndex: 'asc' },
             include: {
               assets: {
-                where: { assetType: 'IMAGE' },
+                where: { assetType: 'IMAGE', deletedAt: null },
                 orderBy: { createdAt: 'desc' },
                 take: 8,
               },
