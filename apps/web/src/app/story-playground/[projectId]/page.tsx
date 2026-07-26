@@ -20,6 +20,9 @@ type Asset = {
   assetUrl: string | null;
   thumbnailUrl: string | null;
   status: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
+  creativeStatus?: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
+  criticScore?: number | null;
+  criticRecommendation?: 'APPROVE' | 'SUGGEST_REFINEMENT' | 'REGENERATE' | null;
   errorMessage: string | null;
   width: number | null;
   height: number | null;
@@ -27,6 +30,17 @@ type Asset = {
   isFavorite?: boolean;
   selectedForStorybookAt?: string | Date | null;
   createdAt: string | Date;
+  criticRuns?: Array<{
+    id: string;
+    status: string;
+    overallScore?: number | null;
+    recommendation?: string | null;
+    strengths?: string[] | null;
+    issues?: Array<{ category: string; severity: string; description: string }> | null;
+    improvementPlan?: Record<string, string[]> | null;
+    errorMessage?: string | null;
+    completedAt?: string | Date | null;
+  }>;
 };
 
 type Scene = {
@@ -121,6 +135,27 @@ function versionLabel(scene: Scene, asset: Asset) {
   return `Picture ${Math.max(1, ordered.findIndex((item) => item.id === asset.id) + 1)}`;
 }
 
+function latestCriticRun(asset: Asset) {
+  return asset.criticRuns?.[0] ?? null;
+}
+
+function criticStatusLabel(asset: Asset) {
+  const run = latestCriticRun(asset);
+  if (run?.status === 'RUNNING' || run?.status === 'PENDING') return 'Reviewing quality';
+  if (run?.status === 'SKIPPED') return 'Review unavailable';
+  if (run?.status === 'FAILED') return 'Review failed';
+  if (asset.creativeStatus === 'APPROVED') return 'Approved';
+  if (asset.creativeStatus === 'REJECTED') return 'Rejected';
+  if (asset.criticRecommendation === 'REGENERATE') return 'Regenerate recommended';
+  if (asset.criticRecommendation === 'SUGGEST_REFINEMENT') return 'Needs refinement';
+  return 'Not reviewed';
+}
+
+function improvementSummary(plan?: Record<string, string[]> | null) {
+  if (!plan) return [];
+  return Object.entries(plan).flatMap(([key, values]) => (values ?? []).map((value) => `${label(key)}: ${value}`)).slice(0, 3);
+}
+
 export default function StoryWorkspacePage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
@@ -186,6 +221,11 @@ export default function StoryWorkspacePage() {
   const updateSceneDirector = trpc.story.updateSceneDirector.useMutation({ onSuccess: () => refresh(isR16 ? 'Choices saved.' : 'Director settings saved.') });
   const generateSceneImage = trpc.story.generateSceneImage.useMutation({ onSuccess: () => refresh(isR16 ? 'Picture made.' : 'Image generated.') });
   const regenerateSceneImage = trpc.story.regenerateSceneImage.useMutation({ onSuccess: () => refresh(isR16 ? 'New picture made.' : 'Image regenerated.') });
+  const runCreativeCritic = trpc.story.runCreativeCritic.useMutation({ onSuccess: () => refresh('Creative review updated.') });
+  const regenerateFromCritic = trpc.story.regenerateFromCritic.useMutation({ onSuccess: () => refresh('Improved picture started.') });
+  const approveSceneAsset = trpc.story.approveSceneAsset.useMutation({ onSuccess: () => refresh('Picture approved.') });
+  const rejectSceneAsset = trpc.story.rejectSceneAsset.useMutation({ onSuccess: () => refresh('Picture rejected.') });
+  const submitCreativeCriticFeedback = trpc.story.submitCreativeCriticFeedback.useMutation({ onSuccess: () => refresh('Creative feedback saved.') });
   const setActiveImage = trpc.story.setActiveSceneImage.useMutation({ onSuccess: () => refresh(isR16 ? 'Picture chosen for book.' : 'Active Storybook image changed.') });
   const favoriteAsset = trpc.story.favoriteSceneAsset.useMutation({ onSuccess: () => refresh(isR16 ? 'Favorite saved.' : 'Favorite updated.') });
   const trackAssetCompared = trpc.story.trackAssetCompared.useMutation();
@@ -532,6 +572,8 @@ export default function StoryWorkspacePage() {
                   {assets.map((asset) => {
                     const isActive = scene.activeImageAssetId === asset.id || (!scene.activeImageAssetId && asset.isLatest);
                     const rating = scene.promptFeedback?.find((item) => item.assetId === asset.id)?.rating ?? null;
+                    const criticRun = latestCriticRun(asset);
+                    const criticImprovements = improvementSummary(criticRun?.improvementPlan ?? null);
                     return (
                       <article key={asset.id} className={`overflow-hidden rounded-2xl border-2 bg-white ${isActive ? 'border-[#2fbf71]' : 'border-[#172033]/10'}`}>
                         <button onClick={() => setPreviewAsset(asset)} className="block aspect-[9/12] w-full bg-[#f5f1e8]">
@@ -543,12 +585,41 @@ export default function StoryWorkspacePage() {
                             {isActive && <span className="rounded-full bg-[#dff8e9] px-2 py-1 text-[#17643a]">{isR16 ? 'In Book' : 'Active'}</span>}
                             {asset.isLatest && <span className="rounded-full bg-[#fff1c7] px-2 py-1">Latest</span>}
                             {asset.isFavorite && <span className="rounded-full bg-[#ffe1eb] px-2 py-1 text-[#b13b63]">Favorite</span>}
+                            {!isR16 && <span className="rounded-full bg-[#eef7ff] px-2 py-1 text-[#2f80ed]">{criticStatusLabel(asset)}</span>}
                           </div>
                           <p className="text-xs font-bold text-[#596070]">{dateLabel(asset.createdAt)} {rating ? `| Rating ${rating > 0 ? '+' : ''}${rating}` : ''}</p>
                           {canUseTechnical && <p className="mt-1 text-xs font-semibold text-[#596070]">{asset.provider} | {asset.model} | {asset.width}x{asset.height}</p>}
+                          {!isR16 && (
+                            <div className="mt-3 rounded-xl bg-[#f6fbff] p-3 text-xs font-semibold text-[#596070]">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-black text-[#172033]">Creative Critic</span>
+                                <span>{asset.criticScore === null || asset.criticScore === undefined ? 'No score' : `${Math.round(asset.criticScore)}/100`}</span>
+                              </div>
+                              {criticRun?.strengths?.length ? <p className="mt-2 line-clamp-2">Strength: {criticRun.strengths[0]}</p> : null}
+                              {criticRun?.issues?.length ? <p className="mt-2 line-clamp-2 text-[#b13b63]">Issue: {criticRun.issues[0].description}</p> : null}
+                              {criticImprovements.length ? (
+                                <ul className="mt-2 space-y-1">
+                                  {criticImprovements.map((item) => <li key={item}>- {item}</li>)}
+                                </ul>
+                              ) : null}
+                            </div>
+                          )}
                           <div className="mt-3 grid gap-2">
                             <button disabled={isActive} onClick={() => setActiveImage.mutate({ projectId, sceneId: scene.id, assetId: asset.id })} className="rounded-xl bg-[#2fbf71] px-3 py-2 text-sm font-black text-white disabled:opacity-50">{isR16 ? 'Use This Picture' : 'Set as Active'}</button>
                             <button onClick={() => favoriteAsset.mutate({ projectId, assetId: asset.id, isFavorite: !asset.isFavorite })} className="rounded-xl bg-white px-3 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10"><Heart className="mr-1 inline" size={16} />{asset.isFavorite ? 'Unfavorite' : 'Favorite'}</button>
+                            {!isR16 && <button onClick={() => runCreativeCritic.mutate({ projectId, sceneId: scene.id, assetId: asset.id })} disabled={runCreativeCritic.isPending} className="rounded-xl bg-[#eef7ff] px-3 py-2 text-sm font-black text-[#2f80ed]"><RefreshCw className="mr-1 inline" size={16} />Review Again</button>}
+                            {!isR16 && criticRun?.recommendation && criticRun.recommendation !== 'APPROVE' && (
+                              <button onClick={() => regenerateFromCritic.mutate({ projectId, criticRunId: criticRun.id, model: 'FLUX' })} disabled={regenerateFromCritic.isPending} className="rounded-xl bg-[#ffcf4a] px-3 py-2 text-sm font-black text-[#172033]">Improve and Regenerate</button>
+                            )}
+                            {!isR16 && <button onClick={() => approveSceneAsset.mutate({ projectId, assetId: asset.id })} disabled={approveSceneAsset.isPending} className="rounded-xl bg-[#dff8e9] px-3 py-2 text-sm font-black text-[#17643a]"><CheckCircle2 className="mr-1 inline" size={16} />Approve</button>}
+                            {!isR16 && <button onClick={() => rejectSceneAsset.mutate({ projectId, assetId: asset.id })} disabled={rejectSceneAsset.isPending} className="rounded-xl bg-[#fff1f1] px-3 py-2 text-sm font-black text-[#b13b63]"><X className="mr-1 inline" size={16} />Reject</button>}
+                            {!isR16 && (
+                              <div className="grid grid-cols-3 gap-2">
+                                <button onClick={() => submitCreativeCriticFeedback.mutate({ projectId, sceneId: scene.id, assetId: asset.id, criticRunId: criticRun?.id, rating: 'UP', categories: [] })} className="rounded-xl bg-white px-2 py-2 text-xs font-black text-[#17643a] ring-2 ring-[#172033]/10">Thumbs up</button>
+                                <button onClick={() => submitCreativeCriticFeedback.mutate({ projectId, sceneId: scene.id, assetId: asset.id, criticRunId: criticRun?.id, rating: 'DOWN', categories: [] })} className="rounded-xl bg-white px-2 py-2 text-xs font-black text-[#b13b63] ring-2 ring-[#172033]/10">Thumbs down</button>
+                                <button onClick={() => submitCreativeCriticFeedback.mutate({ projectId, sceneId: scene.id, assetId: asset.id, criticRunId: criticRun?.id, rating: 'NEEDS_IMPROVEMENT', categories: ['OTHER'] })} className="rounded-xl bg-white px-2 py-2 text-xs font-black text-[#596070] ring-2 ring-[#172033]/10">Needs work</button>
+                              </div>
+                            )}
                             {!isR16 && <button onClick={() => toggleCompareAsset(scene, asset.id)} className="rounded-xl bg-[#172033] px-3 py-2 text-sm font-black text-white">Compare</button>}
                             {!isR16 && !isActive && <button onClick={() => deleteAsset.mutate({ projectId, assetId: asset.id })} className="rounded-xl bg-[#fff1f1] px-3 py-2 text-sm font-black text-[#b13b63]"><Trash2 className="mr-1 inline" size={16} />Remove</button>}
                           </div>

@@ -8,6 +8,17 @@ import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits'
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
+import {
+  applyCriticImprovementsToCreativeSpecification,
+  createCreativeCriticRun,
+  creativeCriticMaxRetries,
+  creativeCriticThreshold,
+  improvementPlanSummary,
+  runCreativeCritic,
+  sanitizeR16AssetPayload,
+  selectStorybookImageForScene,
+  type CreativeCriticInput,
+} from '../lib/creativeCritic';
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock } from '../lib/storyVisualStyles';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
@@ -45,6 +56,8 @@ const walkingStyleSchema = z.enum(['SKIP', 'RUN', 'WALK_PROUDLY', 'WALK_CAREFULL
 const speakingStyleSchema = z.enum(['CHEERFUL', 'GENTLE', 'QUIET', 'CONFIDENT', 'FUNNY']);
 const relationshipTypeSchema = z.enum(['FRIEND', 'SIBLING', 'TEACHER', 'ENEMY', 'PARENT', 'PET', 'MENTOR']);
 const relationshipStrengthSchema = z.enum(['DISTANT', 'FRIENDLY', 'CLOSE', 'VERY_CLOSE']);
+const creativeCriticModeSchema = z.enum(['OFF', 'SUGGEST', 'AUTO_ONCE', 'AUTO_UNTIL_THRESHOLD']);
+const criticFeedbackCategorySchema = z.enum(['CHARACTER', 'EMOTION', 'CAMERA', 'LIGHTING', 'COMPOSITION', 'BACKGROUND', 'STYLE', 'CONTINUITY', 'OTHER']);
 const characterRelationshipSchema = z.object({
   targetCharacterId: z.string().optional().nullable(),
   targetName: z.string().min(1).max(80),
@@ -863,9 +876,194 @@ function devSceneSvgDataUrl(sceneTitle: string, characterName: string) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+function creativeCriticSettings(project: {
+  creativeCriticMode?: string | null;
+  creativeCriticThreshold?: number | null;
+  creativeCriticMaxRetries?: number | null;
+  audienceMode?: string | null;
+}) {
+  const envEnabled = process.env.CREATIVE_CRITIC_ENABLED !== 'false';
+  const mode = !envEnabled ? 'OFF' : (project.creativeCriticMode ?? 'SUGGEST');
+  const maxRetries = Math.min(3, Math.max(0, project.creativeCriticMaxRetries ?? creativeCriticMaxRetries()));
+  return {
+    mode,
+    threshold: project.creativeCriticThreshold ?? creativeCriticThreshold(),
+    maxRetries,
+  };
+}
+
+function safeCriticRunForR16(run: any) {
+  if (!run) return null;
+  return {
+    id: run.id,
+    assetId: run.assetId,
+    sceneId: run.sceneId,
+    status: run.status,
+    recommendation: run.recommendation,
+    completedAt: run.completedAt,
+  };
+}
+
+function attachCriticRunsToProject(project: any, criticRuns: any[], isR16?: boolean) {
+  const runsByAsset = new Map<string, any[]>();
+  for (const run of criticRuns) {
+    const list = runsByAsset.get(run.assetId) ?? [];
+    list.push(isR16 ? safeCriticRunForR16(run) : run);
+    runsByAsset.set(run.assetId, list.filter(Boolean));
+  }
+  return {
+    ...project,
+    sceneSeeds: (project.sceneSeeds ?? []).map((scene: any) => ({
+      ...scene,
+      assets: (scene.assets ?? []).map((asset: any) => ({
+        ...(isR16 ? sanitizeR16AssetPayload(asset) : asset),
+        criticRuns: isR16
+          ? (runsByAsset.get(asset.id) ?? []).map(safeCriticRunForR16)
+          : (runsByAsset.get(asset.id) ?? []),
+      })),
+    })),
+  };
+}
+
+async function hydrateProjectCriticRuns(ctx: any, project: any) {
+  const assetIds = (project.sceneSeeds ?? []).flatMap((scene: any) => (scene.assets ?? []).map((asset: any) => asset.id));
+  if (assetIds.length === 0) return project;
+  const criticRuns = await (ctx.prisma as any).creativeCriticRun.findMany({
+    where: { assetId: { in: assetIds } },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+  return attachCriticRunsToProject(project, criticRuns, ctx.isR16);
+}
+
+async function buildCreativeCriticInput(ctx: any, input: {
+  projectId: string;
+  sceneId: string;
+  assetId: string;
+}): Promise<CreativeCriticInput> {
+  const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+    where: { id: input.sceneId, projectId: input.projectId },
+    include: {
+      project: {
+        select: {
+          id: true,
+          title: true,
+          originalIdea: true,
+          audienceMode: true,
+          visualStyle: true,
+          theme: true,
+          tone: true,
+          synopsis: true,
+          storyDna: true,
+          characterMemory: { orderBy: { createdAt: 'asc' } },
+        },
+      },
+      prompts: { orderBy: { version: 'desc' }, take: 1 },
+      assets: {
+        where: { assetType: 'IMAGE', status: 'READY', deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+      },
+    },
+  });
+  if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+  const asset = scene.assets.find((item: any) => item.id === input.assetId);
+  if (!asset?.assetUrl) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Ready image asset is required for creative review' });
+  const generationJob = asset.generationJobId
+    ? await ctx.prisma.generationJob.findUnique({ where: { id: asset.generationJobId } })
+    : null;
+  const previousScene = await (ctx.prisma as any).storySceneSeed.findFirst({
+    where: { projectId: input.projectId, orderIndex: { lt: scene.orderIndex } },
+    orderBy: { orderIndex: 'desc' },
+    include: {
+      prompts: { orderBy: { version: 'desc' }, take: 1 },
+      assets: { where: { assetType: 'IMAGE', status: 'READY', deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 4 },
+    },
+  });
+  const previousActiveAsset = previousScene?.assets?.find((item: any) => item.id === previousScene.activeImageAssetId)
+    ?? previousScene?.assets?.find((item: any) => item.isLatest)
+    ?? previousScene?.assets?.[0]
+    ?? null;
+  const latestPrompt = scene.prompts?.[0] ?? null;
+  const creativeSpecification = {
+    projectTitle: scene.project.title,
+    originalIdea: scene.project.originalIdea,
+    sceneTitle: scene.title,
+    sceneDescription: scene.description,
+    locationType: scene.locationType,
+    indoorOutdoor: scene.indoorOutdoor,
+    mood: scene.mood,
+    selectedVisualStyle: scene.project.visualStyle,
+    characterIdentity: characterReferencesFromScene(scene, scene.project.characterMemory).map((character) => character.promptIngredient),
+    promptVersion: latestPrompt?.version ?? null,
+    promptMetadata: latestPrompt?.metadata ?? null,
+  };
+  return {
+    assetUrl: asset.assetUrl,
+    assetId: asset.id,
+    projectId: input.projectId,
+    sceneId: input.sceneId,
+    creativeSpecification,
+    storyDna: scene.project.storyDna,
+    visualDna: {
+      visualStyle: normaliseStoryVisualStyle(scene.project.visualStyle),
+      styleLabel: styleLabel(scene.project.visualStyle),
+      portraitFormat: `${asset.width ?? 720}x${asset.height ?? 1280}`,
+    },
+    characterDirector: scene.project.characterMemory,
+    sceneDirector: directorSettingsFromScene(scene),
+    selectedVisualStyle: scene.project.visualStyle,
+    previousActiveSceneAsset: previousActiveAsset ? {
+      id: previousActiveAsset.id,
+      sceneId: previousActiveAsset.sceneId,
+      width: previousActiveAsset.width,
+      height: previousActiveAsset.height,
+      creativeStatus: previousActiveAsset.creativeStatus,
+      criticScore: previousActiveAsset.criticScore,
+      criticRecommendation: previousActiveAsset.criticRecommendation,
+    } : null,
+    previousSceneCreativeSpecification: previousScene ? {
+      title: previousScene.title,
+      description: previousScene.description,
+      promptVersion: previousScene.prompts?.[0]?.version ?? null,
+      promptMetadata: previousScene.prompts?.[0]?.metadata ?? null,
+    } : null,
+    providerMetadata: {
+      provider: asset.provider,
+      model: asset.model,
+      status: asset.status,
+      width: asset.width,
+      height: asset.height,
+    },
+    generationMetadata: generationJob?.metadata as Record<string, unknown> | null,
+  };
+}
+
+function runCreativeCriticInBackground(ctx: any, input: {
+  runId: string;
+  projectId: string;
+  sceneId: string;
+  assetId: string;
+  audienceMode: StoryAudienceMode;
+  threshold?: number | null;
+}) {
+  void (async () => {
+    const criticInput = await buildCreativeCriticInput(ctx, input);
+    await runCreativeCritic(ctx.prisma, {
+      runId: input.runId,
+      userId: ctx.user?.id,
+      audienceMode: input.audienceMode,
+      criticInput,
+      threshold: input.threshold,
+    });
+  })().catch((error) => {
+    console.warn('[creativeCritic] background run failed', error);
+  });
+}
+
 async function generateSceneImageAsset(
   ctx: any,
-  input: { projectId: string; sceneId: string; model: SceneImageModel; isRegeneration?: boolean },
+  input: { projectId: string; sceneId: string; model: SceneImageModel; isRegeneration?: boolean; creativeCriticRunId?: string | null },
 ) {
   const project = await ctx.prisma.storyProject.findFirst({
     where: { id: input.projectId, userId: ctx.user.id },
@@ -904,7 +1102,7 @@ async function generateSceneImageAsset(
     audienceMode,
     properties: { sceneId: scene.id, model: input.model, isRegeneration: Boolean(input.isRegeneration) },
   });
-  const composed = await composeEnhancedScenePrompt(ctx, {
+  let composed = await composeEnhancedScenePrompt(ctx, {
     scene,
     outputType: 'IMAGE',
     provider: 'FLUX',
@@ -912,6 +1110,23 @@ async function generateSceneImageAsset(
     projectId: project.id,
     analyticsSource: 'generation',
   });
+  if (input.creativeCriticRunId) {
+    const criticRun = await (ctx.prisma as any).creativeCriticRun.findFirst({
+      where: { id: input.creativeCriticRunId, projectId: project.id, sceneId: scene.id },
+    });
+    const planSummary = criticRun?.improvementPlan ? improvementPlanSummary(criticRun.improvementPlan, 6) : [];
+    if (planSummary.length) {
+      composed = {
+        ...composed,
+        deterministicPrompt: `${composed.deterministicPrompt}. Creative specification improvements: ${planSummary.join('; ')}`,
+        prompt: limitText(`${composed.prompt}. Creative specification improvements: ${planSummary.join('; ')}`, GENERATION_PROMPT_MAX_LENGTH),
+        providerHints: {
+          ...composed.providerHints,
+          criticImprovements: planSummary.join('; '),
+        } as any,
+      };
+    }
+  }
 
   const moderation = await moderatePrompt(composed.prompt);
   if (!moderation.allowed) {
@@ -930,6 +1145,7 @@ async function generateSceneImageAsset(
       composedPrompt: composed.prompt,
       negativePrompt: composed.negativePrompt,
       status: 'GENERATING',
+      creativeStatus: 'UNDER_REVIEW',
       isLatest: false,
     },
   });
@@ -1000,6 +1216,7 @@ async function generateSceneImageAsset(
           promptEnhancerProvider: composed.enhancerProvider,
           promptEnhancerModel: composed.enhancerModel,
           providerHints: composed.providerHints,
+          sourceCreativeCriticRunId: input.creativeCriticRunId ?? null,
         },
       },
     });
@@ -1099,9 +1316,10 @@ async function generateSceneImageAsset(
         r2Key,
         isRegeneration: Boolean(input.isRegeneration),
         style: composed.styleUsed,
-        enhancerProvider: composed.enhancerProvider,
-      },
-    });
+          enhancerProvider: composed.enhancerProvider,
+          sourceCreativeCriticRunId: input.creativeCriticRunId ?? null,
+        },
+      });
     if (input.isRegeneration) {
       await trackStoryAnalytics(ctx, {
         event: 'scene_image_regenerated',
@@ -1126,12 +1344,33 @@ async function generateSceneImageAsset(
       }
     }
 
+    const criticSettings = creativeCriticSettings(project);
+    let criticRun = null;
+    if (criticSettings.mode !== 'OFF') {
+      criticRun = await createCreativeCriticRun(ctx.prisma, {
+        projectId: project.id,
+        sceneId: scene.id,
+        assetId: asset.id,
+        retryAttempt: input.creativeCriticRunId ? 1 : 0,
+        parentCriticRunId: input.creativeCriticRunId ?? null,
+      });
+      runCreativeCriticInBackground(ctx, {
+        runId: criticRun.id,
+        projectId: project.id,
+        sceneId: scene.id,
+        assetId: asset.id,
+        audienceMode,
+        threshold: criticSettings.threshold,
+      });
+    }
+
     return {
       scene: await ctx.prisma.storySceneSeed.findFirst({
         where: { id: scene.id },
         include: { assets: { orderBy: { createdAt: 'desc' }, take: 12 }, prompts: { orderBy: { createdAt: 'desc' }, take: 6 } },
       }),
       asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
+      criticRun: ctx.isR16 ? safeCriticRunForR16(criticRun) : criticRun,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Picture generation failed. Please try again.';
@@ -1336,18 +1575,12 @@ function buildStoryBookResponse(project: any) {
   const chapters = [...(project.chapters ?? [])].sort((a, b) => a.chapterNumber - b.chapterNumber);
   const textSegments = textSegmentsFromChapters(chapters, scenes.length);
   const pages = scenes.map((scene, index) => {
-    const readyAssets = (scene.assets ?? []).filter((asset: any) => asset.status === 'READY' && !asset.deletedAt);
-    const activeAsset = readyAssets.find((asset: any) => asset.id === scene.activeImageAssetId) ?? null;
-    const latestAsset = readyAssets.find((asset: any) => asset.isLatest)
-      ?? readyAssets[0]
-      ?? null;
-    const selectedAsset = activeAsset ?? latestAsset;
-    const imageUrl = selectedAsset?.assetUrl ?? scene.imageUrl ?? null;
+    const { asset: selectedAsset, imageUrl, imageSource } = selectStorybookImageForScene(scene);
     return {
       pageNumber: index + 1,
       sceneId: scene.id,
       assetId: selectedAsset?.id ?? null,
-      imageSource: activeAsset ? 'ACTIVE' : latestAsset ? 'LATEST' : scene.imageUrl ? 'SCENE' : 'PLACEHOLDER',
+      imageSource,
       imageUrl,
       title: scene.title,
       text: textSegments[index] || scene.description,
@@ -2272,6 +2505,398 @@ export const storyRouter = router({
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
 
+  runCreativeCritic: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      assetId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, projectId: input.projectId, sceneId: input.sceneId, userId: ctx.user.id, status: 'READY', deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ready scene image not found' });
+      const existingCount = await (ctx.prisma as any).creativeCriticRun.count({ where: { assetId: asset.id } });
+      const retryAttempt = Math.min(existingCount, 99);
+      const run = await createCreativeCriticRun(ctx.prisma, {
+        projectId: input.projectId,
+        sceneId: input.sceneId,
+        assetId: input.assetId,
+        retryAttempt,
+      });
+      const criticInput = await buildCreativeCriticInput(ctx, input);
+      const completed = await runCreativeCritic(ctx.prisma, {
+        runId: run.id,
+        userId: ctx.user.id,
+        audienceMode: project.audienceMode,
+        criticInput,
+        threshold: creativeCriticSettings(project).threshold,
+      });
+      return ctx.isR16 ? safeCriticRunForR16(completed) : completed;
+    }),
+
+  getCreativeCriticRun: protectedProcedure
+    .input(z.object({ projectId: z.string(), runId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const run = await (ctx.prisma as any).creativeCriticRun.findFirst({
+        where: { id: input.runId, projectId: input.projectId },
+      });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Creative critic run not found' });
+      return ctx.isR16 ? safeCriticRunForR16(run) : run;
+    }),
+
+  listCreativeCriticRuns: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string().optional(),
+      assetId: z.string().optional(),
+      limit: z.number().int().min(1).max(100).default(30),
+    }))
+    .query(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const runs = await (ctx.prisma as any).creativeCriticRun.findMany({
+        where: {
+          projectId: input.projectId,
+          ...(input.sceneId ? { sceneId: input.sceneId } : {}),
+          ...(input.assetId ? { assetId: input.assetId } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit,
+      });
+      return ctx.isR16 ? runs.map(safeCriticRunForR16) : runs;
+    }),
+
+  applyCriticImprovementPlan: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      criticRunId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const run = await (ctx.prisma as any).creativeCriticRun.findFirst({
+        where: { id: input.criticRunId, projectId: input.projectId, status: 'COMPLETED' },
+      });
+      if (!run?.improvementPlan) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No completed improvement plan found' });
+      const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+        where: { id: run.sceneId, projectId: input.projectId },
+        include: { prompts: { orderBy: { version: 'desc' }, take: 1 } },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      const latest = scene.prompts?.[0] ?? null;
+      const nextVersion = (latest?.version ?? 0) + 1;
+      const specification = applyCriticImprovementsToCreativeSpecification({
+        creativeSpecification: (latest?.metadata as Record<string, unknown> | null) ?? {},
+        criticResult: {
+          overallScore: run.overallScore ?? 0,
+          scores: {
+            characterIdentity: run.characterIdentityScore ?? 0,
+            continuity: run.continuityScore ?? 0,
+            composition: run.compositionScore ?? 0,
+            lighting: run.lightingScore ?? 0,
+            emotion: run.emotionScore ?? 0,
+            visualStyle: run.visualStyleScore ?? 0,
+            environment: run.environmentScore ?? 0,
+            storyAlignment: run.storyAlignmentScore ?? 0,
+            sceneClarity: run.sceneClarityScore ?? 0,
+            technicalQuality: run.technicalQualityScore ?? 0,
+          },
+          strengths: Array.isArray(run.strengths) ? run.strengths : [],
+          issues: Array.isArray(run.issues) ? run.issues : [],
+          improvementPlan: (run.improvementPlan ?? {}) as any,
+          recommendation: run.recommendation ?? 'SUGGEST_REFINEMENT',
+          confidence: run.confidence ?? 0,
+        },
+        sourceCriticRunId: run.id,
+        version: nextVersion,
+      });
+      const prompt = await (ctx.prisma as any).storyScenePrompt.create({
+        data: {
+          sceneId: run.sceneId,
+          outputType: latest?.outputType ?? 'IMAGE',
+          provider: latest?.provider ?? 'FLUX',
+          prompt: latest?.prompt ?? 'Creative critic improvement specification',
+          negativePrompt: latest?.negativePrompt ?? null,
+          aspectRatio: latest?.aspectRatio ?? '9:16',
+          duration: latest?.duration ?? null,
+          version: nextVersion,
+          metadata: specification,
+        },
+      });
+      await (ctx.prisma as any).creativeCriticRun.update({
+        where: { id: run.id },
+        data: { specificationVersion: nextVersion },
+      });
+      return ctx.isR16 ? { ok: true } : { prompt, specification };
+    }),
+
+  regenerateFromCritic: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      criticRunId: z.string(),
+      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const run = await (ctx.prisma as any).creativeCriticRun.findFirst({
+        where: { id: input.criticRunId, projectId: input.projectId, status: 'COMPLETED' },
+      });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Completed creative critic run not found' });
+      if (run.recommendation === 'APPROVE') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This picture is already approved by the critic.' });
+      }
+      if (run.resultingAssetId) {
+        const existingAsset = await (ctx.prisma as any).storySceneAsset.findFirst({
+          where: { id: run.resultingAssetId, projectId: input.projectId, deletedAt: null },
+        });
+        if (existingAsset) {
+          console.info('[creativeCritic] idempotent_replay', {
+            projectId: input.projectId,
+            sceneId: run.sceneId,
+            criticRunId: run.id,
+            resultingAssetId: run.resultingAssetId,
+          });
+          return {
+            scene: await ctx.prisma.storySceneSeed.findFirst({
+              where: { id: run.sceneId },
+              include: { assets: { orderBy: { createdAt: 'desc' }, take: 12 }, prompts: { orderBy: { createdAt: 'desc' }, take: 6 } },
+            }),
+            asset: existingAsset,
+            idempotentReplay: true,
+          };
+        }
+      }
+      const settings = creativeCriticSettings(project);
+      const retries = await (ctx.prisma as any).creativeCriticRun.count({ where: { parentCriticRunId: run.id } });
+      if (retries >= settings.maxRetries) {
+        console.warn('[creativeCritic] retry_blocked', {
+          projectId: input.projectId,
+          sceneId: run.sceneId,
+          criticRunId: run.id,
+          reason: 'retry_limit_reached',
+          retries,
+          maxRetries: settings.maxRetries,
+        });
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Creative retry limit reached for this picture.' });
+      }
+      console.info('[creativeCritic] retry_attempted', {
+        projectId: input.projectId,
+        sceneId: run.sceneId,
+        sourceAssetId: run.assetId,
+        criticRunId: run.id,
+        model: input.model,
+        attempt: retries + 1,
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'creative_retry_started',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: run.sceneId, sourceAssetId: run.assetId, criticRunId: run.id },
+      });
+      await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: run.assetId },
+        data: { creativeStatus: 'UNDER_REVIEW' },
+      }).catch(() => {});
+      if (!run.specificationVersion) {
+        const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+          where: { id: run.sceneId, projectId: input.projectId },
+          include: { prompts: { orderBy: { version: 'desc' }, take: 1 } },
+        });
+        const latest = scene?.prompts?.[0] ?? null;
+        const nextVersion = (latest?.version ?? 0) + 1;
+        const specification = applyCriticImprovementsToCreativeSpecification({
+          creativeSpecification: (latest?.metadata as Record<string, unknown> | null) ?? {},
+          criticResult: {
+            overallScore: run.overallScore ?? 0,
+            scores: {
+              characterIdentity: run.characterIdentityScore ?? 0,
+              continuity: run.continuityScore ?? 0,
+              composition: run.compositionScore ?? 0,
+              lighting: run.lightingScore ?? 0,
+              emotion: run.emotionScore ?? 0,
+              visualStyle: run.visualStyleScore ?? 0,
+              environment: run.environmentScore ?? 0,
+              storyAlignment: run.storyAlignmentScore ?? 0,
+              sceneClarity: run.sceneClarityScore ?? 0,
+              technicalQuality: run.technicalQualityScore ?? 0,
+            },
+            strengths: Array.isArray(run.strengths) ? run.strengths : [],
+            issues: Array.isArray(run.issues) ? run.issues : [],
+            improvementPlan: (run.improvementPlan ?? {}) as any,
+            recommendation: run.recommendation ?? 'SUGGEST_REFINEMENT',
+            confidence: run.confidence ?? 0,
+          },
+          sourceCriticRunId: run.id,
+          version: nextVersion,
+        });
+        await (ctx.prisma as any).storyScenePrompt.create({
+          data: {
+            sceneId: run.sceneId,
+            outputType: latest?.outputType ?? 'IMAGE',
+            provider: latest?.provider ?? 'FLUX',
+            prompt: latest?.prompt ?? 'Creative critic improvement specification',
+            negativePrompt: latest?.negativePrompt ?? null,
+            aspectRatio: latest?.aspectRatio ?? '9:16',
+            duration: latest?.duration ?? null,
+            version: nextVersion,
+            metadata: specification,
+          },
+        });
+        await (ctx.prisma as any).creativeCriticRun.update({
+          where: { id: run.id },
+          data: { specificationVersion: nextVersion },
+        });
+      }
+      const result = await generateSceneImageAsset(ctx, {
+        projectId: input.projectId,
+        sceneId: run.sceneId,
+        model: input.model,
+        isRegeneration: true,
+        creativeCriticRunId: run.id,
+      });
+      if (result.asset?.id) {
+        await (ctx.prisma as any).creativeCriticRun.update({
+          where: { id: run.id },
+          data: { resultingAssetId: result.asset.id },
+        });
+      }
+      await trackStoryAnalytics(ctx, {
+        event: 'creative_retry_completed',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: run.sceneId, sourceAssetId: run.assetId, resultingAssetId: result.asset?.id ?? null, criticRunId: run.id },
+      });
+      console.info('[creativeCritic] retry_completed', {
+        projectId: input.projectId,
+        sceneId: run.sceneId,
+        sourceAssetId: run.assetId,
+        resultingAssetId: result.asset?.id ?? null,
+        criticRunId: run.id,
+      });
+      return result;
+    }),
+
+  approveSceneAsset: protectedProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, projectId: input.projectId, userId: ctx.user.id, deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene asset not found' });
+      const updated = await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: asset.id },
+        data: { creativeStatus: 'APPROVED', approvedAt: new Date(), approvedById: ctx.user.id },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_creatively_approved',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: asset.sceneId, assetId: asset.id },
+      });
+      return updated;
+    }),
+
+  rejectSceneAsset: protectedProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, projectId: input.projectId, userId: ctx.user.id, deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene asset not found' });
+      const updated = await (ctx.prisma as any).storySceneAsset.update({
+        where: { id: asset.id },
+        data: { creativeStatus: 'REJECTED' },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_creatively_rejected',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sceneId: asset.sceneId, assetId: asset.id },
+      });
+      return updated;
+    }),
+
+  updateCreativeCriticSettings: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      mode: creativeCriticModeSchema,
+      threshold: z.number().int().min(0).max(100).optional().nullable(),
+      maxRetries: z.number().int().min(0).max(3).optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      const updated = await (ctx.prisma as any).storyProject.update({
+        where: { id: input.projectId },
+        data: {
+          creativeCriticMode: input.mode,
+          creativeCriticThreshold: input.threshold ?? null,
+          creativeCriticMaxRetries: input.maxRetries ?? null,
+        },
+      });
+      return ctx.isR16 ? { ok: true } : updated;
+    }),
+
+  submitCreativeCriticFeedback: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      assetId: z.string(),
+      criticRunId: z.string().optional().nullable(),
+      rating: z.enum(['UP', 'DOWN', 'NEEDS_IMPROVEMENT']),
+      categories: z.array(criticFeedbackCategorySchema).max(6).optional().default([]),
+      comment: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, sceneId: input.sceneId, projectId: input.projectId, userId: ctx.user.id, deletedAt: null },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Scene image not found' });
+      const feedback = await (ctx.prisma as any).creativeCriticFeedback.create({
+        data: {
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          assetId: input.assetId,
+          criticRunId: input.criticRunId ?? null,
+          userId: ctx.user.id,
+          rating: input.rating,
+          categories: input.categories,
+          comment: input.comment?.trim() || null,
+        },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'critic_feedback_received',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: {
+          sceneId: input.sceneId,
+          assetId: input.assetId,
+          criticRunId: input.criticRunId ?? null,
+          rating: input.rating,
+          categories: input.categories,
+          hasComment: Boolean(input.comment?.trim()),
+        },
+      });
+      if ((asset.criticRecommendation === 'APPROVE' && input.rating !== 'UP') || (asset.criticRecommendation === 'REGENERATE' && input.rating === 'UP')) {
+        await trackStoryAnalytics(ctx, {
+          event: 'critic_human_disagreement',
+          projectId: input.projectId,
+          audienceMode: project.audienceMode,
+          properties: {
+            sceneId: input.sceneId,
+            assetId: input.assetId,
+            criticRunId: input.criticRunId ?? null,
+            criticRecommendation: asset.criticRecommendation,
+            rating: input.rating,
+          },
+        });
+      }
+      return ctx.isR16 ? { ok: true } : feedback;
+    }),
+
   getWorkspace: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -2316,8 +2941,9 @@ export const storyRouter = router({
         audienceMode: project.audienceMode,
         properties: { visualStyle: project.visualStyle, sceneCount: project.sceneSeeds.length, readyImageCount },
       });
+      const hydratedProject = await hydrateProjectCriticRuns(ctx, project);
       return {
-        project,
+        project: hydratedProject,
         summary: {
           chapterCount: project.chapters.length,
           characterCount: project.characterMemory.length,
@@ -2530,11 +3156,23 @@ export const storyRouter = router({
         where: { id: input.sceneId, projectId: input.projectId },
       });
       if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
-      return (ctx.prisma as any).storySceneAsset.findMany({
+      const assets = await (ctx.prisma as any).storySceneAsset.findMany({
         where: { sceneId: input.sceneId, projectId: input.projectId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         take: input.limit,
       });
+      if (ctx.isR16 || assets.length === 0) return assets.map((asset: any) => sanitizeR16AssetPayload({ ...asset, criticRuns: [] }));
+      const criticRuns = await (ctx.prisma as any).creativeCriticRun.findMany({
+        where: { assetId: { in: assets.map((asset: any) => asset.id) } },
+        orderBy: { createdAt: 'desc' },
+      });
+      const byAsset = new Map<string, any[]>();
+      for (const run of criticRuns) {
+        const list = byAsset.get(run.assetId) ?? [];
+        list.push(run);
+        byAsset.set(run.assetId, list);
+      }
+      return assets.map((asset: any) => ({ ...asset, criticRuns: byAsset.get(asset.id) ?? [] }));
     }),
 
   getSceneAsset: protectedProcedure
@@ -2627,7 +3265,7 @@ export const storyRouter = router({
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       await ensureProject(ctx, input.projectId);
-      return (ctx.prisma as any).storyProject.findFirst({
+      const project = await (ctx.prisma as any).storyProject.findFirst({
         where: { id: input.projectId, userId: ctx.user.id },
         include: {
           characters: { orderBy: { createdAt: 'asc' } },
@@ -2651,6 +3289,7 @@ export const storyRouter = router({
           },
         },
       });
+      return project ? hydrateProjectCriticRuns(ctx, project) : project;
     }),
 
   getStoryBook: protectedProcedure

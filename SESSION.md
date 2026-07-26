@@ -1055,3 +1055,202 @@ Not changed:
 - Read-aloud flags.
 - Movie-stitching files.
 - Application feature code.
+
+### 2026-07-26: Phase 8B Creative Critic And Self-Improving Generation
+
+Implemented the post-generation quality loop for Story Playground:
+
+- Added `packages/api/src/lib/creativeCritic/` with a modular critic engine, OpenAI-compatible multimodal provider, Zod-validated structured result schema, score normalization, threshold decisions, improvement planner, and replaceable per-dimension critic descriptors.
+- Added additive schema/migration `20260726090000_creative_critic_phase_8b`.
+- New data:
+  - `CreativeCriticRun`
+  - `CreativeCriticFeedback`
+  - `CreativeCriticRunStatus`
+  - `CreativeCriticRecommendation`
+  - `CreativeCriticMode`
+  - `CreativeAssetStatus`
+  - nullable StoryProject critic settings
+  - asset-level creative status, score, recommendation, approval fields
+- New story APIs:
+  - `story.runCreativeCritic`
+  - `story.getCreativeCriticRun`
+  - `story.listCreativeCriticRuns`
+  - `story.applyCriticImprovementPlan`
+  - `story.regenerateFromCritic`
+  - `story.approveSceneAsset`
+  - `story.rejectSceneAsset`
+  - `story.updateCreativeCriticSettings`
+  - `story.submitCreativeCriticFeedback`
+- Image generation now creates a critic run after a successful scene image and starts quality review in the background.
+- If no multimodal critic provider is configured, generation is not blocked; the run is marked skipped/unavailable and the asset remains usable.
+- Improvement plans create a new creative specification version in `StoryScenePrompt` metadata instead of overwriting the original specification.
+- Improve-and-regenerate uses the critic improvement plan as compiler guidance and preserves original assets/history.
+- Storybook image fallback now prefers active creatively approved images, then active ready images, then latest creatively approved images, then latest ready images, then legacy scene image URL, then placeholder.
+- Non-R16 Story Workspace asset cards show creative status, score, key strengths/issues, review again, improve/regenerate, approve, reject, and human feedback controls.
+- R16 keeps simple picture language and does not expose critic reports, scores, provider/model metadata, prompts, JSON, or debug internals.
+- `/admin/prompt-quality` now includes Creative Critic inspection data in expanded rows: scores, strengths, issues, improvement plans, retry lineage, provider/model, and human critic feedback.
+- Added analytics events for critic started/completed/failed/skipped, scores, improvement plans, retries, creative approval/rejection, feedback, and human disagreement.
+
+Environment:
+
+- `CREATIVE_CRITIC_ENABLED` defaults on unless set to `false`.
+- `CREATIVE_CRITIC_MODEL` overrides critic model.
+- `OPENAI_VISION_MODEL` is the next model fallback.
+- `CREATIVE_CRITIC_APPROVAL_THRESHOLD` defaults to `90`.
+- `CREATIVE_CRITIC_MAX_RETRIES` defaults to `1` and is hard-capped at `3`.
+
+Verification:
+
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
+
+Deferred:
+
+- Production deployment.
+- Staging migration/provider verification.
+- Fully automatic retry-until-threshold loops.
+- Timeline, Movie Builder, read-aloud, narration, publishing, marketplace, and Academy expansion.
+
+### 2026-07-26: Phase 8B.1 Creative Critic Runtime Safety And Test Harness
+
+Hardened the local Phase 8B implementation without deploying production.
+
+Added API test foundation:
+
+- Added Vitest to `packages/api`.
+- Added `packages/api/vitest.config.ts`.
+- Added API scripts:
+  - `pnpm --filter @raivstream/api test`
+  - `pnpm --filter @raivstream/api test:watch`
+- Added 24 tests across 6 files under `packages/api/src/lib/creativeCritic/__tests__/`.
+
+Runtime safety helpers:
+
+- `runtimeSafety.ts`
+  - retry mode decisions for `OFF`, `SUGGEST`, `AUTO_ONCE`, and `AUTO_UNTIL_THRESHOLD`
+  - hard retry cap of 3
+  - project lower retry cap
+  - threshold stop logic
+  - deterministic critic run idempotency keys
+  - deterministic critic retry idempotency keys
+  - credit policy guardrails
+  - creative/moderation separation helper
+  - R16 asset payload sanitizer
+- `storybookSelection.ts`
+  - shared Storybook image fallback order:
+    1. active creatively approved image
+    2. active ready image
+    3. latest creatively approved image
+    4. latest ready image
+    5. legacy `scene.imageUrl`
+    6. placeholder
+  - moderation-rejected assets are excluded from selection when that status is available.
+
+Router hardening:
+
+- `regenerateFromCritic` now returns the existing resulting asset for idempotent replay instead of creating another asset/job/deduction.
+- Retry limit blocks log safe metadata and never log prompts, story text, comments, signed URLs, or secrets.
+- Storybook response now uses the shared `selectStorybookImageForScene` helper.
+- R16 workspace and asset-list responses now sanitize asset payloads at the API layer, removing provider/model/prompt/negative prompt/score/report/debug fields.
+- Mocked critic-engine tests cover idempotent run creation, high-score approval, medium-score improvement plans, skipped unavailable provider, and failed malformed provider response.
+
+Observability:
+
+- Added structured runtime logs for critic start/completion/skipped/failed and retry attempted/completed/blocked/idempotent replay.
+- `/admin/prompt-quality` now includes runtime critic counters for completed/skipped/failed runs, average duration, average score, retry rate, retry success rate, average score improvement, and human disagreement rate.
+
+Test coverage categories:
+
+- score aggregation, weighted/unweighted scoring, clamping, invalid numeric input
+- threshold decisions and configurable threshold
+- retry modes and hard/project retry limits
+- threshold reached stop behavior
+- deterministic idempotency key construction
+- credit policy: critic review is free, retry generation charges once, replay does not deduct, provider failure refunds, low score does not refund
+- creative status versus moderation status
+- R16 filtering of provider/model/prompt/score/report fields
+- improvement plan application without mutating the original creative specification
+- empty improvement plan handling
+- Storybook fallback order and pre-critic backward compatibility
+- moderation-rejected Storybook exclusion
+- critic provider unavailable/malformed response validation
+
+Verification:
+
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder DB URLs.
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/api test` passed: 6 files, 24 tests.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs and read-aloud disabled.
+
+Not performed:
+
+- No production deployment.
+- No staging VPS deployment or real provider/R2 smoke test in this turn.
+- No timeline, movie builder, stitching, read-aloud, narration, publishing, marketplace, or Academy expansion work.
+
+### 2026-07-26: Phase 8B.2 Creative Critic Staging Qualification
+
+Qualified Phase 8B on an isolated VPS staging deployment without touching production.
+
+Staging environment:
+
+- Path: `/root/raivstream-phase8b2-staging`
+- PM2 process: `raivstream-phase8b2-staging`
+- Port: `3032`
+- Isolated Postgres container: `raivstream-phase8b2-postgres`
+- Isolated database: `raivstream_phase8b2`
+- Backup files:
+  - `/root/raivstream/backups/pre_phase_8b2_critic_20260726-230340.sql`
+  - `/root/raivstream/backups/pre_phase_8b2_critic_baselined_20260726-230529.sql`
+- Qualification report: `docs/operations/phase-8b2-staging-qualification.md`
+
+Validation passed on staging:
+
+- `pnpm --filter @raivstream/database exec prisma migrate deploy`
+- `pnpm --filter @raivstream/database exec prisma validate`
+- `pnpm --filter @raivstream/database db:generate`
+- `pnpm --filter @raivstream/api type-check`
+- `pnpm --filter @raivstream/web type-check`
+- `pnpm --filter @raivstream/web lint --max-warnings=0`
+- `pnpm --filter @raivstream/api test` passed: 6 files, 24 tests.
+- `pnpm --filter @raivstream/web build`
+- isolated staging health check on port `3032`
+
+Real provider/R2 smoke passed:
+
+- Created story from `A dog going to school`.
+- Generated 6 scenes and selected `Road to School`.
+- Generated 3 initial images and 1 critic retry image.
+- RunPod/R2/OpenAI critic path executed successfully.
+- Assets were stored under `story-projects/{projectId}/scenes/{sceneId}/assets/{assetId}.png`.
+- Actual execution model was recorded as RunPod `z-image-turbo` while requested model stayed `FLUX`.
+- All generated images recorded `720x1280`.
+- Four usage transactions deducted 80 credits each, with no duplicate references.
+- Four Creative Critic runs completed and analytics events were written.
+- Retry replay returned the existing generated asset and did not create a duplicate generation/deduction.
+- R16 API responses hid prompt/provider/model/critic detail fields.
+- Non-admin access to prompt-quality admin data was denied.
+
+Release-blocking issue found and fixed:
+
+- Initial smoke showed Storybook could select a creativeStatus `REJECTED` asset if it was still the active image.
+- Fixed `selectStorybookImageForScene` to exclude creativeStatus `REJECTED`.
+- Added regression coverage for creative-rejected active assets falling back to approved images.
+- Reran full staging gate and provider smoke successfully.
+
+Production state:
+
+- `https://app.raivstream.com/api/health` healthy.
+- `https://r16.raivstream.com/api/health` healthy.
+- Production PM2 `raivstream-web` was not restarted.
+
+Decision:
+
+- GO for controlled production deployment of Phase 8B/8B.1/8B.2 after committing the Storybook rejection fix with the Phase 8B files.

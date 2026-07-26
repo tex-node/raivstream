@@ -117,6 +117,35 @@ enum StorySceneAssetStatus {
   FAILED
 }
 
+enum CreativeCriticRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum CreativeCriticRecommendation {
+  APPROVE
+  SUGGEST_REFINEMENT
+  REGENERATE
+}
+
+enum CreativeCriticMode {
+  OFF
+  SUGGEST
+  AUTO_ONCE
+  AUTO_UNTIL_THRESHOLD
+}
+
+enum CreativeAssetStatus {
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 enum NotificationType {
   FOLLOW  // someone followed you
   LIKE    // someone liked your video
@@ -708,6 +737,9 @@ model StoryProject {
   visualStyle    String?
   storyDna       Json?
   status         StoryProjectStatus @default(DRAFT)
+  creativeCriticMode CreativeCriticMode @default(SUGGEST)
+  creativeCriticThreshold Int?
+  creativeCriticMaxRetries Int?
 
   characters     StoryCharacter[]
   environments   StoryEnvironment[]
@@ -1098,6 +1130,11 @@ model StorySceneAsset {
   height          Int?
   durationSeconds Float?
   status          StorySceneAssetStatus @default(PENDING)
+  creativeStatus  CreativeAssetStatus   @default(DRAFT)
+  criticScore     Float?
+  criticRecommendation CreativeCriticRecommendation?
+  approvedAt      DateTime?
+  approvedById    String?
   errorMessage    String?
   generationJobId String?
   isLatest        Boolean               @default(false)
@@ -1115,7 +1152,80 @@ model StorySceneAsset {
   @@index([sceneId, isFavorite])
   @@index([deletedAt])
   @@index([status])
+  @@index([creativeStatus])
+  @@index([criticScore])
   @@map("story_scene_assets")
+}
+
+model CreativeCriticRun {
+  id              String                       @id @default(cuid())
+  projectId       String
+  sceneId         String
+  assetId         String
+  reasoningRunId  String?
+  status          CreativeCriticRunStatus      @default(PENDING)
+
+  overallScore            Float?
+  characterIdentityScore  Float?
+  continuityScore         Float?
+  compositionScore        Float?
+  lightingScore           Float?
+  emotionScore            Float?
+  visualStyleScore        Float?
+  environmentScore        Float?
+  storyAlignmentScore     Float?
+  sceneClarityScore       Float?
+  technicalQualityScore   Float?
+  strengths               Json?
+  issues                  Json?
+  improvementPlan         Json?
+  recommendation          CreativeCriticRecommendation?
+  confidence              Float?
+
+  criticProvider       String?
+  criticModel          String?
+  criticVersion        String                @default("phase-8b-v1")
+  specificationVersion Int?
+  promptVersion        Int?
+  generationVersion    Int?
+  retryAttempt         Int                   @default(0)
+  parentCriticRunId    String?
+  resultingAssetId     String?
+  errorMessage         String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@unique([assetId, retryAttempt])
+  @@index([projectId])
+  @@index([sceneId])
+  @@index([assetId])
+  @@index([status])
+  @@index([recommendation])
+  @@index([createdAt])
+  @@map("creative_critic_runs")
+}
+
+model CreativeCriticFeedback {
+  id          String   @id @default(cuid())
+  projectId   String
+  sceneId     String
+  assetId     String
+  criticRunId String?
+  userId      String?
+  rating      String
+  categories  Json?
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([sceneId])
+  @@index([assetId])
+  @@index([criticRunId])
+  @@index([userId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("creative_critic_feedback")
 }
 
 model PromptQualityFeedback {

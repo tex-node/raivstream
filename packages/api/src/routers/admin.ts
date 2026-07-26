@@ -231,12 +231,18 @@ export const adminRouter = router({
       const assetIds = assets.map((asset: any) => asset.id);
       const jobIds = assets.map((asset: any) => asset.generationJobId).filter(Boolean);
       const sceneIds = Array.from(new Set(assets.map((asset: any) => asset.sceneId)));
-      const [jobs, feedback, sceneAssetCounts] = await Promise.all([
+      const [jobs, feedback, criticRuns, criticFeedback, sceneAssetCounts] = await Promise.all([
         jobIds.length
           ? ctx.prisma.generationJob.findMany({ where: { id: { in: jobIds } } })
           : Promise.resolve([]),
         assetIds.length
           ? (ctx.prisma as any).promptQualityFeedback.findMany({ where: { assetId: { in: assetIds } }, orderBy: { createdAt: 'desc' } })
+          : Promise.resolve([]),
+        assetIds.length
+          ? (ctx.prisma as any).creativeCriticRun.findMany({ where: { assetId: { in: assetIds } }, orderBy: { createdAt: 'desc' } })
+          : Promise.resolve([]),
+        assetIds.length
+          ? (ctx.prisma as any).creativeCriticFeedback.findMany({ where: { assetId: { in: assetIds } }, orderBy: { createdAt: 'desc' } })
           : Promise.resolve([]),
         sceneIds.length
           ? (ctx.prisma as any).storySceneAsset.groupBy({ by: ['sceneId'], where: { sceneId: { in: sceneIds }, assetType: { in: ['IMAGE', 'VIDEO'] } }, _count: { id: true } })
@@ -250,11 +256,26 @@ export const adminRouter = router({
         list.push(item);
         feedbackByAsset.set(item.assetId, list);
       }
+      const criticRunsByAsset = new Map<string, any[]>();
+      for (const run of criticRuns as any[]) {
+        const list = criticRunsByAsset.get(run.assetId) ?? [];
+        list.push(run);
+        criticRunsByAsset.set(run.assetId, list);
+      }
+      const criticFeedbackByAsset = new Map<string, any[]>();
+      for (const item of criticFeedback as any[]) {
+        const list = criticFeedbackByAsset.get(item.assetId) ?? [];
+        list.push(item);
+        criticFeedbackByAsset.set(item.assetId, list);
+      }
       const countByScene = new Map((sceneAssetCounts as Array<{ sceneId: string; _count: { id: number } }>).map((item) => [item.sceneId, item._count.id]));
       const rows = assets.map((asset: any) => {
         const job = asset.generationJobId ? jobById.get(asset.generationJobId) : null;
         const metadata = (job?.metadata ?? {}) as Record<string, any>;
         const assetFeedback = feedbackByAsset.get(asset.id) ?? [];
+        const assetCriticRuns = criticRunsByAsset.get(asset.id) ?? [];
+        const latestCriticRun = assetCriticRuns[0] ?? null;
+        const assetCriticFeedback = criticFeedbackByAsset.get(asset.id) ?? [];
         const averageRating = assetFeedback.length
           ? assetFeedback.reduce((sum, item) => sum + item.rating, 0) / assetFeedback.length
           : null;
@@ -280,6 +301,10 @@ export const adminRouter = router({
           activeForStorybook: asset.scene?.activeImageAssetId === asset.id,
           latestAsset: asset.isLatest,
           favoriteAsset: Boolean(asset.isFavorite),
+          creativeStatus: asset.creativeStatus ?? 'DRAFT',
+          criticScore: asset.criticScore ?? null,
+          criticRecommendation: asset.criticRecommendation ?? null,
+          approvedAt: asset.approvedAt ?? null,
           assetVersionCount: countByScene.get(asset.sceneId) ?? 0,
           audienceMode: asset.scene?.project?.audienceMode ?? null,
           storyCompleted: ['STORYBOARDED', 'IN_PRODUCTION', 'PUBLISHED'].includes(asset.scene?.project?.status ?? ''),
@@ -295,6 +320,58 @@ export const adminRouter = router({
             height: asset.height,
             errorMessage: asset.errorMessage,
           },
+          critic: latestCriticRun ? {
+            id: latestCriticRun.id,
+            status: latestCriticRun.status,
+            overallScore: latestCriticRun.overallScore,
+            recommendation: latestCriticRun.recommendation,
+            confidence: latestCriticRun.confidence,
+            scores: {
+              characterIdentity: latestCriticRun.characterIdentityScore,
+              continuity: latestCriticRun.continuityScore,
+              composition: latestCriticRun.compositionScore,
+              lighting: latestCriticRun.lightingScore,
+              emotion: latestCriticRun.emotionScore,
+              visualStyle: latestCriticRun.visualStyleScore,
+              environment: latestCriticRun.environmentScore,
+              storyAlignment: latestCriticRun.storyAlignmentScore,
+              sceneClarity: latestCriticRun.sceneClarityScore,
+              technicalQuality: latestCriticRun.technicalQualityScore,
+            },
+            strengths: latestCriticRun.strengths,
+            issues: latestCriticRun.issues,
+            improvementPlan: latestCriticRun.improvementPlan,
+            criticProvider: latestCriticRun.criticProvider,
+            criticModel: latestCriticRun.criticModel,
+            criticVersion: latestCriticRun.criticVersion,
+            specificationVersion: latestCriticRun.specificationVersion,
+            promptVersion: latestCriticRun.promptVersion,
+            generationVersion: latestCriticRun.generationVersion,
+            retryAttempt: latestCriticRun.retryAttempt,
+            parentCriticRunId: latestCriticRun.parentCriticRunId,
+            resultingAssetId: latestCriticRun.resultingAssetId,
+            errorMessage: latestCriticRun.errorMessage,
+            createdAt: latestCriticRun.createdAt,
+            completedAt: latestCriticRun.completedAt,
+            durationMs: latestCriticRun.completedAt ? new Date(latestCriticRun.completedAt).getTime() - new Date(latestCriticRun.createdAt).getTime() : null,
+          } : null,
+          criticRuns: assetCriticRuns.map((run) => ({
+            id: run.id,
+            status: run.status,
+            overallScore: run.overallScore,
+            recommendation: run.recommendation,
+            retryAttempt: run.retryAttempt,
+            parentCriticRunId: run.parentCriticRunId,
+            resultingAssetId: run.resultingAssetId,
+            createdAt: run.createdAt,
+          })),
+          criticFeedback: assetCriticFeedback.map((item) => ({
+            id: item.id,
+            rating: item.rating,
+            categories: item.categories,
+            hasComment: Boolean(item.comment),
+            createdAt: item.createdAt,
+          })),
           expanded: {
             deterministicPrompt: metadata.deterministicPrompt ?? null,
             enhancedPrompt: job?.prompt ?? asset.composedPrompt ?? null,
@@ -360,7 +437,36 @@ export const adminRouter = router({
         }))
         .sort((a, b) => (b.averageRating ?? -Infinity) - (a.averageRating ?? -Infinity));
 
-      return { rangeDays: input.days, rows, summaries };
+      const completedCriticRuns = (criticRuns as any[]).filter((run) => run.status === 'COMPLETED');
+      const retryRuns = (criticRuns as any[]).filter((run) => (run.retryAttempt ?? 0) > 0);
+      const scoreImprovements = (criticRuns as any[])
+        .filter((run) => run.parentCriticRunId && run.overallScore !== null)
+        .map((run) => {
+          const parent = (criticRuns as any[]).find((item) => item.id === run.parentCriticRunId);
+          return parent?.overallScore !== null && parent?.overallScore !== undefined ? run.overallScore - parent.overallScore : null;
+        })
+        .filter((value): value is number => typeof value === 'number');
+      const criticDurations = completedCriticRuns
+        .map((run) => run.completedAt ? new Date(run.completedAt).getTime() - new Date(run.createdAt).getTime() : null)
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+      const disagreementCount = (criticFeedback as any[]).filter((feedbackItem) => {
+        const asset = assets.find((item: any) => item.id === feedbackItem.assetId);
+        return (asset?.criticRecommendation === 'APPROVE' && feedbackItem.rating !== 'UP')
+          || (asset?.criticRecommendation === 'REGENERATE' && feedbackItem.rating === 'UP');
+      }).length;
+      const criticSummary = {
+        completed: completedCriticRuns.length,
+        skipped: (criticRuns as any[]).filter((run) => run.status === 'SKIPPED').length,
+        failed: (criticRuns as any[]).filter((run) => run.status === 'FAILED').length,
+        averageDurationMs: criticDurations.length ? criticDurations.reduce((sum, value) => sum + value, 0) / criticDurations.length : null,
+        averageOverallScore: completedCriticRuns.length ? completedCriticRuns.reduce((sum, run) => sum + (run.overallScore ?? 0), 0) / completedCriticRuns.length : null,
+        retryRate: (criticRuns as any[]).length ? retryRuns.length / (criticRuns as any[]).length : 0,
+        retrySuccessRate: retryRuns.length ? retryRuns.filter((run) => run.recommendation === 'APPROVE').length / retryRuns.length : 0,
+        averageScoreImprovement: scoreImprovements.length ? scoreImprovements.reduce((sum, value) => sum + value, 0) / scoreImprovements.length : null,
+        criticHumanDisagreementRate: (criticFeedback as any[]).length ? disagreementCount / (criticFeedback as any[]).length : 0,
+      };
+
+      return { rangeDays: input.days, rows, summaries, criticSummary };
     }),
 
   characterInsights: adminProcedure

@@ -22,6 +22,10 @@ type PromptQualityRow = {
   activeForStorybook?: boolean;
   latestAsset?: boolean;
   favoriteAsset?: boolean;
+  creativeStatus?: string;
+  criticScore?: number | null;
+  criticRecommendation?: string | null;
+  approvedAt?: string | Date | null;
   assetVersionCount?: number;
   audienceMode: string | null;
   storyCompleted: boolean;
@@ -37,6 +41,30 @@ type PromptQualityRow = {
     height: number | null;
     errorMessage: string | null;
   };
+  critic: {
+    id: string;
+    status: string;
+    overallScore: number | null;
+    recommendation: string | null;
+    confidence: number | null;
+    scores: Record<string, number | null>;
+    strengths: string[] | null;
+    issues: Array<{ category: string; severity: string; description: string }> | null;
+    improvementPlan: Record<string, string[]> | null;
+    criticProvider: string | null;
+    criticModel: string | null;
+    criticVersion: string | null;
+    specificationVersion: number | null;
+    promptVersion: number | null;
+    generationVersion: number | null;
+    retryAttempt: number;
+    parentCriticRunId: string | null;
+    resultingAssetId: string | null;
+    errorMessage: string | null;
+    durationMs: number | null;
+  } | null;
+  criticRuns: Array<{ id: string; status: string; overallScore: number | null; recommendation: string | null; retryAttempt: number; parentCriticRunId: string | null; resultingAssetId: string | null; createdAt: string | Date }>;
+  criticFeedback: Array<{ id: string; rating: string; categories: unknown; hasComment: boolean; createdAt: string | Date }>;
   expanded: {
     deterministicPrompt: string | null;
     enhancedPrompt: string | null;
@@ -114,6 +142,26 @@ export default function AdminPromptQualityPage() {
             ))}
           </section>
 
+          {'criticSummary' in data && data.criticSummary && (
+            <section className="grid gap-4 md:grid-cols-4">
+              {[
+                ['Critic completed', data.criticSummary.completed],
+                ['Skipped / failed', `${data.criticSummary.skipped} / ${data.criticSummary.failed}`],
+                ['Avg score', data.criticSummary.averageOverallScore === null ? '-' : Math.round(data.criticSummary.averageOverallScore)],
+                ['Retry rate', `${Math.round(data.criticSummary.retryRate * 100)}%`],
+                ['Retry success', `${Math.round(data.criticSummary.retrySuccessRate * 100)}%`],
+                ['Avg improvement', data.criticSummary.averageScoreImprovement === null ? '-' : data.criticSummary.averageScoreImprovement.toFixed(1)],
+                ['Avg critic time', formatMs(data.criticSummary.averageDurationMs)],
+                ['Human disagreement', `${Math.round(data.criticSummary.criticHumanDisagreementRate * 100)}%`],
+              ].map(([title, value]) => (
+                <div key={title as string} className="rounded-2xl border p-5" style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/35">{title as string}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{value as string | number}</p>
+                </div>
+              ))}
+            </section>
+          )}
+
           <section className="overflow-hidden rounded-2xl border" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
             <div className="border-b px-5 py-4" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
               <h2 className="text-lg font-bold text-white">Generation Records</h2>
@@ -162,6 +210,9 @@ export default function AdminPromptQualityPage() {
                           <p className="text-xs text-white/35">
                             {row.activeForStorybook ? 'active' : 'not active'} / {row.favoriteAsset ? 'favorite' : 'not favorite'} / {row.assetVersionCount ?? 0} versions
                           </p>
+                          <p className="text-xs text-white/35">
+                            Creative: {row.creativeStatus ?? 'DRAFT'}{row.criticScore === null || row.criticScore === undefined ? '' : ` / ${Math.round(row.criticScore)}`}
+                          </p>
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-white/65">{ratingLabel(row.averageRating, row.ratingCount)}</p>
@@ -181,6 +232,9 @@ export default function AdminPromptQualityPage() {
                                 ['Original deterministic prompt', row.expanded.deterministicPrompt],
                                 ['Enhanced prompt', row.expanded.enhancedPrompt],
                                 ['Negative prompt', row.expanded.negativePrompt],
+                                ['Creative critic', JSON.stringify(row.critic, null, 2)],
+                                ['Critic retry lineage', JSON.stringify(row.criticRuns, null, 2)],
+                                ['Human critic feedback', JSON.stringify(row.criticFeedback, null, 2)],
                                 ['Provider metadata', JSON.stringify(row.expanded.providerMetadata, null, 2)],
                                 ['Generation result', JSON.stringify(row.expanded.generationResult, null, 2)],
                               ].map(([label, value]) => (
