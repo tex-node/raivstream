@@ -1019,3 +1019,39 @@ Verification:
 Deferred:
 
 - Peer critique, AI Film Mentor, certificates, institution billing, live classes, video conferencing, timeline editor, movie stitching, read-aloud, narration, final public showcase, portfolio publishing, and course marketplace.
+
+### 2026-07-26: GitHub Actions VPS Deploy Hardening
+
+Updated `.github/workflows/deploy.yml` after a transient Next.js output-tracing failure during final build trace collection.
+
+Changed:
+
+- Deployment job now uses local and remote `set -euo pipefail`.
+- GitHub Actions deploy concurrency now queues instead of canceling in-progress deploys.
+- Remote deployment uses `flock -n /tmp/raivstream-deploy.lock` and fails cleanly if another deployment is running.
+- Remote code sync uses `git fetch origin` plus `git reset --hard origin/main`.
+- Runtime env files are preserved before reset and restored afterward:
+  - `.env`
+  - `apps/web/.env.local`
+  - `packages/database/.env`
+- No `git clean` is used, so untracked production backups/runtime files remain untouched.
+- Corepack is run non-interactively with pnpm `8.15.0`.
+- Deployment runs `pnpm install --frozen-lockfile`.
+- Deployment gate now runs:
+  - Prisma migrate deploy
+  - Prisma validate
+  - Prisma client generation
+  - API type-check
+  - web type-check
+  - strict web lint
+  - clean `apps/web/.next`
+  - web build
+- PM2 restart happens only after a successful build.
+- Post-restart health checks are required for both app and R16 endpoints.
+- Logs print the deployed commit SHA.
+
+Not changed:
+
+- Read-aloud flags.
+- Movie-stitching files.
+- Application feature code.

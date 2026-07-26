@@ -6,45 +6,105 @@ on:
 
 concurrency:
   group: deploy-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Build & deploy web
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Deploy to VPS via SSH
+        shell: bash
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+          CI: "1"
         run: |
-          # Write the private key to a temp file
+          set -euo pipefail
+
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-
-          # Strip any carriage returns that Windows/GitHub UI might have added
           sed -i 's/\r//' /tmp/deploy_key
+          trap 'rm -f /tmp/deploy_key' EXIT
 
-          # Run deploy commands on the VPS
           ssh -i /tmp/deploy_key \
             -o StrictHostKeyChecking=no \
             -o PasswordAuthentication=no \
             -p 22 \
             root@${{ secrets.SSH_HOST }} \
-            "set -e
-            cd /root/raivstream
-            echo '==> Pulling latest code...'
-            git pull --ff-only
-            echo '==> Installing dependencies...'
-            pnpm install --frozen-lockfile
-            echo '==> Regenerating Prisma client...'
-            cd packages/database && pnpm exec prisma generate && cd /root/raivstream
-            echo '==> Running strict web lint...'
-            pnpm --filter @raivstream/web lint --max-warnings=0
-            echo '==> Building web app...'
-            pnpm --filter @raivstream/web build
-            echo '==> Restarting PM2...'
-            pm2 restart raivstream-web --update-env
-            echo '==> Done ✅'
-            pm2 list"
+            'bash -s' <<'REMOTE_DEPLOY'
+          set -euo pipefail
 
-          rm -f /tmp/deploy_key
+          if ! command -v flock >/dev/null 2>&1; then
+            echo "flock is required for deployment locking but was not found on the VPS." >&2
+            exit 1
+          fi
+
+          if ! flock -n /tmp/raivstream-deploy.lock bash <<'LOCKED_DEPLOY'
+          set -euo pipefail
+
+          cd /root/raivstream
+
+          echo "==> Preserving runtime environment files..."
+          env_backup_dir="$(mktemp -d)"
+          trap 'rm -rf "$env_backup_dir"' EXIT
+          for env_file in .env apps/web/.env.local packages/database/.env; do
+            if [ -e "$env_file" ] || [ -L "$env_file" ]; then
+              mkdir -p "$env_backup_dir/$(dirname "$env_file")"
+              cp -a "$env_file" "$env_backup_dir/$env_file"
+            fi
+          done
+
+          echo "==> Fetching and resetting to origin/main..."
+          git fetch origin
+          git reset --hard origin/main
+
+          for env_file in .env apps/web/.env.local packages/database/.env; do
+            if [ -e "$env_backup_dir/$env_file" ] || [ -L "$env_backup_dir/$env_file" ]; then
+              mkdir -p "$(dirname "$env_file")"
+              cp -a "$env_backup_dir/$env_file" "$env_file"
+            fi
+          done
+
+          echo "==> Enabling pnpm 8.15.0 non-interactively..."
+          export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+          export CI=1
+          corepack enable
+          corepack prepare pnpm@8.15.0 --activate
+          pnpm --version
+
+          echo "==> Installing dependencies..."
+          pnpm install --frozen-lockfile
+
+          echo "==> Running database migrations and Prisma checks..."
+          pnpm --filter @raivstream/database exec prisma migrate deploy
+          pnpm --filter @raivstream/database exec prisma validate
+          pnpm --filter @raivstream/database db:generate
+
+          echo "==> Running API and web validation..."
+          pnpm --filter @raivstream/api type-check
+          pnpm --filter @raivstream/web type-check
+          pnpm --filter @raivstream/web lint --max-warnings=0
+
+          echo "==> Cleaning previous Next.js build output..."
+          rm -rf apps/web/.next
+
+          echo "==> Building web app..."
+          pnpm --filter @raivstream/web build
+
+          echo "==> Restarting PM2..."
+          pm2 restart raivstream-web --update-env
+
+          echo "==> Checking production health..."
+          sleep 5
+          curl --fail --silent --show-error https://app.raivstream.com/api/health
+          curl --fail --silent --show-error https://r16.raivstream.com/api/health
+
+          echo "Deployed commit: $(git rev-parse HEAD)"
+          LOCKED_DEPLOY
+          then
+            echo "Another Raivstream deployment is already running; could not acquire /tmp/raivstream-deploy.lock." >&2
+            exit 1
+          fi
+          REMOTE_DEPLOY
