@@ -112,13 +112,26 @@ type StoryProjectSummary = {
   visualStyle?: string | null;
   status: string;
   audienceMode: 'KIDS' | 'GENERAL';
+  lastWorkspaceTab?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
   _count?: {
     chapters?: number;
     questions?: number;
     sceneSeeds?: number;
+    sequences?: number;
   };
+  sequences?: Array<{
+    id: string;
+    title: string;
+    runtimeSeconds: number;
+    currentVersionNumber: number;
+    updatedAt: string | Date;
+    _count?: {
+      scenes?: number;
+      versions?: number;
+    };
+  }>;
   sceneSeeds?: Array<{
     id: string;
     imageUrl: string | null;
@@ -906,7 +919,13 @@ export default function StoryPlaygroundPage() {
   };
 
   const resumeProject = (storyProject: StoryProjectSummary) => {
-    router.push(`/story-playground/${storyProject.id}`);
+    const validTabs = new Set(['overview', 'story', 'characters', 'scenes', 'assets', 'sequence', 'storybook']);
+    const requestedTab = storyProject.lastWorkspaceTab && validTabs.has(storyProject.lastWorkspaceTab)
+      ? storyProject.lastWorkspaceTab
+      : null;
+    const sequenceReady = !isR16 && ((storyProject._count?.sequences ?? 0) > 0 || (storyProject.sequences?.length ?? 0) > 0);
+    const tab = requestedTab === 'sequence' && !sequenceReady ? 'scenes' : requestedTab;
+    router.push(tab && !(isR16 && tab === 'sequence') ? `/story-playground/${storyProject.id}?tab=${tab}` : `/story-playground/${storyProject.id}`);
   };
 
   const addPicturesToProject = (storyProject: StoryProjectSummary) => {

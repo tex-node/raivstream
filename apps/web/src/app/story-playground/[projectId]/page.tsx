@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { BookOpen, Camera, CheckCircle2, Heart, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Star, Trash2, UserRound, X } from 'lucide-react';
+import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, GripVertical, Heart, ImagePlus, Loader2, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'storybook' | 'insights';
+type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'storybook' | 'insights';
 
 type Asset = {
   id: string;
@@ -88,12 +88,58 @@ type Character = {
   evolutionSceneOrder?: number | null;
 };
 
-const TABS: Array<{ key: WorkspaceTab; label: string; r16Label: string }> = [
+type SequenceScene = {
+  id: string;
+  storySceneId: string;
+  orderIndex: number;
+  enabled: boolean;
+  durationSeconds: number;
+  selectedAssetId: string | null;
+  shotType: string | null;
+  cameraMovement: string | null;
+  cameraSpeed: string | null;
+  cameraSpeedMultiplier: number | null;
+  transition: string | null;
+  transitionDurationSeconds: number | null;
+  holdDurationSeconds: number | null;
+  zoom: number | null;
+  creativeNotes: string | null;
+  storyScene: Scene;
+  selectedAsset?: Asset | null;
+};
+
+type SequenceData = {
+  sequence: {
+    id: string;
+    title: string;
+    runtimeSeconds: number;
+    status: string;
+    currentVersionNumber: number;
+    scenes: SequenceScene[];
+    versions?: Array<{ id: string; versionNumber: number; title: string; runtimeSeconds: number; createdAt: string | Date }>;
+  };
+  runtime: {
+    totalRuntimeSeconds: number;
+    activeShotCount: number;
+    totalShotCount: number;
+    averageShotLength: number;
+    transitionRule: string;
+  };
+  filmBlueprint: {
+    sequenceId: string;
+    version: number;
+    runtimeSeconds: number;
+    shots: Array<{ sequenceSceneId: string; storySceneId: string; assetId: string | null; order: number; enabled: boolean; durationSeconds: number }>;
+  };
+};
+
+const TABS: Array<{ key: WorkspaceTab; label: string; r16Label: string; hideOnR16?: boolean }> = [
   { key: 'overview', label: 'Overview', r16Label: 'My Story' },
   { key: 'story', label: 'Story', r16Label: 'Story' },
   { key: 'characters', label: 'Characters', r16Label: 'Characters' },
   { key: 'scenes', label: 'Scenes', r16Label: 'Picture Cards' },
   { key: 'assets', label: 'Assets', r16Label: 'Pictures' },
+  { key: 'sequence', label: 'Sequence', r16Label: 'Sequence', hideOnR16: true },
   { key: 'storybook', label: 'Storybook', r16Label: 'Read Book' },
 ];
 
@@ -111,6 +157,11 @@ const DIRECTOR_OPTIONS = {
   lighting: ['BRIGHT', 'WARM', 'SOFT', 'DRAMATIC', 'MOONLIGHT'],
   scenePace: ['CALM', 'NORMAL', 'ENERGETIC'],
 } as const;
+const DURATION_OPTIONS = [2, 3, 4, 5, 7, 10] as const;
+const SHOT_TYPE_OPTIONS = ['EXTREME_WIDE', 'WIDE', 'MEDIUM_WIDE', 'MEDIUM', 'MEDIUM_CLOSE_UP', 'CLOSE_UP', 'EXTREME_CLOSE_UP', 'POV', 'OVER_THE_SHOULDER', 'HIGH_ANGLE', 'LOW_ANGLE', 'TRACKING'] as const;
+const CAMERA_MOVEMENT_OPTIONS = ['NONE', 'STATIC', 'PAN_LEFT', 'PAN_RIGHT', 'TILT_UP', 'TILT_DOWN', 'PUSH_IN', 'PULL_OUT', 'TRACK_LEFT', 'TRACK_RIGHT', 'ORBIT', 'DOLLY', 'CRANE', 'HANDHELD'] as const;
+const CAMERA_SPEED_OPTIONS = ['SLOW', 'NORMAL', 'FAST', 'CUSTOM'] as const;
+const TRANSITION_OPTIONS = ['CUT', 'CROSS_DISSOLVE', 'FADE', 'DIP_TO_BLACK', 'DIP_TO_WHITE', 'MATCH_CUT', 'WIPE', 'NONE'] as const;
 
 function label(value?: string | null) {
   return value ? value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : '';
@@ -128,6 +179,19 @@ function activeAsset(scene: Scene) {
     ?? scene.assets?.find((asset) => asset.isLatest && asset.status === 'READY')
     ?? scene.assets?.find((asset) => asset.status === 'READY')
     ?? null;
+}
+
+function sequenceAsset(sequenceScene: SequenceScene) {
+  return sequenceScene.selectedAsset
+    ?? sequenceScene.storyScene.assets?.find((asset) => asset.id === sequenceScene.selectedAssetId)
+    ?? activeAsset(sequenceScene.storyScene);
+}
+
+function formatRuntime(seconds?: number | null) {
+  const value = Math.max(0, Math.round(seconds ?? 0));
+  const minutes = Math.floor(value / 60);
+  const remainder = value % 60;
+  return minutes ? `${minutes}:${String(remainder).padStart(2, '0')}` : `${remainder}s`;
 }
 
 function versionLabel(scene: Scene, asset: Asset) {
@@ -166,12 +230,18 @@ export default function StoryWorkspacePage() {
   const projectId = params.projectId;
   const requestedTab = searchParams.get('tab') as WorkspaceTab | null;
   const academyAssignmentId = searchParams.get('academyAssignment');
-  const [tab, setTab] = useState<WorkspaceTab>(requestedTab && TABS.some((item) => item.key === requestedTab) ? requestedTab : 'overview');
+  const visibleTabs = TABS.filter((item) => !isR16 || !item.hideOnR16);
+  const [tab, setTab] = useState<WorkspaceTab>(requestedTab && visibleTabs.some((item) => item.key === requestedTab) ? requestedTab : 'overview');
   const [message, setMessage] = useState<string | null>(null);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
   const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
   const [compareAssets, setCompareAssets] = useState<string[]>([]);
+  const [draggedSequenceSceneId, setDraggedSequenceSceneId] = useState<string | null>(null);
+  const [selectedSequenceSceneId, setSelectedSequenceSceneId] = useState<string | null>(null);
+  const [sequencePlaying, setSequencePlaying] = useState(false);
+  const [previewShotIndex, setPreviewShotIndex] = useState(0);
+  const [versionTitle, setVersionTitle] = useState('');
   const [characterForm, setCharacterForm] = useState({
     name: '',
     role: '',
@@ -207,6 +277,10 @@ export default function StoryWorkspacePage() {
   });
 
   const workspace = trpc.story.getWorkspace.useQuery({ projectId }, { enabled: isLoaded && isSignedIn });
+  const sequenceQuery = trpc.story.getOrCreateSequence.useQuery(
+    { projectId },
+    { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'sequence') },
+  );
   const academyAssignment = trpc.academy.getWorkspaceAssignmentContext.useQuery(
     { assignmentId: academyAssignmentId ?? '', projectId },
     { enabled: Boolean(isLoaded && isSignedIn && academyAssignmentId && !isR16) },
@@ -230,6 +304,15 @@ export default function StoryWorkspacePage() {
   const favoriteAsset = trpc.story.favoriteSceneAsset.useMutation({ onSuccess: () => refresh(isR16 ? 'Favorite saved.' : 'Favorite updated.') });
   const trackAssetCompared = trpc.story.trackAssetCompared.useMutation();
   const deleteAsset = trpc.story.deleteSceneAsset.useMutation({ onSuccess: () => refresh(isR16 ? 'Picture removed.' : 'Asset removed from project.') });
+  const updateSequenceScene = trpc.story.updateSequenceScene.useMutation({ onSuccess: () => refreshSequence('Sequence updated.') });
+  const reorderSequence = trpc.story.reorderSequence.useMutation({ onSuccess: () => refreshSequence('Timeline reordered.') });
+  const duplicateSequenceScene = trpc.story.duplicateSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot duplicated.') });
+  const removeSequenceScene = trpc.story.removeSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot removed from sequence.') });
+  const restoreSourceScene = trpc.story.restoreSourceSceneToSequence.useMutation({ onSuccess: () => refreshSequence('Scene added to sequence.') });
+  const createSequenceVersion = trpc.story.createSequenceVersion.useMutation({ onSuccess: () => { setVersionTitle(''); refreshSequence('Version saved.'); } });
+  const restoreSequenceVersion = trpc.story.restoreSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version restored.') });
+  const duplicateSequenceVersion = trpc.story.duplicateSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version duplicated.') });
+  const trackSequenceAnalytics = trpc.story.trackSequenceAnalytics.useMutation();
 
   function refresh(nextMessage: string) {
     setMessage(nextMessage);
@@ -237,15 +320,42 @@ export default function StoryWorkspacePage() {
     utils.story.getStoryBook.invalidate({ projectId });
   }
 
+  function refreshSequence(nextMessage: string) {
+    setMessage(nextMessage);
+    utils.story.getOrCreateSequence.invalidate({ projectId });
+    utils.story.getSequence.invalidate({ projectId });
+    utils.story.getWorkspace.invalidate({ projectId });
+  }
+
   useEffect(() => {
-    if (requestedTab && TABS.some((item) => item.key === requestedTab)) setTab(requestedTab);
-  }, [requestedTab]);
+    if (requestedTab && visibleTabs.some((item) => item.key === requestedTab)) setTab(requestedTab);
+    if (isR16 && requestedTab === 'sequence') setTab('storybook');
+  }, [requestedTab, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!projectId || !tab) return;
     trackTab.mutate({ projectId, tab });
     if (tab === 'assets') utils.story.getWorkspace.invalidate({ projectId });
+    if (tab === 'sequence' && !isR16) utils.story.getOrCreateSequence.invalidate({ projectId });
   }, [tab, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!sequencePlaying || isR16) return;
+    const data = sequenceQuery.data as SequenceData | undefined;
+    const sequence = data?.sequence;
+    const enabledShots = (sequence?.scenes ?? []).filter((item) => item.enabled).sort((a, b) => a.orderIndex - b.orderIndex);
+    if (!sequence || enabledShots.length === 0) return;
+    const current = enabledShots[Math.min(previewShotIndex, enabledShots.length - 1)];
+    const timeout = window.setTimeout(() => {
+      if (previewShotIndex >= enabledShots.length - 1) {
+        setSequencePlaying(false);
+        trackSequenceAnalytics.mutate({ projectId, sequenceId: sequence.id, event: 'sequence_preview_completed', properties: { runtimeSeconds: data?.runtime.totalRuntimeSeconds } });
+      } else {
+        setPreviewShotIndex((index) => Math.min(index + 1, enabledShots.length - 1));
+      }
+    }, Math.max(500, (current?.durationSeconds ?? 4) * 1000));
+    return () => window.clearTimeout(timeout);
+  }, [sequencePlaying, previewShotIndex, sequenceQuery.data, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isLoaded) {
     return <div className="min-h-screen bg-[#fff9ed]"><Navbar /><main className="mx-auto max-w-6xl px-4 py-12 font-bold text-[#596070]">Loading workspace...</main></div>;
@@ -270,6 +380,7 @@ export default function StoryWorkspacePage() {
   const canUseTechnical = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
 
   const chooseTab = (nextTab: WorkspaceTab) => {
+    if (isR16 && nextTab === 'sequence') return;
     setTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', nextTab);
@@ -453,7 +564,9 @@ export default function StoryWorkspacePage() {
         <button onClick={() => continueStory.mutate({ projectId })} className="rounded-2xl bg-[#172033] px-5 py-4 text-left font-black text-white">{isR16 ? 'Keep Writing' : 'Continue Writing'}</button>
         <button onClick={() => chooseTab('characters')} className="rounded-2xl bg-[#2fbf71] px-5 py-4 text-left font-black text-white">{isR16 ? 'Meet My Characters' : 'Edit Characters'}</button>
         <button onClick={() => chooseTab('scenes')} className="rounded-2xl bg-[#ffcf4a] px-5 py-4 text-left font-black text-[#172033]">{isR16 ? 'Add Pictures' : 'Add Pictures'}</button>
-        <Link href={`/story-playground/${projectId}/storybook`} className="rounded-2xl bg-[#2f80ed] px-5 py-4 text-left font-black text-white">{isR16 ? 'Read Book' : 'Read Storybook'}</Link>
+        {isR16
+          ? <Link href={`/story-playground/${projectId}/storybook`} className="rounded-2xl bg-[#2f80ed] px-5 py-4 text-left font-black text-white">Read Book</Link>
+          : <button onClick={() => chooseTab('sequence')} className="rounded-2xl bg-[#2f80ed] px-5 py-4 text-left font-black text-white">Open Sequence</button>}
       </div>
     </div>
   );
@@ -649,6 +762,222 @@ export default function StoryWorkspacePage() {
     </section>
   );
 
+  const renderSequence = () => {
+    if (isR16) return null;
+    if (sequenceQuery.isLoading) return <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-8 font-bold text-[#596070]">Loading sequence...</section>;
+    if (sequenceQuery.error) return <section className="rounded-2xl border-2 border-[#b13b63]/20 bg-white p-8 font-bold text-[#b13b63]">{sequenceQuery.error.message}</section>;
+    const data = sequenceQuery.data as SequenceData | undefined;
+    if (!data?.sequence) return <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-8 font-bold text-[#596070]">No sequence yet.</section>;
+    const sequence = data.sequence;
+    const sequenceScenes = [...(sequence.scenes ?? [])].sort((a, b) => a.orderIndex - b.orderIndex);
+    const enabledShots = sequenceScenes.filter((item) => item.enabled);
+    const selected = sequenceScenes.find((item) => item.id === selectedSequenceSceneId) ?? sequenceScenes[0] ?? null;
+    const previewShot = enabledShots[Math.min(previewShotIndex, Math.max(0, enabledShots.length - 1))] ?? enabledShots[0] ?? null;
+    const elapsed = enabledShots.slice(0, Math.min(previewShotIndex, enabledShots.length)).reduce((sum, item) => sum + item.durationSeconds + (item.holdDurationSeconds ?? 0), 0);
+
+    const updateSequenceEntry = (sequenceScene: SequenceScene, patch: Partial<Pick<SequenceScene, 'enabled' | 'durationSeconds' | 'selectedAssetId' | 'shotType' | 'cameraMovement' | 'cameraSpeed' | 'cameraSpeedMultiplier' | 'transition' | 'transitionDurationSeconds' | 'holdDurationSeconds' | 'zoom' | 'creativeNotes'>>) => {
+      updateSequenceScene.mutate({
+        projectId,
+        sequenceId: sequence.id,
+        sequenceSceneId: sequenceScene.id,
+        ...patch,
+      } as Parameters<typeof updateSequenceScene.mutate>[0]);
+    };
+
+    const moveSequenceScene = (targetId: string) => {
+      if (!draggedSequenceSceneId || draggedSequenceSceneId === targetId) return;
+      const ids = sequenceScenes.map((item) => item.id);
+      const fromIndex = ids.indexOf(draggedSequenceSceneId);
+      const toIndex = ids.indexOf(targetId);
+      if (fromIndex < 0 || toIndex < 0) return;
+      const next = [...ids];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      reorderSequence.mutate({ projectId, sequenceId: sequence.id, sequenceSceneIds: next });
+      setDraggedSequenceSceneId(null);
+    };
+
+    const startPreview = () => {
+      if (!previewShot) return;
+      setSequencePlaying(true);
+      trackSequenceAnalytics.mutate({ projectId, sequenceId: sequence.id, event: 'sequence_preview_started', properties: { shotIndex: previewShotIndex + 1, runtimeSeconds: data.runtime.totalRuntimeSeconds } });
+    };
+
+    const selectedAssets = selected
+      ? (selected.storyScene.assets ?? []).filter((asset) => asset.assetType === 'IMAGE' && asset.status === 'READY' && asset.creativeStatus !== 'REJECTED')
+      : [];
+
+    return (
+      <section className="space-y-5">
+        <div className="rounded-2xl bg-[#111827] p-5 text-white">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase text-[#ffcf4a]">Sequence Workspace</p>
+              <h2 className="text-3xl font-black">{sequence.title}</h2>
+              <p className="mt-2 max-w-3xl text-sm font-semibold text-white/65">Arrange the story like an edit decision list. No movie is rendered here.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-sm font-black md:min-w-[420px]">
+              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Runtime</p><p className="text-2xl">{formatRuntime(data.runtime.totalRuntimeSeconds)}</p></div>
+              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Shots</p><p className="text-2xl">{data.runtime.activeShotCount}</p></div>
+              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Avg Shot</p><p className="text-2xl">{data.runtime.averageShotLength}s</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
+            <div className="overflow-hidden rounded-2xl border-2 border-[#172033]/10 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#172033]/10 px-4 py-3">
+                <p className="text-xs font-black uppercase text-[#596070]">Timeline Editor</p>
+                <button onClick={() => selected && restoreSourceScene.mutate({ projectId, sequenceId: sequence.id, storySceneId: selected.storySceneId, afterSequenceSceneId: selected.id })} disabled={!selected || restoreSourceScene.isPending} className="rounded-xl bg-[#eef7ff] px-3 py-2 text-xs font-black text-[#2f80ed]">Add Source Scene</button>
+              </div>
+              <div className="divide-y divide-[#172033]/10">
+                {sequenceScenes.map((sequenceScene) => {
+                  const asset = sequenceAsset(sequenceScene);
+                  return (
+                    <article
+                      key={sequenceScene.id}
+                      draggable
+                      onClick={() => setSelectedSequenceSceneId(sequenceScene.id)}
+                      onDragStart={() => setDraggedSequenceSceneId(sequenceScene.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => moveSequenceScene(sequenceScene.id)}
+                      className={`grid cursor-pointer gap-4 p-4 md:grid-cols-[34px_90px_1fr] ${sequenceScene.enabled ? 'bg-white' : 'bg-[#f2efe7] opacity-70'} ${selected?.id === sequenceScene.id ? 'ring-4 ring-[#2f80ed]/20' : ''}`}
+                    >
+                      <div className="flex items-center justify-center text-[#596070]"><GripVertical size={20} /></div>
+                      <div className="aspect-[9/12] overflow-hidden rounded-xl bg-[#f5f1e8]">
+                        {asset?.assetUrl ? <img src={asset.assetUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[#596070]"><Clapperboard /></div>}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-xs font-black uppercase text-[#596070]">Shot {sequenceScene.orderIndex}</p>
+                            <h3 className="text-xl font-black">{sequenceScene.storyScene.title}</h3>
+                            <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#596070]">{sequenceScene.storyScene.description}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={(event) => { event.stopPropagation(); duplicateSequenceScene.mutate({ projectId, sequenceId: sequence.id, sequenceSceneId: sequenceScene.id }); }} className="rounded-xl bg-[#eef7ff] px-3 py-2 text-xs font-black text-[#2f80ed]"><Copy className="mr-1 inline" size={14} />Duplicate</button>
+                            <button onClick={(event) => { event.stopPropagation(); updateSequenceEntry(sequenceScene, { enabled: !sequenceScene.enabled }); }} className="rounded-xl bg-[#fff1c7] px-3 py-2 text-xs font-black text-[#172033]">{sequenceScene.enabled ? 'Disable' : 'Enable'}</button>
+                            <button onClick={(event) => { event.stopPropagation(); removeSequenceScene.mutate({ projectId, sequenceId: sequence.id, sequenceSceneId: sequenceScene.id }); }} className="rounded-xl bg-[#fff1f1] px-3 py-2 text-xs font-black text-[#b13b63]"><Trash2 className="mr-1 inline" size={14} />Remove</button>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
+                          <span className="rounded-full bg-[#eef7ff] px-2 py-1">{sequenceScene.durationSeconds}s</span>
+                          <span className="rounded-full bg-[#fff1c7] px-2 py-1">{label(sequenceScene.shotType) || 'Shot'}</span>
+                          <span className="rounded-full bg-[#dff8e9] px-2 py-1">{label(sequenceScene.cameraMovement) || 'Camera'}</span>
+                          <span className="rounded-full bg-[#ffe1eb] px-2 py-1">{label(sequenceScene.transition) || 'Transition'}</span>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-[#172033]/10 bg-[#111827] p-4 text-white">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-xs font-black uppercase text-[#ffcf4a]">Storyboard Animatic</p><h3 className="text-xl font-black">Preview Timing</h3></div>
+                <span className="text-sm font-black text-white/60">{formatRuntime(elapsed)} / {formatRuntime(data.runtime.totalRuntimeSeconds)}</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                <div className="aspect-[9/12] overflow-hidden rounded-xl bg-white/10">
+                  {previewShot && sequenceAsset(previewShot)?.assetUrl ? <img src={sequenceAsset(previewShot)?.assetUrl ?? ''} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Camera /></div>}
+                </div>
+                <div className="flex flex-col justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-[#ffcf4a]">Shot {previewShot ? previewShotIndex + 1 : 0} of {enabledShots.length}</p>
+                    <h4 className="mt-1 text-2xl font-black">{previewShot?.storyScene.title ?? 'No active shots'}</h4>
+                    <p className="mt-2 text-sm font-semibold text-white/60">{previewShot?.durationSeconds ?? 0}s | {label(previewShot?.transition) || 'Cut'} | {label(previewShot?.cameraMovement) || 'Static'}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex(0); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><RotateCcw size={16} /></button>
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.max(0, index - 1)); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><SkipBack size={16} /></button>
+                    <button onClick={sequencePlaying ? () => setSequencePlaying(false) : startPreview} className="rounded-xl bg-[#2fbf71] px-4 py-2 font-black text-white">{sequencePlaying ? <Pause size={16} /> : <Play size={16} />}</button>
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.min(enabledShots.length - 1, index + 1)); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><SkipForward size={16} /></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-2xl border-2 border-[#172033]/10 bg-white p-4">
+              <p className="text-xs font-black uppercase text-[#596070]">Runtime Panel</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm font-black">
+                <div className="rounded-xl bg-[#fff9ed] p-3"><p className="text-[#596070]">Runtime</p><p className="text-2xl">{formatRuntime(data.runtime.totalRuntimeSeconds)}</p></div>
+                <div className="rounded-xl bg-[#fff9ed] p-3"><p className="text-[#596070]">Shots</p><p className="text-2xl">{data.runtime.activeShotCount}</p></div>
+                <div className="rounded-xl bg-[#fff9ed] p-3"><p className="text-[#596070]">Avg</p><p className="text-2xl">{data.runtime.averageShotLength}s</p></div>
+                <div className="rounded-xl bg-[#fff9ed] p-3"><p className="text-[#596070]">Entries</p><p className="text-2xl">{data.runtime.totalShotCount}</p></div>
+              </div>
+              <div className="mt-3 rounded-xl bg-[#eef7ff] p-3 text-sm font-bold text-[#596070]">
+                <p>Narration: <span className="text-[#172033]">Not added</span></p>
+                <p>Music: <span className="text-[#172033]">Not added</span></p>
+                <p>Movie: <span className="text-[#172033]">Not rendered</span></p>
+                <p>Render estimate: <span className="text-[#172033]">Available in Movie Builder</span></p>
+              </div>
+            </div>
+
+            {selected && (
+              <div className="rounded-2xl border-2 border-[#172033]/10 bg-white p-4">
+                <p className="text-xs font-black uppercase text-[#596070]">Shot Inspector</p>
+                <h3 className="mt-1 text-xl font-black">{selected.storyScene.title}</h3>
+                <div className="mt-4 space-y-3">
+                  <label className="block text-xs font-black uppercase text-[#596070]">Picture<select value={selected.selectedAssetId ?? ''} onChange={(event) => updateSequenceEntry(selected, { selectedAssetId: event.target.value || null })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]"><option value="">Auto / active image</option>{selectedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.creativeStatus === 'APPROVED' ? 'Approved' : selected.storyScene.activeImageAssetId === asset.id ? 'Active' : asset.isFavorite ? 'Favorite' : asset.isLatest ? 'Latest' : 'Legacy'} - {dateLabel(asset.createdAt)}</option>)}</select></label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-black uppercase text-[#596070]">Duration<select value={DURATION_OPTIONS.includes(selected.durationSeconds as any) ? String(selected.durationSeconds) : 'custom'} onChange={(event) => event.target.value !== 'custom' && updateSequenceEntry(selected, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]">{DURATION_OPTIONS.map((item) => <option key={item} value={item}>{item}s</option>)}<option value="custom">Custom</option></select></label>
+                    <label className="text-xs font-black uppercase text-[#596070]">Custom<input type="number" min={0.5} max={60} step={0.5} value={selected.durationSeconds} onChange={(event) => updateSequenceEntry(selected, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]" /></label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-black uppercase text-[#596070]">Hold<input type="number" min={0} max={10} step={0.5} value={selected.holdDurationSeconds ?? 0} onChange={(event) => updateSequenceEntry(selected, { holdDurationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]" /></label>
+                    <label className="text-xs font-black uppercase text-[#596070]">Transition Time<input type="number" min={0} max={10} step={0.5} value={selected.transitionDurationSeconds ?? 0} onChange={(event) => updateSequenceEntry(selected, { transitionDurationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]" /></label>
+                  </div>
+                  <label className="block text-xs font-black uppercase text-[#596070]">Shot<select value={selected.shotType ?? ''} onChange={(event) => updateSequenceEntry(selected, { shotType: event.target.value || null })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]"><option value="">Choose shot</option>{SHOT_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></label>
+                  <label className="block text-xs font-black uppercase text-[#596070]">Camera<select value={selected.cameraMovement ?? ''} onChange={(event) => updateSequenceEntry(selected, { cameraMovement: event.target.value || null })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]"><option value="">Choose movement</option>{CAMERA_MOVEMENT_OPTIONS.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-black uppercase text-[#596070]">Speed<select value={selected.cameraSpeed ?? ''} onChange={(event) => updateSequenceEntry(selected, { cameraSpeed: event.target.value || null })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]"><option value="">Speed</option>{CAMERA_SPEED_OPTIONS.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></label>
+                    <label className="text-xs font-black uppercase text-[#596070]">Multiplier<input type="number" min={0.1} max={4} step={0.1} value={selected.cameraSpeedMultiplier ?? 1} onChange={(event) => updateSequenceEntry(selected, { cameraSpeedMultiplier: Number(event.target.value) })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]" /></label>
+                  </div>
+                  <label className="block text-xs font-black uppercase text-[#596070]">Transition<select value={selected.transition ?? ''} onChange={(event) => updateSequenceEntry(selected, { transition: event.target.value || null })} className="mt-1 w-full rounded-xl border-2 p-2 text-sm normal-case text-[#172033]"><option value="">Choose transition</option>{TRANSITION_OPTIONS.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></label>
+                  <label className="block text-xs font-black uppercase text-[#596070]">Notes<textarea value={selected.creativeNotes ?? ''} onChange={(event) => updateSequenceEntry(selected, { creativeNotes: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border-2 p-3 text-sm normal-case text-[#172033]" placeholder="Creative or editorial notes" /></label>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-2xl border-2 border-[#172033]/10 bg-white p-4">
+              <p className="text-xs font-black uppercase text-[#596070]">Version History</p>
+              <div className="mt-3 flex gap-2">
+                <input value={versionTitle} onChange={(event) => setVersionTitle(event.target.value)} placeholder={`Version ${sequence.currentVersionNumber + 1}`} className="min-w-0 flex-1 rounded-xl border-2 px-3 py-2 text-sm font-bold" />
+                <button onClick={() => createSequenceVersion.mutate({ projectId, sequenceId: sequence.id, title: versionTitle || undefined })} disabled={createSequenceVersion.isPending} className="rounded-xl bg-[#172033] px-3 py-2 text-sm font-black text-white"><Save className="inline" size={15} /></button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(sequence.versions ?? []).length === 0 ? <p className="rounded-xl border-2 border-dashed p-4 text-sm font-bold text-[#596070]">No saved versions yet.</p> : sequence.versions?.map((version) => (
+                  <div key={version.id} className="rounded-xl bg-[#fff9ed] p-3">
+                    <p className="font-black">v{version.versionNumber} - {version.title}</p>
+                    <p className="text-xs font-bold text-[#596070]">{formatRuntime(version.runtimeSeconds)} - {dateLabel(version.createdAt)}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => restoreSequenceVersion.mutate({ projectId, sequenceId: sequence.id, versionId: version.id })} disabled={restoreSequenceVersion.isPending} className="rounded-lg bg-white px-3 py-2 text-xs font-black text-[#2f80ed] ring-2 ring-[#172033]/10">Restore</button>
+                      <button onClick={() => duplicateSequenceVersion.mutate({ projectId, sequenceId: sequence.id, versionId: version.id })} disabled={duplicateSequenceVersion.isPending} className="rounded-lg bg-white px-3 py-2 text-xs font-black text-[#596070] ring-2 ring-[#172033]/10">Duplicate</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-[#172033]/10 bg-white p-4">
+              <p className="text-xs font-black uppercase text-[#596070]">Film Blueprint</p>
+              <p className="mt-2 text-sm font-bold text-[#596070]">Phase 9B will consume this EDL contract. Provider and rendering settings are intentionally absent.</p>
+              <div className="mt-3 rounded-xl bg-[#f5f1e8] p-3 text-xs font-black text-[#596070]">
+                <p>Sequence: {data.filmBlueprint.sequenceId}</p>
+                <p>Version: {data.filmBlueprint.version}</p>
+                <p>Shots: {data.filmBlueprint.shots.length}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#fff9ed] text-[#172033]">
       <Navbar />
@@ -658,7 +987,7 @@ export default function StoryWorkspacePage() {
         {message && <div className="mt-4 rounded-xl bg-[#dff8e9] px-4 py-3 font-bold text-[#17643a]">{message}</div>}
         <nav className="sticky top-0 z-30 mt-5 -mx-4 overflow-x-auto border-y border-[#172033]/10 bg-[#fff9ed]/95 px-4 py-3 backdrop-blur">
           <div className="flex min-w-max gap-2">
-            {TABS.map((item) => (
+            {visibleTabs.map((item) => (
               <button key={item.key} onClick={() => chooseTab(item.key)} className={`rounded-full px-4 py-2 text-sm font-black ${tab === item.key ? 'bg-[#172033] text-white' : 'bg-white text-[#596070] ring-2 ring-[#172033]/10'}`}>
                 {isR16 ? item.r16Label : item.label}
               </button>
@@ -672,6 +1001,7 @@ export default function StoryWorkspacePage() {
           {tab === 'characters' && renderCharacters()}
           {tab === 'scenes' && renderScenes()}
           {tab === 'assets' && renderAssets()}
+          {tab === 'sequence' && renderSequence()}
           {tab === 'storybook' && <section className="rounded-2xl border-2 border-[#172033]/10 bg-white p-8 text-center"><BookOpen className="mx-auto text-[#2f80ed]" size={48} /><h2 className="mt-3 text-3xl font-black">{isR16 ? 'Read your book' : 'Storybook'}</h2><p className="mt-2 font-semibold text-[#596070]">{isR16 ? 'Open the book with your chosen pictures.' : 'Storybook uses the active image for each scene, then latest image as fallback.'}</p><Link href={`/story-playground/${projectId}/storybook`} className="mt-5 inline-block rounded-xl bg-[#2f80ed] px-5 py-3 font-black text-white">{isR16 ? 'Read Book' : 'Open Storybook'}</Link></section>}
         </div>
       </main>

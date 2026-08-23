@@ -20,6 +20,21 @@ import {
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock } from '../lib/storyVisualStyles';
+import {
+  SEQUENCE_CAMERA_MOVEMENTS,
+  SEQUENCE_CAMERA_SPEEDS,
+  SEQUENCE_SHOT_TYPES,
+  SEQUENCE_TRANSITIONS,
+  buildFilmBlueprint,
+  clampCameraSpeedMultiplier,
+  clampSequenceDuration,
+  clampTransitionDuration,
+  normalizeSequenceEntryOrder,
+  nextSequenceVersionFromExisting,
+  pickSequenceAsset,
+  sequenceRuntime,
+  sequenceSnapshot,
+} from '../lib/sequencePlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -58,6 +73,10 @@ const relationshipTypeSchema = z.enum(['FRIEND', 'SIBLING', 'TEACHER', 'ENEMY', 
 const relationshipStrengthSchema = z.enum(['DISTANT', 'FRIENDLY', 'CLOSE', 'VERY_CLOSE']);
 const creativeCriticModeSchema = z.enum(['OFF', 'SUGGEST', 'AUTO_ONCE', 'AUTO_UNTIL_THRESHOLD']);
 const criticFeedbackCategorySchema = z.enum(['CHARACTER', 'EMOTION', 'CAMERA', 'LIGHTING', 'COMPOSITION', 'BACKGROUND', 'STYLE', 'CONTINUITY', 'OTHER']);
+const sequenceShotTypeSchema = z.enum(SEQUENCE_SHOT_TYPES);
+const sequenceCameraMovementSchema = z.enum(SEQUENCE_CAMERA_MOVEMENTS);
+const sequenceCameraSpeedSchema = z.enum(SEQUENCE_CAMERA_SPEEDS);
+const sequenceTransitionSchema = z.enum(SEQUENCE_TRANSITIONS);
 const characterRelationshipSchema = z.object({
   targetCharacterId: z.string().optional().nullable(),
   targetName: z.string().min(1).max(80),
@@ -212,6 +231,206 @@ async function trackStoryAnalytics(
       audienceMode: ctx.isR16 ? 'KIDS' : input.audienceMode,
     },
   });
+}
+
+function assertSequenceAllowed(ctx: { isR16?: boolean }) {
+  if (ctx.isR16) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sequence editing is not available in R16 mode.' });
+  }
+}
+
+const sequenceInclude = {
+  scenes: {
+    orderBy: { orderIndex: 'asc' as const },
+    include: {
+      storyScene: {
+        include: {
+          assets: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' as const },
+            take: 30,
+          },
+        },
+      },
+      selectedAsset: true,
+      futureVideoAsset: true,
+    },
+  },
+  versions: {
+    orderBy: { versionNumber: 'desc' as const },
+    take: 12,
+  },
+};
+
+function sequenceSceneCreateData(scene: any, orderIndex: number) {
+  const picked = pickSequenceAsset(scene, 'ACTIVE');
+  return {
+    storySceneId: scene.id,
+    orderIndex,
+    enabled: true,
+    durationSeconds: 4,
+    selectedAssetId: picked.asset?.id ?? null,
+    shotType: 'MEDIUM',
+    cameraMovement: 'STATIC',
+    cameraSpeed: 'NORMAL',
+    transition: orderIndex === 1 ? 'NONE' : 'CUT',
+    transitionDurationSeconds: 0,
+    holdDurationSeconds: 0,
+  };
+}
+
+async function getSequenceProject(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string) {
+  assertSequenceAllowed(ctx);
+  const project = await ctx.prisma.storyProject.findFirst({
+    where: { id: projectId, userId: ctx.user.id },
+    include: {
+      sceneSeeds: {
+        orderBy: { orderIndex: 'asc' },
+        include: {
+          assets: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 30,
+          },
+        },
+      },
+    },
+  });
+  if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+  return project;
+}
+
+async function recalculateSequenceRuntime(prisma: any, sequenceId: string) {
+  const scenes = await prisma.storySequenceScene.findMany({
+    where: { sequenceId },
+    orderBy: { orderIndex: 'asc' },
+  });
+  const runtime = sequenceRuntime(scenes);
+  await prisma.storySequence.update({
+    where: { id: sequenceId },
+    data: { runtimeSeconds: runtime.totalRuntimeSeconds },
+  });
+  return runtime;
+}
+
+async function nextSequenceVersionNumber(prisma: any, sequenceId: string) {
+  const existingVersions = await prisma.sequenceVersion.findMany({
+    where: { sequenceId },
+    select: { versionNumber: true },
+  });
+  return nextSequenceVersionFromExisting(existingVersions);
+}
+
+async function getOrCreateSequence(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string, sequenceId?: string | null) {
+  const project = await getSequenceProject(ctx, projectId);
+  let sequence = sequenceId
+    ? await ctx.prisma.storySequence.findFirst({ where: { id: sequenceId, projectId }, include: sequenceInclude })
+    : await ctx.prisma.storySequence.findFirst({
+      where: { projectId, status: { not: 'ARCHIVED' } },
+      orderBy: { updatedAt: 'desc' },
+      include: sequenceInclude,
+    });
+
+  if (!sequence) {
+    sequence = await ctx.prisma.$transaction(async (tx: any) => {
+      const existing = await tx.storySequence.findFirst({
+        where: { projectId, status: { not: 'ARCHIVED' } },
+        orderBy: { updatedAt: 'desc' },
+        include: sequenceInclude,
+      });
+      if (existing) return existing;
+
+      const created = await tx.storySequence.create({
+        data: {
+          projectId,
+          title: `${project.title || 'Story'} Sequence`,
+          status: 'DRAFT',
+          scenes: {
+            create: project.sceneSeeds.map((scene: any, index: number) => sequenceSceneCreateData(scene, index + 1)),
+          },
+        },
+      });
+      const runtime = sequenceRuntime(project.sceneSeeds.map((scene: any, index: number) => ({
+        id: scene.id,
+        storySceneId: scene.id,
+        orderIndex: index + 1,
+        enabled: true,
+        durationSeconds: 4,
+      })));
+      await tx.storySequence.update({ where: { id: created.id }, data: { runtimeSeconds: runtime.totalRuntimeSeconds } });
+      return tx.storySequence.findUnique({ where: { id: created.id }, include: sequenceInclude });
+    });
+    await trackStoryAnalytics(ctx, {
+      event: 'sequence_created',
+      projectId,
+      audienceMode: project.audienceMode,
+      properties: { sequenceId: sequence.id, shotCount: project.sceneSeeds.length },
+    });
+  }
+
+  return { project, sequence };
+}
+
+async function sequenceResponse(ctx: any, projectId: string, sequenceId?: string | null) {
+  const { project, sequence } = await getOrCreateSequence(ctx, projectId, sequenceId);
+  const runtime = sequenceRuntime(sequence.scenes);
+  const filmBlueprint = buildFilmBlueprint({
+    sequenceId: sequence.id,
+    version: sequence.currentVersionNumber,
+    scenes: sequence.scenes,
+  });
+  return {
+    projectId,
+    projectTitle: project.title,
+    sequence,
+    runtime,
+    filmBlueprint,
+  };
+}
+
+async function assertSequenceAsset(ctx: { prisma: any; user: { id: string } }, input: {
+  projectId: string;
+  storySceneId: string;
+  assetId: string;
+}) {
+  const asset = await ctx.prisma.storySceneAsset.findFirst({
+    where: {
+      id: input.assetId,
+      sceneId: input.storySceneId,
+      projectId: input.projectId,
+      userId: ctx.user.id,
+      assetType: 'IMAGE',
+      status: 'READY',
+      deletedAt: null,
+      creativeStatus: { not: 'REJECTED' },
+    },
+  });
+  if (!asset || asset.moderationStatus === 'REJECTED') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a ready, eligible image from this scene.' });
+  }
+  return asset;
+}
+
+function versionSnapshotScenes(snapshot: any) {
+  const scenes = Array.isArray(snapshot?.scenes) ? snapshot.scenes : [];
+  return scenes
+    .map((scene: any, index: number) => ({
+      storySceneId: String(scene.storySceneId ?? ''),
+      orderIndex: Number(scene.orderIndex ?? index + 1),
+      enabled: scene.enabled !== false,
+      durationSeconds: clampSequenceDuration(scene.durationSeconds),
+      selectedAssetId: scene.selectedAssetId ?? null,
+      shotType: scene.shotType ?? null,
+      cameraMovement: scene.cameraMovement ?? null,
+      cameraSpeed: scene.cameraSpeed ?? null,
+      cameraSpeedMultiplier: clampCameraSpeedMultiplier(scene.cameraSpeedMultiplier),
+      transition: scene.transition ?? null,
+      transitionDurationSeconds: clampTransitionDuration(scene.transitionDurationSeconds),
+      holdDurationSeconds: clampTransitionDuration(scene.holdDurationSeconds),
+      zoom: scene.zoom ?? null,
+      creativeNotes: typeof scene.creativeNotes === 'string' ? scene.creativeNotes.slice(0, 2000) : null,
+    }))
+    .filter((scene: any) => scene.storySceneId);
 }
 
 function assertKidsSafeIdea(idea: string, audienceMode: StoryAudienceMode) {
@@ -2897,6 +3116,351 @@ export const storyRouter = router({
       return ctx.isR16 ? { ok: true } : feedback;
     }),
 
+  getOrCreateSequence: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      await trackStoryAnalytics(ctx, {
+        event: 'sequence_opened',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sequenceId: sequence.id, shotCount: sequence.scenes.length },
+      });
+      return sequenceResponse(ctx, input.projectId, sequence.id);
+    }),
+
+  getSequence: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      await trackStoryAnalytics(ctx, {
+        event: 'sequence_opened',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sequenceId: sequence.id, shotCount: sequence.scenes.length },
+      });
+      return sequenceResponse(ctx, input.projectId, sequence.id);
+    }),
+
+  updateSequence: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sequenceId: z.string(),
+      title: z.string().min(1).max(120).optional(),
+      status: z.enum(['DRAFT', 'LOCKED', 'ARCHIVED']).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      await (ctx.prisma as any).storySequence.update({
+        where: { id: input.sequenceId },
+        data: {
+          ...(input.title ? { title: input.title.trim() } : {}),
+          ...(input.status ? { status: input.status } : {}),
+        },
+      });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  reorderSequence: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), sequenceSceneIds: z.array(z.string()).min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const normalized = normalizeSequenceEntryOrder(input.sequenceSceneIds, sequence.scenes);
+      await (ctx.prisma as any).$transaction(normalized.map((scene: any) =>
+        (ctx.prisma as any).storySequenceScene.update({ where: { id: scene.id }, data: { orderIndex: scene.orderIndex } }),
+      ));
+      const runtime = await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      await trackStoryAnalytics(ctx, {
+        event: 'sequence_scene_reordered',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sequenceId: input.sequenceId, runtimeSeconds: runtime.totalRuntimeSeconds },
+      });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  updateSequenceScene: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sequenceId: z.string(),
+      sequenceSceneId: z.string(),
+      enabled: z.boolean().optional(),
+      durationSeconds: z.number().optional(),
+      selectedAssetId: z.string().nullable().optional(),
+      shotType: sequenceShotTypeSchema.nullable().optional(),
+      cameraMovement: sequenceCameraMovementSchema.nullable().optional(),
+      cameraSpeed: sequenceCameraSpeedSchema.nullable().optional(),
+      cameraSpeedMultiplier: z.number().nullable().optional(),
+      transition: sequenceTransitionSchema.nullable().optional(),
+      transitionDurationSeconds: z.number().nullable().optional(),
+      holdDurationSeconds: z.number().nullable().optional(),
+      zoom: z.number().nullable().optional(),
+      creativeNotes: z.string().max(2000).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const sequenceScene = sequence.scenes.find((scene: any) => scene.id === input.sequenceSceneId);
+      if (!sequenceScene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence scene not found' });
+      if (input.selectedAssetId) {
+        await assertSequenceAsset(ctx, {
+          projectId: input.projectId,
+          storySceneId: sequenceScene.storySceneId,
+          assetId: input.selectedAssetId,
+        });
+      }
+      const changedDuration = input.durationSeconds !== undefined && clampSequenceDuration(input.durationSeconds) !== sequenceScene.durationSeconds;
+      const changedEnabled = input.enabled !== undefined && input.enabled !== sequenceScene.enabled;
+      const changedAsset = input.selectedAssetId !== undefined && input.selectedAssetId !== sequenceScene.selectedAssetId;
+      const changedShot = input.shotType !== undefined && input.shotType !== sequenceScene.shotType;
+      const changedCamera = input.cameraMovement !== undefined || input.cameraSpeed !== undefined || input.cameraSpeedMultiplier !== undefined || input.zoom !== undefined;
+      const changedTransition = input.transition !== undefined || input.transitionDurationSeconds !== undefined || input.holdDurationSeconds !== undefined;
+
+      await (ctx.prisma as any).storySequenceScene.update({
+        where: { id: input.sequenceSceneId },
+        data: {
+          ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+          ...(input.durationSeconds !== undefined ? { durationSeconds: clampSequenceDuration(input.durationSeconds) } : {}),
+          ...(input.selectedAssetId !== undefined ? { selectedAssetId: input.selectedAssetId } : {}),
+          ...(input.shotType !== undefined ? { shotType: input.shotType } : {}),
+          ...(input.cameraMovement !== undefined ? { cameraMovement: input.cameraMovement } : {}),
+          ...(input.cameraSpeed !== undefined ? { cameraSpeed: input.cameraSpeed } : {}),
+          ...(input.cameraSpeedMultiplier !== undefined ? { cameraSpeedMultiplier: clampCameraSpeedMultiplier(input.cameraSpeedMultiplier) } : {}),
+          ...(input.transition !== undefined ? { transition: input.transition } : {}),
+          ...(input.transitionDurationSeconds !== undefined ? { transitionDurationSeconds: clampTransitionDuration(input.transitionDurationSeconds) } : {}),
+          ...(input.holdDurationSeconds !== undefined ? { holdDurationSeconds: clampTransitionDuration(input.holdDurationSeconds) } : {}),
+          ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
+          ...(input.creativeNotes !== undefined ? { creativeNotes: input.creativeNotes?.trim() || null } : {}),
+        },
+      });
+      const runtime = await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      const properties = { sequenceId: input.sequenceId, sequenceSceneId: input.sequenceSceneId, runtimeSeconds: runtime.totalRuntimeSeconds };
+      if (changedDuration) await trackStoryAnalytics(ctx, { event: 'sequence_duration_changed', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      if (changedEnabled && input.enabled === false) await trackStoryAnalytics(ctx, { event: 'sequence_scene_disabled', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      if (changedAsset) await trackStoryAnalytics(ctx, { event: 'sequence_asset_selected', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      if (changedShot) await trackStoryAnalytics(ctx, { event: 'sequence_shot_changed', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      if (changedCamera) await trackStoryAnalytics(ctx, { event: 'sequence_camera_changed', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      if (changedTransition) await trackStoryAnalytics(ctx, { event: 'sequence_transition_changed', projectId: input.projectId, audienceMode: project.audienceMode, properties });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  duplicateSequenceScene: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), sequenceSceneId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const source = sequence.scenes.find((scene: any) => scene.id === input.sequenceSceneId);
+      if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence scene not found' });
+      await (ctx.prisma as any).$transaction(async (tx: any) => {
+        await tx.storySequenceScene.updateMany({
+          where: { sequenceId: input.sequenceId, orderIndex: { gt: source.orderIndex } },
+          data: { orderIndex: { increment: 1 } },
+        });
+        await tx.storySequenceScene.create({
+          data: {
+            sequenceId: input.sequenceId,
+            storySceneId: source.storySceneId,
+            sourceSequenceSceneId: source.id,
+            orderIndex: source.orderIndex + 1,
+            enabled: source.enabled,
+            durationSeconds: source.durationSeconds,
+            selectedAssetId: source.selectedAssetId,
+            shotType: source.shotType,
+            cameraMovement: source.cameraMovement,
+            cameraSpeed: source.cameraSpeed,
+            cameraSpeedMultiplier: source.cameraSpeedMultiplier,
+            transition: source.transition,
+            transitionDurationSeconds: source.transitionDurationSeconds,
+            holdDurationSeconds: source.holdDurationSeconds,
+            zoom: source.zoom,
+            creativeNotes: source.creativeNotes,
+          },
+        });
+      });
+      const runtime = await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      await trackStoryAnalytics(ctx, { event: 'sequence_scene_duplicated', projectId: input.projectId, audienceMode: project.audienceMode, properties: { sequenceId: input.sequenceId, sequenceSceneId: input.sequenceSceneId, runtimeSeconds: runtime.totalRuntimeSeconds } });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  removeSequenceScene: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), sequenceSceneId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const target = sequence.scenes.find((scene: any) => scene.id === input.sequenceSceneId);
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence scene not found' });
+      await (ctx.prisma as any).$transaction(async (tx: any) => {
+        await tx.storySequenceScene.delete({ where: { id: input.sequenceSceneId } });
+        await tx.storySequenceScene.updateMany({
+          where: { sequenceId: input.sequenceId, orderIndex: { gt: target.orderIndex } },
+          data: { orderIndex: { decrement: 1 } },
+        });
+      });
+      const runtime = await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      await trackStoryAnalytics(ctx, { event: 'sequence_scene_removed', projectId: input.projectId, audienceMode: project.audienceMode, properties: { sequenceId: input.sequenceId, sequenceSceneId: input.sequenceSceneId, runtimeSeconds: runtime.totalRuntimeSeconds } });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  restoreSourceSceneToSequence: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), storySceneId: z.string(), afterSequenceSceneId: z.string().optional().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const sourceScene = project.sceneSeeds.find((scene: any) => scene.id === input.storySceneId);
+      if (!sourceScene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      const after = input.afterSequenceSceneId ? sequence.scenes.find((scene: any) => scene.id === input.afterSequenceSceneId) : null;
+      const orderIndex = after ? after.orderIndex + 1 : sequence.scenes.length + 1;
+      await (ctx.prisma as any).$transaction(async (tx: any) => {
+        await tx.storySequenceScene.updateMany({
+          where: { sequenceId: input.sequenceId, orderIndex: { gte: orderIndex } },
+          data: { orderIndex: { increment: 1 } },
+        });
+        await tx.storySequenceScene.create({
+          data: {
+            sequenceId: input.sequenceId,
+            ...sequenceSceneCreateData(sourceScene, orderIndex),
+          },
+        });
+      });
+      await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  createSequenceVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), title: z.string().min(1).max(120).optional(), notes: z.string().max(500).optional().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const nextVersion = await nextSequenceVersionNumber(ctx.prisma, input.sequenceId);
+      const snapshot = sequenceSnapshot(sequence, sequence.scenes);
+      const filmBlueprint = buildFilmBlueprint({ sequenceId: sequence.id, version: nextVersion, scenes: sequence.scenes });
+      const version = await (ctx.prisma as any).$transaction(async (tx: any) => {
+        const created = await tx.sequenceVersion.create({
+          data: {
+            sequenceId: input.sequenceId,
+            versionNumber: nextVersion,
+            title: input.title?.trim() || `Version ${nextVersion}`,
+            notes: input.notes?.trim() || null,
+            snapshot,
+            filmBlueprint,
+            runtimeSeconds: filmBlueprint.runtimeSeconds,
+            createdById: ctx.user.id,
+          },
+        });
+        await tx.storySequence.update({ where: { id: input.sequenceId }, data: { currentVersionNumber: nextVersion, runtimeSeconds: filmBlueprint.runtimeSeconds } });
+        return created;
+      });
+      await trackStoryAnalytics(ctx, { event: 'sequence_version_created', projectId: input.projectId, audienceMode: project.audienceMode, properties: { sequenceId: input.sequenceId, versionNumber: nextVersion, runtimeSeconds: filmBlueprint.runtimeSeconds } });
+      return { version, sequence: (await sequenceResponse(ctx, input.projectId, input.sequenceId)).sequence };
+    }),
+
+  listSequenceVersions: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      return (ctx.prisma as any).sequenceVersion.findMany({
+        where: { sequenceId: input.sequenceId },
+        orderBy: { versionNumber: 'desc' },
+        take: 50,
+      });
+    }),
+
+  restoreSequenceVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), versionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const version = await (ctx.prisma as any).sequenceVersion.findFirst({
+        where: { id: input.versionId, sequenceId: input.sequenceId, sequence: { projectId: input.projectId } },
+      });
+      if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence version not found' });
+      const snapshotScenes = versionSnapshotScenes(version.snapshot);
+      const projectSceneIds = new Set(project.sceneSeeds.map((scene: any) => scene.id));
+      for (const scene of snapshotScenes) {
+        if (!projectSceneIds.has(scene.storySceneId)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Version references a scene outside this project.' });
+        if (scene.selectedAssetId) await assertSequenceAsset(ctx, { projectId: input.projectId, storySceneId: scene.storySceneId, assetId: scene.selectedAssetId });
+      }
+      await (ctx.prisma as any).$transaction(async (tx: any) => {
+        await tx.storySequenceScene.deleteMany({ where: { sequenceId: input.sequenceId } });
+        if (snapshotScenes.length) {
+          await tx.storySequenceScene.createMany({
+            data: snapshotScenes.map((scene: any, index: number) => ({
+              sequenceId: input.sequenceId,
+              storySceneId: scene.storySceneId,
+              orderIndex: index + 1,
+              enabled: scene.enabled,
+              durationSeconds: scene.durationSeconds,
+              selectedAssetId: scene.selectedAssetId,
+              shotType: scene.shotType,
+              cameraMovement: scene.cameraMovement,
+              cameraSpeed: scene.cameraSpeed,
+              cameraSpeedMultiplier: scene.cameraSpeedMultiplier,
+              transition: scene.transition,
+              transitionDurationSeconds: scene.transitionDurationSeconds,
+              holdDurationSeconds: scene.holdDurationSeconds,
+              zoom: scene.zoom,
+              creativeNotes: scene.creativeNotes,
+            })),
+          });
+        }
+        await tx.storySequence.update({
+          where: { id: input.sequenceId },
+          data: {
+            title: (version.snapshot as any)?.sequence?.title ?? undefined,
+            runtimeSeconds: version.runtimeSeconds,
+            currentVersionNumber: version.versionNumber,
+          },
+        });
+      });
+      await trackStoryAnalytics(ctx, { event: 'sequence_version_restored', projectId: input.projectId, audienceMode: project.audienceMode, properties: { sequenceId: input.sequenceId, versionNumber: version.versionNumber, runtimeSeconds: version.runtimeSeconds } });
+      return sequenceResponse(ctx, input.projectId, input.sequenceId);
+    }),
+
+  duplicateSequenceVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string(), versionId: z.string(), title: z.string().min(1).max(120).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const source = await (ctx.prisma as any).sequenceVersion.findFirst({
+        where: { id: input.versionId, sequenceId: input.sequenceId, sequence: { projectId: input.projectId } },
+      });
+      if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence version not found' });
+      const nextVersion = await nextSequenceVersionNumber(ctx.prisma, input.sequenceId);
+      const duplicated = await (ctx.prisma as any).$transaction(async (tx: any) => {
+        const created = await tx.sequenceVersion.create({
+          data: {
+            sequenceId: input.sequenceId,
+            versionNumber: nextVersion,
+            title: input.title?.trim() || `${source.title} Copy`,
+            notes: source.notes,
+            snapshot: source.snapshot,
+            filmBlueprint: source.filmBlueprint,
+            runtimeSeconds: source.runtimeSeconds,
+            createdById: ctx.user.id,
+          },
+        });
+        await tx.storySequence.update({ where: { id: input.sequenceId }, data: { currentVersionNumber: nextVersion } });
+        return created;
+      });
+      await trackStoryAnalytics(ctx, { event: 'sequence_version_created', projectId: input.projectId, audienceMode: project.audienceMode, properties: { sequenceId: input.sequenceId, duplicatedFromVersion: source.versionNumber, versionNumber: nextVersion } });
+      return duplicated;
+    }),
+
+  trackSequenceAnalytics: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sequenceId: z.string(),
+      event: z.enum(['sequence_preview_started', 'sequence_preview_completed']),
+      properties: z.record(z.unknown()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { project } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      await trackStoryAnalytics(ctx, {
+        event: input.event,
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: {
+          sequenceId: input.sequenceId,
+          shotIndex: input.properties?.shotIndex,
+          runtimeSeconds: input.properties?.runtimeSeconds,
+        },
+      });
+      return { ok: true };
+    }),
+
   getWorkspace: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -2959,6 +3523,13 @@ export const storyRouter = router({
     .input(z.object({ projectId: z.string(), tab: z.string().min(1).max(40) }))
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
+      const allowedTabs = new Set(['overview', 'story', 'characters', 'scenes', 'assets', 'sequence', 'storybook']);
+      if (allowedTabs.has(input.tab) && !(ctx.isR16 && input.tab === 'sequence')) {
+        await (ctx.prisma as any).storyProject.update({
+          where: { id: input.projectId },
+          data: { lastWorkspaceTab: input.tab },
+        });
+      }
       await trackStoryAnalytics(ctx, {
         event: input.tab === 'assets' ? 'asset_manager_opened' : 'story_workspace_tab_changed',
         projectId: input.projectId,
@@ -3223,6 +3794,20 @@ export const storyRouter = router({
               chapters: true,
               questions: true,
               sceneSeeds: true,
+              sequences: true,
+            },
+          },
+          sequences: {
+            where: { status: { not: 'ARCHIVED' } },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              title: true,
+              runtimeSeconds: true,
+              currentVersionNumber: true,
+              updatedAt: true,
+              _count: { select: { scenes: true, versions: true } },
             },
           },
           sceneSeeds: {

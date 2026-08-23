@@ -146,6 +146,62 @@ enum CreativeAssetStatus {
   ARCHIVED
 }
 
+enum StorySequenceStatus {
+  DRAFT
+  LOCKED
+  ARCHIVED
+}
+
+enum SequenceShotType {
+  EXTREME_WIDE
+  WIDE
+  MEDIUM_WIDE
+  MEDIUM
+  MEDIUM_CLOSE_UP
+  CLOSE_UP
+  EXTREME_CLOSE_UP
+  POV
+  OVER_THE_SHOULDER
+  HIGH_ANGLE
+  LOW_ANGLE
+  TRACKING
+}
+
+enum SequenceCameraMovement {
+  NONE
+  STATIC
+  PAN_LEFT
+  PAN_RIGHT
+  TILT_UP
+  TILT_DOWN
+  PUSH_IN
+  PULL_OUT
+  TRACK_LEFT
+  TRACK_RIGHT
+  ORBIT
+  DOLLY
+  CRANE
+  HANDHELD
+}
+
+enum SequenceCameraSpeed {
+  SLOW
+  NORMAL
+  FAST
+  CUSTOM
+}
+
+enum SequenceTransitionType {
+  CUT
+  CROSS_DISSOLVE
+  FADE
+  DIP_TO_BLACK
+  DIP_TO_WHITE
+  MATCH_CUT
+  WIPE
+  NONE
+}
+
 enum NotificationType {
   FOLLOW  // someone followed you
   LIKE    // someone liked your video
@@ -740,6 +796,7 @@ model StoryProject {
   creativeCriticMode CreativeCriticMode @default(SUGGEST)
   creativeCriticThreshold Int?
   creativeCriticMaxRetries Int?
+  lastWorkspaceTab String?
 
   characters     StoryCharacter[]
   environments   StoryEnvironment[]
@@ -748,6 +805,7 @@ model StoryProject {
   chapters       StoryChapter[]
   characterMemory StoryCharacterMemory[]
   sceneSeeds     StorySceneSeed[]
+  sequences      StorySequence[]
   academySubmissions AcademySubmission[]
 
   createdAt      DateTime           @default(now())
@@ -1096,6 +1154,7 @@ model StorySceneSeed {
   characters     Json?
   prompts        StoryScenePrompt[]
   assets         StorySceneAsset[]
+  sequenceScenes StorySequenceScene[]
   promptFeedback PromptQualityFeedback[]
   latestImageAssetId String?
   activeImageAssetId String?
@@ -1141,6 +1200,8 @@ model StorySceneAsset {
   isFavorite      Boolean               @default(false)
   selectedForStorybookAt DateTime?
   deletedAt       DateTime?
+  selectedInSequenceScenes StorySequenceScene[] @relation("SequenceSelectedAsset")
+  futureVideoSequenceScenes StorySequenceScene[] @relation("SequenceFutureVideoAsset")
 
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -1155,6 +1216,84 @@ model StorySceneAsset {
   @@index([creativeStatus])
   @@index([criticScore])
   @@map("story_scene_assets")
+}
+
+model StorySequence {
+  id                   String              @id @default(cuid())
+  projectId            String
+  project              StoryProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title                String
+  status               StorySequenceStatus @default(DRAFT)
+  runtimeSeconds       Float               @default(0)
+  currentVersionNumber Int                 @default(0)
+
+  scenes               StorySequenceScene[]
+  versions             SequenceVersion[]
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([projectId, updatedAt])
+  @@map("story_sequences")
+}
+
+model StorySequenceScene {
+  id                         String                 @id @default(cuid())
+  sequenceId                 String
+  sequence                   StorySequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  storySceneId               String
+  storyScene                 StorySceneSeed         @relation(fields: [storySceneId], references: [id], onDelete: Cascade)
+  sourceSequenceSceneId      String?
+
+  orderIndex                 Int
+  enabled                    Boolean                @default(true)
+  durationSeconds            Float                  @default(4)
+  selectedAssetId            String?
+  selectedAsset              StorySceneAsset?       @relation("SequenceSelectedAsset", fields: [selectedAssetId], references: [id], onDelete: SetNull)
+  futureVideoAssetId         String?
+  futureVideoAsset           StorySceneAsset?       @relation("SequenceFutureVideoAsset", fields: [futureVideoAssetId], references: [id], onDelete: SetNull)
+  shotType                   SequenceShotType?
+  cameraMovement             SequenceCameraMovement?
+  cameraSpeed                SequenceCameraSpeed?
+  cameraSpeedMultiplier      Float?
+  transition                 SequenceTransitionType?
+  transitionDurationSeconds  Float?
+  holdDurationSeconds        Float?
+  zoom                       Float?
+  creativeNotes              String?
+
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+
+  @@index([sequenceId])
+  @@index([storySceneId])
+  @@index([sequenceId, orderIndex])
+  @@index([selectedAssetId])
+  @@map("story_sequence_scenes")
+}
+
+model SequenceVersion {
+  id                   String        @id @default(cuid())
+  sequenceId           String
+  sequence             StorySequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  versionNumber        Int
+  title                String
+  snapshot             Json
+  filmBlueprint        Json?
+  runtimeSeconds       Float         @default(0)
+  createdById          String
+  notes                String?
+
+  createdAt            DateTime      @default(now())
+
+  @@unique([sequenceId, versionNumber])
+  @@index([sequenceId])
+  @@index([createdById])
+  @@map("sequence_versions")
 }
 
 model CreativeCriticRun {

@@ -104,6 +104,64 @@ export const adminRouter = router({
     };
   }),
 
+  sequenceAnalytics: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const [sequences, sequenceScenes, versionCount, transitionUsage, cameraUsage, projectsWithSequences] = await Promise.all([
+        (ctx.prisma as any).storySequence.findMany({
+          where: { createdAt: { gte: since } },
+          select: { id: true, projectId: true, runtimeSeconds: true, status: true, currentVersionNumber: true, createdAt: true },
+        }),
+        (ctx.prisma as any).storySequenceScene.findMany({
+          where: { sequence: { createdAt: { gte: since } } },
+          select: { durationSeconds: true, enabled: true },
+        }),
+        (ctx.prisma as any).sequenceVersion.count({ where: { createdAt: { gte: since } } }),
+        (ctx.prisma as any).storySequenceScene.groupBy({
+          by: ['transition'],
+          where: { sequence: { createdAt: { gte: since } } },
+          _count: { id: true },
+        }),
+        (ctx.prisma as any).storySequenceScene.groupBy({
+          by: ['cameraMovement'],
+          where: { sequence: { createdAt: { gte: since } } },
+          _count: { id: true },
+        }),
+        (ctx.prisma as any).storySequence.groupBy({
+          by: ['projectId'],
+          where: { createdAt: { gte: since } },
+          _count: { id: true },
+        }),
+      ]);
+
+      const enabledScenes = sequenceScenes.filter((scene: any) => scene.enabled);
+      const totalRuntime = sequences.reduce((sum: number, sequence: any) => sum + (sequence.runtimeSeconds ?? 0), 0);
+      const completedSequences = sequences.filter((sequence: any) => sequence.currentVersionNumber > 0 || sequence.status === 'LOCKED').length;
+      const runtimeHistogram = [
+        { label: '0-30s', count: sequences.filter((sequence: any) => sequence.runtimeSeconds <= 30).length },
+        { label: '31-60s', count: sequences.filter((sequence: any) => sequence.runtimeSeconds > 30 && sequence.runtimeSeconds <= 60).length },
+        { label: '61-120s', count: sequences.filter((sequence: any) => sequence.runtimeSeconds > 60 && sequence.runtimeSeconds <= 120).length },
+        { label: '120s+', count: sequences.filter((sequence: any) => sequence.runtimeSeconds > 120).length },
+      ];
+
+      return {
+        rangeDays: input.days,
+        sequenceCount: sequences.length,
+        projectsWithSequences: projectsWithSequences.length,
+        averageRuntime: sequences.length ? totalRuntime / sequences.length : 0,
+        averageActiveShotCount: sequences.length ? enabledScenes.length / sequences.length : 0,
+        averageShotDuration: enabledScenes.length ? enabledScenes.reduce((sum: number, scene: any) => sum + scene.durationSeconds, 0) / enabledScenes.length : 0,
+        activeShotCount: enabledScenes.length,
+        totalTimelineEntries: sequenceScenes.length,
+        versionCount,
+        sequenceCompletionRate: sequences.length ? completedSequences / sequences.length : 0,
+        runtimeHistogram,
+        transitionUsage: transitionUsage.map((item: any) => ({ transition: item.transition ?? 'NONE', count: item._count.id })),
+        cameraUsage: cameraUsage.map((item: any) => ({ cameraMovement: item.cameraMovement ?? 'NONE', count: item._count.id })),
+      };
+    }),
+
   storyAnalytics: adminProcedure
     .input(z.object({ days: z.number().int().min(1).max(180).default(30) }))
     .query(async ({ ctx, input }) => {

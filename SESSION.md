@@ -1254,3 +1254,76 @@ Production state:
 Decision:
 
 - GO for controlled production deployment of Phase 8B/8B.1/8B.2 after committing the Storybook rejection fix with the Phase 8B files.
+
+### 2026-08-23: Phase 9A Sequence Workspace and Timeline Editor
+
+Implemented Phase 9A locally in clean isolated worktree `C:\Raiv\raivstream-phase9a-current` on branch `codex/phase-9a-sequence-workspace-current`, based on `origin/main` commit `f2ed6b467bd03d4fa33b91f1afd0b6b3322c9205`.
+
+Added:
+
+- Additive migration `20260823090000_sequence_workspace_phase9a`.
+- Prisma enums: `StorySequenceStatus`, `SequenceShotType`, `SequenceCameraMovement`, `SequenceCameraSpeed`, `SequenceTransitionType`.
+- Prisma models: `StorySequence`, `StorySequenceScene`, `SequenceVersion`.
+- `StoryProject.lastWorkspaceTab` for Continue/Resume.
+- Pure sequence planning helpers for duration bounds, transition/hold semantics, asset eligibility, duplicate-safe reorder, snapshots, runtime, and Film Blueprint serialization.
+- Story router procedures:
+  - `story.getOrCreateSequence`
+  - `story.getSequence`
+  - `story.updateSequence`
+  - `story.reorderSequence`
+  - `story.updateSequenceScene`
+  - `story.duplicateSequenceScene`
+  - `story.removeSequenceScene`
+  - `story.restoreSourceSceneToSequence`
+  - `story.createSequenceVersion`
+  - `story.listSequenceVersions`
+  - `story.restoreSequenceVersion`
+  - `story.duplicateSequenceVersion`
+  - `story.trackSequenceAnalytics`
+- Non-R16 Story Workspace `Sequence` tab with timeline, drag/drop reorder, duplicate, enable/disable, remove, restore source scene, inspector, independent image selection, duration, hold, shot type, camera movement/speed/multiplier, transition/duration, zoom-ready data, notes, runtime panel, Film Blueprint summary, timed storyboard animatic preview, and version save/restore/duplicate.
+- `/admin/sequence` aggregate insights page.
+- Sequence analytics events.
+- Documentation:
+  - `ROADMAP.md`
+  - `docs/architecture/story-sequence-workspace.md`
+  - `docs/adr/0001-sequence-workspace-canonical-edl.md`
+  - `docs/operations/phase-9a-staging-smoke.md`
+
+Runtime semantics:
+
+- Runtime equals enabled shot duration plus explicit hold time.
+- Transition duration is planning metadata and does not add runtime because transitions overlap adjacent shots.
+
+Important boundaries:
+
+- `StorySequenceScene` references `StorySceneSeed`; it does not duplicate source story scenes.
+- Duplicating a timeline item duplicates the sequence entry only.
+- Sequence asset selection is independent from Storybook active image and Asset Manager state.
+- R16 cannot open sequence APIs or see the Sequence tab.
+- No Movie Builder, FFmpeg, movie stitching, image-to-video generation, narration, voice generation, read-aloud, soundtrack generation, subtitle generation, publishing, marketplace, AI Film Mentor, or Academy expansion was added.
+- Production was not deployed.
+
+Verification completed so far:
+
+- `pnpm install --frozen-lockfile` completed after `corepack prepare pnpm@8.15.0 --activate`; `corepack enable` printed an EPERM warning for `C:\Program Files\nodejs\pnpx`, but pnpm 8.15.0 was prepared and install completed.
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/database exec prisma validate` passed.
+- `pnpm --filter @raivstream/api test` passed: 7 files, 30 tests.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URLs, strong local-only JWT secrets, and read-aloud disabled.
+
+Staging status:
+
+- Phase 9A.1 staging qualification completed on the VPS using the established `raivstream` SSH alias and isolated checkout `/root/raivstream-phase9a-staging`.
+- Staging DB used dedicated container `raivstream-phase9a-supabase-postgres`, host port `127.0.0.1:55484`, database `raivstream_phase9a_pg`.
+- Backup created before migration testing: `/root/raivstream/backups/pre_phase_9a_sequence_20260823-125435.sql`, SHA256 `0cd37b08272b3d6b68b3c3ccfc3f323fcdb26421bed5c770fdd9877c2f25df55`.
+- Migration `20260823090000_sequence_workspace_phase9a` applied successfully to staging; second deploy was idempotent.
+- Full staging gate passed after the version-number regression fix: Prisma validate/generate, API type-check, web type-check, strict web lint, API tests, clean web build.
+- API tests now pass: 7 files, 31 tests.
+- Functional smoke used project `cms2bqa710005fq5por678ekh` (`Buddy Goes to School`) and sequence `cmt5pfxjf000er1ib8dody63t`.
+- Smoke verified sequence creation, idempotency, asset independence, asset safety, reorder, duplicate, disable, remove/restore, runtime calculation, shot/camera/transition metadata, version restore/duplicate, Film Blueprint, authorization, R16 blocking, admin analytics, and production health.
+- Defect found and fixed: duplicate-version creation after restoring an older version now uses max existing `versionNumber` + 1 instead of `currentVersionNumber` + 1.
+- Qualification report: `docs/operations/phase-9a-staging-qualification.md`.
+- Decision: GO for controlled production release. Production was not deployed during staging qualification.
