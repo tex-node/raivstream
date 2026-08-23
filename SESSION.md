@@ -1327,3 +1327,17 @@ Staging status:
 - Defect found and fixed: duplicate-version creation after restoring an older version now uses max existing `versionNumber` + 1 instead of `currentVersionNumber` + 1.
 - Qualification report: `docs/operations/phase-9a-staging-qualification.md`.
 - Decision: GO for controlled production release. Production was not deployed during staging qualification.
+
+Production release:
+
+- Release commit `f5529bbe8c0d968cc2b5e16d9fc1de97ec8b8768` (`Add Sequence Workspace and film blueprint`) was pushed to `origin/main`.
+- Fresh production backup created before migration: `/root/raivstream/backups/pre_phase_9a_sequence_20260823-160354.sql`, size `1362206` bytes, SHA256 `25e757764a372b76f2b49375d783fb04c58c2bb4edcc49f3b6afb7e810b1955e`.
+- Production migration deploy completed and was idempotent on rerun.
+- Production gate passed under `/tmp/raivstream-deploy.lock`: Prisma migrate/validate/generate, API type-check, web type-check, strict web lint, API tests, clean web build, PM2 restart, app health, and R16 health.
+- Production API tests passed: 7 files, 31 tests.
+- Deployed production commit: `f5529bbe8c0d968cc2b5e16d9fc1de97ec8b8768`.
+- Controlled production smoke created dedicated project `cmt5vv7of0003ahd2ww73n4ed` and sequence `cmt5vv7s10016ahd24e8dgn54`.
+- Production smoke verified sequence initialization, idempotency, reorder, duplicate without source scene duplication, disable/runtime update, timing metadata, shot/camera/transition metadata, asset independence, version restore, version-number allocation `1,2,3`, Film Blueprint provider-free contract, cross-user denial, R16 API denial, ADMIN-only sequence analytics, and route health.
+- R16 page smoke found no Sequence/Timeline/Film Blueprint/Camera Movement/Version History labels.
+- Phase 9A status: PRODUCTION COMPLETE.
+- Phase 9B was not started.

@@ -23,7 +23,7 @@ Phase 8B Creative Critic is production-complete. Phase 8B.2 staging qualificatio
 
 ## Phase 9A: Sequence Workspace and Timeline Editor
 
-Status: staging-qualified, ready for controlled production release.
+Status: PRODUCTION COMPLETE.
 
 Phase 9A introduces a filmmaking workspace:
 
@@ -48,7 +48,6 @@ Explicitly out of scope:
 
 ## Next Candidate Phases
 
-1. Phase 9A controlled production release.
-2. Phase 9B Movie Builder design and render-pricing contract.
-3. Phase 9C controlled scene video generation from approved sequence entries.
-4. Phase 9D server-side movie assembly after source clips prove stable.
+1. Phase 9B Movie Builder design and render-pricing contract.
+2. Phase 9C controlled scene video generation from approved sequence entries.
+3. Phase 9D server-side movie assembly after source clips prove stable.
