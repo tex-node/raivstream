@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, GripVertical, Heart, ImagePlus, Loader2, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, X } from 'lucide-react';
+import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, Download, GripVertical, Heart, ImagePlus, Loader2, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'storybook' | 'insights';
+type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'film' | 'storybook' | 'insights';
 
 type Asset = {
   id: string;
@@ -133,6 +133,35 @@ type SequenceData = {
   };
 };
 
+type MovieRenderJob = {
+  id: string;
+  status: string;
+  progressPercent: number;
+  currentStage: string | null;
+  renderPlanHash: string;
+  creditsCharged: number;
+  errorMessage: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  movieAsset?: MovieAsset | null;
+  events?: Array<{ id: string; eventName: string; stage: string | null; progressPercent: number | null; message: string | null; createdAt: string | Date }>;
+};
+
+type MovieAsset = {
+  id: string;
+  versionNumber: number;
+  status: string;
+  publicUrl: string | null;
+  width: number;
+  height: number;
+  durationSeconds: number;
+  fps: number;
+  fileSizeBytes: number | null;
+  checksum: string | null;
+  isCurrent: boolean;
+  createdAt: string | Date;
+};
+
 const TABS: Array<{ key: WorkspaceTab; label: string; r16Label: string; hideOnR16?: boolean }> = [
   { key: 'overview', label: 'Overview', r16Label: 'My Story' },
   { key: 'story', label: 'Story', r16Label: 'Story' },
@@ -140,6 +169,7 @@ const TABS: Array<{ key: WorkspaceTab; label: string; r16Label: string; hideOnR1
   { key: 'scenes', label: 'Scenes', r16Label: 'Picture Cards' },
   { key: 'assets', label: 'Assets', r16Label: 'Pictures' },
   { key: 'sequence', label: 'Sequence', r16Label: 'Sequence', hideOnR16: true },
+  { key: 'film', label: 'Film', r16Label: 'Film', hideOnR16: true },
   { key: 'storybook', label: 'Storybook', r16Label: 'Read Book' },
 ];
 
@@ -281,6 +311,16 @@ export default function StoryWorkspacePage() {
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'sequence') },
   );
+  const movieBuilderQuery = trpc.story.getMovieBuilder.useQuery(
+    { projectId },
+    {
+      enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'film'),
+      refetchInterval: (query) => {
+        const history = ((query.state.data as any)?.history ?? []) as MovieRenderJob[];
+        return history.some((job) => ['QUEUED', 'PREPARING', 'RENDERING_SHOTS', 'ASSEMBLING', 'ENCODING', 'UPLOADING'].includes(job.status)) ? 2500 : false;
+      },
+    },
+  );
   const academyAssignment = trpc.academy.getWorkspaceAssignmentContext.useQuery(
     { assignmentId: academyAssignmentId ?? '', projectId },
     { enabled: Boolean(isLoaded && isSignedIn && academyAssignmentId && !isR16) },
@@ -313,6 +353,10 @@ export default function StoryWorkspacePage() {
   const restoreSequenceVersion = trpc.story.restoreSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version restored.') });
   const duplicateSequenceVersion = trpc.story.duplicateSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version duplicated.') });
   const trackSequenceAnalytics = trpc.story.trackSequenceAnalytics.useMutation();
+  const createMovieRender = trpc.story.createMovieRender.useMutation({ onSuccess: () => refreshMovie('Movie render started.') });
+  const retryMovieRender = trpc.story.retryMovieRender.useMutation({ onSuccess: () => refreshMovie('Movie render queued again.') });
+  const cancelMovieRender = trpc.story.cancelMovieRender.useMutation({ onSuccess: () => refreshMovie('Movie render cancelled.') });
+  const setCurrentMovie = trpc.story.setCurrentMovie.useMutation({ onSuccess: () => refreshMovie('Current movie updated.') });
 
   function refresh(nextMessage: string) {
     setMessage(nextMessage);
@@ -327,9 +371,15 @@ export default function StoryWorkspacePage() {
     utils.story.getWorkspace.invalidate({ projectId });
   }
 
+  function refreshMovie(nextMessage: string) {
+    setMessage(nextMessage);
+    utils.story.getMovieBuilder.invalidate({ projectId });
+    utils.story.listMovieRenders.invalidate({ projectId });
+  }
+
   useEffect(() => {
     if (requestedTab && visibleTabs.some((item) => item.key === requestedTab)) setTab(requestedTab);
-    if (isR16 && requestedTab === 'sequence') setTab('storybook');
+    if (isR16 && (requestedTab === 'sequence' || requestedTab === 'film')) setTab('storybook');
   }, [requestedTab, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -337,6 +387,7 @@ export default function StoryWorkspacePage() {
     trackTab.mutate({ projectId, tab });
     if (tab === 'assets') utils.story.getWorkspace.invalidate({ projectId });
     if (tab === 'sequence' && !isR16) utils.story.getOrCreateSequence.invalidate({ projectId });
+    if (tab === 'film' && !isR16) utils.story.getMovieBuilder.invalidate({ projectId });
   }, [tab, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -380,7 +431,7 @@ export default function StoryWorkspacePage() {
   const canUseTechnical = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
 
   const chooseTab = (nextTab: WorkspaceTab) => {
-    if (isR16 && nextTab === 'sequence') return;
+    if (isR16 && (nextTab === 'sequence' || nextTab === 'film')) return;
     setTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', nextTab);
@@ -992,6 +1043,124 @@ export default function StoryWorkspacePage() {
     );
   };
 
+  const renderFilm = () => {
+    if (isR16) return null;
+    if (movieBuilderQuery.isLoading) return <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 font-bold text-[#9397ab]">Loading Movie Builder...</section>;
+    if (movieBuilderQuery.error) return <section className="rounded-2xl border border-[rgba(217,70,168,0.20)] bg-[rgba(217,70,168,0.06)] p-8 font-bold text-[#f0a3d4]">{movieBuilderQuery.error.message}</section>;
+    const data = movieBuilderQuery.data as any;
+    const readiness = data?.readiness;
+    const history = ((data?.history ?? []) as MovieRenderJob[]).slice();
+    const currentMovie = data?.currentMovie as MovieAsset | null | undefined;
+    const activeJob = history.find((job) => ['QUEUED', 'PREPARING', 'RENDERING_SHOTS', 'ASSEMBLING', 'ENCODING', 'UPLOADING'].includes(job.status));
+    const latestReady = currentMovie ?? history.find((job) => job.movieAsset?.publicUrl)?.movieAsset ?? null;
+    const canRender = Boolean(readiness?.ready) && !activeJob && !createMovieRender.isPending;
+
+    return (
+      <section className="space-y-5">
+        <div className="rounded-2xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.10)] p-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#ffcf4a]">Movie Builder</p>
+              <h2 className="mt-1 text-3xl font-black text-[#F7F8FC]">Render Story Movie</h2>
+              <p className="mt-2 max-w-3xl text-sm font-semibold text-[#9397ab]">Build a deterministic MP4 from the saved Film Blueprint and selected scene pictures. No AI video, narration, music, publishing, or provider rendering is used here.</p>
+            </div>
+            <button
+              onClick={() => createMovieRender.mutate({ projectId, sequenceId: data?.sequenceId ?? undefined })}
+              disabled={!canRender}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {createMovieRender.isPending || activeJob ? <Loader2 className="animate-spin" size={18} /> : <Clapperboard size={18} />}
+              {activeJob ? 'Rendering...' : `Build Movie${data?.creditCost ? ` — ${data.creditCost} credits` : ''}`}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
+            <div className="overflow-hidden rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)]">
+              <div className="border-b border-[rgba(233,233,237,0.08)] px-5 py-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Movie Preview</p>
+                <h3 className="mt-1 text-2xl font-black text-[#F7F8FC]">{latestReady?.publicUrl ? `Version ${latestReady.versionNumber}` : 'No rendered movie yet'}</h3>
+              </div>
+              <div className="bg-black p-5">
+                <div className="mx-auto aspect-[9/16] max-h-[72vh] overflow-hidden rounded-2xl bg-black">
+                  {latestReady?.publicUrl ? (
+                    <video src={latestReady.publicUrl} controls className="h-full w-full object-contain" />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 text-[#9397ab]">
+                      <Clapperboard size={48} />
+                      <p className="text-sm font-black">Render a movie to preview it here.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {latestReady?.publicUrl && (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                  <div className="text-sm font-bold text-[#9397ab]">
+                    {formatRuntime(latestReady.durationSeconds)} | {latestReady.width}x{latestReady.height} | {latestReady.fps} fps
+                  </div>
+                  <a href={latestReady.publicUrl} download className="inline-flex items-center gap-2 rounded-xl bg-[rgba(233,233,237,0.08)] border border-[rgba(233,233,237,0.10)] px-4 py-2 text-sm font-black text-[#F7F8FC]"><Download size={16} />Download MP4</a>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Render History</p>
+              <div className="mt-4 space-y-3">
+                {history.length === 0 ? <p className="rounded-xl border border-dashed border-[rgba(233,233,237,0.10)] p-5 text-sm font-bold text-[#9397ab]">No movie renders yet.</p> : history.map((job) => (
+                  <article key={job.id} className="rounded-2xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.04)] p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Render {job.id.slice(-6)}</p>
+                        <h4 className="text-xl font-black text-[#F7F8FC]">{label(job.status)}</h4>
+                        <p className="mt-1 text-sm font-bold text-[#9397ab]">{job.currentStage ? label(job.currentStage) : 'Queued'} | {dateLabel(job.createdAt)}</p>
+                        {job.errorMessage && <p className="mt-2 rounded-xl border border-[rgba(217,70,168,0.20)] bg-[rgba(217,70,168,0.06)] p-3 text-sm font-bold text-[#f0a3d4]">{job.errorMessage}</p>}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {job.movieAsset?.publicUrl && !job.movieAsset.isCurrent && <button onClick={() => setCurrentMovie.mutate({ projectId, movieAssetId: job.movieAsset!.id })} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.06)] px-3 py-2 text-xs font-black text-[#b5abfc]">Use This</button>}
+                        {['FAILED', 'CANCELLED'].includes(job.status) && <button onClick={() => retryMovieRender.mutate({ projectId, renderJobId: job.id })} disabled={retryMovieRender.isPending} className="rounded-xl bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[#b5abfc]">Retry</button>}
+                        {['QUEUED', 'PREPARING'].includes(job.status) && <button onClick={() => cancelMovieRender.mutate({ projectId, renderJobId: job.id })} disabled={cancelMovieRender.isPending} className="rounded-xl bg-[rgba(217,70,168,0.08)] px-3 py-2 text-xs font-black text-[#f0a3d4]">Cancel</button>}
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[rgba(233,233,237,0.08)]">
+                      <div className="h-full rounded-full bg-[#2fbf71]" style={{ width: `${Math.min(100, Math.max(0, job.progressPercent ?? 0))}%` }} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Preflight</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm font-black">
+                <div className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.08)] p-3"><p className="text-[#9397ab]">Shots</p><p className="text-2xl text-[#F7F8FC]">{readiness?.shotCount ?? 0}</p></div>
+                <div className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.08)] p-3"><p className="text-[#9397ab]">Runtime</p><p className="text-2xl text-[#F7F8FC]">{formatRuntime(readiness?.runtimeSeconds ?? 0)}</p></div>
+                <div className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.08)] p-3"><p className="text-[#9397ab]">Output</p><p className="text-2xl text-[#F7F8FC]">9:16</p></div>
+                <div className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.08)] p-3"><p className="text-[#9397ab]">Credits</p><p className="text-2xl text-[#F7F8FC]">{data?.creditCost ?? 0}</p></div>
+              </div>
+              <div className={`mt-3 rounded-xl p-3 text-sm font-bold ${readiness?.ready ? 'bg-[rgba(47,191,113,0.12)] text-[#2fbf71]' : 'bg-[rgba(217,70,168,0.08)] text-[#f0a3d4]'}`}>
+                {readiness?.ready ? 'Ready to render from selected pictures.' : 'Fix the sequence picture selections before rendering.'}
+              </div>
+              {(readiness?.warnings ?? []).length > 0 && <div className="mt-3 space-y-2">{readiness.warnings.map((warning: string) => <p key={warning} className="rounded-xl bg-[rgba(255,207,74,0.08)] p-3 text-xs font-black text-[#ffcf4a]">{warning}</p>)}</div>}
+            </div>
+
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Render Plan</p>
+              <div className="mt-3 space-y-2 text-sm font-bold text-[#9397ab]">
+                <p>Renderer: <span className="text-[#F7F8FC]">{data?.renderPlan?.rendererVersion ?? 'Not ready'}</span></p>
+                <p>Hash: <span className="break-all text-[#F7F8FC]">{data?.renderPlanHash ?? 'No render plan'}</span></p>
+                <p>Video: <span className="text-[#F7F8FC]">720x1280 MP4, 30 fps</span></p>
+                <p>Audio: <span className="text-[#F7F8FC]">None</span></p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0B0D14] text-[#F7F8FC]">
       <Navbar />
@@ -1016,6 +1185,7 @@ export default function StoryWorkspacePage() {
           {tab === 'scenes' && renderScenes()}
           {tab === 'assets' && renderAssets()}
           {tab === 'sequence' && renderSequence()}
+          {tab === 'film' && renderFilm()}
           {tab === 'storybook' && <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center"><BookOpen className="mx-auto text-[#b5abfc]" size={48} /><h2 className="mt-3 text-3xl font-black text-[#F7F8FC]">{isR16 ? 'Read your book' : 'Storybook'}</h2><p className="mt-2 font-semibold text-[#9397ab]">{isR16 ? 'Open the book with your chosen pictures.' : 'Storybook uses the active image for each scene, then latest image as fallback.'}</p><Link href={`/story-playground/${projectId}/storybook`} className="mt-5 inline-block rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[#F7F8FC]">{isR16 ? 'Read Book' : 'Open Storybook'}</Link></section>}
         </div>
       </main>

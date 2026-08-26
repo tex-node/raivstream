@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { router, adminProcedure, moderatorProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
+import { ffmpegAvailable } from '../lib/movieRenderWorker';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -159,6 +160,85 @@ export const adminRouter = router({
         runtimeHistogram,
         transitionUsage: transitionUsage.map((item: any) => ({ transition: item.transition ?? 'NONE', count: item._count.id })),
         cameraUsage: cameraUsage.map((item: any) => ({ cameraMovement: item.cameraMovement ?? 'NONE', count: item._count.id })),
+      };
+    }),
+
+  movieRenderDiagnostics: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30), limit: z.number().int().min(5).max(100).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const [jobs, jobsByStatus, assets, recentEvents, ffmpegReady] = await Promise.all([
+        (ctx.prisma as any).movieRenderJob.findMany({
+          where: { createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: input.limit,
+          include: {
+            project: { select: { id: true, title: true, audienceMode: true } },
+            movieAsset: true,
+          },
+        }),
+        (ctx.prisma as any).movieRenderJob.groupBy({
+          by: ['status'],
+          where: { createdAt: { gte: since } },
+          _count: { id: true },
+        }),
+        (ctx.prisma as any).movieAsset.findMany({
+          where: { createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: input.limit,
+        }),
+        (ctx.prisma as any).movieRenderEvent.findMany({
+          where: { createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: 80,
+        }),
+        ffmpegAvailable(),
+      ]);
+
+      const completed = jobs.filter((job: any) => job.status === 'READY' && job.startedAt && job.completedAt);
+      const failed = jobs.filter((job: any) => job.status === 'FAILED');
+      const averageRenderMs = completed.length
+        ? completed.reduce((sum: number, job: any) => sum + (new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()), 0) / completed.length
+        : null;
+      const totalBytes = assets.reduce((sum: number, asset: any) => sum + (asset.fileSizeBytes ?? 0), 0);
+
+      return {
+        rangeDays: input.days,
+        ffmpegReady,
+        totals: {
+          jobs: jobs.length,
+          ready: jobs.filter((job: any) => job.status === 'READY').length,
+          failed: failed.length,
+          active: jobs.filter((job: any) => ['QUEUED', 'PREPARING', 'RENDERING_SHOTS', 'ASSEMBLING', 'ENCODING', 'VERIFYING', 'UPLOADING'].includes(job.status)).length,
+          assets: assets.length,
+          totalBytes,
+          averageRenderMs,
+          failureRate: jobs.length ? failed.length / jobs.length : 0,
+        },
+        jobsByStatus: Object.fromEntries(jobsByStatus.map((item: any) => [item.status, item._count.id])),
+        recentJobs: jobs.map((job: any) => ({
+          id: job.id,
+          projectId: job.projectId,
+          projectTitle: job.project?.title ?? 'Story',
+          sequenceId: job.sequenceId,
+          status: job.status,
+          progressPercent: job.progressPercent,
+          currentStage: job.currentStage,
+          renderPlanHash: job.renderPlanHash,
+          creditsCharged: job.creditsCharged,
+          errorCode: job.errorCode,
+          errorMessage: job.errorMessage,
+          attemptCount: job.attemptCount,
+          rendererVersion: job.rendererVersion,
+          expectedDurationSeconds: job.movieAsset?.metadata?.verification?.expectedDurationSeconds ?? job.renderPlan?.runtimeSeconds ?? null,
+          actualDurationSeconds: job.movieAsset?.metadata?.verification?.actualDurationSeconds ?? null,
+          durationDeltaSeconds: job.movieAsset?.metadata?.verification?.durationDeltaSeconds ?? null,
+          durationToleranceSeconds: job.movieAsset?.metadata?.verification?.toleranceSeconds ?? null,
+          movieUrl: job.movieAsset?.publicUrl ?? null,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+        })),
+        recentEvents,
       };
     }),
 

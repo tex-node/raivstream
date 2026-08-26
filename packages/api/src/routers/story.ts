@@ -4,7 +4,7 @@ import { protectedProcedure, router } from '../trpc';
 import { moderatePrompt } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
+import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -35,6 +35,15 @@ import {
   sequenceRuntime,
   sequenceSnapshot,
 } from '../lib/sequencePlanning';
+import {
+  ACTIVE_MOVIE_RENDER_STATUSES,
+  MOVIE_RENDER_FEATURE_KEY,
+  buildMovieRenderPlan,
+  hashRenderPlan,
+  renderReadiness,
+  shouldReuseMovieRenderJob,
+} from '../lib/movieRenderPlanning';
+import { queueMovieRenderJob } from '../lib/movieRenderWorker';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -386,6 +395,60 @@ async function sequenceResponse(ctx: any, projectId: string, sequenceId?: string
     runtime,
     filmBlueprint,
   };
+}
+
+async function movieRenderContext(ctx: any, projectId: string, sequenceId?: string | null) {
+  const { project, sequence } = await getOrCreateSequence(ctx, projectId, sequenceId);
+  const filmBlueprint = buildFilmBlueprint({
+    sequenceId: sequence.id,
+    version: sequence.currentVersionNumber,
+    scenes: sequence.scenes,
+  });
+  const assetIds = filmBlueprint.shots
+    .filter((shot) => shot.enabled && shot.assetId)
+    .map((shot) => shot.assetId as string);
+  const assets = assetIds.length
+    ? await (ctx.prisma as any).storySceneAsset.findMany({
+      where: {
+        id: { in: assetIds },
+        projectId,
+        userId: ctx.user.id,
+        deletedAt: null,
+      },
+    })
+    : [];
+  const assetsById = new Map<string, any>(assets.map((asset: any) => [asset.id, asset]));
+  const plan = buildMovieRenderPlan({ filmBlueprint, assetsById });
+  const renderPlanHash = hashRenderPlan(plan);
+  const creditCost = await getFeatureCreditCost(ctx.prisma, MOVIE_RENDER_FEATURE_KEY);
+  const currentMovie = await (ctx.prisma as any).movieAsset.findFirst({
+    where: { projectId, sequenceId: sequence.id, status: 'READY', isCurrent: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return { project, sequence, filmBlueprint, plan, renderPlanHash, creditCost, currentMovie };
+}
+
+async function findReusableMovieRender(ctx: any, input: { projectId: string; sequenceId: string; renderPlanHash: string }) {
+  return (ctx.prisma as any).movieRenderJob.findFirst({
+    where: {
+      projectId: input.projectId,
+      sequenceId: input.sequenceId,
+      userId: ctx.user.id,
+      renderPlanHash: input.renderPlanHash,
+      status: { in: [...ACTIVE_MOVIE_RENDER_STATUSES, 'READY'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
+  });
+}
+
+async function movieRenderForUser(ctx: any, input: { projectId: string; renderJobId: string }) {
+  const job = await (ctx.prisma as any).movieRenderJob.findFirst({
+    where: { id: input.renderJobId, projectId: input.projectId, userId: ctx.user.id },
+    include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 50 } },
+  });
+  if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Movie render job not found' });
+  return job;
 }
 
 async function assertSequenceAsset(ctx: { prisma: any; user: { id: string } }, input: {
@@ -3458,6 +3521,221 @@ export const storyRouter = router({
           runtimeSeconds: input.properties?.runtimeSeconds,
         },
       });
+      return { ok: true };
+    }),
+
+  getMovieBuilder: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        const renderContext = await movieRenderContext(ctx, input.projectId, input.sequenceId);
+        const history = await (ctx.prisma as any).movieRenderJob.findMany({
+          where: { projectId: input.projectId, sequenceId: renderContext.sequence.id, userId: ctx.user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 8 } },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'movie_builder_opened',
+          projectId: input.projectId,
+          audienceMode: renderContext.project.audienceMode,
+          properties: { sequenceId: renderContext.sequence.id },
+        });
+        return {
+          sequenceId: renderContext.sequence.id,
+          filmBlueprint: renderContext.filmBlueprint,
+          renderPlan: renderContext.plan,
+          renderPlanHash: renderContext.renderPlanHash,
+          readiness: renderReadiness(renderContext.plan),
+          creditCost: renderContext.creditCost,
+          currentMovie: renderContext.currentMovie,
+          history,
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        return {
+          sequenceId: input.sequenceId ?? null,
+          filmBlueprint: null,
+          renderPlan: null,
+          renderPlanHash: null,
+          readiness: {
+            ready: false,
+            shotCount: 0,
+            runtimeSeconds: 0,
+            warnings: [error instanceof Error ? error.message : 'Movie render preflight failed.'],
+          },
+          creditCost: 0,
+          currentMovie: null,
+          history: [],
+        };
+      }
+    }),
+
+  createMovieRender: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const renderContext = await movieRenderContext(ctx, input.projectId, input.sequenceId);
+      const reusable = await findReusableMovieRender(ctx, {
+        projectId: input.projectId,
+        sequenceId: renderContext.sequence.id,
+        renderPlanHash: renderContext.renderPlanHash,
+      });
+      if (shouldReuseMovieRenderJob(reusable, renderContext.renderPlanHash)) {
+        await trackStoryAnalytics(ctx, {
+          event: 'movie_render_reused',
+          projectId: input.projectId,
+          audienceMode: renderContext.project.audienceMode,
+          properties: { sequenceId: renderContext.sequence.id, renderJobId: reusable.id, status: reusable.status },
+        });
+        return { job: reusable, reused: true };
+      }
+
+      const job = await (ctx.prisma as any).$transaction(async (tx: any) => tx.movieRenderJob.create({
+        data: {
+          projectId: input.projectId,
+          sequenceId: renderContext.sequence.id,
+          userId: ctx.user.id,
+          status: 'QUEUED',
+          filmBlueprintSnapshot: renderContext.filmBlueprint,
+          renderPlan: renderContext.plan,
+          renderPlanHash: renderContext.renderPlanHash,
+          rendererVersion: renderContext.plan.rendererVersion,
+          creditsReserved: renderContext.creditCost,
+          creditsCharged: 0,
+          events: {
+            create: {
+              eventName: 'movie_render_queued',
+              stage: 'queued',
+              progressPercent: 0,
+              metadata: { renderPlanHash: renderContext.renderPlanHash, creditCost: renderContext.creditCost },
+            },
+          },
+        },
+        include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
+      }));
+
+      if (renderContext.creditCost > 0) {
+        try {
+          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render');
+          await (ctx.prisma as any).movieRenderJob.update({
+            where: { id: job.id },
+            data: { creditsCharged: charged },
+          });
+        } catch (error) {
+          await (ctx.prisma as any).movieRenderJob.update({
+            where: { id: job.id },
+            data: {
+              status: 'FAILED',
+              currentStage: 'credit_check_failed',
+              failedAt: new Date(),
+              errorCode: 'MOVIE_RENDER_CREDIT_FAILED',
+              errorMessage: error instanceof Error ? error.message.slice(0, 1000) : 'Movie render credit check failed.',
+            },
+          });
+          throw error;
+        }
+      }
+
+      await trackStoryAnalytics(ctx, {
+        event: 'movie_render_started',
+        projectId: input.projectId,
+        audienceMode: renderContext.project.audienceMode,
+        properties: {
+          sequenceId: renderContext.sequence.id,
+          renderJobId: job.id,
+          renderPlanHash: renderContext.renderPlanHash,
+          shotCount: renderContext.plan.shots.length,
+          runtimeSeconds: renderContext.plan.runtimeSeconds,
+          credits: renderContext.creditCost,
+        },
+      });
+      queueMovieRenderJob(ctx.prisma, job.id);
+      return { job: await movieRenderForUser(ctx, { projectId: input.projectId, renderJobId: job.id }), reused: false };
+    }),
+
+  getMovieRender: protectedProcedure
+    .input(z.object({ projectId: z.string(), renderJobId: z.string() }))
+    .query(async ({ ctx, input }) => movieRenderForUser(ctx, input)),
+
+  listMovieRenders: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      return (ctx.prisma as any).movieRenderJob.findMany({
+        where: { projectId: input.projectId, sequenceId: sequence.id, userId: ctx.user.id },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 8 } },
+      });
+    }),
+
+  retryMovieRender: protectedProcedure
+    .input(z.object({ projectId: z.string(), renderJobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await movieRenderForUser(ctx, input);
+      if (!['FAILED', 'CANCELLED'].includes(job.status)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only failed or cancelled movie renders can be retried.' });
+      }
+      const updated = await (ctx.prisma as any).movieRenderJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'QUEUED',
+          progressPercent: 0,
+          currentStage: 'queued_for_retry',
+          failedAt: null,
+          cancelledAt: null,
+          errorCode: null,
+          errorMessage: null,
+          events: { create: { eventName: 'movie_render_retry_queued', stage: 'queued_for_retry', progressPercent: 0 } },
+        },
+        include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'movie_render_retried',
+        projectId: input.projectId,
+        properties: { sequenceId: job.sequenceId, renderJobId: job.id },
+      });
+      queueMovieRenderJob(ctx.prisma, job.id);
+      return updated;
+    }),
+
+  cancelMovieRender: protectedProcedure
+    .input(z.object({ projectId: z.string(), renderJobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await movieRenderForUser(ctx, input);
+      if (['READY', 'FAILED', 'CANCELLED'].includes(job.status)) return job;
+      if (!['QUEUED', 'PREPARING'].includes(job.status)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This render is already running and cannot be cancelled safely in Phase 9B.1.' });
+      }
+      const updated = await (ctx.prisma as any).movieRenderJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'CANCELLED',
+          currentStage: 'cancelled',
+          progressPercent: 100,
+          cancelledAt: new Date(),
+          events: { create: { eventName: 'movie_render_cancelled', stage: 'cancelled', progressPercent: 100 } },
+        },
+        include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
+      });
+      if (job.creditsCharged > 0) {
+        await refundCredits(ctx.prisma, ctx.user.id, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render cancelled');
+        await (ctx.prisma as any).movieRenderJob.update({ where: { id: job.id }, data: { creditsReserved: 0, creditsCharged: 0 } });
+      }
+      return updated;
+    }),
+
+  setCurrentMovie: protectedProcedure
+    .input(z.object({ projectId: z.string(), movieAssetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const asset = await (ctx.prisma as any).movieAsset.findFirst({
+        where: { id: input.movieAssetId, projectId: input.projectId, project: { userId: ctx.user.id }, status: 'READY' },
+      });
+      if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Movie asset not found' });
+      await (ctx.prisma as any).$transaction([
+        (ctx.prisma as any).movieAsset.updateMany({ where: { projectId: input.projectId, isCurrent: true }, data: { isCurrent: false } }),
+        (ctx.prisma as any).movieAsset.update({ where: { id: asset.id }, data: { isCurrent: true } }),
+      ]);
       return { ok: true };
     }),
 

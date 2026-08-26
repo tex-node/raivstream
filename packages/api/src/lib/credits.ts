@@ -27,6 +27,21 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   SEEDANCE:       'generate:seedance',       // 200 credits
 };
 
+export const STORY_MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
+
+export async function getFeatureCreditCost(
+  prisma: PrismaClient,
+  featureKey: string,
+): Promise<number> {
+  const rate = await prisma.featureCreditRate.findUnique({
+    where:  { featureKey },
+    select: { creditsPerUnit: true, isActive: true },
+  });
+
+  if (!rate || !rate.isActive) return 0;
+  return rate.creditsPerUnit;
+}
+
 /**
  * Atomically deduct credits for a feature.
  * Throws PAYMENT_REQUIRED if the user has insufficient balance.

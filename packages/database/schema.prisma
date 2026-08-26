@@ -202,6 +202,25 @@ enum SequenceTransitionType {
   NONE
 }
 
+enum MovieRenderStatus {
+  QUEUED
+  PREPARING
+  RENDERING_SHOTS
+  ASSEMBLING
+  ENCODING
+  VERIFYING
+  UPLOADING
+  READY
+  FAILED
+  CANCELLED
+}
+
+enum MovieAssetStatus {
+  READY
+  ARCHIVED
+  FAILED
+}
+
 enum NotificationType {
   FOLLOW  // someone followed you
   LIKE    // someone liked your video
@@ -344,6 +363,7 @@ model User {
   subscriptions      Subscription[]
   refreshTokens      RefreshToken[]
   generationJobs     GenerationJob[]
+  movieRenderJobs    MovieRenderJob[]
   storyProjects       StoryProject[]
   academyCoursesOwned AcademyCourse[] @relation("AcademyCourseOwner")
   academyClassesInstructing AcademyClass[] @relation("AcademyClassInstructor")
@@ -806,6 +826,8 @@ model StoryProject {
   characterMemory StoryCharacterMemory[]
   sceneSeeds     StorySceneSeed[]
   sequences      StorySequence[]
+  movieRenderJobs MovieRenderJob[]
+  movieAssets     MovieAsset[]
   academySubmissions AcademySubmission[]
 
   createdAt      DateTime           @default(now())
@@ -1230,6 +1252,8 @@ model StorySequence {
 
   scenes               StorySequenceScene[]
   versions             SequenceVersion[]
+  movieRenderJobs      MovieRenderJob[]
+  movieAssets          MovieAsset[]
 
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -1294,6 +1318,99 @@ model SequenceVersion {
   @@index([sequenceId])
   @@index([createdById])
   @@map("sequence_versions")
+}
+
+model MovieRenderJob {
+  id                    String            @id @default(cuid())
+  projectId             String
+  project               StoryProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sequenceId            String
+  sequence              StorySequence     @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status                MovieRenderStatus @default(QUEUED)
+  filmBlueprintSnapshot Json
+  renderPlan            Json
+  renderPlanHash        String
+  rendererVersion       String            @default("phase-9b1-v1")
+  progressPercent       Int               @default(0)
+  currentStage          String?
+  attemptCount          Int               @default(0)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  failedAt              DateTime?
+  cancelledAt           DateTime?
+  errorCode             String?
+  errorMessage          String?
+  creditsReserved       Int               @default(0)
+  creditsCharged        Int               @default(0)
+
+  movieAsset            MovieAsset?
+  events                MovieRenderEvent[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([sequenceId])
+  @@index([userId])
+  @@index([status])
+  @@index([renderPlanHash])
+  @@index([createdAt])
+  @@map("movie_render_jobs")
+}
+
+model MovieAsset {
+  id              String           @id @default(cuid())
+  projectId       String
+  project         StoryProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sequenceId      String
+  sequence        StorySequence    @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  renderJobId     String           @unique
+  renderJob       MovieRenderJob   @relation(fields: [renderJobId], references: [id], onDelete: Cascade)
+
+  versionNumber   Int
+  status          MovieAssetStatus @default(READY)
+  storageProvider String           @default("R2")
+  storageKey      String
+  publicUrl       String?
+  mimeType        String           @default("video/mp4")
+  width           Int
+  height          Int
+  durationSeconds Float
+  fps             Int
+  fileSizeBytes   Int?
+  checksum        String?
+  isCurrent       Boolean          @default(false)
+  metadata        Json?
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+  @@index([sequenceId])
+  @@index([status])
+  @@index([isCurrent])
+  @@map("movie_assets")
+}
+
+model MovieRenderEvent {
+  id              String         @id @default(cuid())
+  renderJobId     String
+  renderJob       MovieRenderJob @relation(fields: [renderJobId], references: [id], onDelete: Cascade)
+  eventName       String
+  stage           String?
+  progressPercent Int?
+  message         String?
+  metadata        Json?
+  createdAt       DateTime       @default(now())
+
+  @@index([renderJobId])
+  @@index([eventName])
+  @@index([createdAt])
+  @@map("movie_render_events")
 }
 
 model CreativeCriticRun {

@@ -1341,3 +1341,82 @@ Production release:
 - R16 page smoke found no Sequence/Timeline/Film Blueprint/Camera Movement/Version History labels.
 - Phase 9A status: PRODUCTION COMPLETE.
 - Phase 9B was not started.
+
+### 2026-08-23: Phase 9B.1 Movie Builder Foundation and Deterministic Render Pipeline
+
+Implemented Phase 9B.1 locally in clean isolated worktree `C:\Raiv\raivstream-phase9b1-current` on branch `codex/phase-9b1-movie-builder`, based on production commit `3dadd703dc1403f00ddb46e415dc30a1aa20ba5b`.
+
+Added:
+
+- Additive migration `20260823170000_movie_builder_phase9b1`.
+- Prisma enums: `MovieRenderStatus`, `MovieAssetStatus`.
+- Prisma models: `MovieRenderJob`, `MovieAsset`, `MovieRenderEvent`.
+- `movieRenderPlanning` pure helpers for Phase 9A Film Blueprint consumption, selected-image resolution, deterministic render plan hashing, render readiness, transition normalization, and idempotent job reuse decisions.
+- `movieRenderWorker` server worker abstraction for FFmpeg-based still-image movie rendering, camera motion simulation, MP4 assembly, R2 upload, render events, READY/FAILED transitions, and credit refunds on platform failure.
+- Story router procedures:
+  - `story.getMovieBuilder`
+  - `story.createMovieRender`
+  - `story.getMovieRender`
+  - `story.listMovieRenders`
+  - `story.retryMovieRender`
+  - `story.cancelMovieRender`
+  - `story.setCurrentMovie`
+- Non-R16 Story Workspace `Film` tab with preflight, render plan summary, Build Movie, active progress polling, preview, download, render history, retry/cancel, and current-version selection.
+- `/admin/movie-renders` diagnostics page plus `admin.movieRenderDiagnostics`.
+- Story analytics event names for movie builder open/start/reuse/retry/completion/failure.
+- API tests for render planning determinism, asset eligibility, idempotent reuse, and worker READY transition using injected FFmpeg/R2 fakes.
+
+Runtime semantics:
+
+- Movie render consumes the Phase 9A Film Blueprint and stores a snapshot on `MovieRenderJob`.
+- Render hash is based on canonical blueprint, selected asset identities/URLs, and renderer defaults.
+- Repeated render requests for the same active or READY hash reuse the existing job/asset and do not charge credits again.
+- Rendering creates a new `MovieAsset` version and marks it current without changing `StorySceneSeed`, `StorySequenceScene`, `SequenceVersion`, Storybook image selection, Asset Manager active selections, or Creative Critic results.
+- Output target is deterministic portrait MP4: 720x1280, 30 fps, H.264, no audio.
+- Only still-image FFmpeg rendering was added. No AI image-to-video, RunPod video, Kling, Veo, Seedance, Wan, TTS, narration, soundtrack, subtitles, publishing, marketplace, read-aloud, or Academy expansion was added.
+- R16 cannot open movie render APIs or see the Film tab.
+
+Verification completed locally:
+
+- `pnpm install --frozen-lockfile` completed in the isolated worktree. `corepack enable` printed an EPERM warning for `C:\Program Files\nodejs\pnpm`, but install completed with the available pnpm and the lockfile.
+- `pnpm --filter @raivstream/database exec prisma validate` passed with local placeholder `DATABASE_URL` and `DIRECT_URL`.
+- `pnpm --filter @raivstream/database db:generate` passed.
+- `pnpm --filter @raivstream/api test` passed: 9 files, 35 tests.
+- `pnpm --filter @raivstream/api type-check` passed.
+- `pnpm --filter @raivstream/web type-check` passed.
+- `pnpm --filter @raivstream/web lint --max-warnings=0` passed.
+- `apps/web/.next` was cleaned before build using a resolved in-worktree Node filesystem call because direct PowerShell `Remove-Item` was blocked by local command policy.
+- `pnpm --filter @raivstream/web build` passed with local placeholder DB URL, strong local-only JWT secrets, and no production env values.
+
+Current release state:
+
+- Phase 9B.1 is LOCAL IMPLEMENTATION COMPLETE.
+- Phase 9B.1 staging qualification completed on the VPS in isolated checkout `/root/raivstream-phase9b1-staging`; production was not deployed.
+- Qualification report: `docs/operations/phase-9b1-staging-qualification.md`.
+- Backup before staging migration: `/root/raivstream/backups/pre_phase_9b1_movie_builder_20260823-164610.sql`, SHA256 `14f6d80d922f2af3411edf22eacb8c2b4cef5f8aa3f11f5ff6988f5a998791c3`.
+- Staging migration `20260823170000_movie_builder_phase9b1` applied successfully to production-like restored staging DB `raivstream_phase9b1_restore_20260823164714`.
+- VPS FFmpeg dependency installed and verified: `ffmpeg version 6.1.1-3ubuntu5`, `ffprobe version 6.1.1-3ubuntu5`.
+- Full staging gate passed: Prisma migrate/validate/generate, API type-check, web type-check, strict web lint, API tests, clean web build.
+- Staging API tests passed: 9 files, 35 tests.
+- Runtime smoke created staging project `cmt5xo6900004hdkl3g8m1cal`, sequence `cmt5xo6jz000jhdkl03mfwsm9`, render job `cmt5xo6o4000yhdkluu1rjwk7`, and movie asset `cmt5xod06001lhdklamgtkj9e`.
+- Smoke verified FFmpeg MP4 render, R2 upload at `story-projects/cmt5xo6900004hdkl3g8m1cal/movies/cmt5xo6o4000yhdkluu1rjwk7/movie.mp4`, one-time credit deduction, idempotent replay without extra charge, failed-render refund behavior, R16 API denial, and admin diagnostics before final runtime verification.
+- Independent FFprobe check of the generated MP4 found a release-blocking runtime mismatch: expected `12` seconds, actual `8.566667` seconds, difference `3.433333` seconds. This exceeds the `<= 0.25` second tolerance and the worker incorrectly marked the job `READY`.
+- Defects found and fixed during staging: null camera speed now falls back to `1`, render commands have a timeout guard, and moving-shot filters use lightweight scale/crop pan and tilt instead of expensive `zoompan`.
+- Caveats: browser signed-in Film tab QA is still required after the runtime fix; the worker is still API-process background execution and should become a dedicated worker before high-volume rendering; historical migrations are not replayable from empty DB due a pre-existing migration-chain issue, so qualification used a production-like restore.
+- Phase 9B.1A runtime remediation corrected the NO-GO blocker without adding new Movie Builder features.
+- Confirmed root cause: transition handles were rendered on incoming clips, but `xfade` offsets used the shot boundary instead of `current assembled duration - transition duration`; FFprobe output was also not parsed as an authoritative READY gate.
+- Canonical runtime semantics now remain: shot duration is final screen time; overlapping transitions consume internal render handles and do not change final runtime.
+- Renderer version changed to `phase-9b1a-v2`; render hashes include the corrected effective plan semantics.
+- Added shared runtime helpers, exact-frame still segment rendering, corrected xfade offsets, FFprobe validation before upload/READY, `OUTPUT_DURATION_MISMATCH`, and admin runtime diagnostics.
+- API tests now pass: 9 files, 41 tests.
+- Staging Phase 9B.1A backup: `/root/raivstream/backups/pre_phase_9b1a_runtime_fix_20260823-212055.sql`, size `1436059`, SHA256 `73ae3d3e0a98cba1966685e4800715cfd49b15a2857a1b2e483401fc51112a5b`.
+- Real FFmpeg timing integration passed:
+  - cuts-only: expected `12`, actual `12`, delta `0`;
+  - one dissolve: expected `10`, actual `10`, delta `0`;
+  - multiple dissolves: expected `12`, actual `12`, delta `0`;
+  - mixed transitions: expected `16`, actual `16`, delta `0`.
+- Original 12-second R2 smoke rerun passed with project `cmt67j1c60004256mnodeq51n`, sequence `cmt67j1ph000j256m2ki7r73e`, render job `cmt67j1sy000y256mz5ha39wv`, movie asset `cmt67j5ev001l256m8bvbe34q`, R2 key `story-projects/cmt67j1c60004256mnodeq51n/movies/cmt67j1sy000y256mz5ha39wv/movie.mp4`.
+- Corrected output: expected `12`, FFprobe actual `12.000000`, delta `0`, 720x1280, 30 fps, h264, file size `12640`, checksum `029948fad0991cfcc24cb48175bfbd460b4d760d10de0626ba1085e9cd74a49b`.
+- Credit verification: successful render deducted exactly 1 credit; idempotent replay reused the render and did not deduct again.
+- R16 movie builder API denial and production health checks remained clean.
+- Decision: GO for controlled Phase 9B.1 production release. No commit, push, production migration, production PM2 restart, or production deployment was performed during requalification.
