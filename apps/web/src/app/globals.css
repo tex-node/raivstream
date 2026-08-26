@@ -5,6 +5,32 @@
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 0, 0, 0;
+
+  /* Nocturne design system tokens */
+  --noc-page:      #0B0D14;
+  --noc-bar:       #070810;
+  --noc-bar-alpha: rgba(7,8,16,0.92);
+  --noc-card:      rgba(233,233,237,0.04);
+  --noc-hairline:  rgba(233,233,237,0.08);
+  --noc-rule:      rgba(233,233,237,0.06);
+  --noc-gradient:  linear-gradient(90deg, #d946a8, #b25ad9, #4f8bd6);
+
+  /* Nocturne text scale */
+  --noc-t1: #F7F8FC;
+  --noc-t2: #e9e9ed;
+  --noc-t3: #cfd3e5;
+  --noc-t4: #b2b6ca;
+  --noc-t5: #9397ab;
+  --noc-t6: #75798c;
+
+  /* Nocturne accents */
+  --noc-magenta: #d946a8;
+  --noc-purple:  #b25ad9;
+  --noc-blue:    #4f8bd6;
+  --noc-cyan:    #4fd6e8;
+  --noc-pink-tint:    #f0a3d4;
+  --noc-lavender-tint: #b5abfc;
+  --noc-cyan-tint:    #8fdfe8;
 }
 
 * {
@@ -36,4 +62,131 @@ html, body {
 }
 .snap-start {
   scroll-snap-align: start;
+}
+
+/* ── Nocturne utility classes ──────────────────────────────────────────── */
+.noc-card {
+  background: var(--noc-card);
+  border: 1px solid var(--noc-hairline);
+}
+
+.noc-gradient-text {
+  background: var(--noc-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.noc-btn-primary {
+  background: var(--noc-gradient);
+  color: #0B0D14;
+  font-weight: 600;
+  font-size: 15.5px;
+  min-height: 50px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.noc-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.noc-btn-outline {
+  background: transparent;
+  color: var(--noc-t1);
+  font-weight: 500;
+  font-size: 14px;
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--noc-hairline);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.noc-btn-outline:hover {
+  border-color: rgba(233,233,237,0.20);
+  background: rgba(233,233,237,0.04);
+}
+
+.noc-seg {
+  min-height: 40px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 14px;
+  border: 1px solid rgba(233,233,237,0.11);
+  background: transparent;
+  color: var(--noc-t5);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.noc-seg.active {
+  background: rgba(178,90,217,0.2);
+  color: var(--noc-t1);
+  border-color: rgba(178,90,217,0.5);
+}
+
+.noc-pressable:active {
+  background: rgba(178,90,217,0.12) !important;
+}
+
+/* Nocturne page background for story-playground routes */
+.noc-page-bg {
+  background-color: var(--noc-page);
+  color: var(--noc-t1);
+  min-height: 100dvh;
+}
+
+/* Nocturne card — used for project/story list items */
+.noc-project-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--noc-hairline);
+  background: var(--noc-card);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.noc-project-card:hover {
+  background: rgba(233,233,237,0.07);
+}
+
+/* Nocturne tab bar */
+.noc-tab-bar {
+  background: var(--noc-bar-alpha);
+  border-top: 1px solid var(--noc-hairline);
+  display: flex;
+  padding: 8px 4px 20px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Nocturne section label */
+.noc-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--noc-t6);
+}
+
+/* Nocturne section header */
+.noc-section-header {
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--noc-t1);
+  line-height: 1.2;
 }
