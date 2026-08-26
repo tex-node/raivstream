@@ -167,7 +167,7 @@ export const adminRouter = router({
     .input(z.object({ days: z.number().int().min(1).max(180).default(30), limit: z.number().int().min(5).max(100).default(30) }))
     .query(async ({ ctx, input }) => {
       const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
-      const [jobs, jobsByStatus, assets, recentEvents, ffmpegReady] = await Promise.all([
+      const [jobs, jobsByStatus, assets, recentEvents, ffmpegReady, movieCreditRate] = await Promise.all([
         (ctx.prisma as any).movieRenderJob.findMany({
           where: { createdAt: { gte: since } },
           orderBy: { createdAt: 'desc' },
@@ -193,6 +193,10 @@ export const adminRouter = router({
           take: 80,
         }),
         ffmpegAvailable(),
+        ctx.prisma.featureCreditRate.findUnique({
+          where: { featureKey: 'story:movie_render' },
+          select: { creditsPerUnit: true, isActive: true },
+        }),
       ]);
 
       const completed = jobs.filter((job: any) => job.status === 'READY' && job.startedAt && job.completedAt);
@@ -202,9 +206,13 @@ export const adminRouter = router({
         : null;
       const totalBytes = assets.reduce((sum: number, asset: any) => sum + (asset.fileSizeBytes ?? 0), 0);
 
+      const creditRateConfigured = Boolean(movieCreditRate && movieCreditRate.isActive && movieCreditRate.creditsPerUnit > 0);
+
       return {
         rangeDays: input.days,
         ffmpegReady,
+        creditRateConfigured,
+        creditRateCredits: movieCreditRate?.creditsPerUnit ?? null,
         totals: {
           jobs: jobs.length,
           ready: jobs.filter((job: any) => job.status === 'READY').length,

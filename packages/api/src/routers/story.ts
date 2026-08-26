@@ -3575,6 +3575,13 @@ export const storyRouter = router({
     .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const renderContext = await movieRenderContext(ctx, input.projectId, input.sequenceId);
+      if (renderContext.creditCost <= 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Movie rendering is temporarily unavailable. Please try again later.',
+          cause: { errorCode: 'MOVIE_RENDER_RATE_NOT_CONFIGURED' },
+        });
+      }
       const reusable = await findReusableMovieRender(ctx, {
         projectId: input.projectId,
         sequenceId: renderContext.sequence.id,

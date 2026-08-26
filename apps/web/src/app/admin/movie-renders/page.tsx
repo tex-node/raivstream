@@ -51,6 +51,7 @@ export default function MovieRenderDiagnosticsPage() {
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs font-black uppercase text-white/40">FFmpeg</p><p className="mt-2 text-3xl font-black">{data.ffmpegReady ? 'Ready' : 'Missing'}</p></div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs font-black uppercase text-white/40">Credit Rate</p><p className={`mt-2 text-3xl font-black ${data.creditRateConfigured ? 'text-green-400' : 'text-red-400'}`}>{data.creditRateConfigured ? `${data.creditRateCredits} cr` : 'Not Set'}</p></div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs font-black uppercase text-white/40">Jobs</p><p className="mt-2 text-3xl font-black">{data.totals.jobs}</p></div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs font-black uppercase text-white/40">Active</p><p className="mt-2 text-3xl font-black">{data.totals.active}</p></div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs font-black uppercase text-white/40">Failed</p><p className="mt-2 text-3xl font-black">{data.totals.failed}</p></div>
