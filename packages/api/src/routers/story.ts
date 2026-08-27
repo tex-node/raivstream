@@ -4,7 +4,7 @@ import { protectedProcedure, router } from '../trpc';
 import { moderatePrompt } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost } from '../lib/credits';
+import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -3576,10 +3576,11 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const renderContext = await movieRenderContext(ctx, input.projectId, input.sequenceId);
       if (renderContext.creditCost <= 0) {
+        const rateResult = await resolveMovieRenderCreditRate(ctx.prisma);
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
           message: 'Movie rendering is temporarily unavailable. Please try again later.',
-          cause: { errorCode: 'MOVIE_RENDER_RATE_NOT_CONFIGURED' },
+          cause: { errorCode: rateResult.configured ? 'MOVIE_RENDER_RATE_INVALID' : rateResult.errorCode },
         });
       }
       const reusable = await findReusableMovieRender(ctx, {

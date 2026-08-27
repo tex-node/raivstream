@@ -29,6 +29,26 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
 
 export const STORY_MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
 
+export type MovieRenderCreditRateResult =
+  | { configured: true;  cost: number; errorCode: null }
+  | { configured: false; cost: 0;      errorCode: 'MOVIE_RENDER_RATE_MISSING' | 'MOVIE_RENDER_RATE_INVALID' };
+
+export async function resolveMovieRenderCreditRate(
+  prisma: PrismaClient,
+): Promise<MovieRenderCreditRateResult> {
+  const rate = await prisma.featureCreditRate.findUnique({
+    where:  { featureKey: STORY_MOVIE_RENDER_FEATURE_KEY },
+    select: { creditsPerUnit: true, isActive: true },
+  });
+  if (!rate) {
+    return { configured: false, cost: 0, errorCode: 'MOVIE_RENDER_RATE_MISSING' };
+  }
+  if (!rate.isActive || rate.creditsPerUnit <= 0) {
+    return { configured: false, cost: 0, errorCode: 'MOVIE_RENDER_RATE_INVALID' };
+  }
+  return { configured: true, cost: rate.creditsPerUnit, errorCode: null };
+}
+
 export async function getFeatureCreditCost(
   prisma: PrismaClient,
   featureKey: string,

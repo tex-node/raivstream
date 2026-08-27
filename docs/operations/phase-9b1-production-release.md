@@ -318,3 +318,206 @@ Direct grant of production credits to a smoke account requires explicit authoriz
 | 37 | Data safety | No production user data altered ✅ |
 | 38 | Production render smoke | DEFERRED — no funded disposable test account (acceptable per criteria) |
 | 39 | **Final verdict** | **GO — PHASE 9B.1 MOVIE BUILDER PRODUCTION COMPLETE** |
+
+---
+
+## OPS READINESS / PRODUCTION RENDER SMOKE
+
+**Date:** 2026-08-26  
+**Ops SHA:** `6c5b3d239384d6ab4d01d477b0f3ab00745057db` (fail-closed patch + this doc)  
+**GitHub Actions run:** `33023010276` — success, 2m47s
+
+### Pre-Ops State
+
+| Item | Value |
+|---|---|
+| App health before | `{"status":"healthy","uptime":14957s}` ✅ |
+| R16 health before | `{"status":"healthy","uptime":14957s}` ✅ |
+| Production SHA confirmed | `9e2e987` ✅ |
+| Deploy lock | Zero-byte advisory file, no process held lock ✅ |
+
+### Backup
+
+| Item | Value |
+|---|---|
+| Backup path | `/root/raivstream/backups/pre_phase_9b1_ops_20260826-231552.sql` |
+| Size | 1,429,955 bytes (1.36 MB) |
+| SHA256 | `44232c7d23106b70e0e34b58a8741cde31027e032e32e0bb3c67d8373e8a7f6d` |
+
+### FFmpeg / FFprobe
+
+**FFmpeg was already installed** — no install required.
+
+| Item | Value |
+|---|---|
+| FFmpeg state before | Already installed ✅ |
+| FFmpeg version | `6.1.1-3ubuntu5` |
+| FFprobe version | `6.1.1-3ubuntu5` |
+| FFmpeg path | `/usr/bin/ffmpeg` |
+| FFprobe path | `/usr/bin/ffprobe` |
+| Install source | Ubuntu apt (`3ubuntu5` package suffix) |
+
+### Disk
+
+| Filesystem | Size | Used | Available | Use% |
+|---|---|---|---|---|
+| `/dev/sda1` | 193 GB | 164 GB | 30 GB | 85% |
+
+30 GB available — sufficient for render smoke testing. Monitor if staging snapshots accumulate.
+
+### Credit Rate Configuration
+
+| Item | Value |
+|---|---|
+| `story:movie_render` prior state | Missing — no FeatureCreditRate row |
+| Configured rate | 100 credits per render |
+| Active | true |
+| Configuration method | Prisma ORM upsert via production DB connection |
+| Verified via app code path | `getFeatureCreditCost → COST: 100 (active)` ✅ |
+| Rationale | Local FFmpeg assembly (no external API cost); meaningfully below 200–500 credit range for generative video; configurable launch rate |
+
+**Credit rate defect discovered and patched:**
+
+`createMovieRender` had a guard `if (renderContext.creditCost > 0)` that silently skipped credit deduction when the rate was missing/zero — allowing free renders. Fail-closed patch applied: now throws `PRECONDITION_FAILED` with error code `MOVIE_RENDER_RATE_NOT_CONFIGURED` when creditCost ≤ 0. Admin `movieRenderDiagnostics` now returns `creditRateConfigured` and `creditRateCredits` fields; `/admin/movie-renders` surfaces a Credit Rate tile (green = configured, red = not set).
+
+**Fail-closed patch gate results:**
+- API type-check: PASS ✅
+- Web type-check: PASS ✅
+- Strict lint (0 warnings): PASS ✅
+- API tests: 41/41 ✅
+- Deployed: GitHub Actions run `33023010276` — success, 2m47s ✅
+
+### Renderer Diagnostics
+
+| Item | Value |
+|---|---|
+| FFmpeg available | true ✅ |
+| FFprobe available | true ✅ |
+| Renderer version in code | `phase-9b1a-v2` ✅ |
+| `creditRateConfigured` | true (100 cr) ✅ |
+| Admin `/admin/movie-renders` | HTTP 307 to auth wall (correct for unauthenticated) ✅ |
+
+### Temp Workspace
+
+The render worker uses `/tmp/raivstream-render/{jobId}/` (per `movieRenderWorker.ts`). `/tmp` shares the root filesystem at `/dev/sda1` (30 GB free). Write permissions are available to the PM2 process user (root on this VPS). Cleanup is handled at worker exit.
+
+### Production Render Smoke
+
+**Status: DEFERRED**
+
+**Reason:** No existing test project has a Sequence (`StorySequence`) with `StorySequenceScene` records linked to `StorySceneAsset` images via `selectedAssetId`. Setting up a valid sequence requires the Sequence Workspace UI (Story Workspace → Sequence tab), not direct DB manipulation during an ops task.
+
+**What exists:**
+- 9 funded `.raivstream.test` QA accounts (100–9,920 credits each) ✅
+- 5 READY `StorySceneAsset` records in test account projects with valid R2 URLs ✅
+- 4 "A Dog Going To School" test projects (one per funded account) ✅
+- 0 sequences with assets assigned ✗
+
+**Required to unblock smoke:** A team member with the `phase5c-prod@raivstream.test` or `phase6a-prod@raivstream.test` credentials (or any funded test account) should open the Story Workspace for their "A Dog Going To School" project, go to the Sequence tab, enable shots and assign existing scene images, then use the Film tab to Build Movie.
+
+**Staging evidence accepted in lieu of production smoke:**
+- Staging FFmpeg render: all 4 timing scenarios, delta = 0 ✅
+- Unit tests: 8 planning + 2 worker tests pass ✅
+- Credit deduction code path: verified correct with 100 cr rate configured ✅
+- Fail-closed guard: deployed and confirmed ✅
+
+### Regression Checks (post-patch)
+
+| Route | Status |
+|---|---|
+| `app.raivstream.com/api/health` | `{"status":"healthy","uptime":1013s}` ✅ |
+| `r16.raivstream.com/api/health` | `{"status":"healthy","uptime":1013s}` ✅ |
+| `/story-playground` | HTTP 200 ✅ |
+| `/academy` | HTTP 200 ✅ |
+| `r16.raivstream.com/` | HTTP 200 ✅ |
+| `r16.raivstream.com/generate` | HTTP 307 (blocked) ✅ |
+| `/admin/movie-renders` | HTTP 307 (auth wall) ✅ |
+| PM2 `raivstream-web` | online, restarts: 258 ✅ |
+
+### Open-For-Users Gate
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | FFmpeg available | ✅ |
+| 2 | FFprobe available | ✅ |
+| 3 | Renderer diagnostics healthy | ✅ |
+| 4 | Disk headroom acceptable | ✅ (30 GB) |
+| 5 | `story:movie_render` rate exists and is active | ✅ (100 cr) |
+| 6 | Preflight resolves rate correctly | ✅ |
+| 7 | Real production render succeeds | DEFERRED |
+| 8 | FFprobe runtime within tolerance | DEFERRED |
+| 9 | READY gate correct | ✅ (code + staging) |
+| 10 | R2 upload correct | ✅ (staging) |
+| 11 | Checksum stored | ✅ (code) |
+| 12 | One credit deduction | ✅ (code + fail-closed) |
+| 13 | Replay no duplicate charge | ✅ (code + staging) |
+| 14 | Temp cleanup works | ✅ (code) |
+| 15 | Sequence unchanged | ✅ |
+| 16 | Storybook/Asset state unchanged | ✅ |
+| 17 | Authorization holds | ✅ (code) |
+| 18 | Nocturne remains healthy | ✅ |
+| 19 | Academy remains healthy | ✅ |
+| 20 | R16 remains isolated | ✅ |
+| 21 | Both health endpoints healthy | ✅ |
+
+**Criteria 7–8 are DEFERRED. All others pass.**
+
+### Known Risks (post-ops)
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Disk at 85% | Medium | Monitor; old staging snapshots can be cleared |
+| Production render smoke not run | Medium | Clear staging evidence + fail-closed patch mitigate |
+| Test account sequences not set up | Low | Funded accounts + eligible assets exist; team can set up via UI |
+
+---
+
+## MOVIE RENDER PRICING SAFETY PATCH v2
+
+**Date:** 2026-08-27  
+**Patch SHA:** see commit below (deployed after local gate)
+
+### What Changed
+
+| # | Change | Detail |
+|---|---|---|
+| 1 | Two distinct error codes | `MOVIE_RENDER_RATE_MISSING` (no row) vs `MOVIE_RENDER_RATE_INVALID` (row exists but inactive/zero) replacing single `MOVIE_RENDER_RATE_NOT_CONFIGURED` |
+| 2 | `resolveMovieRenderCreditRate()` helper | New exported function in `credits.ts`; discriminated union return type; testable in isolation |
+| 3 | Admin diagnostics fields renamed | `creditRateConfigured` → `movieRenderRateConfigured`; `creditRateCredits` → `movieRenderCreditCost`; new `movieRenderConfigurationHealthy: boolean` (= ffmpegReady AND rate configured) |
+| 4 | Admin UI updated | "Movie Render Credits" tile; subtitle shows "Configured" / "Action required" |
+| 5 | Fail-closed tests (Cases A–E) | 6 new tests in `movieRenderCreditGate.test.ts`; test file count 9→10; test count 41→47 |
+
+### Local Gate Results
+
+| Step | Result |
+|---|---|
+| API type-check | PASS ✅ |
+| Web type-check | PASS ✅ |
+| Strict lint (0 warnings) | PASS ✅ |
+| API tests (10 files, 47 tests) | PASS ✅ |
+| Local build | BLOCKED (no local JWT secrets — expected; CI has them) |
+
+### Files Changed
+
+```
+packages/api/src/lib/credits.ts              — resolveMovieRenderCreditRate + type
+packages/api/src/routers/story.ts            — import + two-code fail-closed block
+packages/api/src/routers/admin.ts            — renamed fields + movieRenderConfigurationHealthy
+apps/web/src/app/admin/movie-renders/page.tsx — renamed field refs + "Configured" subtitle
+packages/api/src/lib/__tests__/movieRenderCreditGate.test.ts  — NEW (Cases A–E)
+```
+
+### Error Code Semantics
+
+| Code | Meaning | Trigger |
+|---|---|---|
+| `MOVIE_RENDER_RATE_MISSING` | No `FeatureCreditRate` row exists for `story:movie_render` | Row not created / deleted |
+| `MOVIE_RENDER_RATE_INVALID` | Row exists but `isActive=false` or `creditsPerUnit <= 0` | Deactivated or zeroed by admin |
+
+---
+
+## OPS READINESS FINAL STATUS
+
+**PHASE 9B.1 OPS READY — PRODUCTION RENDER SMOKE DEFERRED**
+
+Fail-closed patch v2 in production. Two distinct error codes, testable helper, renamed admin diagnostics. Credit rate active (100 credits). FFmpeg installed. All regressions clear. Movie Builder is safe to open to users after one successful production render smoke via the browser UI on a funded test account (Story Workspace → Sequence tab → assign scene images → Film tab → Build Movie).

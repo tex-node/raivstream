@@ -206,13 +206,14 @@ export const adminRouter = router({
         : null;
       const totalBytes = assets.reduce((sum: number, asset: any) => sum + (asset.fileSizeBytes ?? 0), 0);
 
-      const creditRateConfigured = Boolean(movieCreditRate && movieCreditRate.isActive && movieCreditRate.creditsPerUnit > 0);
+      const movieRenderRateConfigured = Boolean(movieCreditRate && movieCreditRate.isActive && movieCreditRate.creditsPerUnit > 0);
 
       return {
         rangeDays: input.days,
         ffmpegReady,
-        creditRateConfigured,
-        creditRateCredits: movieCreditRate?.creditsPerUnit ?? null,
+        movieRenderRateConfigured,
+        movieRenderCreditCost: movieCreditRate?.creditsPerUnit ?? null,
+        movieRenderConfigurationHealthy: ffmpegReady && movieRenderRateConfigured,
         totals: {
           jobs: jobs.length,
           ready: jobs.filter((job: any) => job.status === 'READY').length,
