@@ -516,8 +516,99 @@ packages/api/src/lib/__tests__/movieRenderCreditGate.test.ts  — NEW (Cases A�
 
 ---
 
+## FINAL PRODUCTION RENDER SMOKE
+
+**Date:** 2026-08-27  
+**Deployed SHA:** `05e3327`  
+**Status:** DEFERRED — QA CREDENTIALS UNAVAILABLE
+
+### Section 1 — Pre-Smoke Safety Check
+
+| Item | Result |
+|---|---|
+| App health | `{"status":"healthy","uptime":22163s}` ✅ |
+| R16 health | `{"status":"healthy","uptime":22164s}` ✅ |
+| Deployed SHA | `05e3327` ✅ |
+| Last Actions run | `33025751413` success ✅ |
+| story:movie_render | 100 credits, active (configured prior session; migrate deploy does not mutate data) ✅ |
+| FFmpeg | `6.1.1-3ubuntu5` at `/usr/bin/ffmpeg` ✅ |
+| FFprobe | `6.1.1-3ubuntu5` at `/usr/bin/ffprobe` ✅ |
+| Disk headroom | ~30 GB free (85% used) — acceptable ✅ |
+| Deployment in progress | No (last run completed 2026-08-27T00:10) ✅ |
+
+### Section 2 — QA Account Selection
+
+**Candidate accounts identified:** `phase5c-prod@raivstream.test` (9,920 credits), `phase6a-prod@raivstream.test` (9,920 credits), plus 7 other funded `.raivstream.test` accounts.
+
+**Credentials search result:** Passwords are bcrypt-hashed from the original sign-up flow and not documented anywhere in the repository, session transcript, ops docs, or project memory. No standardized test password is stored in any seed file or config.
+
+**Decision:** `PRODUCTION RENDER SMOKE DEFERRED — QA CREDENTIALS UNAVAILABLE`
+
+### Sections 3–15 — Render Smoke Items
+
+All deferred. Funded accounts exist in production; 5 READY `StorySceneAsset` records exist in test projects. No sequence with image assignments has been set up. Render cannot proceed without both credentials and a configured sequence.
+
+**To unblock:** A team member who knows the password for any funded `.raivstream.test` account should:
+1. Sign into `app.raivstream.com`
+2. Open their "A Dog Going To School" project → Story Workspace → Sequence tab
+3. Add shots (~6 × 2s = 12s) and assign existing generated scene images as selected assets
+4. Go to Film tab → Build Movie
+5. Record job ID, asset ID, runtime, delta, credit before/after
+
+### Section 16 — Nocturne Regression
+
+| Route | Status |
+|---|---|
+| `/story-playground` | HTTP 200 ✅ |
+| `/story-playground?r16=1` (R16 isolation) | HTTP 200 ✅ |
+| Full workspace browser QA | Not performed (requires auth) — Nocturne smoke separately qualified in prior session |
+
+### Section 17 — Academy Regression
+
+| Route | Status |
+|---|---|
+| `/academy` | HTTP 200 ✅ |
+
+### Section 18 — R16 Isolation
+
+| Check | Result |
+|---|---|
+| `r16.raivstream.com/` (root) | HTTP 200 ✅ |
+| `?r16=1 /generate` | HTTP 307 (blocked) ✅ |
+| Film tab source | `hideOnR16: true` in source — no Film/Movie Builder on R16 ✅ |
+| Admin diagnostics on R16 | HTTP 307 ✅ |
+
+### Section 19 — Admin Diagnostics
+
+| Check | Result |
+|---|---|
+| `/admin/movie-renders` (unauthenticated) | HTTP 307 to auth wall ✅ |
+| `movieRenderConfigurationHealthy` field | Present in deployed code (type-checked, deployed) ✅ |
+| `movieRenderCreditCost = 100` | Active in DB; confirmed before deploy ✅ |
+| Admin browser QA | Not performed (requires admin credentials) |
+
+### Section 20 — Final Health
+
+| Endpoint | Status |
+|---|---|
+| `app.raivstream.com/api/health` | `{"status":"healthy","uptime":22163s}` ✅ |
+| `r16.raivstream.com/api/health` | `{"status":"healthy","uptime":22164s}` ✅ |
+
+### Known Risks (Final)
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Production render smoke not run | Medium | 47/47 tests pass; staging FFmpeg timing qualified; fail-closed patch verified; staging evidence accepted in prior sessions for analogous code paths |
+| QA credentials not documented | Low | Accounts exist; team member with credentials can complete smoke via browser |
+| Disk at 85% | Medium | Monitor; old staging worktrees on VPS can reclaim space |
+| Test account sequences not set up | Low | Assets exist; only requires browser UI setup |
+
+---
+
 ## OPS READINESS FINAL STATUS
 
 **PHASE 9B.1 OPS READY — PRODUCTION RENDER SMOKE DEFERRED**
 
-Fail-closed patch v2 in production. Two distinct error codes, testable helper, renamed admin diagnostics. Credit rate active (100 credits). FFmpeg installed. All regressions clear. Movie Builder is safe to open to users after one successful production render smoke via the browser UI on a funded test account (Story Workspace → Sequence tab → assign scene images → Film tab → Build Movie).
+All safety patches deployed. Two distinct error codes (`MOVIE_RENDER_RATE_MISSING` / `MOVIE_RENDER_RATE_INVALID`), testable helper, renamed admin diagnostics, 47/47 tests. Credit rate active (100 credits). FFmpeg/FFprobe installed. All publicly-verifiable regressions clear. Nocturne, Academy, R16 isolation confirmed.
+
+Production render smoke deferred because funded QA account credentials are not documented in the repository. The smoke can be completed at any time by a team member: sign into a `.raivstream.test` account, set up a sequence with images in Story Workspace, click Build Movie, and record results here.
