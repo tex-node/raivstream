@@ -106,3 +106,9 @@ Additionally re-ran the full `phase9b2b-audio-workspace-acceptance.ts` walkthrou
 - `docs/operations/phase-9b2b-audio-preview-controls-qa.md`, `docs/operations/phase-9b2b-staging-release-candidate.md` — earlier-round reports, unrelated to this hotfix
 
 `migration_lock.toml` confirmed excluded. No unrelated changes in the SHIP scope — `git diff --stat` shows exactly one modified file (`story.ts`) plus the new test/script/doc files listed above.
+
+## Addendum — mapper implementation verified as a genuine constructive whitelist (commit `20aee3e`)
+
+Follow-up review asked for direct evidence that the fix generalizes to the *class* of bug (any relation a future read `include` might add), not just today's one `audioAsset` property. Verified by direct inspection of both mapper functions: neither contains a spread (`...`), `Object.keys`/`entries` iteration, or `delete` — every output field is an individually named literal reading one specific named input property. That's a constructive whitelist (only listed fields can ever appear), not a subtractive blacklist that happens to be safe today.
+
+One real gap found in the process: the existing test suite proved this for cues (`voiceProfile`/`characterMemory`, test E) but had no equivalent direct proof for tracks. Added: a test feeding `toAudioTrackRestoreCreateInput` a snapshot track carrying hypothetical future relation objects (`plan`, `project`) and confirming the output is still exactly the same 6 named fields. **132/132 tests passing** (up from 131). Test-only change — no implementation, schema, or renderer code touched, so no staging redeploy was needed; the file was still synced to the staging tree for repo consistency.
