@@ -273,6 +273,7 @@ export default function StoryWorkspacePage() {
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [newAudioTrackType, setNewAudioTrackType] = useState<typeof AUDIO_TRACK_TYPES[number]>('MUSIC');
+  const [audioPlayheadSeconds, setAudioPlayheadSeconds] = useState(0);
   const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
   const [compareAssets, setCompareAssets] = useState<string[]>([]);
   const [draggedSequenceSceneId, setDraggedSequenceSceneId] = useState<string | null>(null);
@@ -1093,6 +1094,9 @@ export default function StoryWorkspacePage() {
     const timeMarks = Array.from({ length: Math.ceil(runtimeSeconds / 5) + 1 }, (_, i) => i * 5);
     const allCues = tracks.flatMap((t: any) => t.cues.map((c: any) => ({ ...c, trackType: t.type, trackName: t.name })));
     const selectedCue = allCues.find((c: any) => c.id === selectedCueId) ?? null;
+    const selectedCueAudioUrl = selectedCue?.audioAsset?.publicUrl ?? null;
+    const attachedAudioCueCount = allCues.filter((cue: any) => Boolean(cue.audioAsset?.publicUrl)).length;
+    const safePlayhead = Math.min(Math.max(audioPlayheadSeconds, 0), runtimeSeconds);
     const voiceProfiles = (voiceProfilesQuery.data as any[]) ?? [];
     const versions = (listAudioVersions.data as any[]) ?? [];
 
@@ -1125,6 +1129,56 @@ export default function StoryWorkspacePage() {
           <p className="mt-2 max-w-3xl text-sm font-semibold text-[#9397ab]">
             Narration, dialogue, ambience, sound effects, and music — layered on the same canonical timeline as your Sequence. Cue times attach to finished-film seconds, not render transitions.
           </p>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="rounded-xl border border-[rgba(143,223,232,0.18)] bg-[rgba(143,223,232,0.06)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#8fdfe8]">Timeline Preview</p>
+                  <p className="mt-1 text-sm font-bold text-[#F7F8FC]">{safePlayhead.toFixed(1)}s / {runtimeSeconds.toFixed(1)}s</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAudioPlayheadSeconds(0)}
+                    className="inline-flex items-center gap-1 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.06)] px-3 py-2 text-xs font-black text-[#F7F8FC]"
+                  >
+                    <RotateCcw size={13} /> Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectedCue && setAudioPlayheadSeconds(selectedCue.startTimeSeconds ?? 0)}
+                    disabled={!selectedCue}
+                    className="inline-flex items-center gap-1 rounded-xl bg-[rgba(181,171,252,0.14)] px-3 py-2 text-xs font-black text-[#b5abfc] disabled:opacity-40"
+                  >
+                    <Play size={13} /> Cue Start
+                  </button>
+                </div>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={runtimeSeconds}
+                step={0.1}
+                value={safePlayhead}
+                onChange={(event) => setAudioPlayheadSeconds(Number(event.target.value))}
+                className="mt-3 w-full accent-[#b25ad9]"
+                aria-label="Audio timeline playhead"
+              />
+              <p className="mt-2 text-xs font-bold text-[#9397ab]">
+                This previews timing and attached cue audio. Full layered mix playback is available after rendering from the Film tab.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Cue Audio Preview</p>
+              {selectedCueAudioUrl ? (
+                <audio key={selectedCue.id} controls src={selectedCueAudioUrl} className="mt-3 w-full" />
+              ) : (
+                <p className="mt-3 rounded-lg border border-dashed border-[rgba(233,233,237,0.12)] p-3 text-xs font-bold text-[#75798c]">
+                  {selectedCue ? 'This cue has no attached audio asset yet.' : attachedAudioCueCount > 0 ? 'Select an attached cue to preview it.' : 'No audio assets are attached yet. These cues are timing and performance notes until audio is uploaded or generated in a later phase.'}
+                </p>
+              )}
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {AUDIO_TRACK_TYPES.map((type) => (
               <button key={type} onClick={() => setNewAudioTrackType(type)} className={`rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-wide ${newAudioTrackType === type ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[#F7F8FC]' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[#9397ab]'}`}>
@@ -1178,19 +1232,28 @@ export default function StoryWorkspacePage() {
                         </button>
                       </div>
                     </div>
-                    <div className="relative mt-2 h-9 rounded-lg bg-[rgba(233,233,237,0.04)]">
+                    <div className="relative mt-2 h-12 rounded-lg bg-[rgba(233,233,237,0.04)]">
+                      <span
+                        className="pointer-events-none absolute bottom-1 top-1 z-10 w-0.5 rounded-full bg-[#ffcf4a]"
+                        style={{ left: `${(safePlayhead / runtimeSeconds) * 100}%` }}
+                        aria-hidden="true"
+                      />
                       {track.cues.map((cue: any) => {
                         const left = (cue.startTimeSeconds / runtimeSeconds) * 100;
-                        const width = Math.max(3, ((cue.durationSeconds ?? 1) / runtimeSeconds) * 100);
+                        const width = Math.max(8, ((cue.durationSeconds ?? 1) / runtimeSeconds) * 100);
                         return (
                           <button
                             key={cue.id}
-                            onClick={() => setSelectedCueId(cue.id)}
-                            className={`absolute top-1 h-7 truncate rounded-md px-2 text-left text-[10px] font-black leading-7 ${selectedCueId === cue.id ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[#F7F8FC]' : 'bg-[rgba(143,223,232,0.16)] text-[#8fdfe8]'}`}
+                            onClick={() => {
+                              setSelectedCueId(cue.id);
+                              setAudioPlayheadSeconds(cue.startTimeSeconds ?? 0);
+                            }}
+                            className={`absolute top-1 h-10 truncate rounded-lg border px-2 text-left text-[10px] font-black leading-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-[#b25ad9] ${selectedCueId === cue.id ? 'border-[#d946a8] bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[#F7F8FC]' : 'border-[rgba(143,223,232,0.20)] bg-[rgba(143,223,232,0.16)] text-[#8fdfe8] hover:border-[rgba(143,223,232,0.55)] hover:bg-[rgba(143,223,232,0.24)]'}`}
                             style={{ left: `${left}%`, width: `${width}%` }}
-                            title={cue.text || `${AUDIO_TRACK_TYPE_LABEL[track.type]} cue`}
+                            title={`Edit ${cue.text || AUDIO_TRACK_TYPE_LABEL[track.type]} at ${(cue.startTimeSeconds ?? 0).toFixed(1)}s`}
                           >
-                            {cue.text || (track.type === 'SFX' ? 'SFX' : AUDIO_TRACK_TYPE_LABEL[track.type])}
+                            <span className="block truncate">{cue.text || (track.type === 'SFX' ? 'SFX' : AUDIO_TRACK_TYPE_LABEL[track.type])}</span>
+                            <span className="block truncate text-[9px] opacity-80">{(cue.startTimeSeconds ?? 0).toFixed(1)}s · {cue.audioAsset?.publicUrl ? 'Preview' : 'No audio'}</span>
                           </button>
                         );
                       })}
@@ -1220,6 +1283,31 @@ export default function StoryWorkspacePage() {
                 <p className="mt-3 text-sm font-bold text-[#75798c]">Select a cue on the timeline to edit it.</p>
               ) : (
                 <div className="mt-3 space-y-3">
+                  <div className="rounded-xl border border-[rgba(181,171,252,0.20)] bg-[rgba(181,171,252,0.07)] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-black text-[#F7F8FC]">{selectedCue.trackName}</p>
+                        <p className="text-xs font-bold text-[#9397ab]">
+                          Starts at {(selectedCue.startTimeSeconds ?? 0).toFixed(1)}s
+                          {selectedCue.durationSeconds != null ? ` · ${(selectedCue.durationSeconds ?? 0).toFixed(1)}s long` : ' · open ended'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAudioPlayheadSeconds(selectedCue.startTimeSeconds ?? 0)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                      >
+                        <Play size={11} /> Jump
+                      </button>
+                    </div>
+                    {selectedCueAudioUrl ? (
+                      <audio key={`${selectedCue.id}-inspector`} controls src={selectedCueAudioUrl} className="mt-3 w-full" />
+                    ) : (
+                      <p className="mt-3 text-xs font-bold text-[#9397ab]">
+                        No playable audio is attached to this cue yet. Timing, voice, and performance notes will be used when an audio asset is attached or when the final film is rendered with available sources.
+                      </p>
+                    )}
+                  </div>
                   {(selectedCue.trackType === 'NARRATION' || selectedCue.trackType === 'DIALOGUE') && (
                     <>
                       <label className="block text-xs font-bold text-[#9397ab]">Character
@@ -1302,6 +1390,64 @@ export default function StoryWorkspacePage() {
                         onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeOutSeconds: Number(e.target.value) })}
                         className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
                     </label>
+                  </div>
+                  <div className="space-y-3 rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.03)] p-3">
+                    <label className="block text-xs font-bold text-[#9397ab]">Move on timeline
+                      <input
+                        type="range"
+                        min={0}
+                        max={runtimeSeconds}
+                        step={0.1}
+                        value={selectedCue.startTimeSeconds ?? 0}
+                        onChange={(e) => {
+                          const nextStart = Number(e.target.value);
+                          setAudioPlayheadSeconds(nextStart);
+                          updateAudioCue.mutate({ projectId, cueId: selectedCue.id, startTimeSeconds: nextStart });
+                        }}
+                        className="mt-2 w-full accent-[#b25ad9]"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-[#9397ab]">Cue volume
+                      <input
+                        type="range"
+                        min={0}
+                        max={4}
+                        step={0.05}
+                        value={selectedCue.volume ?? 1}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
+                        className="mt-2 w-full accent-[#2fbf71]"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, startTimeSeconds: Math.max(0, (selectedCue.startTimeSeconds ?? 0) - 0.5) })}
+                        className="rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                      >
+                        -0.5s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, startTimeSeconds: Math.min(runtimeSeconds, (selectedCue.startTimeSeconds ?? 0) + 0.5) })}
+                        className="rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                      >
+                        +0.5s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, durationSeconds: Math.max(0.1, (selectedCue.durationSeconds ?? 1) - 0.5) })}
+                        className="rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                      >
+                        Shorter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, durationSeconds: Math.min(runtimeSeconds, (selectedCue.durationSeconds ?? 1) + 0.5) })}
+                        className="rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                      >
+                        Longer
+                      </button>
+                    </div>
                   </div>
                   {(selectedCue.trackType === 'AMBIENCE' || selectedCue.trackType === 'MUSIC') && (
                     <label className="flex items-center gap-2 text-xs font-bold text-[#9397ab]">

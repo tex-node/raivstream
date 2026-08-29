@@ -338,7 +338,22 @@ const AUDIO_TRACK_TYPE_VALUES = ['NARRATION', 'DIALOGUE', 'AMBIENCE', 'SFX', 'MU
 const audioPlanInclude = {
   tracks: {
     orderBy: { order: 'asc' as const },
-    include: { cues: { orderBy: { startTimeSeconds: 'asc' as const } } },
+    include: {
+      cues: {
+        orderBy: { startTimeSeconds: 'asc' as const },
+        include: {
+          audioAsset: {
+            select: {
+              id: true,
+              publicUrl: true,
+              durationSeconds: true,
+              mimeType: true,
+              sourceKind: true,
+            },
+          },
+        },
+      },
+    },
   },
 };
 
