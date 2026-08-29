@@ -365,6 +365,7 @@ model User {
   generationJobs     GenerationJob[]
   movieRenderJobs    MovieRenderJob[]
   audioAssets        AudioAsset[]
+  voiceGenerationJobs VoiceGenerationJob[]
   storyProjects       StoryProject[]
   academyCoursesOwned AcademyCourse[] @relation("AcademyCourseOwner")
   academyClassesInstructing AcademyClass[] @relation("AcademyClassInstructor")
@@ -832,6 +833,7 @@ model StoryProject {
   audioPerformancePlans AudioPerformancePlan[]
   voiceProfiles   VoiceProfile[]
   audioAssets     AudioAsset[]
+  voiceGenerationJobs VoiceGenerationJob[]
   academySubmissions AcademySubmission[]
 
   createdAt      DateTime           @default(now())
@@ -1766,6 +1768,8 @@ model AudioCue {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  voiceGenerationJobs   VoiceGenerationJob[]
+
   @@index([trackId])
   @@index([trackId, startTimeSeconds])
   @@index([sequenceSceneId])
@@ -1792,6 +1796,7 @@ model VoiceProfile {
   styleNotes        String?
 
   cues              AudioCue[]
+  voiceGenerationJobs VoiceGenerationJob[]
 
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -1845,7 +1850,103 @@ model AudioAsset {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  voiceGenerationJobs VoiceGenerationJob[]
+
   @@index([projectId])
   @@index([userId])
   @@map("audio_assets")
+}
+
+// ─── Phase 9B.2C.1 — provider-neutral Voice Generation Core ────────────────
+//
+// Materializes an unmaterialized speech AudioCue into a real AudioAsset.
+// Does NOT define or alter film/audio timing (AudioCue.startTimeSeconds/
+// durationSeconds remain authoritative, untouched by generation); does NOT
+// introduce a second audio-rendering architecture (a successful job's only
+// durable output is a normal AudioAsset that enters the already-qualified
+// AudioBlueprint/movieRenderWorker pipeline exactly like an uploaded asset).
+//
+// One row per distinct (audioCueId, requestFingerprint) pair — the unique
+// constraint below IS the idempotency/concurrency primitive: a retry of an
+// identical material request can never create a duplicate row, and two
+// concurrent identical requests race safely on the same DB constraint (the
+// loser's insert fails cleanly and the service re-reads the winner's row —
+// see resolveOrCreateVoiceGenerationJob in voiceGeneration.ts). A retry
+// after FAILED reuses this same row (increments attemptCount, resets
+// status), it does not fork a new row — that is reserved for a genuinely
+// different fingerprint (different text/voice/performance/provider), which
+// naturally preserves take history as a separate row with its own
+// outputAudioAssetId, per cue.
+enum VoiceGenerationType {
+  SPEECH
+}
+
+enum VoiceGenerationStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  CANCELLED
+}
+
+model VoiceGenerationJob {
+  id                String                @id @default(cuid())
+  projectId         String
+  project           StoryProject          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  audioCueId        String
+  audioCue          AudioCue              @relation(fields: [audioCueId], references: [id], onDelete: Cascade)
+  voiceProfileId    String?
+  voiceProfile      VoiceProfile?         @relation(fields: [voiceProfileId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  generationType    VoiceGenerationType   @default(SPEECH)
+  status            VoiceGenerationStatus @default(QUEUED)
+
+  // Deterministic material-identity fingerprint (voiceGeneration.ts —
+  // fingerprintVoiceGenerationRequest) and the immutable provider-neutral
+  // snapshot it was derived from. The worker reads ONLY requestSnapshot,
+  // never live AudioCue/VoiceProfile state — the exact discipline already
+  // proven for MovieRenderJob.audioBlueprintSnapshot.
+  requestFingerprint String
+  requestSnapshot    Json
+
+  // Provider identity — never a vendor SDK type. providerKey is the only
+  // thing business logic is allowed to branch on; providerModel/
+  // providerVoiceKey/providerRequestId are opaque strings for provenance.
+  providerKey        String
+  providerModel      String?
+  providerVoiceKey   String?
+  providerRequestId  String?
+
+  outputAudioAssetId String?     @unique
+  outputAudioAsset   AudioAsset? @relation(fields: [outputAudioAssetId], references: [id], onDelete: SetNull)
+
+  // Populated only after the media READY gate passes (voiceGenerationWorker.ts) —
+  // never trusted from provider-reported metadata alone.
+  actualDurationSeconds Float?
+  sampleRateHz          Int?
+  channels              Int?
+  codec                 String?
+  mimeType              String?
+  fileSizeBytes         Int?
+  checksumSha256        String?
+
+  failureCode       String?
+  failureMessage    String?
+
+  attemptCount      Int       @default(0)
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  startedAt         DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+
+  @@unique([audioCueId, requestFingerprint])
+  @@index([projectId])
+  @@index([audioCueId])
+  @@index([status])
+  @@index([requestFingerprint])
+  @@map("voice_generation_jobs")
 }

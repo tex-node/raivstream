@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { router, adminProcedure, moderatorProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { ffmpegAvailable } from '../lib/movieRenderWorker';
+import { voiceGenerationDiagnosticsSummary } from '../lib/voiceGenerationProviders';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -1256,6 +1257,50 @@ export const adminRouter = router({
         pageSize:   input.pageSize,
         allTimeCreditsSold:   totals._sum.amount ?? 0,
         allTimeTransactions:  totals._count.id,
+      };
+    }),
+
+  // Phase 9B.2C.1 — Voice Generation Core diagnostics. Never exposes
+  // provider credentials/tokens/raw env vars — only stable provider keys
+  // and boolean configuration state, matching the exact discipline of
+  // movieRenderDiagnostics above. "Not configured" is a valid, expected
+  // state in this phase (no production speech-generation provider or rate
+  // exists yet) and is reported honestly rather than as a false "healthy".
+  voiceGenerationDiagnostics: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const [jobsByStatus, recentReady, recentFailed, oldestQueued, oldestProcessing, speechRate, audioRate] = await Promise.all([
+        (ctx.prisma as any).voiceGenerationJob.groupBy({ by: ['status'], where: { createdAt: { gte: since } }, _count: { id: true } }),
+        (ctx.prisma as any).voiceGenerationJob.count({ where: { createdAt: { gte: since }, status: 'READY' } }),
+        (ctx.prisma as any).voiceGenerationJob.count({ where: { createdAt: { gte: since }, status: 'FAILED' } }),
+        (ctx.prisma as any).voiceGenerationJob.findFirst({ where: { status: 'QUEUED' }, orderBy: { createdAt: 'asc' }, select: { id: true, createdAt: true } }),
+        (ctx.prisma as any).voiceGenerationJob.findFirst({ where: { status: 'PROCESSING' }, orderBy: { startedAt: 'asc' }, select: { id: true, startedAt: true } }),
+        ctx.prisma.featureCreditRate.findUnique({ where: { featureKey: 'story:speech_generation' }, select: { creditsPerUnit: true, isActive: true } }),
+        ctx.prisma.featureCreditRate.findUnique({ where: { featureKey: 'story:audio_generation' }, select: { creditsPerUnit: true, isActive: true } }),
+      ]);
+
+      const { voiceGenerationConfigured, configuredProviderKeys, developmentProviderEnabled, providerConfigurationHealthy } = voiceGenerationDiagnosticsSummary();
+
+      return {
+        rangeDays: input.days,
+        voiceGenerationConfigured,
+        configuredProviderKeys,
+        developmentProviderEnabled,
+        providerConfigurationHealthy,
+        queueHealthy: true, // no external queue infra to be unhealthy in this phase — same in-process pattern as Movie Builder
+        jobsByStatus: Object.fromEntries(jobsByStatus.map((item: any) => [item.status, item._count.id])),
+        recentReadyCount: recentReady,
+        recentFailedCount: recentFailed,
+        oldestQueuedJob: oldestQueued,
+        oldestProcessingJob: oldestProcessing,
+        // Confirms, for operators, that no production speech/audio-generation
+        // charge has been silently enabled — both must read "not configured"
+        // in every environment until Phase 9B.2C.5 deliberately configures one.
+        pricing: {
+          speechGenerationRateConfigured: Boolean(speechRate && speechRate.isActive && speechRate.creditsPerUnit > 0),
+          audioGenerationRateConfigured: Boolean(audioRate && audioRate.isActive && audioRate.creditsPerUnit > 0),
+        },
       };
     }),
 });

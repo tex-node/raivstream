@@ -46,6 +46,14 @@ import {
 import { queueMovieRenderJob } from '../lib/movieRenderWorker';
 import { buildAudioBlueprint, combineRenderHash, hashAudioBlueprint, nextAudioVersionFromExisting, summarizeUnmaterializedSpeechCues } from '../lib/audioPlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
+import {
+  assertCueSpeechEligible,
+  buildVoiceGenerationRequestSnapshot,
+  fingerprintVoiceGenerationRequest,
+  validateSourceText,
+} from '../lib/voiceGeneration';
+import { defaultVoiceGenerationProviderKey, providerIsConfigured } from '../lib/voiceGenerationProviders';
+import { queueVoiceGenerationJob } from '../lib/voiceGenerationWorker';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -567,6 +575,52 @@ export async function restoreAudioVersionForPlan(
   });
 
   return plan;
+}
+
+/**
+ * Phase 9B.2C.1 — the ownership-chain check no existing helper covers:
+ * given a client-supplied audioCueId, verify it actually belongs (via
+ * cue -> track -> plan) to the caller's own project, in one query. Every
+ * existing audio helper starts from an already-trusted planId
+ * (ensureAudioPlanOwnership); voice generation starts from a raw cueId
+ * instead, so this is new — same untrusted-client-id discipline as
+ * ensureProject/assertAudioAssetOwnership above.
+ */
+export async function ensureAudioCueOwnership(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string, audioCueId: string) {
+  assertSequenceAllowed(ctx); // Voice Generation is an Audio Workspace surface — no R16 access, same rule as the rest of Audio Plan editing.
+  await ensureProject(ctx, projectId);
+  const cue = await ctx.prisma.audioCue.findFirst({
+    where: { id: audioCueId, track: { plan: { projectId } } },
+    include: { track: { select: { id: true, type: true, planId: true } } },
+  });
+  if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+  return cue;
+}
+
+/**
+ * Section 21 — only useful, safe fields for normal users. Never exposes
+ * requestSnapshot (may contain performance-direction/creative-intent
+ * detail not meant as a generic API surface), providerRequestId, or
+ * anything that could leak provider internals; failureMessage is already
+ * sanitized by the worker before persistence, so it's safe to pass through
+ * as-is.
+ */
+function sanitizeVoiceGenerationJob(job: any) {
+  return {
+    id: job.id,
+    audioCueId: job.audioCueId,
+    status: job.status,
+    generationType: job.generationType,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+    actualDurationSeconds: job.actualDurationSeconds ?? null,
+    outputAudioAssetId: job.outputAudioAssetId ?? null,
+    playbackUrl: job.outputAudioAsset?.publicUrl ?? null,
+    failureCode: job.failureCode ?? null,
+    failureMessage: job.failureMessage ?? null,
+    attemptCount: job.attemptCount,
+  };
 }
 
 async function getOrCreateSequence(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string, sequenceId?: string | null) {
@@ -5128,5 +5182,164 @@ export const storyRouter = router({
         },
       });
       return duplicate;
+    }),
+
+  // ─── Phase 9B.2C.1 — Voice Generation Core ────────────────────────────
+  //
+  // Materializes an unmaterialized NARRATION/DIALOGUE cue into a real
+  // AudioAsset via a provider-neutral generation job. Never defines/alters
+  // film or audio timing; never charges credits (no production speech-
+  // generation rate exists — see credits.ts's STORY_SPEECH_GENERATION_FEATURE_KEY,
+  // deliberately unconfigured this phase); a successful job's only durable
+  // creative-facing effect is one normal AudioAsset, attached to the cue
+  // only via the explicit attachGeneratedVoiceTake mutation below.
+
+  generateVoiceForCue: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      audioCueId: z.string(),
+      voiceProfileId: z.string().optional().nullable(),
+      requestedFormat: z.enum(['wav']).default('wav'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const cue = await ensureAudioCueOwnership(ctx, input.projectId, input.audioCueId);
+      assertCueSpeechEligible(cue.track.type);
+      validateSourceText(cue.text); // fail fast, before touching voice profile / provider resolution
+
+      let voiceProfile: any = null;
+      if (input.voiceProfileId) {
+        voiceProfile = await ctx.prisma.voiceProfile.findFirst({ where: { id: input.voiceProfileId, projectId: input.projectId } });
+        if (!voiceProfile) throw new TRPCError({ code: 'NOT_FOUND', message: 'Voice profile not found' });
+      } else if (cue.voiceProfileId) {
+        voiceProfile = await ctx.prisma.voiceProfile.findFirst({ where: { id: cue.voiceProfileId, projectId: input.projectId } });
+      }
+
+      const providerKey = defaultVoiceGenerationProviderKey();
+      if (!providerIsConfigured(providerKey)) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'VOICE_PROVIDER_NOT_CONFIGURED: no voice generation provider is configured in this environment.' });
+      }
+
+      const snapshot = buildVoiceGenerationRequestSnapshot({
+        projectId: input.projectId,
+        cue: {
+          id: cue.id, text: cue.text, performancePreset: cue.performancePreset, performanceDirection: cue.performanceDirection,
+          durationSeconds: cue.durationSeconds, voiceProfileId: voiceProfile?.id ?? null, trackType: cue.track.type,
+        },
+        voiceProfile: voiceProfile ? {
+          id: voiceProfile.id, voiceRef: voiceProfile.voiceRef, voiceType: voiceProfile.voiceType, accentStyle: voiceProfile.accentStyle,
+          pitch: voiceProfile.pitch, rate: voiceProfile.rate, styleNotes: voiceProfile.styleNotes, language: voiceProfile.language,
+        } : null,
+        providerKey,
+        requestedFormat: input.requestedFormat,
+      });
+      const requestFingerprint = fingerprintVoiceGenerationRequest(snapshot);
+
+      // Idempotency (brief §5): a READY or still-active job with this exact
+      // fingerprint is reused outright. A FAILED row is retried in place
+      // (same unique row — see the @@unique([audioCueId, requestFingerprint])
+      // constraint) rather than forked into a duplicate.
+      const existing = await (ctx.prisma as any).voiceGenerationJob.findUnique({
+        where: { audioCueId_requestFingerprint: { audioCueId: cue.id, requestFingerprint } },
+      });
+      if (existing) {
+        if (existing.status === 'READY' || existing.status === 'QUEUED' || existing.status === 'PROCESSING') {
+          await trackStoryAnalytics(ctx, { event: 'voice_generation_reused', projectId: input.projectId, properties: { audioCueId: cue.id, jobId: existing.id, status: existing.status } });
+          return sanitizeVoiceGenerationJob(existing);
+        }
+        const retried = await (ctx.prisma as any).voiceGenerationJob.update({
+          where: { id: existing.id },
+          data: { status: 'QUEUED', failureCode: null, failureMessage: null, startedAt: null, completedAt: null, failedAt: null },
+        });
+        await trackStoryAnalytics(ctx, { event: 'voice_generation_requested', projectId: input.projectId, properties: { audioCueId: cue.id, jobId: retried.id, retried: true } });
+        queueVoiceGenerationJob(ctx.prisma, retried.id);
+        return sanitizeVoiceGenerationJob(retried);
+      }
+
+      // Concurrency (brief §19/§32): two simultaneous identical requests
+      // both reach here with no existing row; the DB unique constraint
+      // lets exactly one insert win. The loser catches the constraint
+      // violation and re-reads the winner's row instead of surfacing a raw 500.
+      let created: any;
+      try {
+        created = await (ctx.prisma as any).voiceGenerationJob.create({
+          data: {
+            projectId: input.projectId, audioCueId: cue.id, voiceProfileId: voiceProfile?.id ?? null, userId: ctx.user.id,
+            generationType: 'SPEECH', status: 'QUEUED', requestFingerprint, requestSnapshot: snapshot as any, providerKey,
+          },
+        });
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          const winner = await (ctx.prisma as any).voiceGenerationJob.findUniqueOrThrow({
+            where: { audioCueId_requestFingerprint: { audioCueId: cue.id, requestFingerprint } },
+          });
+          return sanitizeVoiceGenerationJob(winner);
+        }
+        throw error;
+      }
+
+      await trackStoryAnalytics(ctx, { event: 'voice_generation_requested', projectId: input.projectId, properties: { audioCueId: cue.id, jobId: created.id, retried: false } });
+      queueVoiceGenerationJob(ctx.prisma, created.id);
+      return sanitizeVoiceGenerationJob(created);
+    }),
+
+  getVoiceGenerationJob: protectedProcedure
+    .input(z.object({ projectId: z.string(), jobId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx);
+      await ensureProject(ctx, input.projectId);
+      const job = await (ctx.prisma as any).voiceGenerationJob.findFirst({
+        where: { id: input.jobId, projectId: input.projectId },
+        include: { outputAudioAsset: { select: { publicUrl: true } } },
+      });
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Voice generation job not found' });
+      return sanitizeVoiceGenerationJob(job);
+    }),
+
+  listVoiceGenerationHistory: protectedProcedure
+    .input(z.object({ projectId: z.string(), audioCueId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cue = await ensureAudioCueOwnership(ctx, input.projectId, input.audioCueId);
+      const jobs = await (ctx.prisma as any).voiceGenerationJob.findMany({
+        where: { audioCueId: cue.id },
+        orderBy: { createdAt: 'desc' },
+        include: { outputAudioAsset: { select: { publicUrl: true } } },
+      });
+      return jobs.map(sanitizeVoiceGenerationJob);
+    }),
+
+  attachGeneratedVoiceTake: protectedProcedure
+    .input(z.object({ projectId: z.string(), audioCueId: z.string(), jobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const cue = await ensureAudioCueOwnership(ctx, input.projectId, input.audioCueId);
+      const job = await (ctx.prisma as any).voiceGenerationJob.findFirst({ where: { id: input.jobId, projectId: input.projectId, audioCueId: cue.id } });
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Voice generation job not found for this cue' });
+      if (job.status !== 'READY' || !job.outputAudioAssetId) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Voice generation job is not ready to attach.' });
+      }
+      // Defense-in-depth re-validation of the resulting asset's ownership —
+      // the same check addCue/updateCue perform at write time, even though
+      // this asset was created by our own worker for this exact project.
+      await assertAudioAssetOwnership(ctx, input.projectId, job.outputAudioAssetId);
+      await ctx.prisma.audioCue.update({ where: { id: cue.id }, data: { audioAssetId: job.outputAudioAssetId } });
+      await trackStoryAnalytics(ctx, { event: 'voice_generation_take_selected', projectId: input.projectId, properties: { audioCueId: cue.id, jobId: job.id } });
+      return { ok: true, audioCueId: cue.id, audioAssetId: job.outputAudioAssetId as string };
+    }),
+
+  retryVoiceGeneration: protectedProcedure
+    .input(z.object({ projectId: z.string(), jobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx);
+      await ensureProject(ctx, input.projectId);
+      const job = await (ctx.prisma as any).voiceGenerationJob.findFirst({ where: { id: input.jobId, projectId: input.projectId } });
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Voice generation job not found' });
+      if (job.status !== 'FAILED') {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only a FAILED job can be retried.' });
+      }
+      const retried = await (ctx.prisma as any).voiceGenerationJob.update({
+        where: { id: job.id },
+        data: { status: 'QUEUED', failureCode: null, failureMessage: null, startedAt: null, completedAt: null, failedAt: null },
+      });
+      queueVoiceGenerationJob(ctx.prisma, retried.id);
+      return sanitizeVoiceGenerationJob(retried);
     }),
 });

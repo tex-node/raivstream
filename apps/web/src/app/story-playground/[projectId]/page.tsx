@@ -379,6 +379,22 @@ export default function StoryWorkspacePage() {
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'audio') },
   );
+  // Phase 9B.2C.1 — Voice Generation Core. Dev-provider only in this phase;
+  // see the "Audio source" honesty line below for why this never pretends
+  // to be production TTS.
+  const generateVoice = trpc.story.generateVoiceForCue.useMutation({ onSuccess: () => refreshAudio('Voice generation requested.') });
+  const attachVoiceTake = trpc.story.attachGeneratedVoiceTake.useMutation({ onSuccess: () => refreshAudio('Generated take attached.') });
+  const retryVoiceGeneration = trpc.story.retryVoiceGeneration.useMutation({ onSuccess: () => refreshAudio('Voice generation retried.') });
+  const voiceGenerationHistory = trpc.story.listVoiceGenerationHistory.useQuery(
+    { projectId, audioCueId: selectedCueId ?? '' },
+    {
+      enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'audio' && selectedCueId),
+      refetchInterval: (query) => {
+        const jobs = query.state.data as any[] | undefined;
+        return jobs?.some((j) => j.status === 'QUEUED' || j.status === 'PROCESSING') ? 2000 : false;
+      },
+    },
+  );
   const createSequenceVersion = trpc.story.createSequenceVersion.useMutation({ onSuccess: () => { setVersionTitle(''); refreshSequence('Version saved.'); } });
   const restoreSequenceVersion = trpc.story.restoreSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version restored.') });
   const duplicateSequenceVersion = trpc.story.duplicateSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version duplicated.') });
@@ -413,6 +429,12 @@ export default function StoryWorkspacePage() {
     utils.story.listVoiceProfiles.invalidate({ projectId });
     const planId = (audioPlanQuery.data as any)?.plan?.id;
     if (planId) utils.story.listAudioVersions.invalidate({ projectId, planId });
+    // Phase 9B.2C.1 — without this, the voice generation panel never learns
+    // a job was just created/retried/attached: its own query is keyed on
+    // the cue that hasn't changed, so nothing else would trigger a refetch,
+    // and refetchInterval's own "is anything QUEUED/PROCESSING" check reads
+    // stale (pre-mutation) data, so it never starts polling on its own.
+    if (selectedCueId) utils.story.listVoiceGenerationHistory.invalidate({ projectId, audioCueId: selectedCueId });
   }
 
   useEffect(() => {
@@ -1355,13 +1377,67 @@ export default function StoryWorkspacePage() {
                           className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-semibold text-[#F7F8FC]"
                         />
                       </label>
-                      {/* Honest state, never a fake "Generate Voice" control — no TTS
-                          provider exists yet (Phase 9B.2). Text/voice/performance
-                          direction are creative intent; this line is the only place
-                          that says whether they're backed by an actual audio source. */}
                       <p className={`text-[10px] font-black uppercase tracking-wide ${selectedCue.audioAssetId ? 'text-[#2fbf71]' : 'text-[#75798c]'}`}>
                         Audio source: {selectedCue.audioAssetId ? 'Attached' : 'Not generated'}
                       </p>
+                      {/* Phase 9B.2C.1 — Voice Generation Core, dev-fixture provider
+                          only. Never presented as production-quality TTS: the
+                          fixture provider synthesizes a deterministic tone, not
+                          speech, and is only ever reachable when an operator has
+                          explicitly enabled it outside production. */}
+                      {(() => {
+                        const jobs = (voiceGenerationHistory.data as any[]) ?? [];
+                        const latestJob = jobs[0] ?? null;
+                        const busy = latestJob && (latestJob.status === 'QUEUED' || latestJob.status === 'PROCESSING');
+                        return (
+                          <div className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.03)] p-3 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Voice Generation (dev fixture)</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={busy || generateVoice.isPending}
+                                onClick={() => generateVoice.mutate({ projectId, audioCueId: selectedCue.id, voiceProfileId: selectedCue.voiceProfileId ?? undefined })}
+                                className="rounded-lg bg-[rgba(181,171,252,0.14)] px-3 py-1.5 text-xs font-black text-[#b5abfc] disabled:opacity-40"
+                              >
+                                Generate Voice
+                              </button>
+                              {latestJob && (
+                                <span className={`text-[10px] font-black uppercase tracking-wide ${latestJob.status === 'READY' ? 'text-[#2fbf71]' : latestJob.status === 'FAILED' ? 'text-[#e35d5d]' : 'text-[#9397ab]'}`}>
+                                  {latestJob.status}
+                                </span>
+                              )}
+                              {latestJob?.status === 'FAILED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => retryVoiceGeneration.mutate({ projectId, jobId: latestJob.id })}
+                                  className="rounded-lg bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                                >
+                                  Retry
+                                </button>
+                              )}
+                            </div>
+                            {latestJob?.status === 'FAILED' && (
+                              <p className="text-xs font-bold text-[#e35d5d]">{latestJob.failureCode ?? 'Generation failed.'}</p>
+                            )}
+                            {latestJob?.status === 'READY' && (
+                              <div className="space-y-2">
+                                {latestJob.playbackUrl && <audio controls src={latestJob.playbackUrl} className="w-full" />}
+                                {latestJob.outputAudioAssetId !== selectedCue.audioAssetId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => attachVoiceTake.mutate({ projectId, audioCueId: selectedCue.id, jobId: latestJob.id })}
+                                    className="rounded-lg bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-1.5 text-xs font-black text-[#F7F8FC]"
+                                  >
+                                    Use Take / Attach
+                                  </button>
+                                ) : (
+                                  <p className="text-xs font-bold text-[#2fbf71]">This take is attached to the cue.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                   <div className="grid grid-cols-2 gap-2">

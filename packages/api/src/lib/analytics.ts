@@ -103,6 +103,13 @@ export const STORY_ANALYTICS_EVENTS = [
   'movie_render_with_audio_requested',
   'movie_render_with_audio_completed',
   'movie_render_with_audio_failed',
+  // Phase 9B.2C.1 — Voice Generation Core
+  'voice_generation_requested',
+  'voice_generation_reused',
+  'voice_generation_started',
+  'voice_generation_ready',
+  'voice_generation_failed',
+  'voice_generation_take_selected',
 ] as const;
 
 export type StoryAnalyticsEventName = (typeof STORY_ANALYTICS_EVENTS)[number];
