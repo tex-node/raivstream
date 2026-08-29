@@ -190,3 +190,12 @@ html, body {
   color: var(--noc-t1);
   line-height: 1.2;
 }
+
+/* Nocturne loading shimmer (mobile skeleton states) */
+@keyframes noc-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}

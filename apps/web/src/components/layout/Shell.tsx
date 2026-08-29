@@ -7,7 +7,7 @@ import { useUser } from '@/lib/auth';
 export type ShellTab = 'home' | 'story' | 'characters' | 'scenes' | 'assets';
 
 interface ShellProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   backHref?: string;
   showSaved?: boolean;
@@ -48,35 +48,40 @@ const TAB_ICONS: Record<ShellTab, React.ReactNode> = {
 };
 
 function TabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: string }) {
-  const tabs: { id: ShellTab; label: string; href: string }[] = [
-    { id: 'home',       label: 'Home',       href: '/story-playground' },
-    { id: 'story',      label: 'Story',      href: projectId ? `/story-playground/${projectId}?tab=story`      : '#' },
-    { id: 'characters', label: 'Cast',       href: projectId ? `/story-playground/${projectId}?tab=characters` : '#' },
-    { id: 'scenes',     label: 'Scenes',     href: projectId ? `/story-playground/${projectId}?tab=scenes`     : '#' },
-    { id: 'assets',     label: 'Assets',     href: projectId ? `/story-playground/${projectId}?tab=assets`     : '#' },
+  const tabs: { id: ShellTab; label: string; href: string; disabled: boolean }[] = [
+    { id: 'home',       label: 'Home',       href: '/m',                                 disabled: false },
+    { id: 'story',      label: 'Story',      href: projectId ? `/m/${projectId}/story`  : '#', disabled: !projectId },
+    { id: 'characters', label: 'Cast',       href: projectId ? `/m/${projectId}/cast`   : '#', disabled: !projectId },
+    { id: 'scenes',     label: 'Scenes',     href: projectId ? `/m/${projectId}/scenes` : '#', disabled: !projectId },
+    { id: 'assets',     label: 'Assets',     href: projectId ? `/m/${projectId}/assets` : '#', disabled: !projectId },
   ];
 
   return (
     <nav className="noc-tab-bar">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
+        const sharedStyle: React.CSSProperties = {
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '3px',
+          minHeight: '48px',
+          justifyContent: 'center',
+          color: isActive ? 'var(--noc-pink-tint)' : 'var(--noc-t6)',
+          textDecoration: 'none',
+          transition: 'color 0.15s',
+        };
+        if (tab.disabled) {
+          return (
+            <span key={tab.id} aria-disabled="true" style={{ ...sharedStyle, color: 'rgba(117,121,140,0.45)', cursor: 'default' }}>
+              {TAB_ICONS[tab.id]}
+              <span style={{ fontSize: '10.5px', fontWeight: 500 }}>{tab.label}</span>
+            </span>
+          );
+        }
         return (
-          <Link
-            key={tab.id}
-            href={tab.href}
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '3px',
-              minHeight: '48px',
-              justifyContent: 'center',
-              color: isActive ? 'var(--noc-pink-tint)' : 'var(--noc-t6)',
-              textDecoration: 'none',
-              transition: 'color 0.15s',
-            }}
-          >
+          <Link key={tab.id} href={tab.href} style={sharedStyle}>
             {TAB_ICONS[tab.id]}
             <span style={{ fontSize: '10.5px', fontWeight: 500 }}>{tab.label}</span>
           </Link>
@@ -151,7 +156,7 @@ export function Shell({
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-        ) : (
+        ) : !title ? (
           <Link
             href="/story-playground"
             style={{
@@ -165,10 +170,10 @@ export function Shell({
           >
             Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
           </Link>
-        )}
+        ) : null}
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {backHref && (
+          {title && (
             <div style={{ fontSize: '15.5px', fontWeight: 600, color: 'var(--noc-t1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {title}
             </div>
