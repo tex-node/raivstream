@@ -1,0 +1,11 @@
+provider,model,executed,sample_size,min_ms,median_ms,p75_ms,p95_ms,max_ms,ttfa_ms,concurrency_tested,concurrency_success_rate,note
+OpenAI,tts-1,REAL_MEASURED,10,699,1472,1829,2672,2672,NOT_STREAMING_BATCH_ONLY,3,3/3 (100%),"Complete-response (TTCA) latency only -- tts-1 was called in non-streaming batch mode, so no TTFA figure applies. Sample size is 10, well below the brief's suggested 20-request battery; label all percentiles PRELIMINARY. 3-concurrent probe: 1018/1069/1299ms, no degradation, no 429s observed. See phase-9b2c-openai-benchmark-manifest.json for the raw per-request data."
+ElevenLabs,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned in this environment. Third-party published figures exist (e.g. ~832ms TTFA at self-serve tier per one comparison source) but are NOT independently verified here and are excluded from this table per the no-fabrication rule."
+Cartesia,Sonic,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned. Vendor-published figure (40ms TTFA) and one third-party real-world figure (~166-190ms TTFA) both found during research but NOT independently verified here."
+Google Cloud Text-to-Speech,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key/service account provisioned."
+Microsoft Azure AI Speech,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned."
+Amazon Polly,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No AWS credentials provisioned."
+Resemble AI,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned."
+Deepgram Aura-2,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned. Vendor-published figure (sub-200ms baseline, ~90ms optimized) found during research but NOT independently verified here."
+Rime AI,n/a,NOT_EXECUTED_CREDENTIALS_UNAVAILABLE,0,,,,,,,,,"No API key provisioned. Vendor-published figure (sub-200ms, Mist v2 ~70ms) found during research but NOT independently verified here."
+PlayHT,n/a,NOT_APPLICABLE_DISCONTINUED,0,,,,,,,,,"Service discontinued; latency testing is moot."

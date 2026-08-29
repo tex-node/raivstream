@@ -1,0 +1,24 @@
+provider,tier,billing_basis,list_price_per_1m_chars_usd,basis_type,cost_per_min_usd_theoretical,cost_per_min_usd_measured,source_note
+OpenAI,tts-1,characters,15.00,THEORETICAL_AND_MEASURED,0.0150,0.0150,"Measured from real 10-request staging benchmark (Section 35): $0.01356 actual charge across 54.09s of generated audio = $0.01504/min measured, versus $15/1M chars theoretical at ~1000 chars/min measured speech rate = $0.0150/min theoretical. The two independently agree within ~0.3%."
+OpenAI,tts-1-hd,characters,30.00,THEORETICAL_LIST_PRICE,0.0300,,"Not benchmarked; list price is exactly 2x tts-1 per official pricing."
+OpenAI,gpt-4o-mini-tts,tokens (0.60 in / 12.00 out per 1M),TOKEN_BASED,,,,"Token-based pricing is not directly convertible to USD/minute without a confirmed audio-tokens-per-second ratio from OpenAI; not benchmarked this round. Generally reported as pricier than tts-1 for comparable output."
+Google Cloud TTS,Standard / WaveNet,characters,4.00,THEORETICAL_LIST_PRICE,0.0040,,"First 1M WaveNet chars/month and 4M Standard chars/month are free; marginal cost only applies above the free tier."
+Google Cloud TTS,Neural2,characters,16.00,THEORETICAL_LIST_PRICE,0.0160,,
+Google Cloud TTS,Chirp 3 HD,characters,30.00,THEORETICAL_LIST_PRICE,0.0300,,
+Google Cloud TTS,Studio,characters,160.00,THEORETICAL_LIST_PRICE,0.1600,,"Highest-quality/most expensive tier; premium narration use case only."
+Microsoft Azure AI Speech,Neural,characters,16.00,THEORETICAL_LIST_PRICE,0.0160,,"500K characters/month free tier."
+Microsoft Azure AI Speech,Neural HD,characters,22.00,THEORETICAL_LIST_PRICE,0.0220,,"Reduced from $30/1M in a March 2026 price cut per secondary sources -- confirm against the live Azure pricing page before use in a credit model."
+Microsoft Azure AI Speech,Custom Neural Voice (synthesis),characters,24.00,THEORETICAL_LIST_PRICE,0.0240,,"Excludes the separate fixed training cost (~$52/compute-hour, up to ~$4,992/training run) and hourly endpoint hosting (~$4.04/model/hour) -- material for a pinned custom character voice, immaterial per-minute at scale."
+Amazon Polly,Standard,characters,4.00,THEORETICAL_LIST_PRICE,0.0040,,
+Amazon Polly,Neural,characters,16.00,THEORETICAL_LIST_PRICE,0.0160,,
+Amazon Polly,Generative,characters,30.00,THEORETICAL_LIST_PRICE,0.0300,,
+Amazon Polly,Long-Form,characters,100.00,THEORETICAL_LIST_PRICE,0.1000,,"Positioned for audiobook-length narration; premium tier."
+Cartesia,Sonic (standard),characters (1 credit/char),5.00,THEORETICAL_LIST_PRICE_RANGE_LOW,0.0050,,"Effective $/1M chars varies 5-37 depending on subscription tier per third-party pricing breakdowns; treat as a range, not a fixed number, until confirmed against the live Cartesia pricing page."
+Cartesia,Sonic (standard),characters (1 credit/char),37.00,THEORETICAL_LIST_PRICE_RANGE_HIGH,0.0370,,
+Cartesia,Sonic (Pro Voice Cloning),characters (1.5 credits/char),7.50,THEORETICAL_LIST_PRICE_RANGE_LOW,0.0075,,"1.5x the standard per-character rate at the lowest tier in the range above."
+ElevenLabs,Creator plan (subscription-amortized),characters (credits, ~1:1 baseline model),181.80,THEORETICAL_LIST_PRICE,0.1818,,"$22/month / 121,000 credits, assuming 1 credit ~= 1 character on a non-premium model. Actual credit-to-character ratio varies by model (Turbo vs Multilingual v2 vs v3) and was not independently confirmed against the live ElevenLabs pricing page -- LEGAL/PRICING REVIEW REQUIRED before using this figure in a credit model."
+ElevenLabs,Pro plan (subscription-amortized),characters (credits, ~1:1 baseline model),165.00,THEORETICAL_LIST_PRICE,0.1650,,"$99/month / 600,000 credits, same caveat as above."
+Resemble AI,Flex (pay-as-you-go),seconds ($0.0005/sec),,THEORETICAL_LIST_PRICE,0.0300,,"$0.0005/sec x 60 = $0.03/min flat, independent of character count. Voice-clone slots are a SEPARATE monthly add-on fee ($2-$5/voice/month), not included here."
+Deepgram Aura-2,pay-as-you-go,characters,30.00,THEORETICAL_LIST_PRICE,0.0300,,"$0.030/1000 chars per official pricing page found; drops to ~$27/1M on the Growth plan. Not benchmarked; not deep-researched for rights/privacy this round."
+Rime AI,unconfirmed,unconfirmed,,PRICING_NOT_CONFIRMED,,,"Official per-character or per-second rate was not located from a primary source in this research pass. Do not use any third-party-quoted figure for Rime in a credit model until confirmed directly from rime.ai."
+PlayHT,DISCONTINUED,n/a,,DISQUALIFIED,,,"Service shut down December 31, 2025 following Meta's July 2025 acquisition of the PlayAI team. No current cost basis exists."
