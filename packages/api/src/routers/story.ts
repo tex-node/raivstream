@@ -465,6 +465,110 @@ export async function assertAudioAssetOwnership(ctx: { prisma: any }, projectId:
   return asset;
 }
 
+/**
+ * Phase 9B.2B.1 hotfix (restoreAudioVersion "Unknown argument `audioAsset`").
+ *
+ * `audioPlanInclude` nests each cue's `audioAsset` relation (added so the
+ * Nocturne Audio tab can render an <audio> preview player). `saveAudioVersion`
+ * stores that whole read shape verbatim as the version's JSON `snapshot`, so
+ * every snapshotted cue also carries an `audioAsset` object (or `null`).
+ * Restoring used to spread that snapshot object straight into
+ * `tx.audioCue.create({ data: { ...cueRest } })` — Prisma rejects `audioAsset`
+ * there since it's a read-time relation, not a scalar/FK write field, and
+ * the whole restore failed for every plan with at least one track.
+ *
+ * Fixed with an explicit whitelist, not a spread-then-delete: these two
+ * mappers name every real Prisma column, so no relation this read shape
+ * gains in the future (voiceProfile, characterMemory, sequenceScene, …) can
+ * leak into a write again just because it got added to an `include`.
+ */
+export function toAudioTrackRestoreCreateInput(snapshotTrack: any, planId: string) {
+  return {
+    planId,
+    type: snapshotTrack.type,
+    name: snapshotTrack.name,
+    enabled: snapshotTrack.enabled,
+    volume: snapshotTrack.volume,
+    order: snapshotTrack.order,
+  };
+}
+
+export function toAudioCueRestoreCreateInput(snapshotCue: any) {
+  return {
+    sequenceSceneId: snapshotCue.sequenceSceneId,
+    characterMemoryId: snapshotCue.characterMemoryId,
+    voiceProfileId: snapshotCue.voiceProfileId,
+    audioAssetId: snapshotCue.audioAssetId,
+    enabled: snapshotCue.enabled,
+    order: snapshotCue.order,
+    startTimeSeconds: snapshotCue.startTimeSeconds,
+    durationSeconds: snapshotCue.durationSeconds,
+    trimStartSeconds: snapshotCue.trimStartSeconds,
+    trimEndSeconds: snapshotCue.trimEndSeconds,
+    volume: snapshotCue.volume,
+    fadeInSeconds: snapshotCue.fadeInSeconds,
+    fadeOutSeconds: snapshotCue.fadeOutSeconds,
+    text: snapshotCue.text,
+    performancePreset: snapshotCue.performancePreset,
+    performanceDirection: snapshotCue.performanceDirection,
+    duckingEnabled: snapshotCue.duckingEnabled,
+    duckingAmountDb: snapshotCue.duckingAmountDb,
+    metadata: snapshotCue.metadata,
+  };
+}
+
+/**
+ * The actual restore service path (not a pure helper): ownership-checks the
+ * plan, loads the chosen version, re-validates every referenced audio asset
+ * still belongs to this project (defense-in-depth — a saved snapshot must
+ * never become a channel for attaching a foreign-project AudioAsset, even
+ * though in practice its audioAssetId values were already validated by
+ * assertAudioAssetOwnership when they were first written onto a cue), then
+ * atomically replaces the plan's live tracks/cues from the snapshot using
+ * the explicit write mappers above. Exported so it's directly testable
+ * against a mock Prisma client — the same convention as
+ * assertAudioAssetOwnership — rather than only reachable through the tRPC
+ * mutation.
+ */
+export async function restoreAudioVersionForPlan(
+  ctx: { prisma: any; user: { id: string }; isR16?: boolean },
+  input: { projectId: string; planId: string; versionNumber: number },
+) {
+  const plan = await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
+  const version = await ctx.prisma.audioPlanVersion.findUnique({
+    where: { planId_versionNumber: { planId: input.planId, versionNumber: input.versionNumber } },
+  });
+  if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio plan version not found' });
+
+  const snapshotTracks = Array.isArray(version.snapshot) ? version.snapshot as any[] : [];
+
+  const audioAssetIds = new Set<string>();
+  for (const track of snapshotTracks) {
+    for (const cue of track.cues ?? []) {
+      if (cue.audioAssetId) audioAssetIds.add(cue.audioAssetId);
+    }
+  }
+  for (const audioAssetId of audioAssetIds) {
+    await assertAudioAssetOwnership(ctx, input.projectId, audioAssetId);
+  }
+
+  await ctx.prisma.$transaction(async (tx: any) => {
+    await tx.audioTrack.deleteMany({ where: { planId: input.planId } });
+    for (const track of snapshotTracks) {
+      await tx.audioTrack.create({
+        data: {
+          ...toAudioTrackRestoreCreateInput(track, input.planId),
+          cues: {
+            create: (track.cues ?? []).map(toAudioCueRestoreCreateInput),
+          },
+        },
+      });
+    }
+  });
+
+  return plan;
+}
+
 async function getOrCreateSequence(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string, sequenceId?: string | null) {
   const project = await getSequenceProject(ctx, projectId);
   let sequence = sequenceId
@@ -4988,32 +5092,7 @@ export const storyRouter = router({
   restoreAudioVersion: protectedProcedure
     .input(z.object({ projectId: z.string(), planId: z.string(), versionNumber: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
-      const plan = await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
-      const version = await ctx.prisma.audioPlanVersion.findUnique({
-        where: { planId_versionNumber: { planId: input.planId, versionNumber: input.versionNumber } },
-      });
-      if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio plan version not found' });
-
-      const snapshotTracks = Array.isArray(version.snapshot) ? version.snapshot as any[] : [];
-      await ctx.prisma.$transaction(async (tx: any) => {
-        await tx.audioTrack.deleteMany({ where: { planId: input.planId } });
-        for (const track of snapshotTracks) {
-          const { id, cues, createdAt, updatedAt, planId, ...trackRest } = track;
-          await tx.audioTrack.create({
-            data: {
-              planId: input.planId,
-              ...trackRest,
-              cues: {
-                create: (cues ?? []).map((cue: any) => {
-                  const { id: cueId, trackId, createdAt: cueCreatedAt, updatedAt: cueUpdatedAt, ...cueRest } = cue;
-                  return cueRest;
-                }),
-              },
-            },
-          });
-        }
-      });
-
+      const plan = await restoreAudioVersionForPlan(ctx, input);
       await trackStoryAnalytics(ctx, {
         event: 'audio_version_restored',
         projectId: input.projectId,
