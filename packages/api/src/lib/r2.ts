@@ -21,6 +21,20 @@ function getClient() {
 }
 
 /**
+ * Re-derives the permanent public CDN URL for an already-stored object from
+ * its storage key alone — the same construction `uploadBufferToR2`/
+ * `mirrorUrlToR2` return, exposed standalone so a caller holding a persisted
+ * `storageKey` (the stable, non-expiring identity) never has to trust a
+ * separately-stored `publicUrl` string as the canonical reference. Returns
+ * null if R2 isn't configured, exactly like the upload helpers.
+ */
+export function getPublicUrlForKey(key: string): string | null {
+  const publicUrl = process.env.R2_PUBLIC_URL;
+  if (!publicUrl) return null;
+  return `${publicUrl}/${key}`;
+}
+
+/**
  * Upload a raw buffer directly to R2 (used when the provider returns inline data).
  * Returns the permanent public CDN URL, or null if R2 is not configured.
  */

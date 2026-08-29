@@ -208,6 +208,27 @@ export const adminRouter = router({
 
       const movieRenderRateConfigured = Boolean(movieCreditRate && movieCreditRate.isActive && movieCreditRate.creditsPerUnit > 0);
 
+      // Phase 9B.2 — Audio & Performance layer operational metrics. Derived
+      // entirely from the already-fetched `jobs`/`assets` (no extra queries)
+      // and only from fields already safe for admin eyes (no cue text, no
+      // provider names, no signed URLs — same discipline as the existing
+      // visual diagnostics above).
+      const jobsWithAudio = jobs.filter((job: any) => job.audioBlueprintSnapshot?.hasAudio);
+      const silentJobs = jobs.filter((job: any) => !job.audioBlueprintSnapshot?.hasAudio);
+      const audioFailedJobs = jobsWithAudio.filter((job: any) => job.status === 'FAILED');
+      const audioCompletedJobs = jobsWithAudio.filter((job: any) => job.status === 'READY' && job.startedAt && job.completedAt);
+      const averageRenderMsWithAudio = audioCompletedJobs.length
+        ? audioCompletedJobs.reduce((sum: number, job: any) => sum + (new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()), 0) / audioCompletedJobs.length
+        : null;
+      const averageAudioCueCount = jobsWithAudio.length
+        ? jobsWithAudio.reduce((sum: number, job: any) => {
+            const cueCount = (job.audioBlueprintSnapshot?.tracks ?? []).reduce((s: number, t: any) => s + (t.cues?.length ?? 0), 0);
+            return sum + cueCount;
+          }, 0) / jobsWithAudio.length
+        : 0;
+      const outputAudioVerificationFailures = audioFailedJobs.filter((job: any) => job.errorCode === 'OUTPUT_AUDIO_VERIFICATION_FAILED').length;
+      const missingAudioStreamErrors = audioFailedJobs.filter((job: any) => job.errorCode === 'OUTPUT_AUDIO_STREAM_MISSING').length;
+
       return {
         rangeDays: input.days,
         ffmpegReady,
@@ -223,6 +244,15 @@ export const adminRouter = router({
           totalBytes,
           averageRenderMs,
           failureRate: jobs.length ? failed.length / jobs.length : 0,
+        },
+        audio: {
+          rendersWithAudio: jobsWithAudio.length,
+          silentRenders: silentJobs.length,
+          audioRenderFailures: audioFailedJobs.length,
+          averageAudioCueCount: Math.round(averageAudioCueCount * 10) / 10,
+          outputAudioVerificationFailures,
+          missingAudioStreamErrors,
+          averageRenderMsWithAudio,
         },
         jobsByStatus: Object.fromEntries(jobsByStatus.map((item: any) => [item.status, item._count.id])),
         recentJobs: jobs.map((job: any) => ({

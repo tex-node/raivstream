@@ -14,7 +14,10 @@ import {
   type MovieRenderPlan,
   type MovieRenderPlanShot,
 } from './movieRenderPlanning';
-import { uploadBufferToR2 } from './r2';
+import { getPublicUrlForKey, uploadBufferToR2 } from './r2';
+import { assertAudioReadyGate, buildMixedAudioTrack, muxAudioWithVideo, normalizeAudioInput, probeAudioAsset, probeAudioStream, type ResolvedCueSource } from './audioMixing';
+import type { AudioBlueprint } from './audioPlanning';
+import { analytics } from './analytics';
 
 const FINAL_STATUSES = new Set(['READY', 'FAILED', 'CANCELLED']);
 
@@ -257,13 +260,27 @@ async function probeMovie(filePath: string, run: CommandRunner): Promise<MoviePr
   return { durationSeconds, width, height, fps, codec, container, fileSizeBytes };
 }
 
+// Ordered, prefix-matched typed error codes. Every throw site in this file
+// that wants a specific diagnostic code prefixes its message with exactly
+// one of these; anything else falls back to the generic MOVIE_RENDER_FAILED.
+// More specific prefixes (e.g. OUTPUT_AUDIO_STREAM_MISSING) are listed
+// before their more general relatives (OUTPUT_VERIFICATION_FAILED) so a
+// specific match is never shadowed by a broader one.
+const KNOWN_RENDER_ERROR_CODE_PREFIXES = [
+  'OUTPUT_DURATION_MISMATCH',
+  'OUTPUT_AUDIO_STREAM_MISSING',
+  'OUTPUT_AUDIO_VERIFICATION_FAILED',
+  'AUDIO_ASSET_NOT_FOUND',
+  'AUDIO_ASSET_PROJECT_MISMATCH',
+  'AUDIO_ASSET_STORAGE_KEY_MISSING',
+  'AUDIO_ASSET_STORAGE_KEY_MISMATCH',
+  'AUDIO_ASSET_PROBE_FAILED',
+  'OUTPUT_VERIFICATION_FAILED',
+] as const;
+
 async function failJob(prisma: PrismaClient, job: any, error: unknown, metadata?: Record<string, unknown>) {
   const message = error instanceof Error ? error.message : String(error);
-  const errorCode = message.startsWith('OUTPUT_DURATION_MISMATCH')
-    ? 'OUTPUT_DURATION_MISMATCH'
-    : message.startsWith('OUTPUT_VERIFICATION_FAILED')
-      ? 'OUTPUT_VERIFICATION_FAILED'
-      : 'MOVIE_RENDER_FAILED';
+  const errorCode = KNOWN_RENDER_ERROR_CODE_PREFIXES.find((prefix) => message.startsWith(prefix)) ?? 'MOVIE_RENDER_FAILED';
   await (prisma as any).movieRenderJob.update({
     where: { id: job.id },
     data: {
@@ -346,9 +363,194 @@ export async function executeMovieRenderJob(
     if (probe.codec !== 'h264') {
       throw new Error(`OUTPUT_VERIFICATION_FAILED: expected h264 codec, got ${probe.codec}`);
     }
-    const buffer = await readFile(outputPath);
-    const file = await stat(outputPath);
-    if (file.size <= 0 || file.size !== probe.fileSizeBytes) throw new Error('OUTPUT_VERIFICATION_FAILED: invalid output size');
+    // Silent-film verification is exactly as before this point — unchanged,
+    // still operating on `outputPath`/`probe`. Everything below is additive:
+    // a project with no enabled audio cues never enters this branch at all
+    // (required behavior: "Silent films must remain valid", tests I/M).
+    let finalOutputPath = outputPath;
+    let audioVerification: Record<string, unknown> | null = null;
+    const audioBlueprint = job.audioBlueprintSnapshot as AudioBlueprint | null;
+    // "Renderable" is stricter than the planning-level blueprint.hasAudio:
+    // a NARRATION/DIALOGUE cue can exist in the creative plan with only text
+    // and no attached AudioAsset yet (no TTS provider exists this phase —
+    // brief §27). Only cues with a resolved audioAssetId actually contribute
+    // bytes to the mix; text-only speech cues are silently excluded from the
+    // render (not an error) until a future phase adds generation.
+    const cuesWithSource = audioBlueprint
+      ? audioBlueprint.tracks.flatMap((track) =>
+          track.cues
+            .filter((cue) => cue.audioAssetId)
+            .map((cue) => ({ cue, trackType: track.type, trackVolume: track.volume })))
+      : [];
+
+    if (audioBlueprint?.hasAudio && cuesWithSource.length > 0) {
+      await updateStage(prisma, job.id, 'VERIFYING', 'mixing_audio', 89);
+
+      // Every materialized cue (one that claims an audioAssetId) is resolved
+      // through this exact, strict, ordered sequence. A cue with NO
+      // audioAssetId at all is a different condition entirely — plain
+      // speech/creative intent, handled by preflight/product semantics
+      // (summarizeUnmaterializedSpeechCues) — and never reaches this loop
+      // (cuesWithSource already filtered on audioAssetId presence). But once
+      // a cue DOES claim one, every step below either resolves cleanly or
+      // the WHOLE RENDER fails with a typed error — never a silent per-cue
+      // skip. A foreign or tampered reference is a hard integrity problem,
+      // not something to quietly drop and carry on past.
+      //
+      //   1. require audioAssetId            (cuesWithSource's own filter)
+      //   2. load asset from DB              (per-cue, always a fresh,
+      //                                        trusted lookup — never the
+      //                                        blueprint/snapshot alone)
+      //   3. require asset exists            -> AUDIO_ASSET_NOT_FOUND
+      //   4. require asset.projectId matches -> AUDIO_ASSET_PROJECT_MISMATCH
+      //      (checked BEFORE any fetch/download — a cross-project reference
+      //      must never become a storage access side channel)
+      //   5. require asset.storageKey exists -> AUDIO_ASSET_STORAGE_KEY_MISSING
+      //   5.5. compare snapshot cue.storageKey (if present) against the
+      //      canonical DB value -> AUDIO_ASSET_STORAGE_KEY_MISMATCH
+      //      The snapshot's storageKey is PROVENANCE, never AUTHORITY —
+      //      it records what this render intended to use when the job was
+      //      created. It is deliberately NOT silently overridden by the DB
+      //      value on a mismatch: doing that would let the actual render
+      //      input differ from the immutable snapshot while the job still
+      //      claims the original provenance, which undermines the whole
+      //      point of an immutable A/B snapshot. A mismatch is therefore a
+      //      typed, loud failure, not a quiet substitution. (A snapshot with
+      //      no storageKey at all — predates this field, or the
+      //      blueprint-builder never resolved one — has nothing to compare
+      //      against and is not a mismatch.)
+      //   6. resolve URL from the canonical DB storageKey (only after 5.5
+      //      confirms it matches provenance, or there was nothing to check)
+      //   7. download
+      //   8. probe (raw)                     -> AUDIO_ASSET_PROBE_FAILED
+      //   9. normalize
+      //  10. mix (outside this loop, once, over every resolved source)
+      //
+      // Lifecycle assumption this whole sequence depends on: an
+      // AudioAsset's storageKey is treated as IMMUTABLE for the lifetime of
+      // the row — nothing in this codebase ever updates
+      // AudioAsset.storageKey in place. If storage migration is ever
+      // supported (re-encoding, moving buckets, etc.), it must create a new
+      // asset identity/version rather than mutate the key an existing
+      // snapshot already points at — otherwise a strict mismatch check here
+      // would make every already-queued or retried render referencing the
+      // old key permanently unrenderable. Not solved here; documented so it
+      // isn't rediscovered the hard way later.
+      const sources: ResolvedCueSource[] = [];
+      const inputAssetProbes: Array<{ cueId: string; durationSeconds: number | null; sampleRateHz: number | null; channels: number | null }> = [];
+      for (const { cue, trackType, trackVolume } of cuesWithSource) {
+        const audioAssetId = cue.audioAssetId as string;
+
+        // Step 2 + 3.
+        const asset: any = await (prisma as any).audioAsset.findUnique({ where: { id: audioAssetId } });
+        if (!asset) {
+          throw new Error(`AUDIO_ASSET_NOT_FOUND: cue ${cue.cueId} references audioAssetId ${audioAssetId}, which does not exist.`);
+        }
+
+        // Step 4 — before anything that could touch storage.
+        if (asset.projectId !== job.projectId) {
+          throw new Error(`AUDIO_ASSET_PROJECT_MISMATCH: cue ${cue.cueId} references audioAssetId ${audioAssetId}, which belongs to a different project than this render job.`);
+        }
+
+        // Step 5.
+        if (!asset.storageKey) {
+          throw new Error(`AUDIO_ASSET_STORAGE_KEY_MISSING: cue ${cue.cueId}'s audio asset ${audioAssetId} has no storage key.`);
+        }
+
+        // Step 5.5 — provenance vs. authority. A snapshot that recorded a
+        // storageKey which no longer matches the canonical DB value is a
+        // typed, loud failure — never a silent substitution. Nothing to
+        // compare when the snapshot has no storageKey at all (older
+        // snapshots, or a cue the blueprint-builder never resolved one for).
+        if (cue.storageKey && cue.storageKey !== asset.storageKey) {
+          throw new Error(`AUDIO_ASSET_STORAGE_KEY_MISMATCH: cue ${cue.cueId}'s snapshot storageKey does not match audio asset ${audioAssetId}'s canonical DB storageKey.`);
+        }
+
+        // Step 6. Always the canonical DB storageKey (verified above to
+        // either match the snapshot's provenance or have nothing to
+        // compare) — never the snapshot's own value directly, so there is
+        // exactly one code path that ever builds a fetch target. Falls back
+        // to the asset's stored publicUrl only when no R2_PUBLIC_URL-derived
+        // URL is available (e.g. local/test fixtures) — that fallback is
+        // still a DB-trusted field, never a browser/snapshot-supplied one.
+        const sourceUrl = getPublicUrlForKey(asset.storageKey) ?? asset.publicUrl;
+        if (!sourceUrl) {
+          throw new Error(`AUDIO_ASSET_STORAGE_KEY_MISSING: cue ${cue.cueId}'s audio asset ${audioAssetId} has a storage key that could not be resolved to a retrievable URL.`);
+        }
+
+        // Step 7.
+        const rawPath = path.join(tempDir, `audio-${cue.cueId}.source`);
+        await downloadToFile(sourceUrl, rawPath);
+
+        // Step 8 — probe the RAW download before spending effort normalizing
+        // it, so a corrupt/non-audio download fails fast with a clear cause.
+        const rawProbe = await probeAudioAsset(rawPath, run);
+        if (!rawProbe.hasAudioStream) {
+          throw new Error(`AUDIO_ASSET_PROBE_FAILED: cue ${cue.cueId}'s audio asset ${audioAssetId} could not be probed, or has no audio stream.`);
+        }
+        inputAssetProbes.push({ cueId: cue.cueId, durationSeconds: rawProbe.durationSeconds, sampleRateHz: rawProbe.sampleRateHz, channels: rawProbe.channels });
+
+        // Step 9. Normalize to the canonical intermediate PCM format before
+        // the file ever reaches the mix filter graph (see
+        // audioMixing.ts normalizeAudioInput docstring) — mixing math
+        // (adelay/atrim/afade offsets) must operate on identically-shaped
+        // audio regardless of what format/sample-rate the upload was in.
+        const normalizedPath = path.join(tempDir, `audio-${cue.cueId}.normalized.wav`);
+        await normalizeAudioInput({ inputPath: rawPath, outputPath: normalizedPath, run });
+
+        sources.push({ cue, trackType, trackVolume, filePath: normalizedPath });
+      }
+
+      if (sources.length > 0) {
+        const mixedAudioPath = path.join(tempDir, 'mixed-audio.m4a');
+        // canonicalRuntimeSeconds is the Audio Blueprint's own runtimeSeconds,
+        // which is always copied directly from the Film Blueprint — never an
+        // independently-derived value. Forcing the mix to this exact length
+        // (pad/trim, see buildMixFilterGraph) is what keeps "Film Blueprint
+        // runtime = Audio Blueprint runtime = final movie runtime" true
+        // regardless of individual cue timing.
+        await buildMixedAudioTrack({
+          sources,
+          duckingWindows: audioBlueprint.duckingWindows,
+          canonicalRuntimeSeconds: audioBlueprint.runtimeSeconds,
+          outputPath: mixedAudioPath,
+          run,
+        });
+
+        const muxedPath = path.join(tempDir, 'movie-with-audio.mp4');
+        await muxAudioWithVideo({ videoPath: outputPath, audioPath: mixedAudioPath, outputPath: muxedPath, run });
+
+        const audioProbe = await probeAudioStream(muxedPath, run);
+        assertAudioReadyGate({ expectedAudio: true, probe: audioProbe, expectedVideoDurationSeconds: probe.durationSeconds });
+
+        // Second, independent leg of the same invariant: re-probe the muxed
+        // file's VIDEO stream and confirm it is still within the existing
+        // 0.25s tolerance of the pre-mux silent probe. `-c:v copy` never
+        // re-encodes, but this catches any regression where muxing (e.g. a
+        // future `-shortest`/`-t` change) truncates the video stream instead
+        // of the now-exact-length audio stream.
+        const postMuxVideoProbe = await probeMovie(muxedPath, run);
+        const videoDurationCheck = durationWithinTolerance({
+          expectedSeconds: probe.durationSeconds,
+          actualSeconds: postMuxVideoProbe.durationSeconds,
+        });
+        if (!videoDurationCheck.ok) {
+          throw new Error(`OUTPUT_DURATION_MISMATCH: muxing audio altered video duration — expected ${videoDurationCheck.expectedDurationSeconds}s, actual ${videoDurationCheck.actualDurationSeconds}s, delta ${videoDurationCheck.durationDeltaSeconds}s`);
+        }
+
+        finalOutputPath = muxedPath;
+        audioVerification = { ...audioProbe, inputAssetProbes, postMuxVideoDurationSeconds: postMuxVideoProbe.durationSeconds };
+      }
+    }
+
+    const buffer = await readFile(finalOutputPath);
+    const file = await stat(finalOutputPath);
+    if (file.size <= 0) throw new Error('OUTPUT_VERIFICATION_FAILED: invalid output size');
+    if (finalOutputPath === outputPath && file.size !== probe.fileSizeBytes) {
+      // Only enforced on the untouched silent-film path — the muxed file's
+      // size legitimately differs from the silent probe once audio is added.
+      throw new Error('OUTPUT_VERIFICATION_FAILED: invalid output size');
+    }
     const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
 
     await updateStage(prisma, job.id, 'UPLOADING', 'uploading_to_r2', 94);
@@ -389,6 +591,8 @@ export async function executeMovieRenderJob(
               container: probe.container,
               fileSizeBytes: probe.fileSizeBytes,
             },
+            hasAudio: Boolean(audioVerification),
+            audioVerification,
           },
         },
       });
@@ -399,10 +603,27 @@ export async function executeMovieRenderJob(
       return created;
     });
     await addRenderEvent(prisma, job.id, { eventName: 'movie_render_completed', stage: 'ready', progressPercent: 100, metadata: { movieAssetId: asset.id, storageKey } });
+    if (audioVerification) {
+      await analytics.track(prisma, {
+        event: 'movie_render_with_audio_completed',
+        userId: job.userId,
+        projectId: job.projectId,
+        properties: { renderJobId: job.id, movieAssetId: asset.id },
+      });
+    }
     return asset;
   } catch (error) {
     const plan = job.renderPlan as MovieRenderPlan | undefined;
     const expectedDurationSeconds = plan?.shots ? calculateExpectedRenderDuration(plan.shots) : undefined;
+    const audioBlueprintOnFailure = job.audioBlueprintSnapshot as AudioBlueprint | null;
+    if (audioBlueprintOnFailure?.hasAudio) {
+      await analytics.track(prisma, {
+        event: 'movie_render_with_audio_failed',
+        userId: job.userId,
+        projectId: job.projectId,
+        properties: { renderJobId: job.id, errorMessage: error instanceof Error ? error.message.slice(0, 300) : String(error) },
+      });
+    }
     await failJob(prisma, job, error, expectedDurationSeconds ? { expectedDurationSeconds } : undefined);
     return null;
   } finally {

@@ -49,6 +49,43 @@ export async function resolveMovieRenderCreditRate(
   return { configured: true, cost: rate.creditsPerUnit, errorCode: null };
 }
 
+// Phase 9B.2 interface boundary only — no TTS/audio-generation provider is
+// implemented in this phase (brief §27/§29). These feature keys exist so any
+// FUTURE paid speech/audio-generation path has a fail-closed rate lookup
+// ready before a single line of provider code is written. Production rates
+// are intentionally NOT configured in this phase; a missing/inactive rate
+// must reject the operation rather than silently proceed for free.
+export const STORY_SPEECH_GENERATION_FEATURE_KEY = 'story:speech_generation';
+export const STORY_AUDIO_GENERATION_FEATURE_KEY = 'story:audio_generation';
+
+export type FeatureCreditRateResult =
+  | { configured: true;  cost: number; errorCode: null }
+  | { configured: false; cost: 0;      errorCode: 'RATE_MISSING' | 'RATE_INVALID' };
+
+/**
+ * Generic fail-closed credit-rate resolver, generalizing the pattern proven
+ * in resolveMovieRenderCreditRate for `story:movie_render`. Distinguishes a
+ * missing row from an inactive/zero-cost row (each is diagnosable
+ * separately) and is a pure read — zero side effects, zero writes, on every
+ * path, including the "not configured" paths.
+ */
+export async function resolveFeatureCreditRate(
+  prisma: PrismaClient,
+  featureKey: string,
+): Promise<FeatureCreditRateResult> {
+  const rate = await prisma.featureCreditRate.findUnique({
+    where:  { featureKey },
+    select: { creditsPerUnit: true, isActive: true },
+  });
+  if (!rate) {
+    return { configured: false, cost: 0, errorCode: 'RATE_MISSING' };
+  }
+  if (!rate.isActive || rate.creditsPerUnit <= 0) {
+    return { configured: false, cost: 0, errorCode: 'RATE_INVALID' };
+  }
+  return { configured: true, cost: rate.creditsPerUnit, errorCode: null };
+}
+
 export async function getFeatureCreditCost(
   prisma: PrismaClient,
   featureKey: string,

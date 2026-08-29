@@ -44,6 +44,7 @@ import {
   shouldReuseMovieRenderJob,
 } from '../lib/movieRenderPlanning';
 import { queueMovieRenderJob } from '../lib/movieRenderWorker';
+import { buildAudioBlueprint, combineRenderHash, hashAudioBlueprint, nextAudioVersionFromExisting, summarizeUnmaterializedSpeechCues } from '../lib/audioPlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -328,6 +329,125 @@ async function nextSequenceVersionNumber(prisma: any, sequenceId: string) {
     select: { versionNumber: true },
   });
   return nextSequenceVersionFromExisting(existingVersions);
+}
+
+// ─── Phase 9B.2 — Audio & Performance layer helpers ────────────────────────
+
+const AUDIO_TRACK_TYPE_VALUES = ['NARRATION', 'DIALOGUE', 'AMBIENCE', 'SFX', 'MUSIC'] as const;
+
+const audioPlanInclude = {
+  tracks: {
+    orderBy: { order: 'asc' as const },
+    include: { cues: { orderBy: { startTimeSeconds: 'asc' as const } } },
+  },
+};
+
+/**
+ * Idempotent find-or-create, mirroring getOrCreateSequence's own
+ * find-outside / re-check-inside-a-transaction pattern exactly (required
+ * test A: Audio Plan creation is idempotent). One non-archived plan per
+ * sequence.
+ */
+async function getOrCreateAudioPlan(ctx: { prisma: any; user: { id: string } }, projectId: string, sequenceId: string) {
+  let plan = await ctx.prisma.audioPerformancePlan.findFirst({
+    where: { projectId, sequenceId, status: { not: 'ARCHIVED' } },
+    orderBy: { updatedAt: 'desc' },
+    include: audioPlanInclude,
+  });
+  if (!plan) {
+    const created = await ctx.prisma.$transaction(async (tx: any) => {
+      const existing = await tx.audioPerformancePlan.findFirst({
+        where: { projectId, sequenceId, status: { not: 'ARCHIVED' } },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (existing) return existing;
+      return tx.audioPerformancePlan.create({ data: { projectId, sequenceId, status: 'DRAFT' } });
+    });
+    plan = await ctx.prisma.audioPerformancePlan.findUnique({ where: { id: created.id }, include: audioPlanInclude });
+  }
+  return plan;
+}
+
+/**
+ * Every audio procedure's authorization gate. Scopes strictly through
+ * StoryProject.userId, exactly like ensureProject — a cross-user planId
+ * simply resolves NOT_FOUND, never leaking another user's plan (required
+ * test O).
+ */
+async function ensureAudioPlanOwnership(
+  ctx: { prisma: any; user: { id: string }; isR16?: boolean },
+  projectId: string,
+  planId: string,
+  withTracks = false,
+) {
+  assertSequenceAllowed(ctx); // Audio Workspace is a creator-only surface, same as Sequence — no R16 access.
+  await ensureProject(ctx, projectId);
+  const plan = await ctx.prisma.audioPerformancePlan.findFirst({
+    where: { id: planId, projectId },
+    include: withTracks ? audioPlanInclude : undefined,
+  });
+  if (!plan) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio plan not found' });
+  return plan;
+}
+
+/**
+ * Read-only lookup of the current Audio Plan (if any) plus its derived Audio
+ * Blueprint — shared by every call site that needs to *look at* the current
+ * audio state without ever mutating AudioPerformancePlan/AudioTrack/AudioCue
+ * rows (Movie Render Independence, brief §35). Used identically by
+ * createMovieRender (to snapshot into a job) and getMovieBuilder (to preflight
+ * a warning) — one read path, not two slightly-different reimplementations.
+ */
+async function readOnlyAudioBlueprint(ctx: { prisma: any }, input: { projectId: string; sequenceId: string; filmBlueprint: { runtimeSeconds: number } }) {
+  const audioPlan = await ctx.prisma.audioPerformancePlan.findFirst({
+    where: { projectId: input.projectId, sequenceId: input.sequenceId, status: { not: 'ARCHIVED' } },
+    orderBy: { updatedAt: 'desc' },
+    include: audioPlanInclude,
+  });
+  const audioBlueprint = audioPlan
+    ? buildAudioBlueprint({
+        filmBlueprint: input.filmBlueprint,
+        tracks: audioPlan.tracks,
+        resolvedAudioAssets: await resolveProjectAudioAssets(ctx, input.projectId, audioPlan.tracks),
+      })
+    : null;
+  return { audioPlan, audioBlueprint };
+}
+
+/**
+ * Builds the project-scoped `audioAssetId -> { storageKey }` map that
+ * `buildAudioBlueprint` requires to resolve any cue's audio asset. The query
+ * itself is the enforcement — `projectId` is in the WHERE clause, so a
+ * cross-project `audioAssetId` (however it reached a cue) simply never comes
+ * back, and `buildAudioBlueprint` treats it as no asset at all. Every
+ * `buildAudioBlueprint` call site in this router uses this helper — there is
+ * no path that resolves an asset without going through this project-scoped
+ * lookup.
+ */
+export async function resolveProjectAudioAssets(ctx: { prisma: any }, projectId: string, tracks: Array<{ cues: Array<{ audioAssetId: string | null }> }>): Promise<Map<string, { storageKey: string }>> {
+  const assetIds = [...new Set(tracks.flatMap((track) => track.cues.map((cue) => cue.audioAssetId).filter((id): id is string => Boolean(id))))];
+  if (assetIds.length === 0) return new Map();
+  const assets = await ctx.prisma.audioAsset.findMany({
+    where: { id: { in: assetIds }, projectId },
+    select: { id: true, storageKey: true },
+  });
+  return new Map(assets.map((asset: any) => [asset.id, { storageKey: asset.storageKey }]));
+}
+
+/**
+ * Rejects a cross-project AudioAsset reference before it can ever be written
+ * onto a cue. A cue's `audioAssetId` is client-supplied — without this check,
+ * an attacker (or a stale UI) could point a cue at another project's (or
+ * another user's) private audio asset id, and the render worker would later
+ * resolve and mix it in (defense-in-depth against that is the projectId
+ * filter on the worker's own audioAsset lookup, but the write-time check here
+ * is what gives creators an honest, immediate NOT_FOUND instead of silently
+ * accepting a reference that will just be dropped at render time).
+ */
+export async function assertAudioAssetOwnership(ctx: { prisma: any }, projectId: string, audioAssetId: string) {
+  const asset = await ctx.prisma.audioAsset.findFirst({ where: { id: audioAssetId, projectId } });
+  if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio asset not found' });
+  return asset;
 }
 
 async function getOrCreateSequence(ctx: { prisma: any; user: { id: string }; isR16?: boolean }, projectId: string, sequenceId?: string | null) {
@@ -3535,6 +3655,20 @@ export const storyRouter = router({
           take: 12,
           include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 8 } },
         });
+        // Read-only, same as createMovieRender's own lookup — this never
+        // creates a render, it only tells the creator honestly what a render
+        // right now would and wouldn't include. WARNING severity, not
+        // BLOCKER (see summarizeUnmaterializedSpeechCues docstring): an
+        // unmaterialized speech cue never prevents rendering, it's just
+        // silently omitted, so the creator should know before they render,
+        // not be blocked from rendering everything else.
+        const { audioBlueprint } = await readOnlyAudioBlueprint(ctx, {
+          projectId: input.projectId,
+          sequenceId: renderContext.sequence.id,
+          filmBlueprint: renderContext.filmBlueprint,
+        });
+        const unmaterialized = summarizeUnmaterializedSpeechCues(audioBlueprint);
+        const readiness = renderReadiness(renderContext.plan);
         await trackStoryAnalytics(ctx, {
           event: 'movie_builder_opened',
           projectId: input.projectId,
@@ -3546,7 +3680,11 @@ export const storyRouter = router({
           filmBlueprint: renderContext.filmBlueprint,
           renderPlan: renderContext.plan,
           renderPlanHash: renderContext.renderPlanHash,
-          readiness: renderReadiness(renderContext.plan),
+          readiness: {
+            ...readiness,
+            warnings: unmaterialized.message ? [...readiness.warnings, unmaterialized.message] : readiness.warnings,
+          },
+          hasAudio: Boolean(audioBlueprint?.hasAudio),
           creditCost: renderContext.creditCost,
           currentMovie: renderContext.currentMovie,
           history,
@@ -3583,17 +3721,30 @@ export const storyRouter = router({
           cause: { errorCode: rateResult.configured ? 'MOVIE_RENDER_RATE_INVALID' : rateResult.errorCode },
         });
       }
+      // Snapshot the current Audio Plan (if any) BEFORE reuse-matching and
+      // BEFORE job creation. This is a read-only lookup — it never mutates
+      // AudioPerformancePlan/AudioTrack/AudioCue rows (Movie Render
+      // Independence, brief §35). Absence of a plan produces the exact same
+      // silent-film shape as before Phase 9B.2 (audioBlueprintSnapshot stays
+      // null, combinedRenderHash === renderContext.renderPlanHash).
+      const { audioPlan, audioBlueprint } = await readOnlyAudioBlueprint(ctx, {
+        projectId: input.projectId,
+        sequenceId: renderContext.sequence.id,
+        filmBlueprint: renderContext.filmBlueprint,
+      });
+      const combinedRenderHash = combineRenderHash(renderContext.renderPlanHash, audioBlueprint);
+
       const reusable = await findReusableMovieRender(ctx, {
         projectId: input.projectId,
         sequenceId: renderContext.sequence.id,
-        renderPlanHash: renderContext.renderPlanHash,
+        renderPlanHash: combinedRenderHash,
       });
-      if (shouldReuseMovieRenderJob(reusable, renderContext.renderPlanHash)) {
+      if (shouldReuseMovieRenderJob(reusable, combinedRenderHash)) {
         await trackStoryAnalytics(ctx, {
-          event: 'movie_render_reused',
+          event: audioBlueprint?.hasAudio ? 'movie_render_with_audio_requested' : 'movie_render_reused',
           projectId: input.projectId,
           audienceMode: renderContext.project.audienceMode,
-          properties: { sequenceId: renderContext.sequence.id, renderJobId: reusable.id, status: reusable.status },
+          properties: { sequenceId: renderContext.sequence.id, renderJobId: reusable.id, status: reusable.status, reused: true },
         });
         return { job: reusable, reused: true };
       }
@@ -3605,8 +3756,14 @@ export const storyRouter = router({
           userId: ctx.user.id,
           status: 'QUEUED',
           filmBlueprintSnapshot: renderContext.filmBlueprint,
+          audioBlueprintSnapshot: audioBlueprint?.hasAudio ? (audioBlueprint as any) : null,
+          audioPlanVersionId: audioPlan?.id ?? null,
+          // Standalone audio-only hash for provenance/debugging — see
+          // schema.prisma comment. Never used for reuse-matching; that's
+          // combinedRenderHash (renderPlanHash) below, unchanged.
+          audioBlueprintHash: audioBlueprint?.hasAudio ? hashAudioBlueprint(audioBlueprint) : null,
           renderPlan: renderContext.plan,
-          renderPlanHash: renderContext.renderPlanHash,
+          renderPlanHash: combinedRenderHash,
           rendererVersion: renderContext.plan.rendererVersion,
           creditsReserved: renderContext.creditCost,
           creditsCharged: 0,
@@ -3645,16 +3802,23 @@ export const storyRouter = router({
       }
 
       await trackStoryAnalytics(ctx, {
-        event: 'movie_render_started',
+        event: audioBlueprint?.hasAudio ? 'movie_render_with_audio_requested' : 'movie_render_started',
         projectId: input.projectId,
         audienceMode: renderContext.project.audienceMode,
         properties: {
           sequenceId: renderContext.sequence.id,
           renderJobId: job.id,
-          renderPlanHash: renderContext.renderPlanHash,
+          renderPlanHash: combinedRenderHash,
           shotCount: renderContext.plan.shots.length,
           runtimeSeconds: renderContext.plan.runtimeSeconds,
           credits: renderContext.creditCost,
+          hasAudio: Boolean(audioBlueprint?.hasAudio),
+          // Observability for the planning-layer defense: non-zero here
+          // means buildAudioBlueprint rejected at least one cue's
+          // audioAssetId as unresolvable within this project's scope — worth
+          // watching for in production even though the worker's own
+          // independent gate is what actually stops a render from using one.
+          rejectedAudioAssetReferenceCount: audioBlueprint?.rejectedAudioAssetReferences.length ?? 0,
         },
       });
       queueMovieRenderJob(ctx.prisma, job.id);
@@ -4456,5 +4620,419 @@ export const storyRouter = router({
           ...(seedImageUrl !== undefined ? { seedImageUrl: seedImageUrl || null } : {}),
         },
       });
+    }),
+
+  // ─── Phase 9B.2 — Audio & Performance layer ──────────────────────────────
+  //
+  // Every procedure below is scoped through ensureProject/assertSequenceAllowed
+  // exactly like every existing Sequence/Movie Builder procedure — a request
+  // for another user's project fails NOT_FOUND before any Audio* table is
+  // touched. None of these procedures ever writes to storySequence,
+  // storySequenceScene, sequenceVersion, storyCharacterMemory (aside from the
+  // explicit optional voice-profile link), storyCharacterMemory director
+  // fields, active-image selection, Favorite state, Creative Critic status,
+  // or Storybook selection — Source Independence (brief §34) is enforced by
+  // construction: these procedures only ever call `.audioPerformancePlan`,
+  // `.audioTrack`, `.audioCue`, `.voiceProfile`, `.audioPlanVersion`, or
+  // `.audioAsset` Prisma delegates.
+
+  getAudioPlan: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const plan = await getOrCreateAudioPlan(ctx, input.projectId, sequence.id);
+      return { plan, sequenceId: sequence.id };
+    }),
+
+  // Idempotent by construction — the same find-then-transactional-recheck
+  // pattern proven in getOrCreateSequence. Calling this twice for the same
+  // sequence returns the same plan id both times (required test A).
+  createAudioPlan: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const plan = await getOrCreateAudioPlan(ctx, input.projectId, sequence.id);
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_plan_created',
+        projectId: input.projectId,
+        properties: { sequenceId: sequence.id, planId: plan.id },
+      });
+      return plan;
+    }),
+
+  addTrack: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      planId: z.string(),
+      type: z.enum(AUDIO_TRACK_TYPE_VALUES),
+      name: z.string().min(1).max(80),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
+      const existingCount = await ctx.prisma.audioTrack.count({ where: { planId: input.planId } });
+      const track = await ctx.prisma.audioTrack.create({
+        data: { planId: input.planId, type: input.type, name: input.name, order: existingCount },
+      });
+      return track;
+    }),
+
+  updateTrack: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      trackId: z.string(),
+      name: z.string().min(1).max(80).optional(),
+      enabled: z.boolean().optional(),
+      volume: z.number().min(0).max(4).optional(),
+      order: z.number().int().min(0).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const track = await ctx.prisma.audioTrack.findFirst({
+        where: { id: input.trackId, plan: { projectId: input.projectId } },
+      });
+      if (!track) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio track not found' });
+      const { projectId, trackId, ...rest } = input;
+      const updated = await ctx.prisma.audioTrack.update({ where: { id: trackId }, data: rest });
+      if (rest.enabled !== undefined) {
+        await trackStoryAnalytics(ctx, {
+          event: 'audio_track_toggled',
+          projectId: input.projectId,
+          properties: { trackId, enabled: rest.enabled },
+        });
+      }
+      return updated;
+    }),
+
+  addCue: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      trackId: z.string(),
+      sequenceSceneId: z.string().optional().nullable(),
+      characterMemoryId: z.string().optional().nullable(),
+      voiceProfileId: z.string().optional().nullable(),
+      audioAssetId: z.string().min(1).optional().nullable(),
+      startTimeSeconds: z.number().min(0),
+      durationSeconds: z.number().min(0).optional().nullable(),
+      trimStartSeconds: z.number().min(0).optional().nullable(),
+      trimEndSeconds: z.number().min(0).optional().nullable(),
+      volume: z.number().min(0).max(4).default(1),
+      fadeInSeconds: z.number().min(0).max(10).optional().nullable(),
+      fadeOutSeconds: z.number().min(0).max(10).optional().nullable(),
+      text: z.string().max(2000).optional().nullable(),
+      performancePreset: z.string().max(60).optional().nullable(),
+      performanceDirection: z.string().max(500).optional().nullable(),
+      duckingEnabled: z.boolean().default(false),
+      duckingAmountDb: z.number().min(0).max(30).optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const track = await ctx.prisma.audioTrack.findFirst({
+        where: { id: input.trackId, plan: { projectId: input.projectId } },
+      });
+      if (!track) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio track not found' });
+      // On create there is no "leave unchanged" state — audioAssetId is
+      // either absent/null (no asset yet) or a string to validate and attach.
+      if (input.audioAssetId) await assertAudioAssetOwnership(ctx, input.projectId, input.audioAssetId);
+      const { projectId, trackId, ...rest } = input;
+      const existingCount = await ctx.prisma.audioCue.count({ where: { trackId } });
+      const cue = await ctx.prisma.audioCue.create({
+        data: { trackId, order: existingCount, ...rest },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_cue_added',
+        projectId: input.projectId,
+        properties: { trackId, cueId: cue.id, trackType: track.type },
+      });
+      return cue;
+    }),
+
+  updateCue: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      cueId: z.string(),
+      enabled: z.boolean().optional(),
+      startTimeSeconds: z.number().min(0).optional(),
+      durationSeconds: z.number().min(0).optional().nullable(),
+      trimStartSeconds: z.number().min(0).optional().nullable(),
+      trimEndSeconds: z.number().min(0).optional().nullable(),
+      volume: z.number().min(0).max(4).optional(),
+      fadeInSeconds: z.number().min(0).max(10).optional().nullable(),
+      fadeOutSeconds: z.number().min(0).max(10).optional().nullable(),
+      text: z.string().max(2000).optional().nullable(),
+      performancePreset: z.string().max(60).optional().nullable(),
+      performanceDirection: z.string().max(500).optional().nullable(),
+      characterMemoryId: z.string().optional().nullable(),
+      voiceProfileId: z.string().optional().nullable(),
+      audioAssetId: z.string().min(1).optional().nullable(),
+      duckingEnabled: z.boolean().optional(),
+      duckingAmountDb: z.number().min(0).max(30).optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const cue = await ctx.prisma.audioCue.findFirst({
+        where: { id: input.cueId, track: { plan: { projectId: input.projectId } } },
+      });
+      if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+      // audioAssetId is deliberately three-way, not a truthy check on its
+      // own — get this wrong and either removing an attached asset silently
+      // fails (undefined mistaken for null) or every unrelated field-only
+      // update accidentally re-validates/re-touches audioAssetId (null
+      // mistaken for undefined):
+      //   undefined -> key omitted from input entirely -> leave unchanged
+      //   null      -> explicit clear -> write null, no ownership check
+      //   string    -> attach/replace -> must pass ownership first
+      // `rest` below still spreads `input` as-is, so the actual DB write
+      // inherits this distinction automatically (Prisma: undefined = omit
+      // from update, null = set column NULL) — this block only owns the
+      // "should we validate ownership first" decision.
+      if (input.audioAssetId !== undefined && input.audioAssetId !== null) {
+        await assertAudioAssetOwnership(ctx, input.projectId, input.audioAssetId);
+      }
+      const { projectId, cueId, ...rest } = input;
+      const updated = await ctx.prisma.audioCue.update({ where: { id: cueId }, data: rest });
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_cue_updated',
+        projectId: input.projectId,
+        properties: { cueId },
+      });
+      return updated;
+    }),
+
+  removeCue: protectedProcedure
+    .input(z.object({ projectId: z.string(), cueId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const cue = await ctx.prisma.audioCue.findFirst({
+        where: { id: input.cueId, track: { plan: { projectId: input.projectId } } },
+      });
+      if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+      await ctx.prisma.audioCue.delete({ where: { id: input.cueId } });
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_cue_removed',
+        projectId: input.projectId,
+        properties: { cueId: input.cueId },
+      });
+      return { deleted: true };
+    }),
+
+  duplicateCue: protectedProcedure
+    .input(z.object({ projectId: z.string(), cueId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const cue = await ctx.prisma.audioCue.findFirst({
+        where: { id: input.cueId, track: { plan: { projectId: input.projectId } } },
+      });
+      if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+      const { id, createdAt, updatedAt, ...rest } = cue;
+      const duplicate = await ctx.prisma.audioCue.create({ data: rest as any });
+      return duplicate;
+    }),
+
+  listVoiceProfiles: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      return ctx.prisma.voiceProfile.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { createdAt: 'asc' },
+      });
+    }),
+
+  createVoiceProfile: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      characterMemoryId: z.string().optional().nullable(),
+      name: z.string().min(1).max(80),
+      voiceType: z.string().max(40).optional().nullable(),
+      voiceRef: z.string().max(200).optional().nullable(),
+      language: z.string().max(20).optional().nullable(),
+      accentStyle: z.string().max(80).optional().nullable(),
+      pitch: z.number().optional().nullable(),
+      rate: z.number().optional().nullable(),
+      styleNotes: z.string().max(500).optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const profile = await ctx.prisma.voiceProfile.create({ data: input });
+      await trackStoryAnalytics(ctx, {
+        event: 'voice_profile_created',
+        projectId: input.projectId,
+        properties: { voiceProfileId: profile.id, characterMemoryId: input.characterMemoryId ?? null },
+      });
+      return profile;
+    }),
+
+  updateVoiceProfile: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      voiceProfileId: z.string(),
+      name: z.string().min(1).max(80).optional(),
+      voiceType: z.string().max(40).optional().nullable(),
+      voiceRef: z.string().max(200).optional().nullable(),
+      language: z.string().max(20).optional().nullable(),
+      accentStyle: z.string().max(80).optional().nullable(),
+      pitch: z.number().optional().nullable(),
+      rate: z.number().optional().nullable(),
+      styleNotes: z.string().max(500).optional().nullable(),
+      characterMemoryId: z.string().optional().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      const profile = await ctx.prisma.voiceProfile.findFirst({
+        where: { id: input.voiceProfileId, projectId: input.projectId },
+      });
+      if (!profile) throw new TRPCError({ code: 'NOT_FOUND', message: 'Voice profile not found' });
+      const { projectId, voiceProfileId, ...rest } = input;
+      const updated = await ctx.prisma.voiceProfile.update({ where: { id: voiceProfileId }, data: rest });
+      await trackStoryAnalytics(ctx, {
+        event: 'voice_profile_updated',
+        projectId: input.projectId,
+        properties: { voiceProfileId },
+      });
+      return updated;
+    }),
+
+  getAudioBlueprint: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const plan = await getOrCreateAudioPlan(ctx, input.projectId, sequence.id);
+      const filmBlueprint = buildFilmBlueprint({ sequenceId: sequence.id, version: sequence.currentVersionNumber, scenes: sequence.scenes });
+      const blueprint = buildAudioBlueprint({
+        filmBlueprint,
+        tracks: plan.tracks,
+        resolvedAudioAssets: await resolveProjectAudioAssets(ctx, input.projectId, plan.tracks),
+      });
+      return { blueprint, planId: plan.id };
+    }),
+
+  saveAudioVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), planId: z.string(), title: z.string().min(1).max(80).optional(), notes: z.string().max(500).optional().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const plan = await ensureAudioPlanOwnership(ctx, input.projectId, input.planId, true);
+      const sequence = await ctx.prisma.storySequence.findUnique({
+        where: { id: plan.sequenceId },
+        include: sequenceInclude,
+      });
+      if (!sequence) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequence not found for this audio plan' });
+      const filmBlueprint = buildFilmBlueprint({ sequenceId: sequence.id, version: sequence.currentVersionNumber, scenes: sequence.scenes });
+      const audioBlueprint = buildAudioBlueprint({
+        filmBlueprint,
+        tracks: plan.tracks,
+        resolvedAudioAssets: await resolveProjectAudioAssets(ctx, input.projectId, plan.tracks),
+      });
+
+      // Monotonic max(existing)+1 versioning — the exact bug class called out
+      // in the brief ("we already encountered this bug in Phase 9A") is
+      // guarded against by nextAudioVersionFromExisting, mirroring
+      // nextSequenceVersionFromExisting exactly.
+      const existingVersions = await ctx.prisma.audioPlanVersion.findMany({
+        where: { planId: input.planId },
+        select: { versionNumber: true },
+      });
+      const versionNumber = nextAudioVersionFromExisting(existingVersions);
+
+      const version = await ctx.prisma.audioPlanVersion.create({
+        data: {
+          planId: input.planId,
+          versionNumber,
+          title: input.title ?? `Version ${versionNumber}`,
+          snapshot: plan.tracks,
+          audioBlueprint,
+          runtimeSeconds: audioBlueprint.runtimeSeconds,
+          createdById: ctx.user.id,
+          notes: input.notes ?? null,
+        },
+      });
+      await ctx.prisma.audioPerformancePlan.update({
+        where: { id: input.planId },
+        data: { currentVersionNumber: versionNumber },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_version_saved',
+        projectId: input.projectId,
+        properties: { planId: input.planId, versionNumber },
+      });
+      return version;
+    }),
+
+  listAudioVersions: protectedProcedure
+    .input(z.object({ projectId: z.string(), planId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
+      return ctx.prisma.audioPlanVersion.findMany({
+        where: { planId: input.planId },
+        orderBy: { versionNumber: 'desc' },
+      });
+    }),
+
+  // Restoring never reuses an existing version number — it recreates the
+  // live tracks/cues from the chosen snapshot, then the NEXT saveAudioVersion
+  // call still allocates max(existing)+1, so the sequence is 1, 2, 3, ...,
+  // never 1, 2, 2 (required test F / brief §19 regression).
+  restoreAudioVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), planId: z.string(), versionNumber: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const plan = await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
+      const version = await ctx.prisma.audioPlanVersion.findUnique({
+        where: { planId_versionNumber: { planId: input.planId, versionNumber: input.versionNumber } },
+      });
+      if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio plan version not found' });
+
+      const snapshotTracks = Array.isArray(version.snapshot) ? version.snapshot as any[] : [];
+      await ctx.prisma.$transaction(async (tx: any) => {
+        await tx.audioTrack.deleteMany({ where: { planId: input.planId } });
+        for (const track of snapshotTracks) {
+          const { id, cues, createdAt, updatedAt, planId, ...trackRest } = track;
+          await tx.audioTrack.create({
+            data: {
+              planId: input.planId,
+              ...trackRest,
+              cues: {
+                create: (cues ?? []).map((cue: any) => {
+                  const { id: cueId, trackId, createdAt: cueCreatedAt, updatedAt: cueUpdatedAt, ...cueRest } = cue;
+                  return cueRest;
+                }),
+              },
+            },
+          });
+        }
+      });
+
+      await trackStoryAnalytics(ctx, {
+        event: 'audio_version_restored',
+        projectId: input.projectId,
+        properties: { planId: input.planId, versionNumber: input.versionNumber },
+      });
+      return getOrCreateAudioPlan(ctx, input.projectId, plan.sequenceId);
+    }),
+
+  duplicateAudioVersion: protectedProcedure
+    .input(z.object({ projectId: z.string(), planId: z.string(), versionNumber: z.number().int(), title: z.string().max(80).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureAudioPlanOwnership(ctx, input.projectId, input.planId);
+      const source = await ctx.prisma.audioPlanVersion.findUnique({
+        where: { planId_versionNumber: { planId: input.planId, versionNumber: input.versionNumber } },
+      });
+      if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio plan version not found' });
+
+      const existingVersions = await ctx.prisma.audioPlanVersion.findMany({
+        where: { planId: input.planId },
+        select: { versionNumber: true },
+      });
+      const versionNumber = nextAudioVersionFromExisting(existingVersions);
+      const duplicate = await ctx.prisma.audioPlanVersion.create({
+        data: {
+          planId: input.planId,
+          versionNumber,
+          title: input.title ?? `${source.title} (copy)`,
+          snapshot: source.snapshot as any,
+          audioBlueprint: source.audioBlueprint as any,
+          runtimeSeconds: source.runtimeSeconds,
+          createdById: ctx.user.id,
+          notes: source.notes,
+        },
+      });
+      return duplicate;
     }),
 });

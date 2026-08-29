@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-06-23
-Current GitHub commit deployed to VPS: latest pushed `main` verified on 2026-05-25
+Last updated: 2026-08-27 (Phase 9B.2 entry only — earlier sections below predate several shipped phases, e.g. Nocturne UI, Sequence Workspace, Creative Critic, Movie Builder, and were not fully reconciled in this pass; treat this file as partially stale outside the Recent Changes section)
+Current GitHub commit deployed to VPS: `05e3327403d5efb04f79971b995188c890feb43f` (Movie Builder fail-closed patch — production HEAD as of Phase 9B.2 staging qualification)
 
 ## Maintenance Rule
 
@@ -247,6 +247,14 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-08-27: Phase 9B.2B — Pure-rendering + persistence checkpoints
+
+Two follow-up checkpoints on top of the Phase 9B.2 entry below, both PASSED. (1) Pure-rendering: found and fixed a real gap where a short/late audio cue could truncate the final video via `-shortest` muxing — `buildMixFilterGraph` now force-pads/trims the mix to the exact canonical runtime, proven at `0s` delta across all 8 required scenarios with real ffmpeg (`docs/operations/phase-9b2-pure-rendering-checkpoint.md`). (2) Persistence: added `MovieRenderJob.audioBlueprintHash` (migration `20260827180000_audio_blueprint_hash_phase9b2b`), cross-project `AudioAsset` ownership checks (write-time + render-time), storageKey-derived (never-signed) URL resolution, and an honest "Audio source: Not generated yet" preflight warning + per-cue indicator for unmaterialized speech cues. Render idempotency-including-audio-identity and version-numbering (`1,2,3`, never `1,2,2`) proven live against real Postgres via `appRouter.createCaller`, not just unit tests (`docs/operations/phase-9b2b-persistence-checkpoint.md`). 97/97 tests passing. **Still not committed/pushed/deployed to production.**
+
+### 2026-08-27: Phase 9B.2 — Audio & Performance Layer (staging-qualified)
+
+Added a first-class Audio & Performance layer for Movie Builder: `AudioPerformancePlan`/`AudioTrack`/`AudioCue`/`VoiceProfile`/`AudioPlanVersion`/`AudioAsset` (additive schema, migration `20260827120000_audio_performance_phase9b2`), 15 new tRPC procedures, real FFmpeg audio mixing + mux extending the existing silent-video Movie Builder pipeline, an extended (not weakened) FFprobe READY gate, and a new "Audio" tab in Story Workspace between Sequence and Film. Cue timing anchors to the canonical Film Blueprint timeline, never to FFmpeg transition handles. 36 new tests (83/83 total, up from 47/10 baseline). Full staging qualification in `docs/operations/phase-9b2-staging-qualification.md`; architecture in `docs/architecture/audio-performance-layer.md`. **Not yet committed/pushed/deployed to production** — staging-only as of this entry.
 
 ### 2026-06-10: Guest Free Viewing Limit
 

@@ -87,6 +87,22 @@ export const STORY_ANALYTICS_EVENTS = [
   'narration_completed',
   'narration_unavailable',
   'story_feedback_submitted',
+  // Phase 9B.2 — Audio & Performance layer
+  'audio_workspace_opened',
+  'audio_plan_created',
+  'audio_cue_added',
+  'audio_cue_updated',
+  'audio_cue_removed',
+  'audio_track_toggled',
+  'voice_profile_created',
+  'voice_profile_updated',
+  'audio_version_saved',
+  'audio_version_restored',
+  'audio_preview_started',
+  'audio_preview_completed',
+  'movie_render_with_audio_requested',
+  'movie_render_with_audio_completed',
+  'movie_render_with_audio_failed',
 ] as const;
 
 export type StoryAnalyticsEventName = (typeof STORY_ANALYTICS_EVENTS)[number];

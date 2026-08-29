@@ -3,13 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, Download, GripVertical, Heart, ImagePlus, Loader2, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, X } from 'lucide-react';
+import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, Download, GripVertical, Heart, ImagePlus, Loader2, Mic, Music, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, Volume2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'film' | 'storybook' | 'insights';
+type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'audio' | 'film' | 'storybook' | 'insights';
+
+const AUDIO_TRACK_TYPES = ['NARRATION', 'DIALOGUE', 'AMBIENCE', 'SFX', 'MUSIC'] as const;
+const AUDIO_TRACK_TYPE_LABEL: Record<string, string> = {
+  NARRATION: 'Narration', DIALOGUE: 'Dialogue', AMBIENCE: 'Ambience', SFX: 'Sound Effects', MUSIC: 'Music',
+};
 
 type Asset = {
   id: string;
@@ -169,6 +174,7 @@ const TABS: Array<{ key: WorkspaceTab; label: string; r16Label: string; hideOnR1
   { key: 'scenes', label: 'Scenes', r16Label: 'Picture Cards' },
   { key: 'assets', label: 'Assets', r16Label: 'Pictures' },
   { key: 'sequence', label: 'Sequence', r16Label: 'Sequence', hideOnR16: true },
+  { key: 'audio', label: 'Audio', r16Label: 'Audio', hideOnR16: true },
   { key: 'film', label: 'Film', r16Label: 'Film', hideOnR16: true },
   { key: 'storybook', label: 'Storybook', r16Label: 'Read Book' },
 ];
@@ -265,6 +271,8 @@ export default function StoryWorkspacePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
+  const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+  const [newAudioTrackType, setNewAudioTrackType] = useState<typeof AUDIO_TRACK_TYPES[number]>('MUSIC');
   const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
   const [compareAssets, setCompareAssets] = useState<string[]>([]);
   const [draggedSequenceSceneId, setDraggedSequenceSceneId] = useState<string | null>(null);
@@ -311,6 +319,10 @@ export default function StoryWorkspacePage() {
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'sequence') },
   );
+  const audioPlanQuery = trpc.story.getAudioPlan.useQuery(
+    { projectId },
+    { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'audio') },
+  );
   const movieBuilderQuery = trpc.story.getMovieBuilder.useQuery(
     { projectId },
     {
@@ -349,6 +361,23 @@ export default function StoryWorkspacePage() {
   const duplicateSequenceScene = trpc.story.duplicateSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot duplicated.') });
   const removeSequenceScene = trpc.story.removeSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot removed from sequence.') });
   const restoreSourceScene = trpc.story.restoreSourceSceneToSequence.useMutation({ onSuccess: () => refreshSequence('Scene added to sequence.') });
+  const addAudioTrack = trpc.story.addTrack.useMutation({ onSuccess: () => refreshAudio('Track added.') });
+  const updateAudioTrack = trpc.story.updateTrack.useMutation({ onSuccess: () => refreshAudio('Track updated.') });
+  const addAudioCue = trpc.story.addCue.useMutation({ onSuccess: () => refreshAudio('Cue added.') });
+  const updateAudioCue = trpc.story.updateCue.useMutation({ onSuccess: () => refreshAudio('Cue updated.') });
+  const removeAudioCue = trpc.story.removeCue.useMutation({ onSuccess: () => refreshAudio('Cue removed.') });
+  const duplicateAudioCue = trpc.story.duplicateCue.useMutation({ onSuccess: () => refreshAudio('Cue duplicated.') });
+  const createVoiceProfile = trpc.story.createVoiceProfile.useMutation({ onSuccess: () => refreshAudio('Voice profile created.') });
+  const saveAudioVersion = trpc.story.saveAudioVersion.useMutation({ onSuccess: () => refreshAudio('Audio version saved.') });
+  const restoreAudioVersion = trpc.story.restoreAudioVersion.useMutation({ onSuccess: () => refreshAudio('Audio version restored.') });
+  const listAudioVersions = trpc.story.listAudioVersions.useQuery(
+    { projectId, planId: (audioPlanQuery.data as any)?.plan?.id ?? '' },
+    { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'audio' && (audioPlanQuery.data as any)?.plan?.id) },
+  );
+  const voiceProfilesQuery = trpc.story.listVoiceProfiles.useQuery(
+    { projectId },
+    { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'audio') },
+  );
   const createSequenceVersion = trpc.story.createSequenceVersion.useMutation({ onSuccess: () => { setVersionTitle(''); refreshSequence('Version saved.'); } });
   const restoreSequenceVersion = trpc.story.restoreSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version restored.') });
   const duplicateSequenceVersion = trpc.story.duplicateSequenceVersion.useMutation({ onSuccess: () => refreshSequence('Version duplicated.') });
@@ -377,9 +406,17 @@ export default function StoryWorkspacePage() {
     utils.story.listMovieRenders.invalidate({ projectId });
   }
 
+  function refreshAudio(nextMessage: string) {
+    setMessage(nextMessage);
+    utils.story.getAudioPlan.invalidate({ projectId });
+    utils.story.listVoiceProfiles.invalidate({ projectId });
+    const planId = (audioPlanQuery.data as any)?.plan?.id;
+    if (planId) utils.story.listAudioVersions.invalidate({ projectId, planId });
+  }
+
   useEffect(() => {
     if (requestedTab && visibleTabs.some((item) => item.key === requestedTab)) setTab(requestedTab);
-    if (isR16 && (requestedTab === 'sequence' || requestedTab === 'film')) setTab('storybook');
+    if (isR16 && (requestedTab === 'sequence' || requestedTab === 'audio' || requestedTab === 'film')) setTab('storybook');
   }, [requestedTab, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -387,6 +424,7 @@ export default function StoryWorkspacePage() {
     trackTab.mutate({ projectId, tab });
     if (tab === 'assets') utils.story.getWorkspace.invalidate({ projectId });
     if (tab === 'sequence' && !isR16) utils.story.getOrCreateSequence.invalidate({ projectId });
+    if (tab === 'audio' && !isR16) utils.story.getAudioPlan.invalidate({ projectId });
     if (tab === 'film' && !isR16) utils.story.getMovieBuilder.invalidate({ projectId });
   }, [tab, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1043,6 +1081,279 @@ export default function StoryWorkspacePage() {
     );
   };
 
+  const renderAudio = () => {
+    if (isR16) return null;
+    if (audioPlanQuery.isLoading) return <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 font-bold text-[#9397ab]">Loading Audio & Performance Plan...</section>;
+    if (audioPlanQuery.error) return <section className="rounded-2xl border border-[rgba(217,70,168,0.20)] bg-[rgba(217,70,168,0.06)] p-8 font-bold text-[#f0a3d4]">{audioPlanQuery.error.message}</section>;
+
+    const data = audioPlanQuery.data as any;
+    const plan = data?.plan;
+    const tracks: any[] = plan?.tracks ?? [];
+    const runtimeSeconds = Math.max(1, ...tracks.flatMap((t) => t.cues.map((c: any) => (c.startTimeSeconds ?? 0) + (c.durationSeconds ?? 1))), 12);
+    const timeMarks = Array.from({ length: Math.ceil(runtimeSeconds / 5) + 1 }, (_, i) => i * 5);
+    const allCues = tracks.flatMap((t: any) => t.cues.map((c: any) => ({ ...c, trackType: t.type, trackName: t.name })));
+    const selectedCue = allCues.find((c: any) => c.id === selectedCueId) ?? null;
+    const voiceProfiles = (voiceProfilesQuery.data as any[]) ?? [];
+    const versions = (listAudioVersions.data as any[]) ?? [];
+
+    const trackIcon = (type: string) => {
+      if (type === 'NARRATION' || type === 'DIALOGUE') return <Mic size={14} />;
+      if (type === 'MUSIC') return <Music size={14} />;
+      return <Volume2 size={14} />;
+    };
+
+    return (
+      <section className="space-y-5">
+        <div className="rounded-2xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.10)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#8fdfe8]">Audio & Performance</p>
+              <h2 className="mt-1 text-3xl font-black text-[#F7F8FC]">Audio Plan</h2>
+            </div>
+            <div className="flex items-center gap-4 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.03)] px-4 py-2">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#75798c]">Runtime</p>
+                <p className="text-lg font-black text-[#F7F8FC]">{runtimeSeconds.toFixed(1)} sec</p>
+              </div>
+              <div className="h-8 w-px bg-[rgba(233,233,237,0.10)]" />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#75798c]">Version</p>
+                <p className="text-lg font-black text-[#F7F8FC]">{plan?.currentVersionNumber ?? 0}</p>
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm font-semibold text-[#9397ab]">
+            Narration, dialogue, ambience, sound effects, and music — layered on the same canonical timeline as your Sequence. Cue times attach to finished-film seconds, not render transitions.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {AUDIO_TRACK_TYPES.map((type) => (
+              <button key={type} onClick={() => setNewAudioTrackType(type)} className={`rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-wide ${newAudioTrackType === type ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[#F7F8FC]' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[#9397ab]'}`}>
+                {AUDIO_TRACK_TYPE_LABEL[type]}
+              </button>
+            ))}
+            <button
+              onClick={() => plan?.id && addAudioTrack.mutate({ projectId, planId: plan.id, type: newAudioTrackType, name: AUDIO_TRACK_TYPE_LABEL[newAudioTrackType] })}
+              disabled={!plan?.id || addAudioTrack.isPending}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(233,233,237,0.08)] border border-[rgba(233,233,237,0.10)] px-3 py-1.5 text-xs font-black text-[#F7F8FC] disabled:opacity-50"
+            >
+              {addAudioTrack.isPending ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Add Track
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {/* LEFT / MAIN — timeline */}
+          <div className="space-y-4 overflow-x-auto rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Timeline</p>
+            <div className="min-w-[560px]">
+              <div className="relative mb-2 h-5 border-b border-[rgba(233,233,237,0.10)] text-[10px] font-bold text-[#75798c]">
+                {timeMarks.map((s) => (
+                  <span key={s} className="absolute" style={{ left: `${(s / runtimeSeconds) * 100}%` }}>{s}s</span>
+                ))}
+              </div>
+              {tracks.length === 0 && (
+                <p className="rounded-xl border border-dashed border-[rgba(233,233,237,0.10)] p-5 text-sm font-bold text-[#9397ab]">No tracks yet. Add a Narration, Dialogue, Ambience, SFX, or Music track above.</p>
+              )}
+              <div className="space-y-3">
+                {tracks.map((track: any) => (
+                  <div key={track.id} className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.03)] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-black text-[#F7F8FC]">
+                        <span className="text-[#8fdfe8]">{trackIcon(track.type)}</span>
+                        {track.name}
+                        <span className="rounded-full border border-[rgba(233,233,237,0.10)] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#9397ab]">{AUDIO_TRACK_TYPE_LABEL[track.type]}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateAudioTrack.mutate({ projectId, trackId: track.id, enabled: !track.enabled })}
+                          className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${track.enabled ? 'bg-[rgba(47,191,113,0.12)] text-[#2fbf71]' : 'bg-[rgba(233,233,237,0.08)] text-[#75798c]'}`}
+                        >
+                          {track.enabled ? 'On' : 'Off'}
+                        </button>
+                        <button
+                          onClick={() => addAudioCue.mutate({ projectId, trackId: track.id, startTimeSeconds: 0, volume: 1, duckingEnabled: false })}
+                          className="inline-flex items-center gap-1 rounded-full bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                        >
+                          <Plus size={12} /> Cue
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative mt-2 h-9 rounded-lg bg-[rgba(233,233,237,0.04)]">
+                      {track.cues.map((cue: any) => {
+                        const left = (cue.startTimeSeconds / runtimeSeconds) * 100;
+                        const width = Math.max(3, ((cue.durationSeconds ?? 1) / runtimeSeconds) * 100);
+                        return (
+                          <button
+                            key={cue.id}
+                            onClick={() => setSelectedCueId(cue.id)}
+                            className={`absolute top-1 h-7 truncate rounded-md px-2 text-left text-[10px] font-black leading-7 ${selectedCueId === cue.id ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[#F7F8FC]' : 'bg-[rgba(143,223,232,0.16)] text-[#8fdfe8]'}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                            title={cue.text || `${AUDIO_TRACK_TYPE_LABEL[track.type]} cue`}
+                          >
+                            {cue.text || (track.type === 'SFX' ? 'SFX' : AUDIO_TRACK_TYPE_LABEL[track.type])}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-[rgba(233,233,237,0.08)] pt-4">
+              <button
+                onClick={() => plan?.id && saveAudioVersion.mutate({ projectId, planId: plan.id })}
+                disabled={!plan?.id || saveAudioVersion.isPending}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#2fbf71] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+              >
+                {saveAudioVersion.isPending ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Save Version
+              </button>
+              <span className="text-xs font-bold text-[#75798c]">Current version: {plan?.currentVersionNumber ?? 0}</span>
+            </div>
+          </div>
+
+          {/* RIGHT — cue inspector */}
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Cue Inspector</p>
+              {!selectedCue ? (
+                <p className="mt-3 text-sm font-bold text-[#75798c]">Select a cue on the timeline to edit it.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {(selectedCue.trackType === 'NARRATION' || selectedCue.trackType === 'DIALOGUE') && (
+                    <>
+                      <label className="block text-xs font-bold text-[#9397ab]">Character
+                        <select
+                          value={selectedCue.characterMemoryId ?? ''}
+                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, characterMemoryId: e.target.value || null })}
+                          className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-bold text-[#F7F8FC]"
+                        >
+                          <option value="">Narrator / unassigned</option>
+                          {characters.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </label>
+                      <textarea
+                        value={selectedCue.text ?? ''}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, text: e.target.value })}
+                        placeholder="Line or narration text"
+                        rows={3}
+                        className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3 text-sm font-semibold text-[#F7F8FC]"
+                      />
+                      <label className="block text-xs font-bold text-[#9397ab]">Voice
+                        <select
+                          value={selectedCue.voiceProfileId ?? ''}
+                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, voiceProfileId: e.target.value || null })}
+                          className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-bold text-[#F7F8FC]"
+                        >
+                          <option value="">No voice profile</option>
+                          {voiceProfiles.map((vp: any) => <option key={vp.id} value={vp.id}>{vp.name}</option>)}
+                        </select>
+                      </label>
+                      {(() => {
+                        const character = characters.find((c: any) => c.id === selectedCue.characterMemoryId);
+                        const voice = voiceProfiles.find((vp: any) => vp.id === selectedCue.voiceProfileId);
+                        if (!character && !voice) return null;
+                        return (
+                          <p className="text-xs font-bold text-[#75798c]">
+                            {character?.name ?? 'Unassigned'}{voice?.name ? ` — ${voice.name}` : ''}
+                          </p>
+                        );
+                      })()}
+                      <label className="block text-xs font-bold text-[#9397ab]">Performance
+                        <input
+                          value={selectedCue.performanceDirection ?? ''}
+                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, performanceDirection: e.target.value })}
+                          placeholder="e.g. curious, then excited"
+                          className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-semibold text-[#F7F8FC]"
+                        />
+                      </label>
+                      {/* Honest state, never a fake "Generate Voice" control — no TTS
+                          provider exists yet (Phase 9B.2). Text/voice/performance
+                          direction are creative intent; this line is the only place
+                          that says whether they're backed by an actual audio source. */}
+                      <p className={`text-[10px] font-black uppercase tracking-wide ${selectedCue.audioAssetId ? 'text-[#2fbf71]' : 'text-[#75798c]'}`}>
+                        Audio source: {selectedCue.audioAssetId ? 'Attached' : 'Not generated'}
+                      </p>
+                    </>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-bold text-[#9397ab]">Start (s)
+                      <input type="number" min={0} step={0.1} value={selectedCue.startTimeSeconds ?? 0}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, startTimeSeconds: Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
+                    </label>
+                    <label className="text-xs font-bold text-[#9397ab]">Duration (s)
+                      <input type="number" min={0} step={0.1} value={selectedCue.durationSeconds ?? ''}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, durationSeconds: e.target.value === '' ? null : Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
+                    </label>
+                    <label className="text-xs font-bold text-[#9397ab]">Volume
+                      <input type="number" min={0} max={4} step={0.1} value={selectedCue.volume ?? 1}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
+                    </label>
+                    <label className="text-xs font-bold text-[#9397ab]">Fade In (s)
+                      <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeInSeconds ?? 0}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeInSeconds: Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
+                    </label>
+                    <label className="text-xs font-bold text-[#9397ab]">Fade Out (s)
+                      <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeOutSeconds ?? 0}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeOutSeconds: Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[#F7F8FC]" />
+                    </label>
+                  </div>
+                  {(selectedCue.trackType === 'AMBIENCE' || selectedCue.trackType === 'MUSIC') && (
+                    <label className="flex items-center gap-2 text-xs font-bold text-[#9397ab]">
+                      <input type="checkbox" checked={Boolean(selectedCue.duckingEnabled)}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, duckingEnabled: e.target.checked })} />
+                      Duck under speech
+                    </label>
+                  )}
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={() => duplicateAudioCue.mutate({ projectId, cueId: selectedCue.id })} className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.06)] px-3 py-2 text-xs font-black text-[#b5abfc]"><Copy size={13} /> Duplicate</button>
+                    <button onClick={() => { removeAudioCue.mutate({ projectId, cueId: selectedCue.id }); setSelectedCueId(null); }} className="inline-flex items-center gap-1.5 rounded-xl bg-[rgba(217,70,168,0.08)] px-3 py-2 text-xs font-black text-[#f0a3d4]"><Trash2 size={13} /> Remove</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Voice Profiles</p>
+                <button
+                  onClick={() => createVoiceProfile.mutate({ projectId, name: `Voice ${voiceProfiles.length + 1}` })}
+                  disabled={createVoiceProfile.isPending}
+                  className="inline-flex items-center gap-1 rounded-full bg-[rgba(233,233,237,0.08)] px-2 py-1 text-[10px] font-black text-[#F7F8FC]"
+                ><Plus size={12} /> Add</button>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {voiceProfiles.length === 0 && <p className="text-xs font-bold text-[#75798c]">No voice profiles yet.</p>}
+                {voiceProfiles.map((vp: any) => <p key={vp.id} className="text-sm font-bold text-[#F7F8FC]">{vp.name}</p>)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#9397ab]">Version History</p>
+              <div className="mt-3 space-y-2">
+                {versions.length === 0 && <p className="text-xs font-bold text-[#75798c]">No versions saved yet.</p>}
+                {versions.map((v: any) => (
+                  <div key={v.id} className="flex items-center justify-between rounded-lg border border-[rgba(233,233,237,0.08)] p-2">
+                    <span className="text-xs font-black text-[#F7F8FC]">v{v.versionNumber} — {v.title}</span>
+                    <button
+                      onClick={() => plan?.id && restoreAudioVersion.mutate({ projectId, planId: plan.id, versionNumber: v.versionNumber })}
+                      className="inline-flex items-center gap-1 rounded-full border border-[rgba(233,233,237,0.10)] px-2 py-1 text-[10px] font-black text-[#b5abfc]"
+                    ><RotateCcw size={11} /> Restore</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    );
+  };
+
   const renderFilm = () => {
     if (isR16) return null;
     if (movieBuilderQuery.isLoading) return <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 font-bold text-[#9397ab]">Loading Movie Builder...</section>;
@@ -1185,6 +1496,7 @@ export default function StoryWorkspacePage() {
           {tab === 'scenes' && renderScenes()}
           {tab === 'assets' && renderAssets()}
           {tab === 'sequence' && renderSequence()}
+          {tab === 'audio' && renderAudio()}
           {tab === 'film' && renderFilm()}
           {tab === 'storybook' && <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center"><BookOpen className="mx-auto text-[#b5abfc]" size={48} /><h2 className="mt-3 text-3xl font-black text-[#F7F8FC]">{isR16 ? 'Read your book' : 'Storybook'}</h2><p className="mt-2 font-semibold text-[#9397ab]">{isR16 ? 'Open the book with your chosen pictures.' : 'Storybook uses the active image for each scene, then latest image as fallback.'}</p><Link href={`/story-playground/${projectId}/storybook`} className="mt-5 inline-block rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[#F7F8FC]">{isR16 ? 'Read Book' : 'Open Storybook'}</Link></section>}
         </div>

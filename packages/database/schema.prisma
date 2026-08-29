@@ -364,6 +364,7 @@ model User {
   refreshTokens      RefreshToken[]
   generationJobs     GenerationJob[]
   movieRenderJobs    MovieRenderJob[]
+  audioAssets        AudioAsset[]
   storyProjects       StoryProject[]
   academyCoursesOwned AcademyCourse[] @relation("AcademyCourseOwner")
   academyClassesInstructing AcademyClass[] @relation("AcademyClassInstructor")
@@ -828,6 +829,9 @@ model StoryProject {
   sequences      StorySequence[]
   movieRenderJobs MovieRenderJob[]
   movieAssets     MovieAsset[]
+  audioPerformancePlans AudioPerformancePlan[]
+  voiceProfiles   VoiceProfile[]
+  audioAssets     AudioAsset[]
   academySubmissions AcademySubmission[]
 
   createdAt      DateTime           @default(now())
@@ -1144,6 +1148,9 @@ model StoryCharacterMemory {
   evolutionSceneOrder Int?
   directorChangedAt DateTime?
 
+  voiceProfiles     VoiceProfile[]
+  audioCues         AudioCue[]
+
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -1254,6 +1261,7 @@ model StorySequence {
   versions             SequenceVersion[]
   movieRenderJobs      MovieRenderJob[]
   movieAssets          MovieAsset[]
+  audioPerformancePlans AudioPerformancePlan[]
 
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -1288,6 +1296,7 @@ model StorySequenceScene {
   holdDurationSeconds        Float?
   zoom                       Float?
   creativeNotes              String?
+  audioCues                  AudioCue[]
 
   createdAt                  DateTime               @default(now())
   updatedAt                  DateTime               @updatedAt
@@ -1331,6 +1340,15 @@ model MovieRenderJob {
 
   status                MovieRenderStatus @default(QUEUED)
   filmBlueprintSnapshot Json
+  audioBlueprintSnapshot Json?
+  audioPlanVersionId    String?
+  // Standalone hash of audioBlueprintSnapshot alone (hashAudioBlueprint()),
+  // null for silent films. Distinct from renderPlanHash, which is the
+  // COMBINED visual+audio idempotency key (combineRenderHash()) — this field
+  // exists purely for render provenance/debugging (e.g. "did this render's
+  // audio identity actually change between two jobs"), independent of the
+  // idempotency mechanism.
+  audioBlueprintHash    String?
   renderPlan            Json
   renderPlanHash        String
   rendererVersion       String            @default("phase-9b1-v1")
@@ -1628,4 +1646,206 @@ model Notification {
   @@index([recipientId, createdAt])
   @@index([recipientId, read])
   @@map("notifications")
+}
+
+// ─── Audio & Performance Layer (Phase 9B.2) ────────────────────────────────────
+//
+// Story → Scenes → Sequence / Film Blueprint → Audio & Performance Plan →
+// Audiovisual Render Plan → Movie
+//
+// AudioPerformancePlan is scoped to one StorySequence (its Film Blueprint is
+// the canonical visual timeline audio cues attach to). Cue timing is always
+// expressed in canonical finished-film seconds — the same timeline
+// StorySequenceScene.durationSeconds already represents — never derived from
+// FFmpeg transition/xfade handles.
+//
+// Provider-specific generation metadata (TTS provider, model id, signed URLs)
+// must not appear on the creative model. AudioCue references a
+// provider-neutral VoiceProfile; execution/provider details belong in future
+// generation-job records, not here.
+
+enum AudioPlanStatus {
+  DRAFT
+  LOCKED
+  ARCHIVED
+}
+
+enum AudioTrackType {
+  NARRATION
+  DIALOGUE
+  AMBIENCE
+  SFX
+  MUSIC
+}
+
+model AudioPerformancePlan {
+  id                   String                 @id @default(cuid())
+  projectId            String
+  project              StoryProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sequenceId           String
+  sequence             StorySequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  status               AudioPlanStatus        @default(DRAFT)
+  currentVersionNumber Int                    @default(0)
+
+  tracks               AudioTrack[]
+  versions             AudioPlanVersion[]
+
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([projectId])
+  @@index([sequenceId])
+  @@index([sequenceId, status])
+  @@map("audio_performance_plans")
+}
+
+model AudioTrack {
+  id        String         @id @default(cuid())
+  planId    String
+  plan      AudioPerformancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  type      AudioTrackType
+  name      String
+  enabled   Boolean        @default(true)
+  volume    Float          @default(1)
+  order     Int            @default(0)
+
+  cues      AudioCue[]
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([planId])
+  @@index([planId, order])
+  @@index([planId, type])
+  @@map("audio_tracks")
+}
+
+model AudioCue {
+  id                    String         @id @default(cuid())
+  trackId               String
+  track                 AudioTrack     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  // Optional canonical-timeline / creative-entity anchors. Nullable because a
+  // music or ambience cue may span multiple scenes, and an SFX/ambience cue
+  // has no speaking character.
+  sequenceSceneId       String?
+  sequenceScene         StorySequenceScene? @relation(fields: [sequenceSceneId], references: [id], onDelete: SetNull)
+  characterMemoryId     String?
+  characterMemory       StoryCharacterMemory? @relation(fields: [characterMemoryId], references: [id], onDelete: SetNull)
+  voiceProfileId        String?
+  voiceProfile          VoiceProfile?  @relation(fields: [voiceProfileId], references: [id], onDelete: SetNull)
+  audioAssetId          String?
+  audioAsset            AudioAsset?    @relation(fields: [audioAssetId], references: [id], onDelete: SetNull)
+
+  enabled               Boolean        @default(true)
+  order                 Int            @default(0)
+
+  // Canonical finished-film timeline position — never an FFmpeg render handle.
+  startTimeSeconds      Float
+  durationSeconds       Float?
+  trimStartSeconds      Float?
+  trimEndSeconds        Float?
+
+  volume                Float          @default(1)
+  fadeInSeconds          Float?
+  fadeOutSeconds         Float?
+
+  // Speech-only fields (NARRATION / DIALOGUE tracks).
+  text                  String?
+  performancePreset     String?
+  performanceDirection  String?
+
+  // Deterministic mix-time ducking intent (never baked into source assets).
+  duckingEnabled        Boolean        @default(false)
+  duckingAmountDb       Float?
+
+  metadata              Json?
+
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([trackId])
+  @@index([trackId, startTimeSeconds])
+  @@index([sequenceSceneId])
+  @@index([characterMemoryId])
+  @@index([voiceProfileId])
+  @@index([audioAssetId])
+  @@map("audio_cues")
+}
+
+model VoiceProfile {
+  id                String         @id @default(cuid())
+  projectId         String
+  project           StoryProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  characterMemoryId String?
+  characterMemory   StoryCharacterMemory? @relation(fields: [characterMemoryId], references: [id], onDelete: SetNull)
+
+  name              String
+  voiceType         String?        // free text role, e.g. "NARRATOR" | "CHARACTER" — intentionally not a rigid enum
+  voiceRef          String?        // provider-neutral voice reference/handle, never a raw provider model id
+  language          String?        @default("en")
+  accentStyle       String?
+  pitch             Float?
+  rate              Float?
+  styleNotes        String?
+
+  cues              AudioCue[]
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([projectId])
+  @@index([characterMemoryId])
+  @@map("voice_profiles")
+}
+
+model AudioPlanVersion {
+  id             String               @id @default(cuid())
+  planId         String
+  plan           AudioPerformancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  versionNumber  Int
+  title          String
+  snapshot       Json
+  audioBlueprint Json?
+  runtimeSeconds Float                @default(0)
+  createdById    String
+  notes          String?
+
+  createdAt      DateTime             @default(now())
+
+  @@unique([planId, versionNumber])
+  @@index([planId])
+  @@index([createdById])
+  @@map("audio_plan_versions")
+}
+
+model AudioAsset {
+  id              String       @id @default(cuid())
+  projectId       String
+  project         StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  storageProvider String       @default("R2")
+  storageKey      String
+  publicUrl       String?
+  mimeType        String       @default("audio/mpeg")
+  durationSeconds Float?
+  fileSizeBytes   Int?
+  checksum        String?
+  sampleRateHz    Int?
+  channels        Int?
+  sourceKind      String?      // free text, e.g. "UPLOAD" | "SYNTHETIC_TEST" — not a rigid enum
+
+  cues            AudioCue[]
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([userId])
+  @@map("audio_assets")
 }

@@ -246,6 +246,51 @@ export function buildFilmBlueprint(input: {
   };
 }
 
+/**
+ * Canonical finished-film timeline positions for each enabled shot.
+ *
+ * This is the single source of truth for "what second of the finished film
+ * does shot N start at" — used by the Audio & Performance layer (Phase 9B.2)
+ * to anchor cues. It is deliberately NOT derived from FFmpeg render/xfade
+ * handles: `calculateRenderedSegmentDuration` in movieRenderPlanning.ts adds
+ * transition-overlap time for the *encoder's* benefit only, and must never
+ * leak into audio cue timing. The canonical rule (transitionRule:
+ * 'overlap_transitions_do_not_add_runtime') is that each shot occupies
+ * exactly `durationSeconds + holdDurationSeconds` of canonical screen time,
+ * back to back, matching sequenceRuntime()'s own sum exactly.
+ */
+export type CanonicalShotTimelineEntry = {
+  sequenceSceneId: string;
+  storySceneId: string;
+  order: number;
+  startTimeSeconds: number;
+  endTimeSeconds: number;
+  screenTimeSeconds: number;
+};
+
+export function computeCanonicalShotTimeline(filmBlueprint: Pick<FilmBlueprint, 'shots'>): CanonicalShotTimelineEntry[] {
+  const enabledShots = filmBlueprint.shots
+    .filter((shot) => shot.enabled)
+    .slice()
+    .sort((a, b) => a.order - b.order);
+
+  let cursor = 0;
+  return enabledShots.map((shot) => {
+    const screenTimeSeconds = Math.round((shot.durationSeconds + Math.max(0, shot.holdDurationSeconds ?? 0)) * 1000) / 1000;
+    const startTimeSeconds = Math.round(cursor * 1000) / 1000;
+    const endTimeSeconds = Math.round((cursor + screenTimeSeconds) * 1000) / 1000;
+    cursor += screenTimeSeconds;
+    return {
+      sequenceSceneId: shot.sequenceSceneId,
+      storySceneId: shot.storySceneId,
+      order: shot.order,
+      startTimeSeconds,
+      endTimeSeconds,
+      screenTimeSeconds,
+    };
+  });
+}
+
 export function nextSequenceVersionFromExisting(versions: Array<{ versionNumber?: number | null }>) {
   const maxVersion = versions.reduce((max, version) => {
     const numeric = Number(version.versionNumber);
