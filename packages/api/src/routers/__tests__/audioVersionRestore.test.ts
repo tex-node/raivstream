@@ -314,6 +314,26 @@ describe('toAudioTrackRestoreCreateInput / toAudioCueRestoreCreateInput (explici
     expect(Object.keys(out).sort()).toEqual(['enabled', 'name', 'order', 'planId', 'type', 'volume'].sort());
   });
 
+  // Named explicitly per review: the production defect exposed a CLASS of
+  // bug (any relation a future `include` adds leaking into a restore
+  // write), not just today's one `audioAsset` property — so the track
+  // mapper needs its own direct proof too, not just the cue mapper's.
+  // `plan` isn't currently included by audioPlanInclude (tracks are
+  // fetched FROM a plan, never the reverse), but if it — or `project`, or
+  // anything else — ever were, this proves it still couldn't leak through.
+  it('track mapper still emits only the same 6 fields even when the snapshot carries hypothetical future relation objects (plan, project, cues)', () => {
+    const trackWithHypotheticalRelations = relationExpandedTrack({
+      plan: { id: 'plan-1', projectId: 'project-a', status: 'DRAFT' }, // hypothetical future include
+      project: { id: 'project-a', title: 'Some Story' }, // hypothetical future nested include
+    });
+    const out = toAudioTrackRestoreCreateInput(trackWithHypotheticalRelations, 'plan-1');
+    const keys = Object.keys(out).sort();
+    expect(keys).toEqual(['enabled', 'name', 'order', 'planId', 'type', 'volume'].sort());
+    expect(keys).not.toContain('plan');
+    expect(keys).not.toContain('project');
+    expect(keys).not.toContain('cues');
+  });
+
   it('cue mapper emits only real Prisma AudioCue scalar/FK fields, never id/trackId/createdAt/updatedAt/audioAsset/track', () => {
     const out = toAudioCueRestoreCreateInput(relationExpandedCue({ audioAssetId: 'asset-1', audioAsset: { id: 'asset-1' } }));
     const keys = Object.keys(out).sort();
