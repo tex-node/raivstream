@@ -1,10 +1,25 @@
 # Application-Wide UI Reconciliation
 
-Status: **AUDIT PHASE COMPLETE — page-by-page migration not yet started.**
-This document is the live route inventory and design-system plan for the
-"RAIVSTREAM — APPLICATION-WIDE UI SYSTEM RECONCILIATION" initiative. It is
-being built incrementally; see "Execution status" at the bottom for what has
-actually shipped vs. what is inventoried/planned only.
+Status: **FOUNDATION PASS COMPLETE (SHA `f8ffe55`) — route-by-route
+migration not yet started.** This document is the live route inventory,
+design-system plan, and phased roadmap for the "RAIVSTREAM —
+APPLICATION-WIDE UI SYSTEM RECONCILIATION" initiative. It is being built
+incrementally across multiple rounds; see "Execution status" for what has
+actually shipped vs. "Next phase: route-by-route migration" for what's
+planned but not yet built.
+
+**Baseline for all future work on this initiative: `f8ffe55`.** This is
+the production SHA as of the Foundation Pass (route inventory + UI-family
+classification + design-system gap analysis + the Audio/Sequence/Film/
+Storybook shell fix). It is explicitly *not* the endpoint — see the
+completion criterion at the end of "Next phase" below. Any session
+continuing this initiative should treat `f8ffe55` as its starting point,
+re-read this document in full before making changes, and **not reopen
+already-qualified Story Playground behavior** (the 8 canonical
+`/story-playground/[projectId]/*` screens and the responsive-desktop work
+already shipped and verified in `docs/operations/mobile-ui-handoff-
+reconciliation.md`) except where a shared-primitive extraction requires a
+strictly presentation-only refactor of them.
 
 ## 1. Route inventory
 
@@ -287,6 +302,61 @@ while their inner content remains family B markup (Nocturne color values,
 non-Nocturne component patterns) — a hybrid state, recorded honestly
 rather than marked fully migrated. **37 routes still fully unmigrated.**
 
+## Next phase: route-by-route migration
+
+The Foundation Pass unified the application's *navigation chrome* for one
+slice of the app; it did not unify the application's *visual language*.
+That distinction matters and should not get blurred in a future status
+update: a route counts as migrated in this roadmap only when its shell
+**and** its internal component-level markup (buttons, inputs, cards,
+tables, states) are on the Nocturne system — not when it merely renders
+inside `Shell`.
+
+The next phase is the actual route-by-route migration of the 37
+remaining routes from §1's inventory, in this order:
+
+1. **Global application shell and top-level navigation.** Settle `/` (a
+   product decision, per §6 above, before any restyle or redirect),
+   define authenticated Home, and generalize navigation for Account
+   access, Academy, and admin entry points alongside the existing
+   project-workspace `Shell`. This is the prerequisite everything else in
+   this phase nests inside — do it first.
+2. **Auth + account/settings.** Sign-in, sign-up, forgot/reset password,
+   verification, profile, credits, settings. No auth-logic changes.
+3. **Legacy feed family.** `/` (once §1 resolves the product decision),
+   search, generate, upload, video detail, and related feed surfaces.
+4. **Academy + specialized Storybook views.** Preserve lesson/course and
+   read-aloud behavior exactly.
+5. **Admin family.** Normalize shell tokens, cards, tables, forms, and
+   status states onto Nocturne — the shell shape (sidebar + mobile
+   drawer) already confirmed reusable in the Foundation Pass audit, so
+   this is a token/component swap, not a structural rebuild. Revenue-
+   adjacent pages (`/admin/credits`, `/admin/revenue`) need the most care.
+6. **Advanced workspace internals.** Restyle Audio, Sequence, Film, and
+   Storybook's actual internal markup (track lists, cue cards, shot
+   controls, render/preflight panels, forms) onto shared primitives,
+   preserving every piece of qualified behavior exactly — this is where
+   the Foundation Pass's shell-only fix gets finished.
+7. **Shared primitives, extracted from the real migrations above** —
+   Button, IconButton, form fields (Input/Textarea/Select/Checkbox/
+   Radio/Toggle), Panel/Card, Table/DataList, Modal/Drawer,
+   Badge/StatusPill, Tabs, EmptyState/ErrorState/LoadingState, Toast. Per
+   the Foundation Pass's own finding: extract each primitive from its
+   first 1–2 real callers as steps 2–6 hit a genuine duplication, rather
+   than pre-building a speculative library ahead of any consumer.
+8. **Final whole-app visual acceptance** at the full mandated viewport
+   set (§22 of the original brief — 360×800 through 1920×1080), mobile
+   and desktop, plus the R16 route-level audit (§25) and the acceptance
+   matrix (§27) — now actually achievable across the full route set
+   rather than one slice of it.
+
+**Completion criterion for this phase**: do not report it complete after
+another wrapper-level improvement. It is complete only when the §1 route
+inventory matrix reaches something close to **47/47 migrated or
+explicitly, individually product-excluded** (not silently skipped) — a
+real per-route count, checked against the matrix, not a qualitative
+impression that "the app feels more consistent now."
+
 ## Final report
 
 1. **Starting production SHA**: `9c15238` (last-deployed before this
@@ -395,16 +465,21 @@ rather than marked fully migrated. **37 routes still fully unmigrated.**
     product decision before any UI work can proceed there
 42. **Final verdict**: see below
 
-**RAIVSTREAM APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS**
+**RAIVSTREAM APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS
+(FOUNDATION PASS — SHA `f8ffe55` — NOT THE ENDPOINT)**
 
 This round delivered the audit (full route inventory, UI-family
 classification, design-system gap analysis) and one real, verified,
 production-deployed fix — closing the specific "Story Playground looks
 new but Audio looks old" navigation-chrome failure mode named in the
 brief — scoped exactly per the user's explicit "foundation first, highest-
-value target" direction. It does not claim, and should not be read as
+value target" direction. It does not claim, and must not be read as
 claiming, that the application-wide reconciliation itself is complete:
 37 of 47 routes are unmigrated, no shared component library exists yet,
-and `/` still awaits a product decision. Those are the "limitations" this
-verdict is qualified by, and they are the explicit subject of whatever
-follow-up round continues this initiative.
+and `/` still awaits a product decision. The shell is becoming unified;
+the application is not yet visually unified. `f8ffe55` is the confirmed
+baseline for the next phase — see "Next phase: route-by-route migration"
+above for the required order, the extract-primitives-from-real-usage
+approach, and the explicit completion criterion (something close to
+47/47 migrated or individually product-excluded, not another wrapper-
+level improvement reported as done).
