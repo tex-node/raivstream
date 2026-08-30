@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, Download, GripVertical, Heart, ImagePlus, Loader2, Mic, Music, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, Volume2, X } from 'lucide-react';
-import { Navbar } from '@/components/layout/Navbar';
+import { Shell } from '@/components/layout/Shell';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
@@ -470,16 +470,16 @@ export default function StoryWorkspacePage() {
   }
 
   if (!isLoaded) {
-    return <div className="min-h-screen bg-[#0B0D14]"><Navbar /><main className="mx-auto max-w-6xl px-4 py-12 font-bold text-[#9397ab]">Loading workspace...</main></div>;
+    return <Shell backHref="/story-playground" title="Loading…" activeTab="home" projectId={projectId}><main className="mx-auto max-w-6xl px-4 py-12 font-bold text-[#9397ab]">Loading workspace...</main></Shell>;
   }
   if (!isSignedIn) {
-    return <div className="min-h-screen bg-[#0B0D14]"><Navbar /><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-3xl font-black">Sign in to open this story.</h1><Link href="/sign-in" className="mt-5 inline-block rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-5 py-3 font-black text-white">Sign In</Link></main></div>;
+    return <Shell backHref="/story-playground" title="Story Playground" activeTab="home" projectId={projectId}><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-3xl font-black">Sign in to open this story.</h1><Link href="/sign-in" className="mt-5 inline-block rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-5 py-3 font-black text-white">Sign In</Link></main></Shell>;
   }
   if (workspace.isLoading) {
-    return <div className="min-h-screen bg-[#0B0D14]"><Navbar /><main className="mx-auto max-w-6xl px-4 py-12"><div className="h-40 animate-pulse rounded-2xl bg-[rgba(233,233,237,0.08)]" /></main></div>;
+    return <Shell backHref="/story-playground" title="Loading…" activeTab="home" projectId={projectId}><main className="mx-auto max-w-6xl px-4 py-12"><div className="h-40 animate-pulse rounded-2xl bg-[rgba(233,233,237,0.08)]" /></main></Shell>;
   }
   if (workspace.error) {
-    return <div className="min-h-screen bg-[#0B0D14]"><Navbar /><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-3xl font-black">We could not open this story.</h1><p className="mt-3 font-bold text-[#9397ab]">{workspace.error.message}</p><Link href="/story-playground" className="mt-5 inline-block rounded-xl bg-[#0B0D14] px-5 py-3 font-black text-white">Back to My Stories</Link></main></div>;
+    return <Shell backHref="/story-playground" title="Story Playground" activeTab="home" projectId={projectId}><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-3xl font-black">We could not open this story.</h1><p className="mt-3 font-bold text-[#9397ab]">{workspace.error.message}</p><Link href="/story-playground" className="mt-5 inline-block rounded-xl bg-[#0B0D14] px-5 py-3 font-black text-white">Back to My Stories</Link></main></Shell>;
   }
 
   const workspaceData = workspace.data;
@@ -1641,8 +1641,7 @@ export default function StoryWorkspacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0D14] text-[#F7F8FC]">
-      <Navbar />
+    <Shell backHref={`/story-playground/${projectId}`} title={project.title} activeTab="home" projectId={projectId}>
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-10">
         {renderHero()}
         {renderAcademyBanner()}
@@ -1777,6 +1776,6 @@ export default function StoryWorkspacePage() {
           </div>
         </div>
       )}
-    </div>
+    </Shell>
   );
 }
