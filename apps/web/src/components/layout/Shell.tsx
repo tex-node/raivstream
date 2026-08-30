@@ -49,11 +49,11 @@ const TAB_ICONS: Record<ShellTab, React.ReactNode> = {
 
 function TabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: string }) {
   const tabs: { id: ShellTab; label: string; href: string; disabled: boolean }[] = [
-    { id: 'home',       label: 'Home',       href: '/m',                                 disabled: false },
-    { id: 'story',      label: 'Story',      href: projectId ? `/m/${projectId}/story`  : '#', disabled: !projectId },
-    { id: 'characters', label: 'Cast',       href: projectId ? `/m/${projectId}/cast`   : '#', disabled: !projectId },
-    { id: 'scenes',     label: 'Scenes',     href: projectId ? `/m/${projectId}/scenes` : '#', disabled: !projectId },
-    { id: 'assets',     label: 'Assets',     href: projectId ? `/m/${projectId}/assets` : '#', disabled: !projectId },
+    { id: 'home',       label: 'Home',       href: '/story-playground',                                 disabled: false },
+    { id: 'story',      label: 'Story',      href: projectId ? `/story-playground/${projectId}/story`      : '#', disabled: !projectId },
+    { id: 'characters', label: 'Cast',       href: projectId ? `/story-playground/${projectId}/characters` : '#', disabled: !projectId },
+    { id: 'scenes',     label: 'Scenes',     href: projectId ? `/story-playground/${projectId}/scenes`     : '#', disabled: !projectId },
+    { id: 'assets',     label: 'Assets',     href: projectId ? `/story-playground/${projectId}/assets`     : '#', disabled: !projectId },
   ];
 
   return (

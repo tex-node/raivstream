@@ -49,6 +49,26 @@ const nextConfig = {
       bodySizeLimit: '50mb',
     },
   },
+
+  // Mobile UI handoff canonical activation: /m/** was the first landing
+  // spot for the design-handoff screens (codex/ui-mobile-handoff-production,
+  // be8f8a4) but was never linked from ordinary navigation. The same
+  // screens are now rendered directly from the canonical /story-playground
+  // route tree (see components/mobile-handoff/*), so /m/** becomes a
+  // permanent (308) redirect rather than a second, separately-maintained
+  // implementation — Section 6, option B. Deep links keep working.
+  async redirects() {
+    return [
+      { source: '/m', destination: '/story-playground', permanent: true },
+      { source: '/m/:projectId', destination: '/story-playground/:projectId', permanent: true },
+      { source: '/m/:projectId/story', destination: '/story-playground/:projectId/story', permanent: true },
+      { source: '/m/:projectId/cast', destination: '/story-playground/:projectId/characters', permanent: true },
+      { source: '/m/:projectId/cast/:characterId', destination: '/story-playground/:projectId/characters/:characterId', permanent: true },
+      { source: '/m/:projectId/scenes', destination: '/story-playground/:projectId/scenes', permanent: true },
+      { source: '/m/:projectId/scenes/:sceneId', destination: '/story-playground/:projectId/scenes/:sceneId', permanent: true },
+      { source: '/m/:projectId/assets', destination: '/story-playground/:projectId/assets', permanent: true },
+    ];
+  },
 };
 
 module.exports = nextConfig;

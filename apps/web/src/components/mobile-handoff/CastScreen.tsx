@@ -1,18 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-/** /m/[projectId]/cast — Characters list. design_handoff_raivstream_mobile, screen 4 of 8. */
+/** Characters list — design_handoff_raivstream_mobile, screen 4 of 8. Canonical: /story-playground/[projectId]/characters. */
 
-export default function MobileCastPage() {
-  const params = useParams();
-  const projectId = String(params.projectId);
+export function CastScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
@@ -23,7 +20,7 @@ export default function MobileCastPage() {
   const characters: any[] = (workspaceQuery.data as any)?.project?.characterMemory ?? [];
 
   return (
-    <Shell backHref={`/m/${projectId}`} title="Characters" activeTab="characters" projectId={projectId}>
+    <Shell backHref={`/story-playground/${projectId}`} title="Characters" activeTab="characters" projectId={projectId}>
       <div style={{ padding: '14px 18px 32px' }}>
         {workspaceQuery.isLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -37,7 +34,7 @@ export default function MobileCastPage() {
             {characters.map((character) => (
               <Link
                 key={character.id}
-                href={`/m/${projectId}/cast/${character.id}`}
+                href={`/story-playground/${projectId}/characters/${character.id}`}
                 className="noc-pressable"
                 style={{
                   display: 'flex',
@@ -85,7 +82,7 @@ export default function MobileCastPage() {
         )}
 
         <Link
-          href={`/story-playground/${projectId}?tab=characters`}
+          href={`/story-playground/${projectId}?tab=characters&legacy=1`}
           style={{
             display: 'block',
             textAlign: 'center',

@@ -1,14 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
 import { Pill, Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-/** /m/[projectId]/scenes — Scenes list. design_handoff_raivstream_mobile, screen 6 of 8. */
+/** Scenes list — design_handoff_raivstream_mobile, screen 6 of 8. Canonical: /story-playground/[projectId]/scenes. */
 
 function sceneStatus(scene: any): { label: string; tone: 'ready' | 'generating' | 'draft' | 'failed'; cta: string } {
   switch (scene.imageStatus) {
@@ -35,9 +34,7 @@ function castNames(scene: any): string[] {
     .slice(0, 3);
 }
 
-export default function MobileScenesPage() {
-  const params = useParams();
-  const projectId = String(params.projectId);
+export function ScenesScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
@@ -48,7 +45,7 @@ export default function MobileScenesPage() {
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
 
   return (
-    <Shell backHref={`/m/${projectId}`} title="Scenes" activeTab="scenes" projectId={projectId}>
+    <Shell backHref={`/story-playground/${projectId}`} title="Scenes" activeTab="scenes" projectId={projectId}>
       <div style={{ padding: '14px 18px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {workspaceQuery.isLoading ? (
           <>
@@ -65,7 +62,7 @@ export default function MobileScenesPage() {
             return (
               <Link
                 key={scene.id}
-                href={`/m/${projectId}/scenes/${scene.id}`}
+                href={`/story-playground/${projectId}/scenes/${scene.id}`}
                 className="noc-pressable"
                 style={{
                   display: 'block',

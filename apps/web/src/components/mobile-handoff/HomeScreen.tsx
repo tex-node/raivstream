@@ -10,8 +10,13 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
 /**
- * /m — Home. design_handoff_raivstream_mobile, screen 1 of 8 ("m: 'home'").
+ * Home — design_handoff_raivstream_mobile, screen 1 of 8 ("m: 'home'").
  * Real data via story.listMyProjects — no mock projects in production.
+ *
+ * Canonical: rendered at /story-playground. Also rendered at /m (which
+ * redirects to /story-playground — see next.config.js — so this component
+ * has exactly one call site in practice, but stays importable from either
+ * tree per the Method A "single implementation" rule).
  */
 
 const STARTERS = [
@@ -41,7 +46,7 @@ function projectStage(project: any, pct: number): string {
   return 'In progress';
 }
 
-export default function MobileHomePage() {
+export function HomeScreen() {
   const { user, isLoaded, isSignedIn } = useUser();
   const isR16 = useR16();
   const projectsQuery = trpc.story.listMyProjects.useQuery(
@@ -88,7 +93,7 @@ export default function MobileHomePage() {
                 return (
                   <Link
                     key={project.id}
-                    href={`/m/${project.id}`}
+                    href={`/story-playground/${project.id}`}
                     className="noc-pressable"
                     style={{
                       display: 'flex',
@@ -133,7 +138,7 @@ export default function MobileHomePage() {
             {(isR16 ? STARTERS.filter((s) => s.type === 'story' || s.type === 'idea') : STARTERS).map(({ label, icon: Icon, type }) => (
               <Link
                 key={type}
-                href={`/story-playground?type=${type}`}
+                href={`/story-playground/new?type=${type}`}
                 className="noc-pressable"
                 style={{
                   minHeight: 86,
@@ -161,7 +166,7 @@ export default function MobileHomePage() {
               {latest.map((project) => (
                 <Link
                   key={project.id}
-                  href={`/m/${project.id}`}
+                  href={`/story-playground/${project.id}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

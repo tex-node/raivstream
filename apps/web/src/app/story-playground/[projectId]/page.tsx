@@ -8,6 +8,11 @@ import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { ProjectOverviewScreen } from '@/components/mobile-handoff/ProjectOverviewScreen';
+import { StoryScreen as HandoffStoryScreen } from '@/components/mobile-handoff/StoryScreen';
+import { CastScreen as HandoffCastScreen } from '@/components/mobile-handoff/CastScreen';
+import { ScenesScreen as HandoffScenesScreen } from '@/components/mobile-handoff/ScenesScreen';
+import { AssetsScreen as HandoffAssetsScreen } from '@/components/mobile-handoff/AssetsScreen';
 
 type WorkspaceTab = 'overview' | 'story' | 'characters' | 'scenes' | 'assets' | 'sequence' | 'audio' | 'film' | 'storybook' | 'insights';
 
@@ -446,6 +451,23 @@ export default function StoryWorkspacePage() {
     }, Math.max(500, (current?.durationSeconds ?? 4) * 1000));
     return () => window.clearTimeout(timeout);
   }, [sequencePlaying, previewShotIndex, sequenceQuery.data, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Canonical route activation (mobile UI handoff): this route now renders
+  // the new handoff-derived screens for the tabs they cover. The legacy
+  // tabs below (sequence/audio/film/storybook/insights) keep rendering
+  // exactly the code that follows, completely unchanged. `?legacy=1` is an
+  // intentional escape hatch back to the old rendering for a covered tab —
+  // used today only by the new Characters screen's "+ Add a character"
+  // link, since character creation isn't reimplemented in the new UI yet.
+  // See docs/operations/mobile-ui-handoff-reconciliation.md.
+  const isLegacyEscape = searchParams.get('legacy') === '1';
+  if (!isLegacyEscape) {
+    if (tab === 'overview') return <ProjectOverviewScreen projectId={projectId} />;
+    if (tab === 'story') return <HandoffStoryScreen projectId={projectId} />;
+    if (tab === 'characters') return <HandoffCastScreen projectId={projectId} />;
+    if (tab === 'scenes') return <HandoffScenesScreen projectId={projectId} />;
+    if (tab === 'assets') return <HandoffAssetsScreen projectId={projectId} />;
+  }
 
   if (!isLoaded) {
     return <div className="min-h-screen bg-[#0B0D14]"><Navbar /><main className="mx-auto max-w-6xl px-4 py-12 font-bold text-[#9397ab]">Loading workspace...</main></div>;

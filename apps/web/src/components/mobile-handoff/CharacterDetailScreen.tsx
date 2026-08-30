@@ -1,23 +1,19 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
 import { Accordion, Skeleton, optionLabel } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
-/** /m/[projectId]/cast/[characterId] — Character detail. design_handoff_raivstream_mobile, screen 5 of 8. */
+/** Character detail — design_handoff_raivstream_mobile, screen 5 of 8. Canonical: /story-playground/[projectId]/characters/[characterId]. */
 
 function chipsFrom(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => (typeof v === 'string' ? optionLabel(v) : String(v)));
   return [];
 }
 
-export default function MobileCharacterDetailPage() {
-  const params = useParams();
-  const projectId = String(params.projectId);
-  const characterId = String(params.characterId);
+export function CharacterDetailScreen({ projectId, characterId }: { projectId: string; characterId: string }) {
   const { isLoaded, isSignedIn } = useUser();
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
@@ -27,7 +23,7 @@ export default function MobileCharacterDetailPage() {
 
   if (workspaceQuery.isLoading) {
     return (
-      <Shell backHref={`/m/${projectId}/cast`} title="Character" activeTab="characters" projectId={projectId}>
+      <Shell backHref={`/story-playground/${projectId}/characters`} title="Character" activeTab="characters" projectId={projectId}>
         <div style={{ padding: 18 }}>
           <Skeleton height={84} radius={999} width={84} />
         </div>
@@ -40,7 +36,7 @@ export default function MobileCharacterDetailPage() {
 
   if (!character) {
     return (
-      <Shell backHref={`/m/${projectId}/cast`} title="Character" activeTab="characters" projectId={projectId}>
+      <Shell backHref={`/story-playground/${projectId}/characters`} title="Character" activeTab="characters" projectId={projectId}>
         <div style={{ padding: 32, textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: 'var(--noc-t4)' }}>Character not found.</p>
         </div>
@@ -51,7 +47,7 @@ export default function MobileCharacterDetailPage() {
   const relationships: any[] = Array.isArray(character.relationships) ? character.relationships : [];
 
   return (
-    <Shell backHref={`/m/${projectId}/cast`} title={character.name} activeTab="characters" projectId={projectId}>
+    <Shell backHref={`/story-playground/${projectId}/characters`} title={character.name} activeTab="characters" projectId={projectId}>
       <div style={{ padding: '20px 18px 32px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 4, marginBottom: 20 }}>
           <div

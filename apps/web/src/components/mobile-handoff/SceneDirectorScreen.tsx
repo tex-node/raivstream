@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
-import { SegRow, Skeleton, optionLabel, useGenerateProgress } from '@/components/mobile/primitives';
+import { SegRow, Skeleton, useGenerateProgress } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
 /**
- * /m/[projectId]/scenes/[sceneId] — Scene Director. design_handoff_raivstream_mobile, screen 7 of 8.
+ * Scene Director — design_handoff_raivstream_mobile, screen 7 of 8. Canonical:
+ * /story-playground/[projectId]/scenes/[sceneId].
  *
  * The design mocks 11 pickable dimensions across 5 groups (Performance:
  * Emotion/Character behaviour/Energy; Camera: Shot size/Angle/Movement;
@@ -45,11 +46,8 @@ const DIRECTOR_GROUPS: Array<{ label: string; fields: Array<{ key: keyof typeof 
   { label: 'Pace', fields: [{ key: 'scenePace', fieldLabel: 'Pace' }] },
 ];
 
-export default function MobileSceneDirectorPage() {
-  const params = useParams();
+export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string; sceneId: string }) {
   const router = useRouter();
-  const projectId = String(params.projectId);
-  const sceneId = String(params.sceneId);
   const { isLoaded, isSignedIn } = useUser();
   const isR16 = useR16();
   const utils = trpc.useUtils();
@@ -72,7 +70,7 @@ export default function MobileSceneDirectorPage() {
 
   if (workspaceQuery.isLoading) {
     return (
-      <Shell backHref={`/m/${projectId}/scenes`} title="Scene Director" activeTab="scenes" projectId={projectId}>
+      <Shell backHref={`/story-playground/${projectId}/scenes`} title="Scene Director" activeTab="scenes" projectId={projectId}>
         <div style={{ padding: 18 }}>
           <Skeleton height={220} radius={0} />
         </div>
@@ -82,7 +80,7 @@ export default function MobileSceneDirectorPage() {
 
   if (!scene) {
     return (
-      <Shell backHref={`/m/${projectId}/scenes`} title="Scene Director" activeTab="scenes" projectId={projectId}>
+      <Shell backHref={`/story-playground/${projectId}/scenes`} title="Scene Director" activeTab="scenes" projectId={projectId}>
         <div style={{ padding: 32, textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: 'var(--noc-t4)' }}>Scene not found.</p>
         </div>
@@ -116,7 +114,7 @@ export default function MobileSceneDirectorPage() {
   function keepResult() {
     setReviewAssetUrl(null);
     utils.story.getWorkspace.invalidate({ projectId });
-    router.push(`/m/${projectId}/scenes`);
+    router.push(`/story-playground/${projectId}/scenes`);
   }
 
   const generating = progress.running || generateImage.isPending || regenerateImage.isPending;
@@ -124,7 +122,7 @@ export default function MobileSceneDirectorPage() {
 
   return (
     <Shell
-      backHref={`/m/${projectId}/scenes`}
+      backHref={`/story-playground/${projectId}/scenes`}
       title="Scene Director"
       activeTab="scenes"
       projectId={projectId}

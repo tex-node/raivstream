@@ -1,5 +1,25 @@
 # Mobile UI Handoff Reconciliation
 
+## Release history
+
+**Release 1 — `be8f8a4`** (`codex/ui-mobile-handoff-production`): implemented
+and staging-qualified all 8 handoff screens, deployed to production. Status:
+**IMPLEMENTATION DEPLOYED / CANONICAL ACTIVATION INCOMPLETE.** The screens
+were real, functional, and reachable at `/m/**` — but `/m` was never linked
+from anywhere in the application, so no ordinary user could reach them.
+Production smoke testing at the time navigated directly into `/m/**` and
+declared success without proving a normal user journey ever landed there.
+That was a real gap in the smoke methodology, not a fabricated result: the
+UI genuinely worked at `/m/**`, it just wasn't canonical.
+
+**Release 2 — this document's release** (corrective): makes the same
+screens the actual canonical `/story-playground` experience. `/m/**` now
+permanently redirects to the equivalent canonical route (308, via
+`next.config.js`) rather than serving a second, separately-maintained
+implementation. See "Canonical route activation" below.
+
+## Source
+
 Source handoff: `C:\Raiv\raivstream\UI\design_handoff_raivstream_mobile`
 Target: `apps/web` (Next.js) — not `apps/mobile`, a disconnected relic of the
 old video-feed product (upload/search/video screens, no story/chapter/
@@ -49,15 +69,72 @@ animation duration app-wide (new, not previously present).
 
 ## Navigation
 
-Real Next.js routes per screen (`/m`, `/m/[projectId]`, `/m/[projectId]/
-story`, `/cast(+/[characterId])`, `/scenes(+/[sceneId])`, `/assets`) rather
-than the prototype's single-page in-memory state machine — proper URLs,
-back-button, and deep-linking, same visual/interaction design. The
-previously-unused `Shell.tsx` component was extended (app bar, back button,
-"Saved" pill, scroll region, optional bottom action bar, 5-tab bottom bar)
-rather than duplicated. Tab-bar active-state mapping ports the prototype's
-own logic exactly: Home stays lit on Overview, Cast stays lit on Character
-detail, Scenes stays lit on Scene Director.
+Real Next.js routes per screen rather than the prototype's single-page
+in-memory state machine — proper URLs, back-button, and deep-linking, same
+visual/interaction design. The previously-unused `Shell.tsx` component was
+extended (app bar, back button, "Saved" pill, scroll region, optional bottom
+action bar, 5-tab bottom bar) rather than duplicated. Tab-bar active-state
+mapping ports the prototype's own logic exactly: Home stays lit on Overview,
+Cast stays lit on Character detail, Scenes stays lit on Scene Director.
+
+## Canonical route activation (corrective release)
+
+**Method A** (component extraction — preferred per the corrective brief) was
+used: every screen's presentation/logic was extracted from its original
+`/m/**` page file into a reusable component under
+`apps/web/src/components/mobile-handoff/` (`HomeScreen`,
+`ProjectOverviewScreen`, `StoryScreen`, `CastScreen`, `CharacterDetailScreen`,
+`ScenesScreen`, `SceneDirectorScreen`, `AssetsScreen`). There is exactly one
+implementation of each screen; nothing is duplicated between route trees.
+
+**Canonical route wiring**:
+- `/story-playground` → `HomeScreen` (was the creation wizard; the wizard
+  moved, byte-for-byte unchanged, to `/story-playground/new` and is now
+  linked from `HomeScreen`'s "Start something" cards).
+- `/story-playground/[projectId]` (no `tab`, or `tab=overview`) →
+  `ProjectOverviewScreen`.
+- `/story-playground/[projectId]/story` → `StoryScreen` (new nested route).
+- `/story-playground/[projectId]/characters` (+`/[characterId]`) →
+  `CastScreen` / `CharacterDetailScreen` (new nested routes; named
+  `characters` rather than `cast` to match the app's own pre-existing
+  `?tab=characters` convention rather than inventing a third naming
+  variant).
+- `/story-playground/[projectId]/scenes` (+`/[sceneId]`) → `ScenesScreen` /
+  `SceneDirectorScreen` (new nested routes).
+- `/story-playground/[projectId]/assets` → `AssetsScreen` (new nested
+  route).
+- `/story-playground/[projectId]?tab=X` for `X` in
+  `{story,characters,scenes,assets}` renders the **same** components inline
+  (no redirect) — so any old bookmark using the legacy query-param
+  convention keeps working, not just the new nested paths.
+- `/story-playground/[projectId]?tab=X` for `X` in
+  `{sequence,audio,film,storybook,insights}` — **completely unchanged**,
+  the original ~1760-line workspace component's existing rendering, reached
+  by an early-return branch inserted after its last hook call and before
+  its own render logic. Nothing inside that legacy render path was touched.
+- `?legacy=1` on any of the five now-componentized tabs is an intentional,
+  documented escape hatch back to the original inline rendering for that
+  tab — used today only by `CastScreen`'s "+ Add a character" link, since
+  character creation (a form embedded in the legacy Characters tab) isn't
+  reimplemented in the new UI yet. Verified working live on staging.
+- `/m` and every `/m/**` path permanently redirect (308, `next.config.js`
+  `redirects()`) to their canonical equivalent, preserving project/character/
+  scene IDs. The old `/m/**` page files were deleted — Section 6's "there
+  should be ONE implementation" is satisfied structurally, not just by
+  convention. Verified live: `/m/[projectId]/scenes` → 308 →
+  `/story-playground/[projectId]/scenes`.
+
+**Why `/story-playground` itself was never reachable from ordinary
+navigation before this release, and still mostly isn't from the site
+root**: the app's `Navbar` hides its entire desktop nav (including the
+existing "Story Playground" link) whenever `isFeed` is true — and the site
+root `/` *is* the legacy video-feed page. This is pre-existing behavior,
+untouched by this release, and out of scope for it (this corrective release
+is scoped to making `/story-playground` itself canonical, exactly as
+Section 2/4 of the brief defines "canonical" — not to changing the legacy
+feed's own navigation chrome). Once a user reaches `/story-playground` by
+any means — the Navbar link on a non-feed page, a bookmark, a direct
+URL — they now land in the new UI automatically.
 
 ## Backend / schema
 

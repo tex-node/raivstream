@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { splitParagraphs } from '@/lib/mobileFormat';
@@ -10,7 +9,8 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
 /**
- * /m/[projectId]/story — Story. design_handoff_raivstream_mobile, screen 3 of 8.
+ * Story — design_handoff_raivstream_mobile, screen 3 of 8. Canonical:
+ * /story-playground/[projectId]/story.
  *
  * Two known, documented deviations from the prototype (real-content reasons,
  * not fidelity shortcuts):
@@ -28,9 +28,7 @@ import { useUser } from '@/lib/auth';
 
 const STORY_ACTIONS = ['Develop this idea', 'Strengthen conflict', 'Explore another ending', 'Make this funnier', 'Increase tension'];
 
-export default function MobileStoryPage() {
-  const params = useParams();
-  const projectId = String(params.projectId);
+export function StoryScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
   const isR16 = useR16();
   const [selected, setSelected] = useState<number | null>(null);
@@ -42,7 +40,7 @@ export default function MobileStoryPage() {
 
   if (workspaceQuery.isLoading) {
     return (
-      <Shell backHref={`/m/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
+      <Shell backHref={`/story-playground/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Skeleton height={14} width="60%" />
           <Skeleton height={80} />
@@ -58,7 +56,7 @@ export default function MobileStoryPage() {
   const paragraphs = splitParagraphs(latestChapter?.body);
 
   return (
-    <Shell backHref={`/m/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
+    <Shell backHref={`/story-playground/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
       <div style={{ padding: '18px 18px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {!latestChapter ? (
           <EmptyState title="No chapters yet" hint="Start writing from the project overview." />

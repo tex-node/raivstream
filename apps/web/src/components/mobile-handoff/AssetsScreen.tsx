@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
 import { Heart } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
@@ -9,7 +8,8 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 
 /**
- * /m/[projectId]/assets — Assets. design_handoff_raivstream_mobile, screen 8 of 8.
+ * Assets — design_handoff_raivstream_mobile, screen 8 of 8. Canonical:
+ * /story-playground/[projectId]/assets.
  *
  * The design mocks 4 filter chips (All/Chosen/Scenes/Characters). This
  * backend only has one asset category today (per-scene generated images —
@@ -21,9 +21,7 @@ import { useUser } from '@/lib/auth';
 
 type Filter = 'all' | 'favorites';
 
-export default function MobileAssetsPage() {
-  const params = useParams();
-  const projectId = String(params.projectId);
+export function AssetsScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
   const utils = trpc.useUtils();
   const [filter, setFilter] = useState<Filter>('all');
@@ -46,7 +44,7 @@ export default function MobileAssetsPage() {
   const favoriteCount = allAssets.filter((a) => a.isFavorite).length;
 
   return (
-    <Shell backHref={`/m/${projectId}`} title="Assets" activeTab="assets" projectId={projectId}>
+    <Shell backHref={`/story-playground/${projectId}`} title="Assets" activeTab="assets" projectId={projectId}>
       <div style={{ padding: '14px 18px 32px' }}>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12 }} className="hide-scrollbar">
           {(['all', 'favorites'] as Filter[]).map((f) => (
