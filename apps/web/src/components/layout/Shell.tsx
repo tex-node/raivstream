@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
 
@@ -60,6 +61,51 @@ function primaryNavItems(projectId?: string): NavItem[] {
   ];
 }
 
+/**
+ * Phase 1 of the application-wide UI reconciliation (see
+ * docs/operations/application-wide-ui-reconciliation.md): before this,
+ * there was no way to navigate from inside the Story Playground workspace
+ * back to the app's other top-level destinations (the video-feed Home,
+ * Academy, Account, Admin) — Shell's nav was entirely project-scoped. The
+ * legacy `Navbar` already links into Story Playground/Academy/Settings/
+ * Admin from the feed side; this closes the missing direction. Academy is
+ * hidden under R16 and Admin is role-gated, matching Navbar's own existing
+ * conventions exactly (not a new policy invented here).
+ */
+type GlobalDestination = { key: string; label: string; href: string; icon: React.ReactNode };
+
+const GLOBAL_ICONS = {
+  feed: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3" /><path d="M10 8l6 4-6 4V8z" />
+    </svg>
+  ),
+  academy: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 10L12 5 2 10l10 5 10-5z" /><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" />
+    </svg>
+  ),
+  account: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+    </svg>
+  ),
+  admin: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" />
+    </svg>
+  ),
+} as const;
+
+function globalDestinations(isR16: boolean, canAdmin: boolean): GlobalDestination[] {
+  return [
+    { key: 'feed', label: 'Home', href: '/', icon: GLOBAL_ICONS.feed },
+    ...(!isR16 ? [{ key: 'academy', label: 'Academy', href: '/academy', icon: GLOBAL_ICONS.academy }] : []),
+    { key: 'account', label: 'Account', href: '/settings', icon: GLOBAL_ICONS.account },
+    ...(!isR16 && canAdmin ? [{ key: 'admin', label: 'Admin', href: '/admin', icon: GLOBAL_ICONS.admin }] : []),
+  ];
+}
+
 /** Mobile bottom tab bar — primary nav only, exactly as before. Hidden at lg:. */
 function BottomTabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: string }) {
   const tabs = primaryNavItems(projectId);
@@ -109,17 +155,46 @@ const SECONDARY_ITEMS = [
  * Only rendered at lg: and up; mobile keeps the bottom tab bar instead. */
 function Sidebar({ activeTab, projectId }: { activeTab?: ShellTab; projectId?: string }) {
   const isR16 = useR16();
+  const { user } = useUser();
+  const canAdmin = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
   const tabs = primaryNavItems(projectId);
+  const destinations = globalDestinations(isR16, canAdmin);
 
   return (
     <aside
       className="hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:bottom-0 lg:w-64 lg:shrink-0"
       style={{ borderRight: '1px solid var(--noc-hairline)', background: 'var(--noc-bar)' }}
     >
-      <div style={{ padding: '20px 22px 16px' }}>
+      <div style={{ padding: '20px 22px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Link href="/story-playground" style={{ fontWeight: 700, fontSize: 17, color: 'var(--noc-t1)', textDecoration: 'none', letterSpacing: '-0.01em' }}>
           Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
         </Link>
+        {/* Global destinations — Home/Academy/Account/Admin. The only way
+            to leave the project workspace before this was the browser
+            back button or typing a URL; see Phase 1 note above. */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {destinations.map((dest) => (
+            <Link
+              key={dest.key}
+              href={dest.href}
+              title={dest.label}
+              aria-label={dest.label}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--noc-t5)',
+                textDecoration: 'none',
+                flexShrink: 0,
+              }}
+            >
+              {dest.icon}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <nav style={{ padding: '4px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -192,6 +267,10 @@ export function Shell({
 }: ShellProps) {
   const router = useRouter();
   const { user } = useUser();
+  const isR16 = useR16();
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  const canAdmin = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
+  const destinations = globalDestinations(isR16, canAdmin);
 
   const savedVisible = showSaved && !!user;
 
@@ -276,6 +355,33 @@ export function Shell({
               <span style={{ fontSize: '11px', color: 'var(--noc-cyan-tint)', fontWeight: 500 }}>Saved</span>
             </div>
           )}
+
+          {/* Mobile-only trigger for the global-destinations drawer — the
+              desktop Sidebar already carries these as an icon row next to
+              the brand mark, so this is hidden at lg:. */}
+          <button
+            type="button"
+            onClick={() => setNavDrawerOpen(true)}
+            aria-label="More destinations"
+            className="lg:hidden"
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: 'var(--noc-card)',
+              border: '1px solid var(--noc-hairline)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              color: 'var(--noc-t4)',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+            </svg>
+          </button>
         </div>
 
         {/* Scroll region — full available width; each screen decides its
@@ -308,6 +414,57 @@ export function Shell({
         {/* Bottom tab bar — mobile only */}
         {activeTab && <BottomTabBar activeTab={activeTab} projectId={projectId} />}
       </div>
+
+      {/* Mobile global-destinations drawer — bottom sheet, triggered by
+          the dots button above. Desktop never renders this (the trigger
+          itself is lg:hidden, so navDrawerOpen can never become true
+          there), matching "Mobile: compact top bar + drawer where
+          appropriate" from the app-wide UI reconciliation brief. */}
+      {navDrawerOpen && (
+        <div
+          className="lg:hidden"
+          style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', alignItems: 'flex-end' }}
+        >
+          <div
+            onClick={() => setNavDrawerOpen(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }}
+          />
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              background: 'var(--noc-bar)',
+              borderTop: '1px solid var(--noc-hairline)',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              padding: '8px 8px calc(env(safe-area-inset-bottom, 0px) + 12px)',
+            }}
+          >
+            <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--noc-hairline)', margin: '8px auto 14px' }} />
+            {destinations.map((dest) => (
+              <Link
+                key={dest.key}
+                href={dest.href}
+                onClick={() => setNavDrawerOpen(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '13px 14px',
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: 'var(--noc-t2)',
+                  textDecoration: 'none',
+                }}
+              >
+                {dest.icon}
+                {dest.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

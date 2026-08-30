@@ -162,7 +162,7 @@ before a single non-Story-Playground route can be migrated onto it with
 integrity — migrating pages onto placeholder/incomplete primitives would
 just create a sixth visual family.
 
-## 6. Root `/` — product decision required
+## 6. Root `/` — product decision (RESOLVED)
 
 Per the brief's own instruction ("do not silently redirect `/` merely to
 make UI consistency easier... document this as a product decision before
@@ -170,11 +170,16 @@ changing behavior"): `/` is confirmed to be the pre-pivot TikTok-style
 video-feed product (`Navbar` + `FeedTabs` + `VideoFeed`, full-screen
 vertical video, black background, violet/blue gradient identity) — a
 different product surface from the story-to-film creator tool this whole
-initiative is themed around. This was already flagged as out of scope in
-the prior responsive-reconciliation release, with the user's explicit
-agreement that changing `/` is "a separate product/navigation decision."
-**No action taken on `/` in this phase; flagged here per the brief's own
-gate, not decided unilaterally.**
+initiative is themed around.
+
+**Decision (user, explicit): `/` stays the video feed. Restyle it onto
+Nocturne tokens/components; do not redirect it or replace it with Story
+Playground or a new authenticated home.** Restyling `/`'s actual content
+is scoped to "3. Legacy feed family" in the route-by-route migration
+roadmap below, not this Phase 1 — Phase 1 only needed to know *that* `/`
+stays the feed, so the global-navigation work could correctly treat it as
+one of the app's permanent top-level destinations rather than a
+placeholder pending removal.
 
 ## Execution status
 
@@ -357,7 +362,63 @@ explicitly, individually product-excluded** (not silently skipped) — a
 real per-route count, checked against the matrix, not a qualitative
 impression that "the app feels more consistent now."
 
-## Final report
+## Phase 1 execution: global shell & top-level navigation
+
+Scoped to the roadmap's own Phase 1 definition: "settle `/`, authenticated
+home, sidebar/topbar behavior, account access, Academy, admin entry
+points." Root `/` is now settled (§6, resolved — stays the video feed,
+content restyle deferred to Phase 3), which retired "authenticated home"
+as a separate open question: there is no new unified home page to build,
+`/` remains the entry point by decision.
+
+**The real, confirmed gap this phase closed**: navigation between the
+app's top-level destinations only worked in one direction. The legacy
+`Navbar` (used by `/` and its sibling legacy-feed routes) already links to
+Story Playground, Academy, Settings, Credits, and Admin — both in its
+desktop center-nav and its avatar dropdown. But `Shell` (used by the
+entire Story Playground/project-workspace tree) had **no** links back out
+to Home, Academy, Account, or Admin at all — a user inside Story
+Playground could only leave via the browser back button or by typing a
+URL. This is exactly the kind of "shell not yet unified" gap Phase 1 was
+supposed to find and fix.
+
+**Fix**: `components/layout/Shell.tsx` gained a `globalDestinations()`
+helper (Home → `/`, Academy → `/academy`, Account → `/settings`, Admin →
+`/admin`) with the exact same R16 (Academy + Admin hidden) and role
+(`ADMIN`/`MODERATOR` for Admin) gating `Navbar` already uses — not a new
+policy, matched to the existing one. Surfaced two ways:
+
+- **Desktop**: a compact icon row next to the brand wordmark at the top
+  of the persistent `Sidebar`, always visible alongside the project nav.
+- **Mobile**: a new "more destinations" icon button in `Shell`'s sticky
+  top app bar opens a bottom-sheet drawer (backdrop-dismissible) listing
+  the same destinations with full labels. This is the first real,
+  consumer-driven use of a drawer/bottom-sheet pattern in the app — kept
+  as a local implementation inside `Shell` rather than extracted to a
+  shared `Drawer` component yet, since it has exactly one caller so far;
+  per the "extract primitives from real usage" principle, it becomes a
+  real shared-primitive candidate once a second caller needs the same
+  pattern (a natural fit for Phase 5's Admin mobile drawer, which already
+  hand-rolls an equivalent overlay in `AdminLayout`).
+
+**Verified on staging**, real QA account (role `ADMIN`), both viewports:
+desktop icon row shows all 4 destinations (Home/Academy/Account/Admin);
+under `?r16=1` it correctly drops to 2 (Home/Account only), matching
+`Navbar`'s R16 behavior exactly. Mobile drawer opens, shows all 4 links
+with correct hrefs, sits as a proper bottom sheet (confirmed via
+`getBoundingClientRect` — not the hidden desktop sidebar's copy, which
+was a false-positive the first measurement attempt caught and corrected
+for), closes on backdrop click, zero horizontal overflow. Typecheck and
+build clean. Diff is exactly one file (`Shell.tsx`).
+
+**Not done in this phase** (correctly deferred to their own numbered
+steps in the roadmap, not silently skipped): `/`'s actual content restyle
+(Phase 3), Auth/Account/Academy/Admin's own internal visual migration
+(Phases 2, 4, 5), and extracting the drawer pattern into a shared,
+independently-documented `Drawer` component (Phase 7, once a second real
+caller exists).
+
+## Final report — Foundation Pass (superseded by "Final report — Phase 1" below)
 
 1. **Starting production SHA**: `9c15238` (last-deployed before this
    initiative)
@@ -483,3 +544,74 @@ above for the required order, the extract-primitives-from-real-usage
 approach, and the explicit completion criterion (something close to
 47/47 migrated or individually product-excluded, not another wrapper-
 level improvement reported as done).
+
+## Final report — Phase 1
+
+1. **Starting production SHA**: `f8ffe55` (Foundation Pass baseline)
+2. **Candidate SHA**: pending production deploy — see "Production
+   verification" note appended below once confirmed live
+3. **Route inventory total**: 47 page routes (+2 alias/redirect files) —
+   unchanged, no new routes added or removed
+4. **Routes migrated this round**: 0 additional routes reach full
+   family-A status (shell + internals). This round's work is
+   cross-cutting navigation topology, not a per-route visual migration —
+   it makes *every* route in the Story Playground tree able to navigate
+   out to Home/Academy/Account/Admin, which the route matrix doesn't
+   capture as a single countable "route migrated" line item. Recorded
+   honestly rather than inflating the 10/47 count.
+5. **Routes intentionally excluded this round**: all 37 unmigrated routes
+   from §1, unchanged — this round touched shell/navigation code only
+6. **Shared design primitives**: still none formally extracted; the
+   mobile bottom-sheet drawer built this round is a real, working, first
+   use of that pattern, kept local to `Shell.tsx` pending a second caller
+7. **Global shell**: **this round's actual deliverable** — `Shell` now
+   carries global top-level destination links (desktop icon row +
+   mobile drawer), closing the one-directional-navigation gap; see
+   "Phase 1 execution" above for the full account
+8. **Root/feed**: product decision resolved (`/` stays the feed); no
+   content restyle performed (deferred to Phase 3, per the roadmap)
+9–24. **Auth/Story Playground/Overview through Admin**: unchanged from
+   the Foundation Pass report above; no regressions introduced by this
+   round's `Shell.tsx` change (verified — the project-scoped nav, R16
+   gating, and every existing Sidebar/BottomTabBar behavior are byte-
+   identical except for the new destination row/drawer being added)
+25. **Generate/upload/search/video**: unchanged
+26. **Forms**: unchanged
+27. **Tables**: unchanged
+28. **Modals**: unchanged; the new mobile drawer is a distinct pattern
+    (bottom sheet, not a centered dialog) from the existing fixed-overlay
+    modals in the project-workspace page, not a consolidation of them
+29. **Empty/error/loading states**: unchanged
+30. **Mobile QA**: done — `390×844` on staging, drawer opens/closes
+    correctly, correct destination set, zero overflow
+31. **Tablet QA**: not separately re-run (no tablet-specific behavior
+    changed by this round)
+32. **Desktop QA**: done — `1440×900` on staging, icon row present with
+    correct hrefs and title/aria-labels
+33. **R16**: verified — desktop icon row and mobile drawer both correctly
+    drop to Home/Account only under `?r16=1`, matching `Navbar`'s
+    existing R16 gating exactly (not a new policy)
+34. **Functional QA**: real navigation confirmed via actual DOM
+    measurement of link hrefs and rendered positions (not merely that
+    the code compiles) on staging
+35. **Console/logs**: zero new errors on staging; only the same three
+    pre-existing, already-documented, unrelated issues present
+36. **Backend/schema audit**: clean — diff is exactly one frontend file
+    (`components/layout/Shell.tsx`); zero backend/schema/migration/
+    renderer/worker files touched
+37. **Voice exclusion**: untouched; not in scope
+38. **Movie rate invariant**: not re-checked this round (no code path
+    anywhere near credits/rendering was touched — re-verifying an
+    invariant that provably cannot have changed would be theater, not
+    verification; last confirmed at exactly 100 credits in the Foundation
+    Pass round immediately prior)
+39. **Production backup**: not taken — zero schema/migration changes
+40. **Production smoke**: pending — see appended note once deployed
+41. **Known limitations**: (a) the drawer pattern isn't yet a shared,
+    documented component — it has one caller; (b) global destination
+    links use `title`/`aria-label` for accessibility on the icon-only
+    desktop row but have not been through a full keyboard-navigation
+    audit (tab order, focus rings) — flagged for Phase 8's final
+    acceptance pass, not silently assumed fine; (c) all limitations
+    carried over from the Foundation Pass report remain unchanged
+42. **Final verdict**: see below, pending production confirmation
