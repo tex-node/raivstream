@@ -1,37 +1,47 @@
 # Application-Wide UI Reconciliation
 
-Status: **PHASE 1 (1a + 1b) COMPLETE (SHA `f2e2be6`) — global shell/
-top-level navigation AND the legacy feed's shell restyled onto Nocturne;
-route-by-route migration (Phase 2 onward) not yet started.** This
-document is the live route inventory, design-system plan, and phased
-roadmap for the "RAIVSTREAM — APPLICATION-WIDE UI SYSTEM RECONCILIATION"
-initiative. It is being built incrementally across multiple rounds; see
-"Execution status", "Phase 1 execution", and "Phase 1b: feed shell
-restyle" for what has actually shipped vs. "Next phase: route-by-route
-migration" for what's planned but not yet built.
+Status: **PHASE 2 COMPLETE (SHA `470bcc4`) — global shell/top-level nav,
+the legacy feed's shell, and auth + account/settings all restyled onto
+Nocturne; route-by-route migration for the remaining phases (3 onward)
+not yet started.** This document is the live route inventory,
+design-system plan, and phased roadmap for the "RAIVSTREAM —
+APPLICATION-WIDE UI SYSTEM RECONCILIATION" initiative. It is being built
+incrementally across multiple rounds; see "Execution status", "Phase 1
+execution", "Phase 1b: feed shell restyle", and "Phase 2: Auth +
+Account/Settings" for what has actually shipped vs. "Next phase:
+route-by-route migration" for what's planned but not yet built.
 
-**Baseline for all future work on this initiative: `f2e2be6`** (supersedes
-`9536a4e` and, before that, `f8ffe55`). This is the production SHA as of
-Phase 1's completion in full: route inventory + UI-family classification
-+ design-system gap analysis + the Audio/Sequence/Film/Storybook shell
-fix + global top-level navigation in `Shell` + the legacy feed's own
-shell (`Navbar`/`FeedTabs`/`VideoFeed` chrome/`PaywallModal`) restyled
-onto Nocturne, root `/` preserved exactly as the feed product (not
-redirected, not removed). It is explicitly *not* the endpoint — see the
-completion criterion at the end of "Next phase" below. Any session
-continuing this initiative should treat `f2e2be6` as its starting point,
-re-read this document in full before making changes, and **not reopen
-already-qualified Story Playground behavior** (the 8 canonical
-`/story-playground/[projectId]/*` screens and the responsive-desktop
-work already shipped and verified in `docs/operations/mobile-ui-handoff-
-reconciliation.md`) except where a shared-primitive extraction requires
-a strictly presentation-only refactor of them. Also not yet touched:
-`VideoInteractions.tsx`/`VideoPlayer.tsx` (real feed interaction/playback
-logic, deliberately deferred — see "Phase 1b" for why) and `/[username]`,
-`/v/[id]`, `/generate`, `/upload`, `/search`, and the rest of the legacy-
-feed route family's own page content (only the shared `Navbar` chrome
-they all render was touched, which already improves their consistency
-for free — their own content is still Phase 3's job).
+**Baseline for all future work on this initiative: `470bcc4`**
+(supersedes `f2e2be6`, `9536a4e`, and, before that, `f8ffe55`). This is
+the production SHA as of Phase 2's completion: route inventory +
+UI-family classification + design-system gap analysis + the Audio/
+Sequence/Film/Storybook shell fix + global top-level navigation in
+`Shell` + the legacy feed's own shell (`Navbar`/`FeedTabs`/`VideoFeed`
+chrome/`PaywallModal`) restyled onto Nocturne + sign-in/sign-up/forgot-
+password/reset-password/settings/credits/credits-success/subscription-
+success all fully restyled and verified, root `/` preserved exactly as
+the feed product (not redirected, not removed). It is explicitly *not*
+the endpoint — see the completion criterion at the end of "Next phase"
+below. Any session continuing this initiative should treat `470bcc4` as
+its starting point, re-read this document in full before making changes,
+and **not reopen already-qualified Story Playground behavior** (the 8
+canonical `/story-playground/[projectId]/*` screens and the
+responsive-desktop work already shipped and verified in `docs/
+operations/mobile-ui-handoff-reconciliation.md`) except where a
+shared-primitive extraction requires a strictly presentation-only
+refactor of them. Also not yet touched: `VideoInteractions.tsx`/
+`VideoPlayer.tsx` (real feed interaction/playback logic, deliberately
+deferred — see "Phase 1b" for why), `/[username]`, `/v/[id]`,
+`/generate`, `/upload`, `/search`, and the rest of the legacy-feed route
+family's own page content (only the shared `Navbar` chrome they all
+render was touched — Phase 3's job), and Academy/Admin (Phases 4–5). One
+reusable finding from Phase 2, worth knowing before writing any new
+conditional/toggled color style in this codebase: **a CSS `transition`
+animating to/from a `var(--noc-*)`-based Tailwind arbitrary color value
+gets visually stuck in this app's target browser engine** — use the
+literal hex/rgba value instead for any color that actually changes at
+runtime under a `transition` class (see "Phase 2" below for the full
+account and the fix applied everywhere it was found).
 
 ## 1. Route inventory
 
@@ -1050,7 +1060,10 @@ round's bookkeeping discipline, not a special exception for this one.
 ## Final report — Phase 2
 
 1. **Starting production SHA**: `f2e2be6` (Phase 1 complete baseline)
-2. **Candidate SHA**: pending production deploy — see appended note
+2. **Candidate SHA**: `470bcc43df6be3412678d827b816aa2772755346` (short:
+   `470bcc4`) — deployed via the standard `main` push → GitHub Actions
+   pipeline (run `33307120897`, succeeded in 2m34s), confirmed live via
+   `git rev-parse HEAD` and `/api/health`
 3. **Route inventory total**: 47 page routes — unchanged
 4. **Routes migrated this round**: 8 routes restyled end-to-end (shell
    and content, since auth/account pages don't have a separate
@@ -1110,11 +1123,52 @@ round's bookkeeping discipline, not a special exception for this one.
 38. **Movie rate invariant**: not re-checked — no code path near
     credits/rendering was touched (display-only changes)
 39. **Production backup**: not taken — zero schema/migration changes
-40. **Production smoke**: pending — see appended note once deployed
+40. **Production smoke**: done — live at `https://app.raivstream.com/`.
+    A disposable account registered directly, then signed in via the
+    real, live sign-in form using genuine DOM input events (not a
+    scripted API bypass): the hard redirect fired and landed on `/` with
+    a valid session confirmed via `/api/auth/me`. Navigated to
+    `/settings` and confirmed the real `user.getProfile` tRPC call
+    returned `200` with real profile data rendering correctly, zero
+    horizontal overflow. Disposable account deleted and verified gone
+    (`verifiedGone: true`) immediately after.
 41. **Known limitations**: (a) the password-strength meter and error/
     success colors remain intentionally semantic rather than brand-
     mapped, consistent with prior rounds; (b) a real, narrow browser
     engine bug (CSS transitions to/from `var()`-based colors) was found
     and fixed — flagged for any future contributor per the note above;
     (c) all limitations carried over from Phase 1 remain unchanged
-42. **Final verdict**: see below, pending production confirmation
+42. **Final verdict**: see below
+
+**RAIVSTREAM APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS
+(PHASE 2 COMPLETE — SHA `470bcc4` — NOT THE ENDPOINT)**
+
+Phase 2's acceptance boundary held in full, verified live: auth flows
+are functionally identical (real sign-in confirmed end-to-end on
+production, including the `redirect_url` return-url behavior), R16/role
+visibility is unchanged (no R16 branching exists in these 8 pages;
+gating continues to come from the already-verified shared `Navbar`/
+`Shell`), credits/balances stayed presentation-only (the real Paystack
+purchase flow and `story:movie_render` were never touched), the diff is
+frontend-only across 11 files, and console/logs stayed clean throughout.
+Per the requested documentation split: **sign-in, sign-up, forgot-
+password, reset-password, settings (all three tabs), credits, credits/
+success, and subscription/success were fully migrated** (shell and
+content both, since these pages have no separate "internals" layer);
+`/generate`, `/upload`, `/search`, `/[username]`, `/v/[id]`, `/story-
+studio`, `/analytics`, `/notifications` continue to **only inherit** the
+shared `Navbar` restyle from Phase 1b — their own page content remains
+unmigrated family C, exactly as before this round. A real, narrow
+browser-engine bug (CSS transitions to/from `var()`-based Tailwind
+arbitrary colors) was found and fixed along the way, with the fix
+generalized across every file in Phase 1b and Phase 2 that had the same
+pattern, not just the one that surfaced it.
+
+`470bcc4` is now the baseline for whichever phase comes next. Consistent
+with every prior round's labeling discipline: **the overall program
+remains PASS WITH LIMITATIONS** — 39 of 47 routes are still unmigrated
+(§1's inventory, updated), and this verdict must not be read as the
+application-wide reconciliation being complete. It is complete only when
+the route matrix reaches something close to 47/47 migrated or explicitly
+product-excluded, per the completion criterion recorded in "Next phase:
+route-by-route migration" above.
