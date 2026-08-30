@@ -534,13 +534,16 @@ creative application, not a mobile app enlarged.
    "tablet expands intelligently" ideal described in the brief; flagged as
    a follow-up rather than blocking this release, since the brief's
    pass/fail bar is specifically the desktop (`>= 1024px`) composition.
-2. Several Tailwind utility classes needed the `!` important modifier to
-   win over a pre-existing inline `style` on the same CSS property (e.g.
-   `padding`, `display`, `gap`). This is a correct, deliberate use of the
-   modifier (verified: inline `style` always beats a same-specificity
-   class, `!important` is the only way to override it short of removing
-   the inline declaration) — documented here so a future contributor
-   editing these files understands why some classes carry `!`.
+2. **Superseded** — the initial pass of this release used Tailwind's `!`
+   important modifier to win over pre-existing inline `style` properties
+   on the same element. A follow-up round removed every `!` and instead
+   moved every breakpoint-varying layout property (`display`,
+   `flexDirection`, `gap`, `padding`, `width`/`height`,
+   `gridTemplateColumns`, `whiteSpace`) out of inline `style` and into
+   `className`, leaving inline `style` only for values that never change
+   by breakpoint. See "Follow-up: inline-style/class precedence audit"
+   below for the full account, including a real regression this caught
+   and fixed in `Shell.tsx`.
 3. Production live verification used an empty (no-project) disposable
    account rather than a real project, to avoid spending real AI
    generation credits purely to re-confirm layout code that was already
@@ -550,3 +553,110 @@ creative application, not a mobile app enlarged.
    this purely-frontend change). The Home screen's desktop shell/grid
    composition was confirmed live on production instead, which exercises
    the same Shell/Sidebar/nav code every other screen shares.
+
+## Follow-up: inline-style/class precedence audit
+
+A second pass, prompted by direct review of the diff, treated every
+Tailwind `!important` added in the first pass as a signal to re-examine
+the underlying inline `style` rather than a fix in itself. Two things came
+out of that: one real regression, and a repo-wide cleanup.
+
+### The regression: `.noc-shell-main` was missing its flex-column context
+
+When `.noc-shell-frame` (the old ~440px phone frame) was deleted and
+replaced by `.noc-shell-main`, the rewrite kept `min-height: 100dvh` but
+dropped `display: flex; flex-direction: column; position: relative` —
+properties the old class also carried, which is what made the sticky top
+app bar, the `flex: 1` scroll region, the sticky action bar, and the
+bottom tab bar behave as a pinned app-shell chrome (the standard
+"min-height + flex-column" sticky-footer pattern) instead of a plain
+scrolling document. Confirmed live on staging before the fix: at
+`390×844` on the Home screen, `.noc-shell-main` computed to
+`display: block`, and the bottom tab bar sat at `top: 360.75px / bottom:
+437.75px` — nowhere near the `844px` viewport bottom, `position: static`.
+This was present at **every** viewport, not just desktop — the desktop
+symptom (a workspace that still looked cramped) was a second-order effect
+of the same missing rule, not a separate bug. Fixed by restoring
+`display: flex; flex-direction: column; position: relative` to
+`.noc-shell-main` in `globals.css`. Re-verified on staging post-fix:
+`navBottom: 844 === windowInnerHeight: 844` at `390×844`, `mainDisplay:
+"flex"`. This is exactly the class of bug the precedence audit was meant
+to catch — a global/shell-level constraint that can make the whole
+application look wrong regardless of how correct the per-screen grids
+are.
+
+### The cleanup: removing inline layout properties instead of stacking `!`
+
+Every `lg:!`/`xl:!`/`wide:!` override from the first pass was removed.
+Where a layout property (`display`, `flexDirection`, `gap`, `padding`,
+`width`/`height`, `gridTemplateColumns`, `whiteSpace`, `position`) needed
+to differ by breakpoint, it was moved out of the element's inline `style`
+object and into `className` as a base Tailwind utility plus `lg:`/`xl:`/
+`wide:` variants — e.g. `style={{ padding: '14px 18px 32px' }}` became
+`className="px-[18px] pt-3.5 pb-8 lg:px-10 lg:py-10"`. Inline `style` now
+carries only values that never change by breakpoint (colors, borders,
+border-radius, font-weight, one-off pixel values like a fixed hero
+height). Applied to all 8 mobile-handoff screens.
+
+One additional, distinct case surfaced during this pass: `.noc-btn-primary`
+(`width: 100%`) is a plain custom class, not an inline style, but because
+it's defined in `globals.css` *after* the `@tailwind utilities;`
+directive, it was beating a responsive utility class (`lg:w-auto`) on
+plain file order at equal specificity — the same trap, one layer removed,
+with no inline style to blame. The correct fix for that shape of conflict
+is different: `globals.css`'s custom `.noc-*` classes are now wrapped in
+Tailwind's `@layer components { ... }` block, which is hoisted ahead of
+`@tailwind utilities`'s generated output regardless of where it sits in
+the source file — so any Tailwind utility, including a responsive variant,
+now reliably wins over these classes without `!important` anywhere.
+
+### `ProjectOverviewScreen` restructure
+
+Rebuilt to the specified target: mobile keeps the exact original stack
+(hero → CTA → Story/Characters → stats → More); `md:` (tablet, 768px+)
+becomes a balanced `1fr 1fr` two-column split; `lg:` (desktop) becomes a
+real `2fr 1fr` (~2/3 main, ~1/3 utility) workspace split — main column
+(hero, primary action, Story/Characters), utility column (metadata stats,
+More). The "More" section now renders inside the utility column with its
+own bordered card treatment at `lg:` (`lg:rounded-2xl lg:border lg:p-4`)
+so it reads as a distinct panel rather than a mobile menu tacked onto the
+end of a long page; on mobile it's unchanged (no card, no border).
+
+### `CharacterDetailScreen` and remaining screens
+
+`CharacterDetailScreen` already had the target profile-column (sticky,
+left) + editable-details-column (right) split from the first pass; this
+round only removed its `!` overrides (avatar `width`/`height`/`fontSize`,
+container `padding`) in favor of moving those into `className`, with no
+structural change. `CastScreen`, `HomeScreen`, `ScenesScreen`,
+`StoryScreen`, `AssetsScreen`, and `SceneDirectorScreen` received the same
+treatment — same grids/splits as documented above, same measurements,
+just with every layout property now living in `className`.
+
+### DOM measurements after the audit (staging, `1440×900`, same seeded QA project)
+
+| Metric | Value |
+|---|---|
+| Viewport width | 1440px |
+| Shell outer width (`.noc-shell-viewport`) | 1440px |
+| Sidebar width | 256px |
+| Main workspace width (`.noc-shell-main`) | 1184px |
+| Home content width | 1184px |
+| Overview content width | 1184px (main column 714.7px, utility column 357.3px — a 2.0:1 ratio, matching the ~2/3 : ~1/3 target) |
+| Story reading-column width | 760px |
+| Assets grid width | 1104px (1184px content minus the screen's own `lg:px-10` gutters) |
+| Assets visible columns | 6 |
+| Cast visible columns | 4 |
+| Scenes visible columns | 3 |
+
+All values land inside the expected qualitative ranges (shell ≈100%
+viewport; sidebar 220–280px; main = remaining width; Home/Overview/Assets
+≈1000–1250px usable workspace; Story prose ≈680–820px) — confirmed via
+`getBoundingClientRect()`/`getComputedStyle()`, not inferred. Re-ran the
+zero-horizontal-overflow and R16 (`?r16=1`, "More" absent) checks at both
+`390×844` and `1440×900` post-fix; both pass.
+
+Typecheck and build clean after this round
+(`pnpm --filter @raivstream/web type-check` / `build`). Deployed to
+staging (`raivstream-phase9b2-audio-staging`), then to production via the
+same `main` push pipeline — see the updated final SHA below.

@@ -82,10 +82,7 @@ export function HomeScreen() {
 
   return (
     <Shell showSaved={false} activeTab="home">
-      <div
-        className="lg:max-w-[1280px] lg:mx-auto lg:!px-10 lg:!py-10 lg:!gap-8"
-        style={{ padding: '20px 18px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}
-      >
+      <div className="flex flex-col gap-6 px-[18px] pt-5 pb-8 lg:gap-8 lg:px-10 lg:py-10 lg:max-w-[1280px] lg:mx-auto">
         <div>
           <h1 className="noc-section-header lg:text-[32px]">What are we making today?</h1>
           <p style={{ fontSize: 13.5, color: 'var(--noc-t6)', marginTop: 4 }}>
@@ -99,7 +96,7 @@ export function HomeScreen() {
         </div>
 
         {isSignedIn && (
-          <div className="lg:!grid lg:grid-cols-2 lg:!gap-3" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-3">
             {projectsQuery.isLoading ? (
               <>
                 <Skeleton height={88} radius={16} />
@@ -160,23 +157,18 @@ export function HomeScreen() {
         <div>
           <SectionLabel>Start something</SectionLabel>
           <div
-            className="lg:!grid-cols-4 lg:!gap-4"
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 8 }}
+            className="grid grid-cols-2 gap-[9px] lg:grid-cols-4 lg:gap-4"
+            style={{ marginTop: 8 }}
           >
             {(isR16 ? STARTERS.filter((s) => s.type === 'story' || s.type === 'idea') : STARTERS).map(({ label, icon: Icon, type }) => (
               <Link
                 key={type}
                 href={`/story-playground/new?type=${type}`}
-                className="noc-pressable lg:!min-h-[110px]"
+                className="noc-pressable flex flex-col justify-between p-3 min-h-[86px] lg:min-h-[110px]"
                 style={{
-                  minHeight: 86,
                   borderRadius: 14,
                   border: '1px solid rgba(233,233,237,0.08)',
                   background: 'rgba(233,233,237,0.03)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  padding: 12,
                   textDecoration: 'none',
                 }}
               >

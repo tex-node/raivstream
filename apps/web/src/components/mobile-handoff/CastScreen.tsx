@@ -16,9 +16,14 @@ import { useTrackTab } from './useTrackTab';
  * original row-list (avatar left, name/role/description right). At `lg:`
  * and up this becomes a responsive card grid — 2 cols at 1024, 3 at 1280,
  * 4 at wide (1440+) — with each card's avatar centered above its text
- * instead of beside it, a normal desktop cast-grid pattern. Layout axis
- * (row vs. column) moves to Tailwind classes so it can vary by breakpoint;
- * colors/sizes that don't need to vary stay inline, unchanged.
+ * instead of beside it, a normal desktop cast-grid pattern.
+ *
+ * Every layout property that flips by breakpoint (display, flex-direction,
+ * gap, padding, width/height, white-space) lives in `className`, not
+ * inline `style` — inline style always wins a same-specificity class tie
+ * regardless of source order, so a property that must vary by breakpoint
+ * can never live there. Only breakpoint-invariant decoration (colors,
+ * border, radius, font-weight) stays inline.
  */
 
 export function CastScreen({ projectId }: { projectId: string }) {
@@ -34,58 +39,50 @@ export function CastScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Characters" activeTab="characters" projectId={projectId}>
-      <div className="lg:max-w-[1280px] lg:mx-auto lg:!px-10 lg:!py-10" style={{ padding: '14px 18px 32px' }}>
+      <div className="px-[18px] pt-3.5 pb-8 lg:px-10 lg:py-10 lg:max-w-[1280px] lg:mx-auto">
         {workspaceQuery.isLoading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="flex flex-col gap-2.5">
             <Skeleton height={72} radius={16} />
             <Skeleton height={72} radius={16} />
           </div>
         ) : characters.length === 0 ? (
           <EmptyState title="No characters yet" hint="Add your cast to bring the story to life." />
         ) : (
-          <div className="lg:!grid lg:grid-cols-2 xl:grid-cols-3 wide:grid-cols-4 lg:!gap-4" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="flex flex-col gap-1 lg:grid lg:grid-cols-2 xl:grid-cols-3 wide:grid-cols-4 lg:gap-4">
             {characters.map((character) => (
               <Link
                 key={character.id}
                 href={`/story-playground/${projectId}/characters/${character.id}`}
-                className="noc-pressable lg:flex-col lg:items-center lg:text-center lg:!gap-3 lg:!p-5"
+                className="noc-pressable flex items-center gap-3 p-2.5 lg:flex-col lg:items-center lg:text-center lg:gap-3 lg:p-5"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: 10,
                   borderRadius: 16,
                   border: '1px solid transparent',
                   textDecoration: 'none',
                 }}
               >
                 <div
-                  className="lg:!w-20 lg:!h-20 lg:!text-2xl"
+                  className="w-14 h-14 text-lg flex items-center justify-center shrink-0 lg:w-20 lg:h-20 lg:text-2xl"
                   style={{
-                    width: 56,
-                    height: 56,
                     borderRadius: '50%',
-                    flexShrink: 0,
                     background: gradientPlaceholder(character.id),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18,
                     fontWeight: 600,
                     color: 'var(--noc-t1)',
                   }}
                 >
                   {character.name?.charAt(0)?.toUpperCase() ?? '?'}
                 </div>
-                <div className="lg:min-w-0 lg:w-full" style={{ flex: 1, minWidth: 0 }}>
-                  <div className="lg:flex-col lg:!gap-0.5" style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <div className="flex-1 min-w-0 lg:w-full">
+                  <div className="flex items-baseline gap-2 lg:flex-col lg:gap-0.5">
                     <span style={{ fontSize: 15.5, fontWeight: 500, color: 'var(--noc-t1)' }}>{character.name}</span>
                     {character.role && (
                       <span style={{ fontSize: 10.5, textTransform: 'uppercase', color: 'var(--noc-t6)', letterSpacing: '0.06em' }}>{character.role}</span>
                     )}
                   </div>
                   {character.visualDescription && (
-                    <p className="lg:!whitespace-normal lg:line-clamp-2" style={{ fontSize: 12.5, color: 'var(--noc-t5)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <p
+                      className="whitespace-nowrap overflow-hidden text-ellipsis lg:whitespace-normal lg:line-clamp-2"
+                      style={{ fontSize: 12.5, color: 'var(--noc-t5)', margin: '2px 0 0' }}
+                    >
                       {character.visualDescription}
                     </p>
                   )}
@@ -97,10 +94,8 @@ export function CastScreen({ projectId }: { projectId: string }) {
 
         <Link
           href={`/story-playground/${projectId}?tab=characters&legacy=1`}
-          className="lg:max-w-xs"
+          className="block text-center lg:max-w-xs"
           style={{
-            display: 'block',
-            textAlign: 'center',
             minHeight: 48,
             lineHeight: '48px',
             marginTop: 12,

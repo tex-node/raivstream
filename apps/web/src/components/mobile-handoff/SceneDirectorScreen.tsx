@@ -153,8 +153,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
     >
       <div className="lg:max-w-[1280px] lg:mx-auto lg:grid lg:grid-cols-[1fr_420px] lg:gap-8 lg:px-10 lg:py-10 lg:items-start">
         <div
-          className="lg:rounded-2xl lg:overflow-hidden lg:!sticky lg:top-24"
-          style={{ position: 'relative', aspectRatio: '16 / 10', background: previewImage ? `url(${previewImage}) center/cover` : gradientPlaceholder(sceneId) }}
+          className="relative lg:rounded-2xl lg:overflow-hidden lg:sticky lg:top-24"
+          style={{ aspectRatio: '16 / 10', background: previewImage ? `url(${previewImage}) center/cover` : gradientPlaceholder(sceneId) }}
         >
           {generating && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(11,13,20,0.72)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
@@ -171,7 +171,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
           )}
         </div>
 
-        <div className="lg:!p-0" style={{ padding: '16px 18px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4 px-[18px] pt-4 pb-6 lg:p-0">
           <div>
             <span className="noc-label">{String(scene.orderIndex + 1).padStart(2, '0')}</span>
             <h1 style={{ fontSize: 19, fontWeight: 500, textTransform: 'uppercase', color: 'var(--noc-t1)', margin: '2px 0 0' }}>{scene.title}</h1>

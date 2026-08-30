@@ -59,19 +59,13 @@ export function CharacterDetailScreen({ projectId, characterId }: { projectId: s
 
   return (
     <Shell backHref={`/story-playground/${projectId}/characters`} title={character.name} activeTab="characters" projectId={projectId}>
-      <div className="lg:max-w-[1120px] lg:mx-auto lg:grid lg:grid-cols-[280px_1fr] lg:gap-10 lg:!px-10 lg:!py-10 lg:items-start" style={{ padding: '20px 18px 32px' }}>
-        <div className="lg:sticky lg:top-24" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 4, marginBottom: 20 }}>
+      <div className="px-[18px] pt-5 pb-8 lg:px-10 lg:py-10 lg:max-w-[1120px] lg:mx-auto lg:grid lg:grid-cols-[280px_1fr] lg:gap-10 lg:items-start">
+        <div className="flex flex-col items-center text-center gap-1 mb-5 lg:sticky lg:top-24">
           <div
-            className="lg:!w-32 lg:!h-32 lg:!text-4xl"
+            className="w-[84px] h-[84px] text-[28px] lg:w-32 lg:h-32 lg:text-4xl flex items-center justify-center"
             style={{
-              width: 84,
-              height: 84,
               borderRadius: '50%',
               background: gradientPlaceholder(character.id),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 28,
               fontWeight: 600,
               color: 'var(--noc-t1)',
             }}

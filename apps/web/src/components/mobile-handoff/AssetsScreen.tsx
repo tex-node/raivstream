@@ -53,7 +53,7 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Assets" activeTab="assets" projectId={projectId}>
-      <div className="lg:max-w-[1440px] lg:mx-auto lg:!px-10 lg:!py-10" style={{ padding: '14px 18px 32px' }}>
+      <div className="px-[18px] pt-3.5 pb-8 lg:px-10 lg:py-10 lg:max-w-[1440px] lg:mx-auto">
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12 }} className="hide-scrollbar">
           {(['all', 'favorites'] as Filter[]).map((f) => (
             <button
@@ -69,14 +69,14 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
         </div>
 
         {workspaceQuery.isLoading ? (
-          <div className="lg:!grid-cols-3 xl:!grid-cols-4 wide:!grid-cols-6 lg:!gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-4 wide:grid-cols-6 lg:gap-4">
             <Skeleton height={140} radius={14} />
             <Skeleton height={140} radius={14} />
           </div>
         ) : visibleAssets.length === 0 ? (
           <EmptyState title={filter === 'favorites' ? 'No favorites yet' : 'No assets yet'} hint="Generate scene images to see them here." />
         ) : (
-          <div className="lg:!grid-cols-3 xl:!grid-cols-4 wide:!grid-cols-6 lg:!gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-4 wide:grid-cols-6 lg:gap-4">
             {visibleAssets.map((asset) => (
               <div
                 key={asset.id}

@@ -14,19 +14,32 @@ import { useTrackTab } from './useTrackTab';
  * Project Overview — design_handoff_raivstream_mobile, screen 2 of 8.
  * Canonical: /story-playground/[projectId].
  *
- * Responsive desktop reconciliation: mobile keeps the exact original
- * single-column stack (hero → CTA → stats → Story/Characters → More).
- * At `lg:` and up this becomes a workspace dashboard split (Section 6):
- * a left/main column (hero, primary action, Story/Characters) and a
- * right column (stats + More tools), laid out via CSS grid so nothing
- * needs to be duplicated in the markup.
+ * Responsive desktop reconciliation (Section 6):
+ * - Mobile (`< 768px`): unchanged single-column stack — hero, CTA,
+ *   Story/Characters, stats, More, in that order.
+ * - Tablet (`md:`, 768–1023px): a balanced 2-column split — main content
+ *   left, stats/More right — only once there's comfortable room for two
+ *   columns of real content.
+ * - Desktop (`lg:`, 1024px+): a workspace dashboard — a ~2/3 main column
+ *   (hero, primary action, Story/Characters) + a ~1/3 utility column
+ *   (metadata stats, More), not a wider version of the mobile stack.
+ *
+ * Layout-affecting properties that need to change per breakpoint —
+ * `display`, `flexDirection`, `gap`, `padding`, `gridTemplateColumns`,
+ * `width` — live in `className` here, not inline `style`. Inline `style`
+ * always wins over a same-specificity class regardless of source order,
+ * so mixing the two for a property that must vary by breakpoint forces
+ * every responsive override into a `!important` fight; keeping those
+ * properties in Tailwind classes from the start avoids that entirely.
+ * Inline `style` is used only where a value never changes by breakpoint
+ * (colors, borders, one-off pixel values like the hero height).
  */
 
 function StatRow({ label, value, note, noteColor }: { label: string; value: string; note?: string; noteColor?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--noc-rule)' }}>
+    <div className="flex items-center justify-between" style={{ padding: '9px 0', borderBottom: '1px solid var(--noc-rule)' }}>
       <span style={{ fontSize: 13.5, color: 'var(--noc-t4)' }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+      <div className="flex items-baseline gap-2">
         <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--noc-t1)' }}>{value}</span>
         {note && <span style={{ fontSize: 11.5, color: noteColor ?? 'var(--noc-t5)' }}>{note}</span>}
       </div>
@@ -50,7 +63,7 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
       <Shell backHref="/story-playground" title="Loading…" activeTab="home" projectId={projectId}>
         <div style={{ padding: 18 }}>
           <Skeleton height={186} radius={0} />
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="flex flex-col gap-2" style={{ marginTop: 16 }}>
             <Skeleton height={14} />
             <Skeleton height={14} />
             <Skeleton height={14} />
@@ -85,25 +98,20 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref="/story-playground" title={project.title} activeTab="home" projectId={projectId}>
-      <div className="lg:max-w-[1280px] lg:mx-auto lg:grid lg:grid-cols-[1fr_360px] lg:gap-8 lg:px-10 lg:py-10 lg:items-start">
-        {/* Left/main column — hero, primary action, Story/Characters. */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-[2fr_1fr] gap-0 md:gap-6 lg:gap-8 lg:max-w-[1280px] lg:mx-auto lg:px-10 lg:py-10 lg:items-start">
+        {/* Main column (~2/3 at desktop) — hero, primary action, Story/Characters. */}
         <div>
           <div
-            className="lg:rounded-2xl lg:overflow-hidden"
+            className="relative lg:rounded-2xl lg:overflow-hidden"
             style={{
               height: 186,
-              position: 'relative',
               background: heroImage ? `url(${heroImage}) center/cover` : gradientPlaceholder(projectId),
             }}
           >
             <div
+              className="absolute inset-0 flex flex-col justify-end"
               style={{
-                position: 'absolute',
-                inset: 0,
                 background: 'linear-gradient(180deg, transparent, rgba(7,8,16,0.88))',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'flex-end',
                 padding: '0 18px 16px',
               }}
             >
@@ -114,22 +122,22 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <div className="lg:mt-6 lg:!px-0" style={{ padding: '16px 18px 0', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="flex flex-col gap-[18px] px-[18px] pt-4 lg:px-0 lg:pt-0 lg:mt-6">
             {nextScene ? (
               <button
                 type="button"
                 onClick={() => router.push(`/story-playground/${projectId}/scenes/${nextScene.id}`)}
-                className="noc-btn-primary lg:!w-auto lg:!px-8"
+                className="noc-btn-primary lg:w-auto lg:px-8"
               >
                 Continue Scene {String(nextScene.orderIndex + 1).padStart(2, '0')}
               </button>
             ) : (
-              <button type="button" onClick={() => router.push(`/story-playground/${projectId}/story`)} className="noc-btn-primary lg:!w-auto lg:!px-8">
+              <button type="button" onClick={() => router.push(`/story-playground/${projectId}/story`)} className="noc-btn-primary lg:w-auto lg:px-8">
                 Continue the story
               </button>
             )}
 
-            <div className="lg:max-w-[420px]" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="grid grid-cols-2 gap-[10px] max-w-[420px]">
               <button type="button" onClick={() => router.push(`/story-playground/${projectId}/story`)} className="noc-btn-outline">
                 Story
               </button>
@@ -140,9 +148,10 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
           </div>
         </div>
 
-        {/* Right column — metadata stats + More tools. Mobile: same content,
-            just falls below the left column in source order (no lg: grid). */}
-        <div className="lg:mt-0 lg:!pt-0" style={{ padding: '16px 18px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* Utility column (~1/3 at desktop) — metadata stats + More. Mobile:
+            same content, falls below the main column in source order
+            (single-column grid collapses to block flow below `md:`). */}
+        <div className="flex flex-col gap-[18px] px-[18px] pt-4 pb-8 md:pt-0 md:pb-0 lg:px-0">
           <div>
             <StatRow label="Story" value={`${summary.chapterCount} chapter${summary.chapterCount === 1 ? '' : 's'}`} />
             <StatRow label="Characters" value={String(summary.characterCount)} note={summary.characterCount === 0 ? 'add your cast' : undefined} noteColor="var(--noc-pink-tint)" />
@@ -168,19 +177,19 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
               capability, these link straight into the existing, unmodified
               legacy tab presentation (?tab=X on this same route — see the
               branch in [projectId]/page.tsx). Hidden for R16, matching the
-              legacy workspace's own tab visibility rule. */}
+              legacy workspace's own tab visibility rule. At `lg:` this gets
+              its own bordered card so it reads as a distinct utility-column
+              panel rather than a menu tacked onto the end of a long page. */}
           {!isR16 && (
-            <div>
+            <div className="lg:rounded-2xl lg:p-4 lg:bg-[rgba(233,233,237,0.03)] lg:border lg:border-[rgba(233,233,237,0.08)]">
               <SectionLabel>More</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+              <div className="flex flex-col gap-1" style={{ marginTop: 6 }}>
                 {moreItems.map((item) => (
                   <Link
                     key={item.tab}
                     href={`/story-playground/${projectId}?tab=${item.tab}`}
+                    className="flex items-center justify-between"
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
                       padding: '11px 0',
                       borderBottom: '1px solid var(--noc-rule)',
                       textDecoration: 'none',

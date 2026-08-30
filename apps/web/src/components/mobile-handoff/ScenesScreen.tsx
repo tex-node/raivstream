@@ -56,10 +56,7 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Scenes" activeTab="scenes" projectId={projectId}>
-      <div
-        className="lg:max-w-[1280px] lg:mx-auto lg:!px-10 lg:!py-10 lg:!grid lg:grid-cols-2 xl:grid-cols-3 lg:!gap-5"
-        style={{ padding: '14px 18px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}
-      >
+      <div className="flex flex-col gap-3 px-[18px] pt-3.5 pb-8 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-5 lg:px-10 lg:py-10 lg:max-w-[1280px] lg:mx-auto">
         {workspaceQuery.isLoading ? (
           <>
             <Skeleton height={200} radius={18} />

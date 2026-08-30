@@ -65,6 +65,19 @@ html, body {
 }
 
 /* ── Nocturne utility classes ──────────────────────────────────────────── */
+/* Wrapped in Tailwind's `components` layer so these plain custom classes
+   are always beaten by a Tailwind utility class of the same specificity
+   (including a responsive `lg:` variant), regardless of source order —
+   Tailwind hoists `@layer components` content to right before the
+   `utilities` layer no matter where this block sits in the file. Without
+   this, a class like `.noc-btn-primary { width: 100% }` — appearing after
+   `@tailwind utilities` in the raw file — would beat `lg:w-auto` on plain
+   file-order, the exact same trap as an inline `style` beating a class,
+   just one layer removed. This is the correct fix for that case (a
+   plain-class-vs-utility-class conflict); it does not apply to inline
+   `style` vs. class conflicts, which still need the conflicting inline
+   property removed or, failing that, `!important` on the class. */
+@layer components {
 .noc-card {
   background: var(--noc-card);
   border: 1px solid var(--noc-hairline);
@@ -214,6 +227,22 @@ html, body {
   min-height: 100dvh;
   background: var(--noc-page);
 }
+/* .noc-shell-main is the flex-column chrome that makes the sticky top app
+   bar, the flex:1 scroll region, the sticky action bar, and the bottom tab
+   bar behave as a pinned app shell rather than a plain scrolling document
+   (the classic min-height + flex-column "sticky footer" pattern — when
+   content is shorter than the viewport, the flex:1 middle region grows to
+   push the bottom bar to the true viewport bottom; when content is
+   taller, the column grows past 100dvh and the page scrolls normally,
+   with the top bar staying visible via its own position:sticky). This was
+   previously carried by the old `.noc-shell-frame` phone-frame class and
+   must stay on whatever class replaces it — dropping it (as happened
+   briefly during the frame removal) silently breaks the bottom nav's
+   pinned position on every viewport, not just desktop. */
 .noc-shell-main {
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
+} /* @layer components */
