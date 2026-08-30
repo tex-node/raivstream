@@ -281,11 +281,11 @@ export default function ResetPasswordPage() {
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,90,217,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(178,90,217,0.20) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 85% 100%, rgba(79,214,232,0.08) 0%, transparent 70%)',
         }}
       />
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-sm lg:max-w-md">
         <Link href="/" className="flex justify-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-8 w-auto" />
