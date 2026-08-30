@@ -511,19 +511,34 @@ also created this round):
   `/api/auth/me` probe before sign-in completed — expected, not a
   regression.
 
-### Verdict
+### Verdict (superseded by the precedence-audit round below)
+
+Initial verdict at SHA `b9a5844` was PASS, but that build still carried
+the `.noc-shell-main` flex-column regression described in "Follow-up:
+inline-style/class precedence audit" above — present at every viewport,
+including the ones this verdict was based on. The regression didn't
+visibly break the specific checks run at the time (short-content pages
+happened to render correctly regardless), so it was not caught before
+that verdict was issued. The corrected, current verdict is below.
+
+### Final verdict
 
 **RAIVSTREAM RESPONSIVE DESKTOP RECONCILIATION — PASS**
 
-Final SHA: `b9a5844457efc41cbea7eca45b50c65ca61ba214e` (short: `b9a5844`),
+Final SHA: `b8ccf27e8c132b6994287dd625120e71737874f0` (short: `b8ccf27`),
 merged to `main` from `codex/ui-mobile-handoff-production`, deployed and
-verified live at both the mandated mobile and desktop viewports. The
-1440×900 desktop view is a real workspace composition — persistent
-sidebar, wide multi-column grids, split-panel detail/director screens,
-capped-width reading and dashboard columns — not the mobile layout
-centered or scaled. Success-test self-assessment: a viewer shown only a
-1440×900 screenshot of this release would reasonably read it as a desktop
-creative application, not a mobile app enlarged.
+re-verified live at both `390×844` and `1440×900` after the precedence
+audit and shell regression fix — including the specific bottom-nav
+pinning check the regression broke
+(`navBottom: 844 === windowInnerHeight: 844` on production, matching the
+post-fix staging result). The 1440×900 desktop view is a real workspace
+composition — persistent sidebar, wide multi-column grids (measured 4
+Cast / 3 Scenes / 6 Assets columns), split-panel detail/director screens,
+a measured 2.0:1 main:utility column ratio on Overview, capped-width
+reading (760px) and dashboard columns — not the mobile layout centered or
+scaled. Success-test self-assessment: a viewer shown only a 1440×900
+screenshot of this release would reasonably read it as a desktop creative
+application, not a mobile app enlarged.
 
 ### Known limitations (this phase)
 
