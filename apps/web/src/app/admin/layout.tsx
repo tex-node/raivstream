@@ -52,8 +52,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Logo */}
       <div className="px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
         <div>
-          <Link href="/" className="text-white font-extrabold text-lg">
-            Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+          <Link href="/" className="block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-6 w-auto" />
           </Link>
           <div className="mt-1 text-xs font-semibold px-2 py-0.5 rounded-full inline-block"
             style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>

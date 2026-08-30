@@ -166,8 +166,9 @@ function Sidebar({ activeTab, projectId }: { activeTab?: ShellTab; projectId?: s
       style={{ borderRight: '1px solid var(--noc-hairline)', background: 'var(--noc-bar)' }}
     >
       <div style={{ padding: '20px 22px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Link href="/story-playground" style={{ fontWeight: 700, fontSize: 17, color: 'var(--noc-t1)', textDecoration: 'none', letterSpacing: '-0.01em' }}>
-          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
+        <Link href="/story-playground" style={{ textDecoration: 'none', flexShrink: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-5 w-auto" />
         </Link>
         {/* Global destinations — Home/Academy/Account/Admin. The only way
             to leave the project workspace before this was the browser

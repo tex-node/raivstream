@@ -47,11 +47,12 @@ export function Navbar() {
       }
     >
       {/* Logo */}
-      <Link href="/" className="font-extrabold text-lg tracking-tight flex-shrink-0" style={{ color: 'var(--noc-t1)' }}>
+      <Link href="/" className="flex-shrink-0 flex items-center" style={{ color: 'var(--noc-t1)' }}>
         {isR16 ? (
-          <>R16 <span style={{ color: 'var(--noc-cyan)' }}>Kids</span></>
+          <span className="font-extrabold text-lg tracking-tight">R16 <span style={{ color: 'var(--noc-cyan)' }}>Kids</span></span>
         ) : (
-          <>Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span></>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-7 w-auto" />
         )}
       </Link>
 

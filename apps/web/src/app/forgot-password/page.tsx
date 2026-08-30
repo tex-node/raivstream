@@ -50,8 +50,9 @@ export default function ForgotPasswordPage() {
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}
-        <Link href="/" className="block text-center font-extrabold text-2xl mb-8" style={{ color: 'var(--noc-t1)' }}>
-          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
+        <Link href="/" className="flex justify-center mb-8">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-8 w-auto" />
         </Link>
 
         <div
