@@ -1,25 +1,28 @@
 # Application-Wide UI Reconciliation
 
-Status: **FOUNDATION PASS COMPLETE (SHA `f8ffe55`) — route-by-route
-migration not yet started.** This document is the live route inventory,
-design-system plan, and phased roadmap for the "RAIVSTREAM —
-APPLICATION-WIDE UI SYSTEM RECONCILIATION" initiative. It is being built
-incrementally across multiple rounds; see "Execution status" for what has
-actually shipped vs. "Next phase: route-by-route migration" for what's
-planned but not yet built.
+Status: **PHASE 1 OF 8 COMPLETE (SHA `9536a4e`) — global shell/top-level
+navigation done; route-by-route migration (Phase 2 onward) not yet
+started.** This document is the live route inventory, design-system
+plan, and phased roadmap for the "RAIVSTREAM — APPLICATION-WIDE UI
+SYSTEM RECONCILIATION" initiative. It is being built incrementally
+across multiple rounds; see "Execution status" and "Phase 1 execution"
+for what has actually shipped vs. "Next phase: route-by-route migration"
+for what's planned but not yet built.
 
-**Baseline for all future work on this initiative: `f8ffe55`.** This is
-the production SHA as of the Foundation Pass (route inventory + UI-family
-classification + design-system gap analysis + the Audio/Sequence/Film/
-Storybook shell fix). It is explicitly *not* the endpoint — see the
-completion criterion at the end of "Next phase" below. Any session
-continuing this initiative should treat `f8ffe55` as its starting point,
-re-read this document in full before making changes, and **not reopen
-already-qualified Story Playground behavior** (the 8 canonical
-`/story-playground/[projectId]/*` screens and the responsive-desktop work
-already shipped and verified in `docs/operations/mobile-ui-handoff-
-reconciliation.md`) except where a shared-primitive extraction requires a
-strictly presentation-only refactor of them.
+**Baseline for all future work on this initiative: `9536a4e`** (supersedes
+the prior `f8ffe55` Foundation Pass baseline). This is the production SHA
+as of Phase 1 (route inventory + UI-family classification + design-system
+gap analysis + the Audio/Sequence/Film/Storybook shell fix + the global
+top-level navigation added to `Shell`). It is explicitly *not* the
+endpoint — see the completion criterion at the end of "Next phase" below.
+Any session continuing this initiative should treat `9536a4e` as its
+starting point, re-read this document in full before making changes, and
+**not reopen already-qualified Story Playground behavior** (the 8
+canonical `/story-playground/[projectId]/*` screens and the
+responsive-desktop work already shipped and verified in
+`docs/operations/mobile-ui-handoff-reconciliation.md`) except where a
+shared-primitive extraction requires a strictly presentation-only
+refactor of them.
 
 ## 1. Route inventory
 
@@ -548,8 +551,11 @@ level improvement reported as done).
 ## Final report — Phase 1
 
 1. **Starting production SHA**: `f8ffe55` (Foundation Pass baseline)
-2. **Candidate SHA**: pending production deploy — see "Production
-   verification" note appended below once confirmed live
+2. **Candidate SHA**: `9536a4e10f9a13b2c03be2bed1b0fa8f1ed680e8` (short:
+   `9536a4e`) — deployed via the standard `main` push → GitHub Actions
+   pipeline (run `33303046322`, succeeded in 2m36s), confirmed live via
+   `git rev-parse HEAD` on the VPS and `/api/health` (both `app.` and
+   `r16.` subdomains healthy)
 3. **Route inventory total**: 47 page routes (+2 alias/redirect files) —
    unchanged, no new routes added or removed
 4. **Routes migrated this round**: 0 additional routes reach full
@@ -606,7 +612,15 @@ level improvement reported as done).
     verification; last confirmed at exactly 100 credits in the Foundation
     Pass round immediately prior)
 39. **Production backup**: not taken — zero schema/migration changes
-40. **Production smoke**: pending — see appended note once deployed
+40. **Production smoke**: done — live at `https://app.raivstream.com/`,
+    a disposable non-admin (`VIEWER` role) account confirmed the desktop
+    icon row shows exactly Home/Academy/Account (Admin correctly absent
+    for a non-admin user — the complementary case to the `ADMIN`-role
+    account already verified on staging), zero horizontal overflow, and
+    every real network request the page made (`story.listMyProjects`,
+    `story.getWorkspace`, `analytics.trackStoryEvent`, etc.) returned
+    `200`. Disposable account deleted and verified gone
+    (`verifiedGone: true`) immediately after.
 41. **Known limitations**: (a) the drawer pattern isn't yet a shared,
     documented component — it has one caller; (b) global destination
     links use `title`/`aria-label` for accessibility on the icon-only
@@ -614,4 +628,22 @@ level improvement reported as done).
     audit (tab order, focus rings) — flagged for Phase 8's final
     acceptance pass, not silently assumed fine; (c) all limitations
     carried over from the Foundation Pass report remain unchanged
-42. **Final verdict**: see below, pending production confirmation
+42. **Final verdict**: see below
+
+**RAIVSTREAM APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS
+(PHASE 1 OF 8 — ROUTE-BY-ROUTE MIGRATION ROADMAP — SHA `9536a4e` — NOT
+THE ENDPOINT)**
+
+Phase 1's actual objective — a unified global shell/top-level navigation
+— is delivered and verified live: a user anywhere in the Story Playground
+workspace can now reach Home, Academy, Account, and (if authorized) Admin
+directly, closing the one-directional-navigation gap confirmed at the
+start of this round. Verified with both an `ADMIN`-role account (staging)
+and a plain `VIEWER`-role account (production), correct R16 gating,
+zero regressions to existing project-scoped navigation, zero new console
+errors, zero backend/schema changes. `9536a4e` is now the baseline for
+Phase 2 (Auth + account/settings). The route-migration count remains
+0/47 net-new by this round's own honest accounting (§4 above) — this
+round's contribution is cross-cutting infrastructure, not a countable
+route migration, and should be read as exactly that rather than progress
+toward the 47/47 completion criterion.
