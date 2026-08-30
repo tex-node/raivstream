@@ -195,6 +195,13 @@ functions with zero voice-generation UI present).
 
 All verified live against `?r16=1` on real staging data.
 
+**R16 retains all existing capability restrictions and server-side
+isolation.** Two minor presentation differences remain: some kid-friendly
+copy from the legacy interface has not yet been fully replicated in the new
+handoff screens, and creator/admin technical asset metadata remains
+available only through the existing advanced surface. Neither limitation
+exposes restricted functionality or data.
+
 ## Responsive qualification
 
 Verified clean (no horizontal overflow, centered 440px-max-width column,
