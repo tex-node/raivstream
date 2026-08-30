@@ -1,0 +1,171 @@
+# Mobile UI Handoff Reconciliation
+
+Source handoff: `C:\Raiv\raivstream\UI\design_handoff_raivstream_mobile`
+Target: `apps/web` (Next.js) — not `apps/mobile`, a disconnected relic of the
+old video-feed product (upload/search/video screens, no story/chapter/
+character/scene concepts). Voice-generation work (Phase 9B.2C) remains
+paused and is absent from this branch entirely — it was built from `481fce4`,
+production's actual deployed baseline, before any Phase 9B.2C.1 code existed.
+
+## Screen inventory
+
+The handoff's `Raivstream Redesign.dc.html` contains three sibling
+prototypes, confirmed by grepping every `data-screen-label`/`sc-if` marker in
+the file: **RS desktop** (10 reference screens — Home, Projects, Project
+Overview, Story Workspace, Character Director, Character detail, Scenes,
+Scene Director, Asset Manager, Journey map), **RS mobile** (the 8 new
+screens — the actual scope of this work), and **R16 reader** (5 screens — a
+separate consumer reading-app product, not the creator-side R16-safety mode
+this codebase already has; out of scope here).
+
+| Handoff screen | Purpose | Existing Raivstream equivalent | API dependency | Status |
+|---|---|---|---|---|
+| Home | Project list, resume, start new | `story-playground` project list | `story.listMyProjects` | Shipped: `/m` |
+| Project Overview | Single-project summary + entry points | Workspace "Overview" tab | `story.getWorkspace` | Shipped: `/m/[projectId]` |
+| Story | Chapter text, paragraph-level AI direction | Workspace "Story" tab | `story.getWorkspace` (chapters) | Shipped: `/m/[projectId]/story` — AI action chips inert (no rewrite-dispatch endpoint exists) |
+| Characters | Cast list | Character Director list | `story.getWorkspace` (characterMemory) | Shipped: `/m/[projectId]/cast` |
+| Character detail | 7-section character profile | Character Director detail | `story.getWorkspace` | Shipped: `/m/[projectId]/cast/[characterId]` |
+| Scenes | Scene list w/ status | Workspace "Scenes" tab | `story.getWorkspace` (sceneSeeds) | Shipped: `/m/[projectId]/scenes` |
+| Scene Director | Direction controls + generate | Scene Director | `story.updateSceneDirector`, `story.generateSceneImage`/`regenerateSceneImage` | Shipped: `/m/[projectId]/scenes/[sceneId]` — real 7-field schema, not the mockup's invented 11-key set |
+| Assets | Asset grid, favorite, tags | Asset Manager | `story.getWorkspace`, `story.favoriteSceneAsset` | Shipped: `/m/[projectId]/assets` |
+
+No mobile design was supplied for **Audio, Sequence, Film (Movie Builder), or
+Storybook**. These remain fully accessible — unmodified, unredesigned — via a
+"More" section on Project Overview that links directly into the existing
+desktop-styled implementation (`/story-playground/[projectId]?tab=audio` /
+`?tab=sequence` / `?tab=film` / `?tab=storybook`), hidden for R16 to match
+the desktop workspace's own visibility rule. This was a real gap found
+during QA (see Known limitations) and fixed before this doc was written, not
+a planned omission.
+
+## Design tokens
+
+Reconciled with the existing (previously scaffolded, unused) Nocturne token
+sheet in `globals.css` (`--noc-*`: page/bar/card surfaces, t1–t6 text ramp,
+magenta→purple→blue accent gradient, tints) and `tailwind.config.ts`. No
+second theme was introduced. Two additions only: a `noc-shimmer` keyframe for
+loading skeletons, and a `prefers-reduced-motion` rule disabling all
+animation duration app-wide (new, not previously present).
+
+## Navigation
+
+Real Next.js routes per screen (`/m`, `/m/[projectId]`, `/m/[projectId]/
+story`, `/cast(+/[characterId])`, `/scenes(+/[sceneId])`, `/assets`) rather
+than the prototype's single-page in-memory state machine — proper URLs,
+back-button, and deep-linking, same visual/interaction design. The
+previously-unused `Shell.tsx` component was extended (app bar, back button,
+"Saved" pill, scroll region, optional bottom action bar, 5-tab bottom bar)
+rather than duplicated. Tab-bar active-state mapping ports the prototype's
+own logic exactly: Home stays lit on Overview, Cast stays lit on Character
+detail, Scenes stays lit on Scene Director.
+
+## Backend / schema
+
+Zero Prisma schema changes, zero migrations, zero new tRPC procedures. Every
+screen calls procedures that already existed in production: `listMyProjects`,
+`getWorkspace`, `updateSceneDirector`, `generateSceneImage`,
+`regenerateSceneImage`, `favoriteSceneAsset`.
+
+## Features intentionally simplified or omitted (documented, not faked)
+
+- **Story AI action chips** (Develop this idea / Strengthen conflict /
+  etc.): no rewrite-per-paragraph endpoint exists — story text is
+  regenerated wholesale via `continueStory`/`generateStory`, not edited
+  paragraph-by-paragraph. Chips render and toggle selection exactly as
+  designed but dispatch nothing. No fake success state, no call to a
+  nonexistent endpoint.
+- **Scene Director's 11 mocked control dimensions** (Performance: Emotion/
+  Character behaviour/Energy; Camera: Shot size/Angle/Movement; etc.) don't
+  map 1:1 onto the real 7-field `directorSettingsSchema`. Shipped the real 7
+  fields (emotion, cameraStyle, timeOfDay, weather, environmentMood,
+  lighting, scenePace) in the design's 5-group layout instead of inventing 4
+  fields the backend can't persist.
+- **"Generate picture" progress bar**: the real `generateSceneImage`/
+  `regenerateSceneImage` mutation is synchronous (blocks until the image is
+  ready). The design's 4-step copy/percentage schedule (0/900/2100/3100ms)
+  is used as client-side cosmetic pacing for the wait — real generation,
+  polished wait state, never a fabricated result. If the real call finishes
+  early, the UI jumps straight to review; if slower, it holds at the final
+  step until the real result arrives.
+- **Assets filter chips**: the design mocks 4 (All/Chosen/Scenes/
+  Characters). This backend has one asset category (per-scene generated
+  images, no separate character-portrait type), so "Scenes"/"Characters"
+  would always equal "All"/empty. Shipped real, backed filters only: All,
+  Favorites.
+- **"+ Add a character"**: links to the existing desktop character-creation
+  flow rather than reimplementing it in the new shell.
+
+## Voice-generation exclusion
+
+Confirmed structurally, not just by policy: this branch (`codex/
+ui-mobile-handoff-production`) was cut directly from `481fce4` — production's
+actual deployed commit, which predates Phase 9B.2C.1 entirely. There is no
+`VoiceGenerationJob`, provider registry, provider adapter, Generate Voice
+button, voice model selector, or any other Phase 9B.2C artifact anywhere in
+this branch's history, confirmed live in the Audio Workspace (loads and
+functions with zero voice-generation UI present).
+
+## R16 behavior
+
+- Home: "Create an Advert"/"Create a Short Film" starters hidden, only
+  "Create a Story"/"Start from an Idea" shown.
+- Overview: "Storybook" stat row and the entire "More" (Audio/Sequence/
+  Film/Storybook) section hidden.
+- Story: "Tap any paragraph to direct it." hint hidden; paragraphs are not
+  selectable, AI action chips never render.
+- Scene Director: all 5 director control groups replaced with "Advanced
+  scene controls aren't shown here."; only Generate/Regenerate remains.
+
+All verified live against `?r16=1` on real staging data.
+
+## Responsive qualification
+
+Verified clean (no horizontal overflow, centered 440px-max-width column,
+correct text truncation) at 360×800, 375×812, 390×844, 430×932, 768×1024
+(tablet), and 1024×768/1440×900 (desktop) — confirmed via
+`getBoundingClientRect`/`scrollWidth` checks in addition to visual
+screenshots.
+
+## Staging qualification (real data, real mutations)
+
+Full click-through of all 8 screens against the shared QA project ("The
+Brave Firefly's Journey") twice — once before, once after the projectId/More
+-section/badge fixes below:
+
+- Real navigation (tab bar, back button) between every screen.
+- Real `updateSceneDirector` mutation, verified persisted across a hard
+  reload.
+- One real, full `generateSceneImage` run on a Draft scene through to
+  Keep — real R2-hosted image, real status transition Draft → Ready,
+  verified both in the Scenes list and via the Assets grid.
+- Real `favoriteSceneAsset` toggle, verified persisted, then cleaned up
+  (un-favorited) after testing — the generated image itself was left in
+  place, since it's real functional output, not disposable test data.
+- Real Active/Latest/Approved/Favorite/Storybook-selected badges confirmed
+  distinct and correct on the Assets grid.
+- Audio, Sequence, Film (Movie Builder — `story:movie_render` confirmed
+  still exactly 100 credits), and Storybook all confirmed reachable and
+  fully functional through the new "More" links.
+
+## Known limitations
+
+1. **Pre-existing hard-reload auth race** (not introduced or worsened by
+   this work): on a hard URL reload/direct navigation (not a soft/SPA tab
+   click), `useUser()`'s `isLoaded`/`isSignedIn` can resolve after a
+   project-scoped query has already rendered its error/empty branch,
+   producing a brief "This project couldn't be loaded" / empty-state flash
+   before self-correcting once auth resolves (typically 1-3s). Confirmed via
+   `/api/auth/me` calls that this is a genuine, if brief, session-timing
+   condition, not a routing or data bug — and confirmed the same class of
+   race exists on the pre-existing desktop pages, which share the same
+   `useUser()` pattern. Not fixed here, since fixing it would mean touching
+   shared auth-loading behavior well outside this UI-only change's scope;
+   flagged as a follow-up.
+2. Character portraits, scene-card thumbnails without a ready image, and
+   avatar placeholders use deterministic gradient placeholders (matching the
+   handoff's own placeholder convention) rather than real images, since
+   `StoryCharacterMemory` has no portrait-image field.
+3. The Story screen's paragraph selection generalizes the prototype's
+   hardcoded "exactly 2 selectable paragraphs" to "every paragraph
+   selectable, single-select" — a real-content necessity (unbounded
+   paragraph count), not a fidelity shortcut.
