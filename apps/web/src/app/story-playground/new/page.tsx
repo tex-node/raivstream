@@ -456,10 +456,18 @@ export default function StoryPlaygroundPage() {
   const generateStory = trpc.story.generateStory.useMutation({
     onSuccess: async (_chapter, variables) => {
       await generateScenes.mutateAsync({ projectId: variables.projectId, replaceExisting: true });
-      setStep('story');
-      setMessage('Story saved. Scene cards are ready.');
       await utils.story.getProject.invalidate();
       await utils.story.listMyProjects.invalidate();
+      // Canonical activation: a freshly created story must land on the
+      // canonical project route (Section 9/1 of the corrective brief) —
+      // not stay inline on this wizard page, which would leave the user in
+      // the old embedded story/scene editor and never show them the new
+      // handoff UI at all. This page's own inline 'story' step (and its
+      // continue-chapter / scene-editing actions) is now unreachable from
+      // this specific success path; left in place, unmodified, since other
+      // parts of this same file may still reference that state and this
+      // release only changes where a *fresh* creation lands.
+      router.push(`/story-playground/${variables.projectId}`);
     },
     onError: (error) => setMessage(error.message),
   });

@@ -67,6 +67,15 @@ const nextConfig = {
       { source: '/m/:projectId/scenes', destination: '/story-playground/:projectId/scenes', permanent: true },
       { source: '/m/:projectId/scenes/:sceneId', destination: '/story-playground/:projectId/scenes/:sceneId', permanent: true },
       { source: '/m/:projectId/assets', destination: '/story-playground/:projectId/assets', permanent: true },
+
+      // The canonical route itself is named "characters" (matching the
+      // app's own pre-existing ?tab=characters convention) rather than
+      // "cast" (the /m-era name, kept above only as an /m/** redirect
+      // source). Alias the intuitive "cast" spelling on the canonical tree
+      // too, since a bare 404 for a name this codebase used everywhere
+      // else this same release is a real defect, not just an /m artifact.
+      { source: '/story-playground/:projectId/cast', destination: '/story-playground/:projectId/characters', permanent: true },
+      { source: '/story-playground/:projectId/cast/:characterId', destination: '/story-playground/:projectId/characters/:characterId', permanent: true },
     ];
   },
 };

@@ -8,6 +8,7 @@ import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /**
  * Scene Director — design_handoff_raivstream_mobile, screen 7 of 8. Canonical:
@@ -52,6 +53,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
   const isR16 = useR16();
   const utils = trpc.useUtils();
   const progress = useGenerateProgress();
+  useTrackTab(projectId, 'scenes');
   const [reviewAssetUrl, setReviewAssetUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

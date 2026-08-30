@@ -8,6 +8,7 @@ import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /** Project Overview — design_handoff_raivstream_mobile, screen 2 of 8. Canonical: /story-playground/[projectId]. */
 
@@ -27,6 +28,7 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useUser();
   const isR16 = useR16();
+  useTrackTab(projectId, 'overview');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },

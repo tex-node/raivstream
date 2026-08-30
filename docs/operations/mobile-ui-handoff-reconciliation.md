@@ -224,6 +224,89 @@ Brave Firefly's Journey") twice — once before, once after the projectId/More
   still exactly 100 credits), and Storybook all confirmed reachable and
   fully functional through the new "More" links.
 
+## Post-activation gate audit (this release)
+
+Ten additional gates were run after the canonical activation above, before
+this was considered release-complete. Two real, release-critical gaps were
+found and fixed as a direct result:
+
+1. **Fresh story creation never redirected anywhere** — `generateStory`'s
+   success handler only ever called `setStep('story')`, keeping the user on
+   `/story-playground/new` inside its own embedded story/scene editor
+   (unchanged legacy code). There was no path by which finishing the
+   creation wizard sent a user to the new canonical UI at all. Fixed:
+   `onSuccess` now does `router.push(\`/story-playground/${projectId}\`)`
+   immediately after scene generation completes. Verified end-to-end on
+   staging with a real `createSpark → generateQuestions → answerQuestion ×5
+   → generateStory → generateScenes` run: landed at
+   `/story-playground/<newId>` showing the new Overview with real content
+   (1 chapter, 4 characters, 6 scenes). Cleaned up afterward.
+2. **`/story-playground/[projectId]/cast` 404'd** — the canonical nested
+   route is named `characters` (matching the app's pre-existing
+   `?tab=characters` convention), but nothing aliased the equally-plausible
+   `cast` spelling (only `/m/:id/cast` → `/characters` existed). Fixed by
+   adding `/story-playground/:projectId/cast(/:characterId)` redirects on
+   the canonical tree itself, not just from `/m`.
+3. **Analytics/resume-state parity gap** — the legacy workspace component's
+   `useEffect` that calls `story.trackWorkspaceTab` (persists
+   `StoryProject.lastWorkspaceTab`, used by the "Continue Your Stories"
+   resume action; fires a `story_workspace_tab_changed`/`asset_manager_
+   opened` analytics event) still fires correctly for the legacy `?tab=X`
+   access pattern on the unchanged component, but never fired for the five
+   new dedicated nested routes, since those are separate page components
+   that never called it. Fixed: added a shared `useTrackTab` hook
+   (`components/mobile-handoff/useTrackTab.ts`), wired into all five new
+   screens plus `CharacterDetailScreen`/`SceneDirectorScreen` (tracked as
+   their parent tab, matching the legacy component's own granularity — it
+   never had separate "character detail" or "scene director" tab
+   identities either). Similarly, the legacy list page's one-time
+   `story_playground_opened` analytics event moved with it to
+   `/story-playground/new`; added the same event to the new `HomeScreen`,
+   since that's the actual primary entry point now.
+4. Verified narrow/explicit branching in `[projectId]/page.tsx` — exactly
+   five `if (tab === '...')` string-equality checks, no wildcard
+   fallthrough; structurally guaranteed (not just by convention) that the
+   dedicated nested routes (`/story`, `/characters(+detail)`, `/scenes
+   (+director)`, `/assets`) can never reach the legacy render path, since
+   Next.js routes them to entirely separate page files.
+5. Verified every `next.config.js` redirect preserves nested dynamic
+   segments exactly (`/m/:id/cast/:characterId` →
+   `/story-playground/:id/characters/:characterId`, tested live with real
+   IDs, not just inspected).
+6. Repository-wide search for `/m` navigation references
+   (`["'\`]/m["'/]` across `apps/web/src`) returned zero matches outside
+   `next.config.js`'s redirect definitions themselves — no remaining
+   in-app `/m` destination anywhere.
+7. All 13 deep links from the corrective brief's list tested via direct
+   hard navigation (not clicks): all 200, survived independently.
+8. Two lower-severity, non-security parity gaps found and **not** fixed
+   (documented instead, since fixing them would expand this release's
+   scope beyond routing/composition reconciliation):
+   - The legacy workspace swapped in kid-friendly copy throughout
+     Overview/Story/Characters for R16 users (e.g. "Keep Writing" vs
+     "Continue Writing", "My Characters" vs "Edit Characters", "Cards" vs
+     "Scenes"). The new screens use one consistent (adult-register) copy
+     for all users. Nothing sensitive is exposed either way — this is a
+     tone/warmth regression for R16 users, not a capability or safety gap
+     (every actual R16 hiding rule — Storybook stat, More section, Story
+     hint/chips, Scene Director controls — is preserved, see below).
+   - The legacy Scenes/Assets tabs showed extra technical metadata
+     (provider/model/dimensions) to ADMIN/MODERATOR/CREATOR roles on each
+     asset. The new Assets/Scenes screens don't surface this for anyone —
+     an under-exposure, not an over-exposure, and a minor convenience loss
+     for internal/creator power users only.
+9. Confirmed `/` (the legacy video-feed product) was not touched, and
+   is intentionally out of scope: **the Raivstream Story Playground
+   canonical application begins at `/story-playground`; the legacy `/`
+   video-feed surface was outside the supplied mobile handoff and remains
+   unchanged in this release.** A future phase could make `/` itself open
+   directly into Story Playground — that is a separate product/navigation
+   decision, not part of this corrective activation.
+10. Re-ran the full staging acceptance walkthrough from a cold sign-in,
+    zero manual `/m` entry, covering both the existing-project journey and
+    the fresh-creation journey above — see the Staging qualification
+    section for the consolidated route sequence.
+
 ## Known limitations
 
 1. **Pre-existing hard-reload auth race** (not introduced or worsened by

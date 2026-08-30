@@ -7,6 +7,7 @@ import { splitParagraphs } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /**
  * Story — design_handoff_raivstream_mobile, screen 3 of 8. Canonical:
@@ -32,6 +33,7 @@ export function StoryScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
   const isR16 = useR16();
   const [selected, setSelected] = useState<number | null>(null);
+  useTrackTab(projectId, 'story');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },

@@ -6,6 +6,7 @@ import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /**
  * Assets — design_handoff_raivstream_mobile, screen 8 of 8. Canonical:
@@ -25,6 +26,7 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
   const utils = trpc.useUtils();
   const [filter, setFilter] = useState<Filter>('all');
+  useTrackTab(projectId, 'assets');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },

@@ -5,6 +5,7 @@ import { Accordion, Skeleton, optionLabel } from '@/components/mobile/primitives
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /** Character detail — design_handoff_raivstream_mobile, screen 5 of 8. Canonical: /story-playground/[projectId]/characters/[characterId]. */
 
@@ -15,6 +16,7 @@ function chipsFrom(value: unknown): string[] {
 
 export function CharacterDetailScreen({ projectId, characterId }: { projectId: string; characterId: string }) {
   const { isLoaded, isSignedIn } = useUser();
+  useTrackTab(projectId, 'characters');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },

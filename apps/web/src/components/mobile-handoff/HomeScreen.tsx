@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Sparkles, Megaphone, Clapperboard, Lightbulb } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
@@ -53,6 +54,21 @@ export function HomeScreen() {
     { limit: 12 },
     { enabled: Boolean(isLoaded && isSignedIn) },
   );
+
+  // Parity fix (canonical activation corrective release, gate 6): the
+  // legacy list/wizard page fired `story_playground_opened` once per
+  // session on load. That page moved to /story-playground/new; this new
+  // canonical Home is the actual primary entry point now, so it needs the
+  // same event, not the (now-secondary) wizard page.
+  const trackStoryEvent = trpc.analytics.trackStoryEvent.useMutation();
+  const playgroundOpenedTracked = useRef(false);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    if (playgroundOpenedTracked.current) return;
+    playgroundOpenedTracked.current = true;
+    trackStoryEvent.mutate({ event: 'story_playground_opened', properties: { audienceMode: isR16 ? 'KIDS' : 'GENERAL' } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn, isR16]);
 
   const projects = (projectsQuery.data as any[]) ?? [];
   const continueProjects = projects.slice(0, 2);

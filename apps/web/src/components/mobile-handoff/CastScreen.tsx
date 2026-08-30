@@ -6,11 +6,13 @@ import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /** Characters list — design_handoff_raivstream_mobile, screen 4 of 8. Canonical: /story-playground/[projectId]/characters. */
 
 export function CastScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
+  useTrackTab(projectId, 'characters');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },

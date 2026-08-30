@@ -6,6 +6,7 @@ import { Pill, Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useTrackTab } from './useTrackTab';
 
 /** Scenes list — design_handoff_raivstream_mobile, screen 6 of 8. Canonical: /story-playground/[projectId]/scenes. */
 
@@ -36,6 +37,7 @@ function castNames(scene: any): string[] {
 
 export function ScenesScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
+  useTrackTab(projectId, 'scenes');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },
