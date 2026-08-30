@@ -39,19 +39,19 @@ export function Navbar() {
         isFeed
           ? { background: 'transparent' }
           : {
-              background: 'rgba(5,11,24,0.80)',
+              background: 'var(--noc-bar-alpha)',
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid var(--noc-rule)',
             }
       }
     >
       {/* Logo */}
-      <Link href="/" className="text-white font-extrabold text-lg tracking-tight flex-shrink-0">
+      <Link href="/" className="font-extrabold text-lg tracking-tight flex-shrink-0" style={{ color: 'var(--noc-t1)' }}>
         {isR16 ? (
-          <>R16 <span style={{ color: '#34d399' }}>Kids</span></>
+          <>R16 <span style={{ color: 'var(--noc-cyan)' }}>Kids</span></>
         ) : (
-          <>Raiv<span style={{ color: '#a78bfa' }}>stream</span></>
+          <>Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span></>
         )}
       </Link>
 
@@ -70,8 +70,8 @@ export function Navbar() {
               href={href}
               className="px-3 py-1.5 rounded-lg text-sm transition-colors"
               style={{
-                color: pathname === href ? '#fff' : 'rgba(255,255,255,0.50)',
-                background: pathname === href ? 'rgba(255,255,255,0.07)' : 'transparent',
+                color: pathname === href ? 'var(--noc-t1)' : 'var(--noc-t5)',
+                background: pathname === href ? 'rgba(178,90,217,0.14)' : 'transparent',
               }}
             >
               {label}
@@ -90,15 +90,15 @@ export function Navbar() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search…"
-              className="text-white text-sm rounded-lg px-3 py-1.5 w-36 focus:w-48 transition-all outline-none"
+              className="text-sm rounded-lg px-3 py-1.5 w-36 focus:w-48 transition-all outline-none"
               style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                color: '#fff',
+                background: 'var(--noc-card)',
+                border: '1px solid var(--noc-hairline)',
+                color: 'var(--noc-t1)',
               }}
             />
             <button type="submit" className="absolute right-2.5 top-1/2 -translate-y-1/2">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="rgba(255,255,255,0.35)" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="var(--noc-t6)" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -111,7 +111,7 @@ export function Navbar() {
             {/* Notifications bell */}
             <Link
               href="/notifications"
-              className="relative p-1.5 text-white/50 hover:text-white transition-colors"
+              className="relative p-1.5 transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
               aria-label="Notifications"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,7 +119,10 @@ export function Navbar() {
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-white text-[9px] font-bold">
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold"
+                  style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
+                >
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -129,8 +132,8 @@ export function Navbar() {
             {!isR16 && (
               <Link
                 href="/upload"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+                style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -143,13 +146,13 @@ export function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-transparent hover:ring-violet-500/50 transition-all"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+                className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-transparent hover:ring-[rgba(178,90,217,0.5)] transition-all"
+                style={{ background: 'var(--noc-gradient)' }}
               >
                 {user?.avatarUrl ? (
                   <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-white font-bold text-sm flex items-center justify-center h-full">
+                  <span className="font-bold text-sm flex items-center justify-center h-full" style={{ color: '#0B0D14' }}>
                     {user?.displayName?.[0]?.toUpperCase() ?? '?'}
                   </span>
                 )}
@@ -159,8 +162,8 @@ export function Navbar() {
                 <div
                   className="absolute right-0 top-10 w-44 rounded-xl py-1 z-50"
                   style={{
-                    background: '#0d1420',
-                    border: '1px solid rgba(255,255,255,0.10)',
+                    background: 'var(--noc-bar)',
+                    border: '1px solid var(--noc-hairline)',
                     boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
                   }}
                 >
@@ -186,12 +189,12 @@ export function Navbar() {
                       key={href}
                       href={href}
                       onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                      className="block px-4 py-2 text-sm transition-colors text-[var(--noc-t4)] hover:text-[var(--noc-t1)] hover:bg-[rgba(178,90,217,0.08)]"
                     >
                       {label}
                     </Link>
                   ))}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} className="my-1" />
+                  <div style={{ borderTop: '1px solid var(--noc-rule)' }} className="my-1" />
                   <button
                     onClick={() => { signOut(); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-2 text-sm text-red-400/80 hover:text-red-400 hover:bg-red-500/5 transition-colors"
@@ -206,14 +209,14 @@ export function Navbar() {
           <div className="flex items-center gap-2">
             <Link
               href="/sign-in"
-              className="px-3 py-1.5 rounded-lg text-sm font-medium text-white/60 hover:text-white transition-colors"
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
             >
               Sign in
             </Link>
             <Link
               href="/sign-up"
-              className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+              className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+              style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
             >
               Get started
             </Link>

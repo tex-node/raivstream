@@ -163,8 +163,8 @@ export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoC
           </div>
           <button
             onClick={() => router.push('/pricing')}
-            className="px-6 py-2.5 rounded-2xl text-white text-sm font-semibold transition-colors"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+            className="px-6 py-2.5 rounded-2xl text-sm font-semibold transition-colors"
+            style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
           >
             Subscribe — ₦1,500/mo
           </button>

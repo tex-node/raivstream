@@ -548,6 +548,121 @@ approach, and the explicit completion criterion (something close to
 47/47 migrated or individually product-excluded, not another wrapper-
 level improvement reported as done).
 
+## Phase 1b: feed shell restyle (root `/`)
+
+Continuation of Phase 1, per the user's explicit direction: root `/`
+decision reconfirmed as **restyle in place, do not redirect or remove**
+— `/` stays the legacy feed product, preserved exactly, restyled onto
+Nocturne. (Note on continuity: the instruction referenced resuming from
+SHA `f2a2062`; the actual current baseline at the time was `9536a4e`
+— `f2a2062` predates the Shell global-nav work in "Phase 1 execution"
+above, which is real, verified, and already live. Continued from the
+current baseline rather than reverting it, since discarding shipped,
+verified work would contradict the spirit of "continue Phase 1," and
+this round's diff is additive/independent of that work regardless of
+which SHA it's read against.)
+
+### Audit: what carries feed behavior vs. what's safe chrome
+
+Before touching any code, read every component the feed actually renders
+(`app/page.tsx`, `components/layout/Navbar.tsx`, `components/feed/
+FeedTabs.tsx`, `components/feed/VideoFeed.tsx`, `components/feed/
+PaywallModal.tsx`, `components/video/VideoCard.tsx`, `components/video/
+VideoInteractions.tsx`, `components/video/VideoPlayer.tsx`) to separate
+presentation from behavior:
+
+- **Safe chrome (restyled this round)**: `Navbar` (search/notifications/
+  upload/avatar-dropdown/sign-in-up — all pure UI wiring to existing
+  routes and mutations, no business logic of its own), `FeedTabs` (fully
+  controlled by props, zero internal state or data fetching), `VideoFeed`'s
+  own wrapper chrome (loading spinner, empty state, fetch-next-page
+  spinner, desktop progress dots, the signed-in-FREE sticky banner —
+  every one of these is decoration around behavior that lives elsewhere,
+  not behavior itself), `PaywallModal` (a fully prop-driven modal, three
+  `router.push` calls, no mutations or queries), and the root `page.tsx`'s
+  own loading spinner and signed-out join-CTA overlay.
+- **Real behavior, explicitly NOT touched this round**: `VideoFeed`'s
+  actual feed logic (the four `trpc.feed.*` infinite queries, guest
+  episode tracking via `sessionStorage`, the server-side FREE-tier
+  episode gate, scroll/wheel/keyboard navigation, prefetching); all of
+  `VideoCard` (view/progress tracking mutations, HLS/MP4/image branching,
+  image-autoscroll timers, the premium-lock gate) *except* its one static
+  subscribe button (a plain `router.push`, zero data dependency — restyled
+  as the one safe exception); and all of `VideoInteractions` (211 lines of
+  real optimistic like/dislike/star-rating/follow mutations) and
+  `VideoPlayer` (209 lines, not even opened this round — the risk of
+  restyling a raw `<video>` playback component without a dedicated audit
+  outweighs the benefit of a color pass this round).
+
+This matches the user's own instruction — shell/chrome first, then
+cards/search/nav surfaces, not a wholesale rewrite — with one deliberate
+boundary drawn tighter than "feed cards" might suggest: a full-screen
+video overlay's *own* interaction buttons are closer to behavior than
+chrome (they're real mutation-wired controls, not decoration), so
+`VideoInteractions` and `VideoPlayer` are flagged as their own follow-up
+rather than folded into this pass.
+
+### What changed
+
+Six files, all color/token substitutions only (`#7c3aed`/`#2563eb` →
+`var(--noc-gradient)`, `#a78bfa`/violet accents → `var(--noc-purple)`/
+`var(--noc-lavender-tint)`, `#050b18`/black-with-opacity surfaces →
+`var(--noc-bar)`/`var(--noc-bar-alpha)`/`var(--noc-card)`, white-with-
+opacity text → the `--noc-t*` ramp, `#34d399` R16 accent →
+`var(--noc-cyan)`): `Navbar.tsx`, `FeedTabs.tsx`, `VideoFeed.tsx`,
+`PaywallModal.tsx`, `app/page.tsx`, and the one isolated spot in
+`VideoCard.tsx`. Zero lines of query/mutation/state/effect logic changed
+in any of them — every `useEffect`, `useState`, `trpc.*` call, event
+handler, and conditional render branch is byte-identical to before.
+
+One precedence issue caught and fixed inline (same class of bug as the
+earlier responsive-reconciliation work): several `hover:` states
+(notification bell, avatar ring, dropdown items, sign-in link) initially
+got their base color via inline `style`, which — as established earlier
+— silently defeats a `hover:` class on the same property. Fixed by moving
+those specific colors to Tailwind arbitrary-value classes
+(`text-[var(--noc-t5)] hover:text-[var(--noc-t1)]`) instead of inline
+`style`, so the hover states actually work.
+
+### Verified on staging, real QA account (`ADMIN` role, both signed-in and
+signed-out), both viewports
+
+- **1440×900**: logo accent computed to `rgb(178, 90, 217)` (`--noc-
+  purple`), sign-up/generate CTA gradients computed to the exact 3-stop
+  `--noc-gradient`, confirming the token swap took effect (not just
+  present in source). Avatar dropdown opens and lists the same items as
+  before (Profile/Story Playground/Academy/Upload/Analytics/Advanced
+  Story Studio/AI Studio/Credits/Settings/Admin — Admin present because
+  the QA account is `ADMIN`-role, matching existing gating). Search input,
+  notification bell, and FeedTabs switching all functional.
+- **390×844**, `?r16=1`: logo reads "R16 Kids", tab reads "Kids Feed"
+  (both correctly gated), desktop center-nav correctly hidden, "Kids"
+  accent computed to `rgb(79, 214, 232)` (`--noc-cyan`), zero horizontal
+  overflow.
+- Console: only the same pre-existing, already-documented, unrelated
+  errors (R2 CORS, staging CSP misconfiguration, stale 401s) — zero new
+  errors from this round's changes.
+
+Typecheck clean; build clean (one retry needed due to the known,
+previously-documented transient `next/font/google` fetch flake — resolved
+immediately on retry with no code changes, consistent with every prior
+occurrence this session). Diff is exactly 6 frontend files, all
+presentation-only — zero backend/schema/migration/renderer/credits/
+voice/provider files touched, satisfying the round's stated boundaries
+in full.
+
+### Explicitly deferred from this round
+
+`VideoInteractions.tsx` and `VideoPlayer.tsx` (like/dislike/follow/star-
+rating mutation UI and the raw video-playback component) — flagged
+above as carrying real behavior dense enough to warrant their own
+dedicated audit rather than folding into a chrome pass. This is the
+correct continuation of "migrate shell/chrome first, followed by feed
+cards/search/navigation surfaces" — the *cards*' presentational shell
+(the overlays, title/creator/tags block, premium-lock CTA in `VideoCard`)
+is done; the cards' *interaction controls* are the next slice, not yet
+started.
+
 ## Final report — Phase 1
 
 1. **Starting production SHA**: `f8ffe55` (Foundation Pass baseline)

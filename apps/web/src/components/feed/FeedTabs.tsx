@@ -19,7 +19,7 @@ export function FeedTabs({ activeTab, onChange, signedIn = false }: FeedTabsProp
       <div className="flex gap-5 justify-center">
         <span
           className="text-sm font-semibold pb-1 border-b-2"
-          style={{ color: '#34d399', borderColor: '#34d399' }}
+          style={{ color: 'var(--noc-cyan)', borderColor: 'var(--noc-cyan)' }}
         >
           Kids Feed
         </span>
@@ -42,8 +42,8 @@ export function FeedTabs({ activeTab, onChange, signedIn = false }: FeedTabsProp
           onClick={() => onChange(tab.id)}
           className={`text-sm font-semibold pb-1 transition-all border-b-2 ${
             activeTab === tab.id
-              ? 'text-white border-white'
-              : 'text-white/50 border-transparent hover:text-white/80'
+              ? 'text-[var(--noc-t1)] border-[var(--noc-t1)]'
+              : 'text-[var(--noc-t5)] border-transparent hover:text-[var(--noc-t3)]'
           }`}
         >
           {tab.label}

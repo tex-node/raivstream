@@ -161,16 +161,16 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-black">
-        <div className="w-12 h-12 border-4 border-white/20 border-t-violet-500 rounded-full animate-spin" />
+        <div className="w-12 h-12 rounded-full animate-spin" style={{ border: '4px solid rgba(233,233,237,0.15)', borderTopColor: 'var(--noc-purple)' }} />
       </div>
     );
   }
 
   if (videos.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-black text-white gap-4 px-6">
+      <div className="flex-1 flex flex-col items-center justify-center bg-black gap-4 px-6" style={{ color: 'var(--noc-t1)' }}>
         <div className="text-6xl">🎬</div>
-        <p className="text-white/60 text-center text-sm max-w-xs">
+        <p className="text-center text-sm max-w-xs" style={{ color: 'var(--noc-t5)' }}>
           {feedType === 'following'
             ? 'Follow some creators to see their videos here'
             : 'No videos yet — be the first to upload or generate one!'}
@@ -178,8 +178,8 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
         {feedType !== 'following' && (
           <a
             href="/generate"
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white mt-2"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+            className="px-5 py-2.5 rounded-xl text-sm font-semibold mt-2"
+            style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
           >
             ✨ Generate with AI
           </a>
@@ -218,7 +218,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
 
         {activeQuery.isFetchingNextPage && (
           <div className="h-20 flex items-center justify-center bg-black">
-            <div className="w-8 h-8 border-4 border-white/20 border-t-violet-500 rounded-full animate-spin" />
+            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '4px solid rgba(233,233,237,0.15)', borderTopColor: 'var(--noc-purple)' }} />
           </div>
         )}
       </div>
@@ -232,7 +232,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
             className="w-1.5 rounded-full transition-all duration-200"
             style={{
               height:     i === activeIndex ? '20px' : '6px',
-              background: i === activeIndex ? '#a78bfa' : 'rgba(255,255,255,0.25)',
+              background: i === activeIndex ? 'var(--noc-purple)' : 'rgba(233,233,237,0.25)',
             }}
           />
         ))}
@@ -240,18 +240,18 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
 
       {/* Sticky banner — signed-in FREE users past their 10-episode limit */}
       {freeContentOnly && !bannerDismissed && (
-        <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-2.5 bg-black/90 backdrop-blur-sm border-b border-white/10">
-          <span className="text-white/70 text-sm">🔒 Watching free content · Subscribe for unlimited</span>
+        <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-2.5 backdrop-blur-sm" style={{ background: 'rgba(7,8,16,0.92)', borderBottom: '1px solid var(--noc-hairline)' }}>
+          <span className="text-sm" style={{ color: 'var(--noc-t4)' }}>🔒 Watching free content · Subscribe for unlimited</span>
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push('/pricing')}
-              className="text-xs font-semibold text-violet-400 hover:text-violet-300"
+              className="text-xs font-semibold text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]"
             >
               Subscribe →
             </button>
             <button
               onClick={() => setBannerDismissed(true)}
-              className="text-white/30 hover:text-white/60 text-base leading-none"
+              className="text-base leading-none text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
             >
               ✕
             </button>

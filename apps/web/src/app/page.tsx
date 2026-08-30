@@ -16,7 +16,7 @@ export default function HomePage() {
   if (!isLoaded) {
     return (
       <div className="h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-white/20 border-t-violet-500 rounded-full animate-spin" />
+        <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '4px solid rgba(233,233,237,0.15)', borderTopColor: 'var(--noc-purple)' }} />
       </div>
     );
   }
@@ -47,21 +47,21 @@ export default function HomePage() {
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)' }}
         >
           <div className="pointer-events-auto max-w-sm mx-auto text-center">
-            <p className="text-white font-semibold text-base mb-3">
+            <p className="font-semibold text-base mb-3" style={{ color: 'var(--noc-t1)' }}>
               Join free to watch unlimited videos
             </p>
             <div className="flex gap-3 justify-center">
               <Link
                 href="/sign-up"
-                className="px-6 py-2.5 rounded-xl font-semibold text-sm text-white"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+                className="px-6 py-2.5 rounded-xl font-semibold text-sm"
+                style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
               >
                 Sign up free
               </Link>
               <Link
                 href="/sign-in"
-                className="px-6 py-2.5 rounded-xl font-semibold text-sm text-white/70 border"
-                style={{ borderColor: 'rgba(255,255,255,0.20)' }}
+                className="px-6 py-2.5 rounded-xl font-semibold text-sm border text-[var(--noc-t4)]"
+                style={{ borderColor: 'var(--noc-hairline)' }}
               >
                 Sign in
               </Link>
