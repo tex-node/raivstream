@@ -253,6 +253,30 @@ touched.
   works, so changing it further this round would have been scope creep
   beyond the stated fix.
 
+### Production verification
+
+Deployed via the standard `main` push → GitHub Actions pipeline (run
+`33298866373`, succeeded in 2m43s). Deployed SHA `b163c2c`, confirmed via
+`git rev-parse HEAD` on the VPS. Both health endpoints healthy post-deploy.
+
+Live smoke test starting from `https://app.raivstream.com/` (root),
+signing in, then navigating to a disposable smoke project's Audio tab —
+using a disposable account + zero-AI-cost project created via direct
+Prisma insert (`StoryProject` with no chapters/scenes, to avoid spending
+real generation credits on a check that doesn't need real content):
+sidebar (256px) present and correctly showing on the Audio tab; real tRPC
+calls (`story.getWorkspace`, `story.getAudioPlan`,
+`story.listVoiceProfiles`, `story.listAudioVersions`,
+`story.trackWorkspaceTab`) all returned `200`; `story:movie_render`
+re-confirmed unchanged at exactly 100 credits. The only console errors
+present were `ERR_BLOCKED_BY_CLIENT`/`ERR_NAME_NOT_RESOLVED` entries
+attributable to the legacy video-feed root page's video sources from
+earlier in the same browser tab's session (confirmed via
+`read_network_requests` that every actual request made *by* the Audio
+page itself returned `200`) — not a regression from this change.
+Disposable smoke account and project deleted and verified gone
+(`verifiedGone: true`) immediately after.
+
 ### Route inventory update
 
 Recount after this round: **10 of 47 routes now on family A (Nocturne)**
@@ -262,3 +286,125 @@ tabs, which now share the Nocturne *shell* (family A navigation chrome)
 while their inner content remains family B markup (Nocturne color values,
 non-Nocturne component patterns) — a hybrid state, recorded honestly
 rather than marked fully migrated. **37 routes still fully unmigrated.**
+
+## Final report
+
+1. **Starting production SHA**: `9c15238` (last-deployed before this
+   initiative)
+2. **Candidate SHA**: `b163c2c958d316c5377a9d7e984f6ffd5fedd2e2`
+3. **Route inventory total**: 47 page routes (+2 alias/redirect files)
+4. **Routes migrated this round**: 0 new full-family migrations; 5
+   render-path call sites in 1 route (`story-playground/[projectId]`)
+   moved from the legacy `Navbar` to the Nocturne `Shell` for the
+   Audio/Sequence/Film/Storybook/Insights tabs — a shell-level fix, not a
+   full visual-family migration (their internal markup is unchanged)
+5. **Routes intentionally excluded this round**: all 37 other unmigrated
+   routes — deferred per the user's explicit "foundation first, highest-
+   value target only" scoping decision, not silently skipped
+6. **Shared design primitives**: not built this round (see "Not done this
+   round" above for the reasoning — no speculative library without a real
+   consumer)
+7. **Global shell**: not generalized into a top-level `AppShell` this
+   round; the existing project-scoped `Shell` was extended to cover the
+   advanced workspace tabs it didn't reach before
+8. **Root/feed**: unchanged; confirmed to be the pre-pivot video-feed
+   product, flagged per the brief's own gate as a product decision, not
+   restyled or redirected
+9. **Auth**: unchanged (still family C)
+10. **Story Playground**: unchanged, already family A from the prior
+    release, no regression
+11–17. **Overview/Story/Cast/Character/Scenes/Scene Director/Assets**:
+    unchanged, already family A, no regression
+18. **Audio**: shell reconciled to family A (Nocturne Sidebar/BottomTabBar
+    now wraps it); internal markup still family B (unchanged, "UI ONLY,
+    preserve all qualified behavior" — satisfied by construction since no
+    render-function code was touched)
+19. **Sequence**: same as Audio
+20. **Film**: same as Audio
+21. **Storybook**: the in-workspace tab card (linking out to the
+    dedicated reading route) shares the same shell fix; the dedicated
+    `/story-playground/[projectId]/storybook` reading route itself is
+    unchanged (still family C-variant)
+22. **Academy**: unchanged (family E)
+23. **Account**: unchanged (family C) — note: `/account` as such doesn't
+    exist as a route; `/settings` is the closest equivalent and is
+    unchanged
+24. **Admin**: unchanged (family D); structurally reusable shell already
+    confirmed, tokens not yet swapped
+25. **Generate/upload/search/video**: unchanged (family C)
+26. **Forms**: unchanged; no shared form-control components built this
+    round
+27. **Tables**: unchanged; no shared table pattern built this round
+28. **Modals**: unchanged; the three existing fixed-overlay modals
+    (character edit, scene edit, asset preview) in
+    `story-playground/[projectId]/page.tsx` are unaffected by the shell
+    swap (they're `position: fixed`, viewport-relative) and were not
+    migrated onto a shared `Modal` component
+29. **Empty/error/loading states**: the workspace's own loading/signed-
+    out/error states now render inside `Shell` instead of a bare
+    `Navbar`-wrapped div (more consistent chrome), but their inner
+    copy/markup is unchanged
+30. **Mobile QA**: done for the migrated slice — `390×844` verified on
+    staging (bottom nav present, correct scroll behavior on long content,
+    zero overflow) and spot-checked on production
+31. **Tablet QA**: not separately re-run this round (no tablet-specific
+    layout changed — the fix is chrome-only and inherits the existing
+    responsive shell)
+32. **Desktop QA**: done — `1440×900` verified on staging (sidebar
+    present and correctly highlighted on Audio/Sequence/Film, real
+    content unchanged) and re-verified on production via a real click-
+    through from a disposable account
+33. **R16**: verified — the pre-existing `isR16` tab-redirect logic
+    (Audio/Sequence/Film → Storybook) and the sidebar's "More" section
+    visibility are both unchanged and confirmed working post-fix, on
+    staging
+34. **Functional QA**: real tRPC calls confirmed succeeding in production
+    for the Audio tab (`getWorkspace`, `getAudioPlan`,
+    `listVoiceProfiles`, `listAudioVersions`, `trackWorkspaceTab`, all
+    `200`); Sequence and Film content confirmed rendering with real data
+    on staging
+35. **Console/logs**: zero new errors on staging or production; the only
+    errors present are the three pre-existing, already-documented,
+    unrelated issues (R2 CORS on one thumbnail, a staging-only CSP
+    misconfiguration, and legacy-feed video-source blocks from earlier
+    tab history)
+36. **Backend/schema audit**: clean — diff is exactly one frontend file
+    (`story-playground/[projectId]/page.tsx`, 7 insertions / 8 deletions)
+    plus this documentation file; zero backend/schema/migration/renderer/
+    worker files touched
+37. **Voice exclusion**: untouched; no voice-provider code in scope or
+    touched
+38. **Movie rate invariant**: confirmed unchanged at exactly 100 credits
+    (`story:movie_render`, `creditsPerUnit: 100`) via direct query against
+    the production credit-rate table, post-deploy
+39. **Production backup**: not taken this round — this release contains
+    zero schema/migration changes (frontend-only diff), consistent with
+    this session's established policy that a fresh backup is only
+    required ahead of releases carrying migrations
+40. **Production smoke**: done — see "Production verification" above;
+    disposable account/project created, verified, and deleted
+    (`verifiedGone: true`)
+41. **Known limitations**: (a) 37 of 47 routes remain unmigrated and are
+    explicitly deferred, not silently dropped; (b) Audio/Sequence/Film/
+    Storybook now share Nocturne's *navigation chrome* but not yet its
+    *component-level* visual language — their internal buttons, inputs,
+    cards, and tables are still hand-rolled Tailwind-arbitrary-value
+    markup, which is why this report does not claim those four tabs are
+    "fully migrated"; (c) the ~30-component shared UI library from §3 of
+    the brief remains unbuilt; (d) `/` (root) still requires an explicit
+    product decision before any UI work can proceed there
+42. **Final verdict**: see below
+
+**RAIVSTREAM APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS**
+
+This round delivered the audit (full route inventory, UI-family
+classification, design-system gap analysis) and one real, verified,
+production-deployed fix — closing the specific "Story Playground looks
+new but Audio looks old" navigation-chrome failure mode named in the
+brief — scoped exactly per the user's explicit "foundation first, highest-
+value target" direction. It does not claim, and should not be read as
+claiming, that the application-wide reconciliation itself is complete:
+37 of 47 routes are unmigrated, no shared component library exists yet,
+and `/` still awaits a product decision. Those are the "limitations" this
+verdict is qualified by, and they are the explicit subject of whatever
+follow-up round continues this initiative.
