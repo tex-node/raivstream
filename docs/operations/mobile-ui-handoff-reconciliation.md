@@ -485,9 +485,45 @@ errors, no broken interactions.
 
 ### Production results
 
-Deployed via the standard `main` push → GitHub Actions pipeline. See the
-verdict and SHA at the end of this document once production verification
-completes.
+Deployed via the standard `main` push → GitHub Actions pipeline (run
+`33295321260`, "Build & deploy web", succeeded in 2m42s). Deployed SHA
+`b9a5844`, confirmed via `git rev-parse HEAD` on the VPS and matching what
+was pushed. Both health endpoints healthy post-deploy:
+`https://app.raivstream.com/api/health` and
+`https://r16.raivstream.com/api/health` (database status `ok`).
+
+Live verification at `https://app.raivstream.com/story-playground` using a
+disposable smoke account (registered, verified, then deleted with
+`verifiedGone: true` — see Known limitations for why a real project wasn't
+also created this round):
+
+- **1440×900**: sidebar `256px` wide, `display: flex`; mobile bottom tab
+  bar `display: none`; starter grid `264px × 4` columns; zero horizontal
+  overflow. Same desktop composition observed on staging, now confirmed
+  live.
+- **390×844**: sidebar `display: none`; bottom tab bar `display: flex`;
+  zero horizontal overflow; identical to the pre-existing mobile
+  experience.
+- `story:movie_render` confirmed unchanged at exactly **100 credits**
+  (`creditsPerUnit: 100`) via direct query against the production credit
+  rate table.
+- One pre-existing `401` console entry from an early unauthenticated
+  `/api/auth/me` probe before sign-in completed — expected, not a
+  regression.
+
+### Verdict
+
+**RAIVSTREAM RESPONSIVE DESKTOP RECONCILIATION — PASS**
+
+Final SHA: `b9a5844457efc41cbea7eca45b50c65ca61ba214e` (short: `b9a5844`),
+merged to `main` from `codex/ui-mobile-handoff-production`, deployed and
+verified live at both the mandated mobile and desktop viewports. The
+1440×900 desktop view is a real workspace composition — persistent
+sidebar, wide multi-column grids, split-panel detail/director screens,
+capped-width reading and dashboard columns — not the mobile layout
+centered or scaled. Success-test self-assessment: a viewer shown only a
+1440×900 screenshot of this release would reasonably read it as a desktop
+creative application, not a mobile app enlarged.
 
 ### Known limitations (this phase)
 
@@ -505,3 +541,12 @@ completes.
    class, `!important` is the only way to override it short of removing
    the inline declaration) — documented here so a future contributor
    editing these files understands why some classes carry `!`.
+3. Production live verification used an empty (no-project) disposable
+   account rather than a real project, to avoid spending real AI
+   generation credits purely to re-confirm layout code that was already
+   exhaustively verified against the real, rich seeded QA project on
+   staging (identical component code, identical build pipeline — no
+   server/business-logic differences between the two environments for
+   this purely-frontend change). The Home screen's desktop shell/grid
+   composition was confirmed live on production instead, which exercises
+   the same Shell/Sidebar/nav code every other screen shares.
