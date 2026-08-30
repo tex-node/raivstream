@@ -39,6 +39,10 @@ const config: Config = {
       },
       screens: {
         xs: '375px',
+        // Responsive desktop reconciliation breakpoint tiers:
+        // mobile 0-639 (base), tablet 640-1023 (sm:/md:), desktop
+        // 1024-1439 (lg:), wide 1440+ (this custom `wide:` screen).
+        wide: '1440px',
       },
     },
   },

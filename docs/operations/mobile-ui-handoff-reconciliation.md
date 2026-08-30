@@ -336,3 +336,172 @@ found and fixed as a direct result:
    hardcoded "exactly 2 selectable paragraphs" to "every paragraph
    selectable, single-select" — a real-content necessity (unbounded
    paragraph count), not a fidelity shortcut.
+
+## Responsive Desktop Reconciliation
+
+### Root cause
+
+The activation release above made `/story-playground` render the handoff's
+components at their canonical routes, but those components — and the
+`Shell` chrome wrapping them — were built exclusively against the handoff's
+one supplied artboard (a 390×844 phone mock). Nothing in the mobile-handoff
+tree carried a `>= 1024px` layout rule, and `Shell`'s desktop treatment
+(shipped in commit `9615ead`) was a decorative ~440px-wide "phone frame"
+centered in the viewport with an ambient background — a nicer-looking
+phone, not a desktop composition. The user's own words: "the current
+implementation appears to preserve the handoff's narrow mobile column at
+desktop widths instead of adapting the interface into a proper desktop
+workspace." Confirmed by direct inspection of `https://app.raivstream.com/
+story-playground` at desktop widths prior to this fix.
+
+### Original mobile width cap
+
+No component declared a literal `max-width: 440px` in code — the "cap" was
+`Shell.tsx`'s removed `.noc-shell-frame` class (`max-width: 440px` at
+`@media (min-width: 768px)`, with a 44px border-radius and a phone-frame
+box-shadow token from the design handoff's README). Below that, every one
+of the 8 screen components used single-column flex/grid layouts with no
+`lg:` (or equivalent) responsive variants at all — so even after removing
+the frame, nothing would have used the freed width without the per-screen
+work described below.
+
+### Chosen breakpoints
+
+Tailwind's existing `sm`/`md`/`lg`/`xl`/`2xl` scale, plus one new custom
+screen, added to `apps/web/tailwind.config.ts`:
+
+| Tier    | Range          | Tailwind prefix |
+|---------|----------------|------------------|
+| Mobile  | 0–639px        | (base, unprefixed) |
+| Tablet  | 640–1023px     | `sm:` / `md:` |
+| Desktop | 1024–1439px    | `lg:` |
+| Wide    | 1440px+        | `wide:` (new custom screen) |
+
+`lg:` (1024px) is the desktop-shell threshold everywhere: the sidebar
+appears, the mobile bottom tab bar disappears, and every screen's grid/
+split-panel rules activate at that same breakpoint, matching the mandated
+QA viewport `1024×768` exactly. `xl:`/`wide:` further widen grids (Cast,
+Scenes, Assets) as more columns comfortably fit; they never change nav or
+shell structure, only column counts.
+
+### Shell behavior
+
+`apps/web/src/components/layout/Shell.tsx` was rewritten (not patched):
+
+- **Mobile (`< 1024px`)**: unchanged from the handoff — full-width, sticky
+  top app bar (back/title/subtitle/Saved pill), scrollable content, sticky
+  bottom tab bar (Home/Story/Cast/Scenes/Assets).
+- **Desktop (`>= 1024px`)**: a new, persistent, `position: fixed` left
+  `Sidebar` (264px / `lg:w-64`) carrying the Raivstream wordmark, the same
+  5 primary nav items as the mobile tab bar, and a secondary "More" section
+  (Audio/Sequence/Film/Storybook — hidden for R16 and when no project is in
+  context, matching the mobile tab bar's own disabled-state and R16 rules).
+  The main content column is offset `lg:ml-64` and the mobile bottom tab
+  bar is hidden (`lg:hidden`). The Shell itself imposes **no width cap** on
+  its children at any breakpoint — each screen owns its own content/
+  reading/grid width, per Section 14 of the brief.
+- `apps/web/src/app/globals.css`: the old `.noc-shell-frame` phone-frame
+  class (and the desktop ambient-background/flex-center rules on
+  `.noc-shell-viewport`) were deleted outright, not merely resized —
+  confirmed via a repo-wide search that no other file still references
+  `noc-shell-frame`.
+
+### Navigation behavior
+
+Both `BottomTabBar` (mobile) and `Sidebar` (desktop) are driven by the same
+`primaryNavItems(projectId)` helper, so active-tab highlighting, disabled
+state (no project in context), and href targets can never drift between
+the two — there is exactly one nav-item source of truth. R16 hides the
+sidebar's "More" section exactly as it hides the equivalent legacy-tab
+links elsewhere; verified live on staging at both 390×844 and 1440×900
+(see Staging results below).
+
+### Per-screen desktop changes
+
+| Screen | Mobile (unchanged) | Desktop (`lg:` and up) |
+|---|---|---|
+| Home | Single column, 2-col starter grid | Content capped `1280px`; continue-cards become a 2-col grid; starters expand to 4 columns |
+| Project Overview | Single column stack | CSS grid split: left/main column (hero, primary CTA, Story/Characters) + fixed 360px right column (stats, More) |
+| Story | Full-width paragraph stack | Reading column capped at `760px`, centered in the (still-wide) workspace — app width and reading width are separate, per Section 14 |
+| Cast | Single-column row list | Card grid: 2 cols at 1024, 3 at 1280, 4 at 1440+; avatar moves above name (portrait-card layout) instead of beside it |
+| Character detail | Single column (avatar, then every accordion) | Grid split: 280px sticky profile column + accordion detail column |
+| Scenes | Single-column card stack | Card grid: 2 cols at 1024, 3 at 1280+ |
+| Scene Director | Preview, then all controls stacked beneath | Grid split: sticky preview column + 420px controls column, side by side |
+| Assets | 2-col thumbnail grid | Grid widens: 3 cols at 1024, 4 at 1280, 6 at 1440+; content capped `1440px` |
+
+All mutation/query logic (`getWorkspace`, `updateSceneDirector`,
+`generateSceneImage`/`regenerateSceneImage`, `favoriteSceneAsset`,
+`trackWorkspaceTab`, etc.) is untouched — every change in this phase is
+Tailwind className additions (plus, where a class needed to win over an
+existing inline `style` on the same CSS property, Tailwind's `!important`
+modifier) to the JSX these components already rendered.
+
+### Measurements (staging, `raivstream-phase9b2-audio-staging`, port 3037)
+
+Captured via `getBoundingClientRect()`/`getComputedStyle()` (screenshots on
+this pane are unreliable — see Known limitations below), at
+`1440×900` against the seeded QA project (`cmtb8u7ga000b9s38pewi3miz`):
+
+- Sidebar: `256px` wide, `display: flex` (desktop), `display: none` at
+  `< 1024px`; mobile bottom tab bar: `display: none` at `>= 1024px`,
+  `display: flex` below it.
+- Project Overview grid: `712px 360px` columns (1184px content column,
+  1280px max-width minus `lg:px-10` gutters, minus the 264px sidebar).
+- Story reading column: `760px` wide (fixed, independent of the 1184px
+  workspace width around it).
+- Cast grid at 1440: `264px × 4` columns (4 characters/row).
+- Character detail: `280px` profile column + `720px` detail column.
+- Scenes grid at 1440: 3 columns (`~355px` each).
+- Scene Director at 1440: `637px` preview column (sticky) + `420px`
+  controls column.
+- Assets grid at 1440: 6 columns (`~171px` each), content capped `1440px`.
+- Zero horizontal overflow (`document.documentElement.scrollWidth ===
+  window.innerWidth`) confirmed at all 9 mandated viewports: `360×800`,
+  `390×844`, `430×932`, `768×1024`, `1024×768`, `1280×800`, `1366×768`,
+  `1440×900`, `1920×1080`. At `1920×1080` the content column correctly
+  holds at its `1280px` cap rather than stretching edge to edge.
+- R16 (`?r16=1`) at both `390×844` and `1440×900`: sidebar/legacy "More"
+  section absent, Storybook stat row absent — same as the non-R16 mobile
+  behavior, just also verified in the new desktop sidebar.
+
+### Staging results
+
+Deployed to `raivstream-phase9b2-audio-staging` (port 3037) by syncing only
+the 11 changed files (`Shell.tsx`, `globals.css`, `tailwind.config.ts`, and
+all 8 `mobile-handoff/*.tsx` screens) into the existing staging checkout,
+rebuilding, and restarting the pm2 process. Full walkthrough at both
+`390×844` (mobile, to confirm zero regression) and `1440×900` (desktop, the
+release's actual target) covering: sign-in → Home → Project Overview →
+Story → Cast → Character detail → Scenes → Scene Director → Assets, plus
+the sidebar's "More" links into the untouched Audio/Sequence/Film/
+Storybook legacy-tab views. All real data (no mocks), same seeded QA
+project used throughout this arc. Console: two pre-existing, unrelated
+errors observed and NOT attributable to this change — an R2 CORS
+restriction on one scene-asset thumbnail (tracked separately, see
+`docs/r2-cors-setup.md`) and a CSP-blocked `fetch` to
+`app.raivstream.com` (a staging-environment `NEXT_PUBLIC_APP_URL`
+misconfiguration, pre-existing). No new console errors, no hydration
+errors, no broken interactions.
+
+### Production results
+
+Deployed via the standard `main` push → GitHub Actions pipeline. See the
+verdict and SHA at the end of this document once production verification
+completes.
+
+### Known limitations (this phase)
+
+1. The tablet tier (`640–1023px`, `sm:`/`md:`) inherits the mobile layout
+   as-is (2-column starter grid, single-column everything else) rather
+   than receiving its own intermediate treatment — acceptable because
+   nothing overflows or breaks at that width, but it is not the
+   "tablet expands intelligently" ideal described in the brief; flagged as
+   a follow-up rather than blocking this release, since the brief's
+   pass/fail bar is specifically the desktop (`>= 1024px`) composition.
+2. Several Tailwind utility classes needed the `!` important modifier to
+   win over a pre-existing inline `style` on the same CSS property (e.g.
+   `padding`, `display`, `gap`). This is a correct, deliberate use of the
+   modifier (verified: inline `style` always beats a same-specificity
+   class, `!important` is the only way to override it short of removing
+   the inline declaration) — documented here so a future contributor
+   editing these files understands why some classes carry `!`.

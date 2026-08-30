@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/auth';
+import { useR16 } from '@/lib/r16';
 
 export type ShellTab = 'home' | 'story' | 'characters' | 'scenes' | 'assets';
 
@@ -47,17 +48,23 @@ const TAB_ICONS: Record<ShellTab, React.ReactNode> = {
   ),
 };
 
-function TabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: string }) {
-  const tabs: { id: ShellTab; label: string; href: string; disabled: boolean }[] = [
-    { id: 'home',       label: 'Home',       href: '/story-playground',                                 disabled: false },
+type NavItem = { id: ShellTab; label: string; href: string; disabled: boolean };
+
+function primaryNavItems(projectId?: string): NavItem[] {
+  return [
+    { id: 'home',       label: 'Home',       href: '/story-playground',                                    disabled: false },
     { id: 'story',      label: 'Story',      href: projectId ? `/story-playground/${projectId}/story`      : '#', disabled: !projectId },
     { id: 'characters', label: 'Cast',       href: projectId ? `/story-playground/${projectId}/characters` : '#', disabled: !projectId },
     { id: 'scenes',     label: 'Scenes',     href: projectId ? `/story-playground/${projectId}/scenes`     : '#', disabled: !projectId },
     { id: 'assets',     label: 'Assets',     href: projectId ? `/story-playground/${projectId}/assets`     : '#', disabled: !projectId },
   ];
+}
 
+/** Mobile bottom tab bar — primary nav only, exactly as before. Hidden at lg:. */
+function BottomTabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: string }) {
+  const tabs = primaryNavItems(projectId);
   return (
-    <nav className="noc-tab-bar">
+    <nav className="noc-tab-bar lg:hidden">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         const sharedStyle: React.CSSProperties = {
@@ -91,6 +98,88 @@ function TabBar({ activeTab, projectId }: { activeTab: ShellTab; projectId?: str
   );
 }
 
+const SECONDARY_ITEMS = [
+  { label: 'Audio', tab: 'audio' },
+  { label: 'Sequence', tab: 'sequence' },
+  { label: 'Film', tab: 'film' },
+  { label: 'Storybook', tab: 'storybook' },
+] as const;
+
+/** Desktop persistent sidebar — primary nav + secondary (legacy-tab) links.
+ * Only rendered at lg: and up; mobile keeps the bottom tab bar instead. */
+function Sidebar({ activeTab, projectId }: { activeTab?: ShellTab; projectId?: string }) {
+  const isR16 = useR16();
+  const tabs = primaryNavItems(projectId);
+
+  return (
+    <aside
+      className="hidden lg:flex lg:flex-col lg:fixed lg:left-0 lg:top-0 lg:bottom-0 lg:w-64 lg:shrink-0"
+      style={{ borderRight: '1px solid var(--noc-hairline)', background: 'var(--noc-bar)' }}
+    >
+      <div style={{ padding: '20px 22px 16px' }}>
+        <Link href="/story-playground" style={{ fontWeight: 700, fontSize: 17, color: 'var(--noc-t1)', textDecoration: 'none', letterSpacing: '-0.01em' }}>
+          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
+        </Link>
+      </div>
+
+      <nav style={{ padding: '4px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const rowStyle: React.CSSProperties = {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '10px 12px',
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 500,
+            textDecoration: 'none',
+            color: isActive ? 'var(--noc-t1)' : tab.disabled ? 'rgba(117,121,140,0.45)' : 'var(--noc-t4)',
+            background: isActive ? 'rgba(178,90,217,0.14)' : 'transparent',
+          };
+          if (tab.disabled) {
+            return (
+              <span key={tab.id} aria-disabled="true" style={rowStyle}>
+                {TAB_ICONS[tab.id]}
+                {tab.label}
+              </span>
+            );
+          }
+          return (
+            <Link key={tab.id} href={tab.href} style={rowStyle}>
+              {TAB_ICONS[tab.id]}
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {projectId && !isR16 && (
+        <div style={{ padding: '16px 12px', marginTop: 8, borderTop: '1px solid var(--noc-rule)' }}>
+          <p className="noc-label" style={{ padding: '0 12px', marginBottom: 6 }}>More</p>
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {SECONDARY_ITEMS.map((item) => (
+              <Link
+                key={item.tab}
+                href={`/story-playground/${projectId}?tab=${item.tab}`}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 10,
+                  fontSize: 13.5,
+                  color: 'var(--noc-t5)',
+                  textDecoration: 'none',
+                }}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
+    </aside>
+  );
+}
+
 export function Shell({
   title,
   subtitle,
@@ -108,109 +197,117 @@ export function Shell({
 
   return (
     <div className="noc-shell-viewport">
-    <div className="noc-shell-frame">
-      {/* App bar */}
-      <div
-        style={{
-          padding: '12px 18px 12px',
-          borderBottom: '1px solid var(--noc-rule)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexShrink: 0,
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          background: 'var(--noc-bar-alpha)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-        }}
-      >
-        {backHref ? (
-          <button
-            onClick={() => router.push(backHref)}
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'var(--noc-card)',
-              border: '1px solid var(--noc-hairline)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              color: 'var(--noc-t1)',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-        ) : null}
-        {/* No brand wordmark here: the handoff's own README is explicit
-            that the reviewer-only chrome around the phone preview
-            ("brand + Desktop/Mobile/R16 switch") "are not product UI" —
-            the app bar itself never specifies one, and Home's own H1
-            ("What are we making today?") is the actual heading. */}
+      {activeTab && <Sidebar activeTab={activeTab} projectId={projectId} />}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {title && (
-            <div style={{ fontSize: '15.5px', fontWeight: 600, color: 'var(--noc-t1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {title}
-            </div>
-          )}
-          {subtitle && (
-            <div style={{ fontSize: '11.5px', color: 'var(--noc-t6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {subtitle}
-            </div>
-          )}
-        </div>
-
-        {savedVisible && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              background: 'rgba(79,214,232,0.10)',
-              borderRadius: '999px',
-              padding: '4px 10px',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--noc-cyan)', flexShrink: 0 }} />
-            <span style={{ fontSize: '11px', color: 'var(--noc-cyan-tint)', fontWeight: 500 }}>Saved</span>
-          </div>
-        )}
-      </div>
-
-      {/* Scroll region */}
-      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
-        {children}
-      </div>
-
-      {/* Optional action bar */}
-      {actionBar && (
+      <div className="noc-shell-main lg:ml-64">
+        {/* Top bar — sticky app bar on mobile; a slimmer contextual bar on desktop
+            (the sidebar already carries persistent nav + brand identity there,
+            so this only needs back/title/subtitle/Saved). */}
         <div
           style={{
-            padding: '12px 18px',
-            borderTop: '1px solid var(--noc-hairline)',
+            padding: '12px 18px 12px',
+            borderBottom: '1px solid var(--noc-rule)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flexShrink: 0,
+            position: 'sticky',
+            top: 0,
+            zIndex: 40,
             background: 'var(--noc-bar-alpha)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
-            flexShrink: 0,
           }}
         >
-          {actionBar}
-        </div>
-      )}
+          {backHref ? (
+            <button
+              onClick={() => router.push(backHref)}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'var(--noc-card)',
+                border: '1px solid var(--noc-hairline)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: 'var(--noc-t1)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          ) : null}
+          {/* No brand wordmark in the mobile app bar: the handoff's own
+              README is explicit that the reviewer-only chrome around the
+              phone preview "are not product UI". At desktop, the sidebar
+              above carries the brand mark instead — a persistent app-shell
+              identity is a normal desktop pattern, distinct from that. */}
 
-      {/* Bottom tab bar */}
-      {activeTab && (
-        <TabBar activeTab={activeTab} projectId={projectId} />
-      )}
-    </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {title && (
+              <div style={{ fontSize: '15.5px', fontWeight: 600, color: 'var(--noc-t1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {title}
+              </div>
+            )}
+            {subtitle && (
+              <div style={{ fontSize: '11.5px', color: 'var(--noc-t6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {subtitle}
+              </div>
+            )}
+          </div>
+
+          {savedVisible && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: 'rgba(79,214,232,0.10)',
+                borderRadius: '999px',
+                padding: '4px 10px',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--noc-cyan)', flexShrink: 0 }} />
+              <span style={{ fontSize: '11px', color: 'var(--noc-cyan-tint)', fontWeight: 500 }}>Saved</span>
+            </div>
+          )}
+        </div>
+
+        {/* Scroll region — full available width; each screen decides its
+            own inner content/reading/grid width (Section 14: app shell
+            width vs content width are separate concerns). */}
+        <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+          {children}
+        </div>
+
+        {/* Optional action bar — sticky within the content column at every
+            breakpoint (full mobile width; content-column width at desktop,
+            never full viewport width once a sidebar is present). */}
+        {actionBar && (
+          <div
+            style={{
+              padding: '12px 18px',
+              borderTop: '1px solid var(--noc-hairline)',
+              background: 'var(--noc-bar-alpha)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              flexShrink: 0,
+              position: 'sticky',
+              bottom: 0,
+            }}
+          >
+            {actionBar}
+          </div>
+        )}
+
+        {/* Bottom tab bar — mobile only */}
+        {activeTab && <BottomTabBar activeTab={activeTab} projectId={projectId} />}
+      </div>
     </div>
   );
 }

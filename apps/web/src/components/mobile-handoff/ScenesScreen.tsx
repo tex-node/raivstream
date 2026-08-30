@@ -8,7 +8,15 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { useTrackTab } from './useTrackTab';
 
-/** Scenes list — design_handoff_raivstream_mobile, screen 6 of 8. Canonical: /story-playground/[projectId]/scenes. */
+/**
+ * Scenes list — design_handoff_raivstream_mobile, screen 6 of 8.
+ * Canonical: /story-playground/[projectId]/scenes.
+ *
+ * Responsive desktop reconciliation (Section 9): mobile keeps the exact
+ * original single-column card stack. At `lg:` and up the same cards
+ * arrange into a responsive grid (2 cols at 1024, 3 at wide) instead of
+ * a single 440px-wide column stretched down a tall desktop viewport.
+ */
 
 function sceneStatus(scene: any): { label: string; tone: 'ready' | 'generating' | 'draft' | 'failed'; cta: string } {
   switch (scene.imageStatus) {
@@ -48,7 +56,10 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Scenes" activeTab="scenes" projectId={projectId}>
-      <div style={{ padding: '14px 18px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div
+        className="lg:max-w-[1280px] lg:mx-auto lg:!px-10 lg:!py-10 lg:!grid lg:grid-cols-2 xl:grid-cols-3 lg:!gap-5"
+        style={{ padding: '14px 18px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}
+      >
         {workspaceQuery.isLoading ? (
           <>
             <Skeleton height={200} radius={18} />

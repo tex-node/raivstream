@@ -18,6 +18,12 @@ import { useUser } from '@/lib/auth';
  * redirects to /story-playground — see next.config.js — so this component
  * has exactly one call site in practice, but stays importable from either
  * tree per the Method A "single implementation" rule).
+ *
+ * Responsive desktop reconciliation: mobile layout (single-column stack,
+ * 2-col starter grid) is untouched below `lg:`. At `lg:` and up, the page
+ * content is capped to a ~1280px workspace width with real gutters
+ * (Section 14), continue-cards become a 2-col grid, and the starter grid
+ * expands to use the available row width instead of staying pinned at 2.
  */
 
 const STARTERS = [
@@ -76,9 +82,12 @@ export function HomeScreen() {
 
   return (
     <Shell showSaved={false} activeTab="home">
-      <div style={{ padding: '20px 18px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div
+        className="lg:max-w-[1280px] lg:mx-auto lg:!px-10 lg:!py-10 lg:!gap-8"
+        style={{ padding: '20px 18px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}
+      >
         <div>
-          <h1 className="noc-section-header">What are we making today?</h1>
+          <h1 className="noc-section-header lg:text-[32px]">What are we making today?</h1>
           <p style={{ fontSize: 13.5, color: 'var(--noc-t6)', marginTop: 4 }}>
             {greeting()}{user?.displayName ? `, ${user.displayName}` : ''}.{' '}
             {isSignedIn
@@ -90,7 +99,7 @@ export function HomeScreen() {
         </div>
 
         {isSignedIn && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="lg:!grid lg:grid-cols-2 lg:!gap-3" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {projectsQuery.isLoading ? (
               <>
                 <Skeleton height={88} radius={16} />
@@ -150,12 +159,15 @@ export function HomeScreen() {
 
         <div>
           <SectionLabel>Start something</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 8 }}>
+          <div
+            className="lg:!grid-cols-4 lg:!gap-4"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 8 }}
+          >
             {(isR16 ? STARTERS.filter((s) => s.type === 'story' || s.type === 'idea') : STARTERS).map(({ label, icon: Icon, type }) => (
               <Link
                 key={type}
                 href={`/story-playground/new?type=${type}`}
-                className="noc-pressable"
+                className="noc-pressable lg:!min-h-[110px]"
                 style={{
                   minHeight: 86,
                   borderRadius: 14,
@@ -176,7 +188,7 @@ export function HomeScreen() {
         </div>
 
         {isSignedIn && latest.length > 0 && (
-          <div>
+          <div className="lg:max-w-[640px]">
             <SectionLabel>Latest</SectionLabel>
             <div style={{ marginTop: 4 }}>
               {latest.map((project) => (

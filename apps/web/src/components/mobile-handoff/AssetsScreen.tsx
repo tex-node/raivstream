@@ -18,6 +18,12 @@ import { useTrackTab } from './useTrackTab';
  * would always be identical to "All"/empty; shipping them would be a filter
  * that lies about what it does. Real, backed filters only: All, Favorites
  * (StorySceneAsset.isFavorite).
+ *
+ * Responsive desktop reconciliation (Section 10): mobile keeps the exact
+ * original 2-col thumbnail grid. At `lg:` and up the grid widens to a
+ * real media-browser column count (3 at 1024, 4 at 1280, 6 at wide),
+ * filling the available workspace instead of stretching a 2-col grid
+ * across a wide viewport.
  */
 
 type Filter = 'all' | 'favorites';
@@ -47,7 +53,7 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Assets" activeTab="assets" projectId={projectId}>
-      <div style={{ padding: '14px 18px 32px' }}>
+      <div className="lg:max-w-[1440px] lg:mx-auto lg:!px-10 lg:!py-10" style={{ padding: '14px 18px 32px' }}>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12 }} className="hide-scrollbar">
           {(['all', 'favorites'] as Filter[]).map((f) => (
             <button
@@ -63,14 +69,14 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
         </div>
 
         {workspaceQuery.isLoading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="lg:!grid-cols-3 xl:!grid-cols-4 wide:!grid-cols-6 lg:!gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Skeleton height={140} radius={14} />
             <Skeleton height={140} radius={14} />
           </div>
         ) : visibleAssets.length === 0 ? (
           <EmptyState title={filter === 'favorites' ? 'No favorites yet' : 'No assets yet'} hint="Generate scene images to see them here." />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="lg:!grid-cols-3 xl:!grid-cols-4 wide:!grid-cols-6 lg:!gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {visibleAssets.map((asset) => (
               <div
                 key={asset.id}

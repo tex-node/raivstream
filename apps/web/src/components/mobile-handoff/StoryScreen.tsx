@@ -59,7 +59,13 @@ export function StoryScreen({ projectId }: { projectId: string }) {
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
-      <div style={{ padding: '18px 18px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Section 7: the app shell/workspace can be wide, but the reading
+          column itself stays at an editorial width — a wide unconstrained
+          text column is worse to read, not better, on a big screen. */}
+      <div
+        className="lg:max-w-[760px] lg:mx-auto lg:!px-10 lg:!py-10"
+        style={{ padding: '18px 18px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}
+      >
         {!latestChapter ? (
           <EmptyState title="No chapters yet" hint="Start writing from the project overview." />
         ) : (

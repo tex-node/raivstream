@@ -25,6 +25,12 @@ import { useTrackTab } from './useTrackTab';
  * day/Weather/Mood (a real 3-control group), Lighting→Light, Pace→Pace.
  */
 
+// Responsive desktop reconciliation (Section 11): mobile keeps the exact
+// original stack (preview, then title, then every control group beneath
+// it, full width). At lg: and up this becomes a preview column (sticky,
+// left) + a controls column (right) instead of controls stacked beneath
+// a full-width preview -- all mutation/generation logic is unchanged.
+
 const DIRECTOR_OPTIONS = {
   emotion: ['HAPPY', 'EXCITED', 'CURIOUS', 'BRAVE', 'CALM', 'SAD', 'SURPRISED'],
   cameraStyle: ['CLOSE_UP', 'MEDIUM_SHOT', 'WIDE_SHOT', 'OVER_THE_SHOULDER', 'BIRDS_EYE_VIEW', 'EYE_LEVEL'],
@@ -145,63 +151,68 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
         )
       }
     >
-      <div style={{ position: 'relative', aspectRatio: '16 / 10', background: previewImage ? `url(${previewImage}) center/cover` : gradientPlaceholder(sceneId) }}>
-        {generating && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(11,13,20,0.72)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
-            <span style={{ fontSize: 14, color: 'var(--noc-t2)' }}>{progress.label}</span>
-            <div style={{ width: '62%', height: 4, borderRadius: 999, background: 'rgba(233,233,237,0.12)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${progress.pct}%`, background: 'var(--noc-gradient)', transition: 'width 400ms' }} />
+      <div className="lg:max-w-[1280px] lg:mx-auto lg:grid lg:grid-cols-[1fr_420px] lg:gap-8 lg:px-10 lg:py-10 lg:items-start">
+        <div
+          className="lg:rounded-2xl lg:overflow-hidden lg:!sticky lg:top-24"
+          style={{ position: 'relative', aspectRatio: '16 / 10', background: previewImage ? `url(${previewImage}) center/cover` : gradientPlaceholder(sceneId) }}
+        >
+          {generating && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(11,13,20,0.72)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
+              <span style={{ fontSize: 14, color: 'var(--noc-t2)' }}>{progress.label}</span>
+              <div style={{ width: '62%', height: 4, borderRadius: 999, background: 'rgba(233,233,237,0.12)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${progress.pct}%`, background: 'var(--noc-gradient)', transition: 'width 400ms' }} />
+              </div>
             </div>
-          </div>
-        )}
-        {isReviewing && !generating && (
-          <span style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(217,70,168,0.9)', color: '#0B0D14', fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '3px 7px' }}>
-            New picture
-          </span>
-        )}
-      </div>
-
-      <div style={{ padding: '16px 18px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <span className="noc-label">{String(scene.orderIndex + 1).padStart(2, '0')}</span>
-          <h1 style={{ fontSize: 19, fontWeight: 500, textTransform: 'uppercase', color: 'var(--noc-t1)', margin: '2px 0 0' }}>{scene.title}</h1>
+          )}
+          {isReviewing && !generating && (
+            <span style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(217,70,168,0.9)', color: '#0B0D14', fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '3px 7px' }}>
+              New picture
+            </span>
+          )}
         </div>
 
-        {errorMessage && (
-          <div style={{ borderRadius: 12, padding: 10, background: 'rgba(227,93,93,0.12)', border: '1px solid rgba(227,93,93,0.3)' }}>
-            <p style={{ fontSize: 13, color: '#e35d5d', margin: 0 }}>{errorMessage}</p>
+        <div className="lg:!p-0" style={{ padding: '16px 18px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <span className="noc-label">{String(scene.orderIndex + 1).padStart(2, '0')}</span>
+            <h1 style={{ fontSize: 19, fontWeight: 500, textTransform: 'uppercase', color: 'var(--noc-t1)', margin: '2px 0 0' }}>{scene.title}</h1>
           </div>
-        )}
 
-        {isReviewing && (
-          <div style={{ borderRadius: 16, padding: 14, background: 'rgba(178,90,217,0.1)', border: '1px solid rgba(178,90,217,0.32)' }}>
-            <p style={{ fontSize: 13.5, color: 'var(--noc-t2)', margin: 0 }}>New take ready. Keep this one, or try again?</p>
-          </div>
-        )}
+          {errorMessage && (
+            <div style={{ borderRadius: 12, padding: 10, background: 'rgba(227,93,93,0.12)', border: '1px solid rgba(227,93,93,0.3)' }}>
+              <p style={{ fontSize: 13, color: '#e35d5d', margin: 0 }}>{errorMessage}</p>
+            </div>
+          )}
 
-        {!isR16 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {DIRECTOR_GROUPS.map((group) => (
-              <div key={group.label}>
-                <span className="noc-label">{group.label}</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
-                  {group.fields.map((field) => (
-                    <div key={field.key}>
-                      <p style={{ fontSize: 12.5, color: 'var(--noc-t4)', margin: '0 0 4px' }}>{field.fieldLabel}</p>
-                      <SegRow
-                        options={DIRECTOR_OPTIONS[field.key]}
-                        value={scene[field.key] ?? undefined}
-                        onChange={(value) => pick(field.key, value)}
-                      />
-                    </div>
-                  ))}
+          {isReviewing && (
+            <div style={{ borderRadius: 16, padding: 14, background: 'rgba(178,90,217,0.1)', border: '1px solid rgba(178,90,217,0.32)' }}>
+              <p style={{ fontSize: 13.5, color: 'var(--noc-t2)', margin: 0 }}>New take ready. Keep this one, or try again?</p>
+            </div>
+          )}
+
+          {!isR16 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {DIRECTOR_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <span className="noc-label">{group.label}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
+                    {group.fields.map((field) => (
+                      <div key={field.key}>
+                        <p style={{ fontSize: 12.5, color: 'var(--noc-t4)', margin: '0 0 4px' }}>{field.fieldLabel}</p>
+                        <SegRow
+                          options={DIRECTOR_OPTIONS[field.key]}
+                          value={scene[field.key] ?? undefined}
+                          onChange={(value) => pick(field.key, value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: 12.5, color: 'var(--noc-t6)' }}>Advanced scene controls aren&apos;t shown here.</p>
-        )}
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12.5, color: 'var(--noc-t6)' }}>Advanced scene controls aren&apos;t shown here.</p>
+          )}
+        </div>
       </div>
     </Shell>
   );

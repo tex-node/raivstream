@@ -200,46 +200,20 @@ html, body {
   * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
 }
 
-/* Nocturne mobile shell — desktop presentation.
-   The handoff is a fixed 390x844 phone design (README: "Layout is
-   dark-mode only" / mobile-frame-first). At real mobile widths the shell
-   is edge-to-edge, as designed. At >=768px it needs to read as a
-   deliberate composition, not a phone-width column floating in bare
-   black — so it picks up the design system's own already-documented
-   "phone frame" elevation token (radius 44, this exact box-shadow —
-   see the handoff README's Design Tokens: "Elevation: phone frame only")
-   plus an ambient wash built from the same accent hues already used
-   throughout (Overview's own hero gradient), not new colors. */
+/* Nocturne app shell — responsive.
+   Mobile (<1024px): full-width, edge-to-edge, exactly the handoff's own
+   390x844 design — bottom tab bar, sticky app bar, no sidebar.
+   Desktop (>=1024px): a persistent sidebar (see components/layout/Shell's
+   <Sidebar>, lg:fixed lg:w-64) plus a main content column offset by
+   lg:ml-64. This is a real desktop workspace shell, not the mobile layout
+   scaled or framed — each screen controls its own inner content/reading/
+   grid width against the full available column width (see per-screen
+   `lg:max-w-*` / `lg:grid-cols-*` usage), matching Section 14's separation
+   of app-shell width from content/reading/editor/grid width. */
 .noc-shell-viewport {
   min-height: 100dvh;
   background: var(--noc-page);
 }
-.noc-shell-frame {
-  max-width: 440px;
-  width: 100%;
-  margin: 0 auto;
+.noc-shell-main {
   min-height: 100dvh;
-  background: var(--noc-page);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-@media (min-width: 768px) {
-  .noc-shell-viewport {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
-    background:
-      radial-gradient(80% 60% at 20% 10%, rgba(217, 70, 168, 0.16), transparent 60%),
-      radial-gradient(70% 60% at 85% 90%, rgba(79, 139, 214, 0.16), transparent 60%),
-      var(--noc-page);
-  }
-  .noc-shell-frame {
-    min-height: 0;
-    height: min(844px, calc(100vh - 80px));
-    border-radius: 44px;
-    box-shadow: 0 0 0 1px rgba(233, 233, 237, 0.14), 0 0 0 10px #14161f, 0 34px 80px rgba(0, 0, 0, 0.65);
-    overflow: hidden;
-  }
 }
