@@ -27,6 +27,8 @@ function EyeOffIcon() {
 }
 
 // ── Password strength ────────────────────────────────────────────────────────
+// Semantic weak→strong ramp, not a Nocturne brand accent — same
+// intentional exception as sign-up's identical meter.
 
 function getStrength(pw: string): { score: number; label: string; color: string } {
   if (!pw)          return { score: 0, label: '',        color: 'transparent' };
@@ -100,19 +102,19 @@ function ResetContent() {
   if (step === 'invalid') {
     return (
       <div className="text-center py-2">
-        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 bg-red-500/10">
-          <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: 'rgba(227,93,93,0.10)' }}>
+          <svg className="w-7 h-7" style={{ color: '#e35d5d' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </div>
-        <h2 className="text-white font-bold text-lg mb-2">Invalid reset link</h2>
-        <p className="text-white/40 text-sm mb-5">
+        <h2 className="font-bold text-lg mb-2" style={{ color: 'var(--noc-t1)' }}>Invalid reset link</h2>
+        <p className="text-sm mb-5" style={{ color: 'var(--noc-t6)' }}>
           This link is missing, expired, or has already been used.
         </p>
         <Link
           href="/forgot-password"
-          className="inline-block px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+          className="inline-block px-5 py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
         >
           Request a new link
         </Link>
@@ -126,14 +128,14 @@ function ResetContent() {
       <div className="text-center py-2">
         <div
           className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
-          style={{ background: 'rgba(34,197,94,0.12)' }}
+          style={{ background: 'rgba(47,191,113,0.12)' }}
         >
-          <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-7 h-7" style={{ color: '#2fbf71' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-white font-bold text-lg mb-2">Password updated!</h2>
-        <p className="text-white/40 text-sm">Redirecting you to sign in…</p>
+        <h2 className="font-bold text-lg mb-2" style={{ color: 'var(--noc-t1)' }}>Password updated!</h2>
+        <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>Redirecting you to sign in…</p>
       </div>
     );
   }
@@ -142,20 +144,20 @@ function ResetContent() {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-white text-xl font-bold mb-1">Set a new password</h1>
-        <p className="text-white/40 text-sm">Choose something strong that you haven&apos;t used before.</p>
+        <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--noc-t1)' }}>Set a new password</h1>
+        <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>Choose something strong that you haven&apos;t used before.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm px-4 py-3 rounded-xl">
+          <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>
             {error}
           </div>
         )}
 
         {/* New password */}
         <div>
-          <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
             New password
           </label>
           <div className="relative">
@@ -169,18 +171,19 @@ function ResetContent() {
               maxLength={128}
               autoComplete="new-password"
               autoFocus
-              className="w-full rounded-xl px-4 py-3 pr-11 text-white text-sm outline-none transition-colors placeholder-white/25"
+              className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-colors"
               style={{
-                background:   'rgba(255,255,255,0.06)',
-                border:       '1px solid rgba(255,255,255,0.10)',
+                background:   'var(--noc-card)',
+                border:       '1px solid var(--noc-hairline)',
+                color:        'var(--noc-t1)',
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'rgba(167,139,250,0.6)')}
-              onBlur={(e)  => (e.target.style.borderColor = 'rgba(255,255,255,0.10)')}
+              onFocus={(e) => (e.target.style.borderColor = 'rgba(178,90,217,0.6)')}
+              onBlur={(e)  => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
             />
             <button
               type="button"
               onClick={() => setShowPw((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
               tabIndex={-1}
               aria-label={showPw ? 'Hide password' : 'Show password'}
             >
@@ -197,7 +200,7 @@ function ResetContent() {
                     key={n}
                     className="flex-1 h-1 rounded-full transition-all duration-300"
                     style={{
-                      background: n <= strength.score ? strength.color : 'rgba(255,255,255,0.08)',
+                      background: n <= strength.score ? strength.color : 'rgba(233,233,237,0.08)',
                     }}
                   />
                 ))}
@@ -209,7 +212,7 @@ function ResetContent() {
 
         {/* Confirm password */}
         <div>
-          <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
             Confirm password
           </label>
           <div className="relative">
@@ -221,24 +224,25 @@ function ResetContent() {
               required
               maxLength={128}
               autoComplete="new-password"
-              className="w-full rounded-xl px-4 py-3 pr-11 text-white text-sm outline-none transition-colors placeholder-white/25"
+              className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-colors"
               style={{
-                background:   'rgba(255,255,255,0.06)',
-                border:       `1px solid ${mismatch ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)'}`,
+                background:   'var(--noc-card)',
+                color:        'var(--noc-t1)',
+                border:       `1px solid ${mismatch ? 'rgba(227,93,93,0.5)' : 'rgba(233,233,237,0.08)'}`,
               }}
               onFocus={(e) => {
-                if (!mismatch) e.target.style.borderColor = 'rgba(167,139,250,0.6)';
+                if (!mismatch) e.target.style.borderColor = 'rgba(178,90,217,0.6)';
               }}
               onBlur={(e) => {
                 e.target.style.borderColor = mismatch
-                  ? 'rgba(239,68,68,0.5)'
-                  : 'rgba(255,255,255,0.10)';
+                  ? 'rgba(227,93,93,0.5)'
+                  : 'rgba(233,233,237,0.08)';
               }}
             />
             <button
               type="button"
               onClick={() => setShowCfm((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
               tabIndex={-1}
               aria-label={showCfm ? 'Hide password' : 'Show password'}
             >
@@ -246,19 +250,19 @@ function ResetContent() {
             </button>
           </div>
           {mismatch && (
-            <p className="text-red-400 text-xs mt-1.5">Passwords don&apos;t match</p>
+            <p className="text-xs mt-1.5" style={{ color: '#e35d5d' }}>Passwords don&apos;t match</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={loading || mismatch || password.length < 8}
-          className="w-full py-3 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-50 hover:opacity-90 mt-1"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+          className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 hover:opacity-90 mt-1"
+          style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(11,13,20,0.3)', borderTopColor: '#0B0D14' }} />
               Updating…
             </span>
           ) : 'Update password'}
@@ -272,35 +276,35 @@ function ResetContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#050b18' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--noc-page)' }}>
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(120,60,220,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,90,217,0.18) 0%, transparent 70%)',
         }}
       />
 
       <div className="relative w-full max-w-sm">
-        <Link href="/" className="block text-center text-white font-extrabold text-2xl mb-8">
-          Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+        <Link href="/" className="block text-center font-extrabold text-2xl mb-8" style={{ color: 'var(--noc-t1)' }}>
+          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
         </Link>
 
         <div
           className="rounded-2xl p-8 border"
-          style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'var(--noc-card)', borderColor: 'var(--noc-hairline)' }}
         >
           <Suspense fallback={
             <div className="flex justify-center py-8">
-              <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+              <div className="w-6 h-6 rounded-full animate-spin" style={{ border: '2px solid rgba(178,90,217,0.3)', borderTopColor: 'var(--noc-purple)' }} />
             </div>
           }>
             <ResetContent />
           </Suspense>
         </div>
 
-        <p className="text-white/30 text-center text-sm mt-6">
-          <Link href="/sign-in" className="text-violet-400 hover:text-violet-300 transition-colors">
+        <p className="text-center text-sm mt-6" style={{ color: 'var(--noc-t6)' }}>
+          <Link href="/sign-in" className="transition-colors text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]">
             Back to sign in
           </Link>
         </p>

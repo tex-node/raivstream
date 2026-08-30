@@ -232,7 +232,7 @@ export function VideoFeed({ feedType }: VideoFeedProps) {
             className="w-1.5 rounded-full transition-all duration-200"
             style={{
               height:     i === activeIndex ? '20px' : '6px',
-              background: i === activeIndex ? 'var(--noc-purple)' : 'rgba(233,233,237,0.25)',
+              background: i === activeIndex ? '#b25ad9' : 'rgba(233,233,237,0.25)',
             }}
           />
         ))}

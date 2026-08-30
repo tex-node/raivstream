@@ -21,13 +21,14 @@ export default function CreditsPage() {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col">
+      <div className="min-h-screen flex flex-col" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
         <Navbar />
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <p className="text-white/60">Sign in to manage your credits</p>
+          <p style={{ color: 'var(--noc-t5)' }}>Sign in to manage your credits</p>
           <button
             onClick={() => router.push('/sign-in')}
-            className="px-6 py-3 bg-pink-500 rounded-xl font-semibold text-sm"
+            className="px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-90"
+            style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
           >
             Sign In
           </button>
@@ -58,26 +59,26 @@ export default function CreditsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
       <Navbar />
 
       <div className="max-w-2xl mx-auto pt-24 px-4 pb-20">
 
         {/* Balance card */}
-        <div className="rounded-3xl bg-gradient-to-br from-pink-500/20 to-purple-500/10 border border-pink-500/20 p-6 mb-10 flex items-center justify-between">
+        <div className="rounded-3xl p-6 mb-10 flex items-center justify-between" style={{ background: 'rgba(178,90,217,0.10)', border: '1px solid rgba(178,90,217,0.25)' }}>
           <div>
-            <p className="text-white/50 text-sm mb-1">Your credit balance</p>
+            <p className="text-sm mb-1" style={{ color: 'var(--noc-t6)' }}>Your credit balance</p>
             {balanceLoading ? (
-              <div className="h-8 w-24 bg-white/10 rounded-lg animate-pulse" />
+              <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: 'rgba(233,233,237,0.1)' }} />
             ) : (
-              <p className="text-4xl font-extrabold text-white">
+              <p className="text-4xl font-extrabold">
                 {(balanceData?.balance ?? 0).toLocaleString()}
-                <span className="text-lg font-normal text-white/50 ml-1.5">credits</span>
+                <span className="text-lg font-normal ml-1.5" style={{ color: 'var(--noc-t6)' }}>credits</span>
               </p>
             )}
           </div>
-          <div className="w-14 h-14 rounded-2xl bg-pink-500/20 flex items-center justify-center">
-            <svg className="w-7 h-7 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(178,90,217,0.18)' }}>
+            <svg className="w-7 h-7" style={{ color: 'var(--noc-lavender-tint)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -97,26 +98,27 @@ export default function CreditsPage() {
             return (
               <div
                 key={pkg.tag}
-                className={`relative rounded-2xl p-5 border flex items-center justify-between transition-all ${
+                className="relative rounded-2xl p-5 border flex items-center justify-between transition-all"
+                style={
                   isPopular
-                    ? 'border-pink-500 bg-pink-500/10'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                }`}
+                    ? { borderColor: 'var(--noc-magenta)', background: 'rgba(217,70,168,0.10)' }
+                    : { borderColor: 'var(--noc-hairline)', background: 'var(--noc-card)' }
+                }
               >
                 {isPopular && (
-                  <span className="absolute -top-3 left-4 bg-pink-500 text-white text-xs font-bold px-3 py-0.5 rounded-full">
+                  <span className="absolute -top-3 left-4 text-xs font-bold px-3 py-0.5 rounded-full" style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}>
                     Most Popular
                   </span>
                 )}
 
                 <div>
-                  <p className="font-bold text-white text-lg">
+                  <p className="font-bold text-lg">
                     {pkg.credits.toLocaleString()} credits
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-white/50 text-sm">{naira}</span>
+                    <span className="text-sm" style={{ color: 'var(--noc-t6)' }}>{naira}</span>
                     {'saving' in pkg && (
-                      <span className="text-green-400 text-xs font-semibold">{pkg.saving}</span>
+                      <span className="text-xs font-semibold" style={{ color: '#2fbf71' }}>{pkg.saving}</span>
                     )}
                   </div>
                 </div>
@@ -124,15 +126,16 @@ export default function CreditsPage() {
                 <button
                   onClick={() => handlePurchase(pkg.tag)}
                   disabled={!!loading}
-                  className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 ${
+                  className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 hover:opacity-90"
+                  style={
                     isPopular
-                      ? 'bg-pink-500 hover:bg-pink-600 text-white'
-                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-                  }`}
+                      ? { background: 'var(--noc-magenta)', color: '#0B0D14' }
+                      : { background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }
+                  }
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(233,233,237,0.3)', borderTopColor: 'currentColor' }} />
                       Wait…
                     </span>
                   ) : 'Buy'}
@@ -144,7 +147,7 @@ export default function CreditsPage() {
 
         {/* Credit rates reference */}
         <h2 className="text-lg font-bold mb-4">What credits unlock</h2>
-        <div className="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5 mb-12">
+        <div className="rounded-2xl divide-y mb-12" style={{ border: '1px solid var(--noc-hairline)', background: 'var(--noc-card)' }}>
           {[
             { label: 'Nano Banana generation',  cost: 50,  icon: '⚡' },
             { label: 'Grok Imagine generation', cost: 100, icon: '🎨' },
@@ -156,9 +159,9 @@ export default function CreditsPage() {
             { label: 'Transcription',           cost: 30,  icon: '📝' },
             { label: 'Video enhance',           cost: 100, icon: '✨' },
           ].map(({ label, cost, icon }) => (
-            <div key={label} className="flex items-center justify-between px-4 py-3">
-              <span className="text-white/70 text-sm">{icon} {label}</span>
-              <span className="text-white/50 text-sm font-medium">{cost} credits</span>
+            <div key={label} className="flex items-center justify-between px-4 py-3" style={{ borderColor: 'var(--noc-rule)' }}>
+              <span className="text-sm" style={{ color: 'var(--noc-t4)' }}>{icon} {label}</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--noc-t6)' }}>{cost} credits</span>
             </div>
           ))}
         </div>
@@ -168,28 +171,28 @@ export default function CreditsPage() {
         {historyLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />
+              <div key={i} className="h-14 rounded-2xl animate-pulse" style={{ background: 'var(--noc-card)' }} />
             ))}
           </div>
         ) : !history?.length ? (
-          <p className="text-white/30 text-sm text-center py-8">No transactions yet</p>
+          <p className="text-sm text-center py-8" style={{ color: 'var(--noc-t6)' }}>No transactions yet</p>
         ) : (
-          <div className="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
+          <div className="rounded-2xl divide-y" style={{ border: '1px solid var(--noc-hairline)', background: 'var(--noc-card)' }}>
             {history.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between px-4 py-3.5">
+              <div key={tx.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderColor: 'var(--noc-rule)' }}>
                 <div>
-                  <p className="text-white text-sm font-medium">{tx.description ?? tx.featureKey ?? tx.type}</p>
-                  <p className="text-white/30 text-xs mt-0.5">
+                  <p className="text-sm font-medium">{tx.description ?? tx.featureKey ?? tx.type}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--noc-t6)' }}>
                     {new Date(tx.createdAt).toLocaleDateString('en-NG', {
                       day: 'numeric', month: 'short', year: 'numeric',
                     })}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className={`font-semibold text-sm ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className="font-semibold text-sm" style={{ color: tx.amount > 0 ? '#2fbf71' : '#e35d5d' }}>
                     {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
                   </span>
-                  <p className="text-white/30 text-xs">{tx.balanceAfter.toLocaleString()} bal</p>
+                  <p className="text-xs" style={{ color: 'var(--noc-t6)' }}>{tx.balanceAfter.toLocaleString()} bal</p>
                 </div>
               </div>
             ))}

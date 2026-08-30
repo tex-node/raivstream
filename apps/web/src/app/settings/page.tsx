@@ -63,7 +63,7 @@ export default function SettingsPage() {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
         <p>Please sign in to access settings.</p>
       </div>
     );
@@ -78,21 +78,21 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
       <Navbar />
       <div className="max-w-2xl mx-auto pt-24 px-4 pb-20">
         <h1 className="text-2xl font-bold mb-8">Settings</h1>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/10 mb-8 gap-6">
+        <div className="flex mb-8 gap-6" style={{ borderBottom: '1px solid var(--noc-hairline)' }}>
           {(['profile', 'account', 'billing'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`pb-3 text-sm font-semibold capitalize transition-colors border-b-2 -mb-px ${
                 activeTab === tab
-                  ? 'text-white border-pink-500'
-                  : 'text-white/40 border-transparent hover:text-white/70'
+                  ? 'text-[var(--noc-t1)] border-[#d946a8]'
+                  : 'text-[var(--noc-t6)] border-transparent hover:text-[var(--noc-t3)]'
               }`}
             >
               {tab}
@@ -105,51 +105,58 @@ export default function SettingsPage() {
           <form onSubmit={handleSaveProfile} className="flex flex-col gap-6">
             {/* Avatar preview */}
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0" style={{ border: '2px solid var(--noc-hairline)' }}>
                 {profile?.avatarUrl ? (
                   <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full bg-pink-500 flex items-center justify-center text-2xl font-bold">
+                  <div className="w-full h-full flex items-center justify-center text-2xl font-bold" style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}>
                     {displayName?.[0] ?? '?'}
                   </div>
                 )}
               </div>
               <div>
                 <p className="text-sm font-medium">{profile?.username}</p>
-                <p className="text-white/40 text-xs mt-0.5">
+                <p className="text-xs mt-0.5" style={{ color: 'var(--noc-t6)' }}>
                   @{profile?.username}
                 </p>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm text-white/60 mb-1.5">Display name</label>
+              <label className="block text-sm mb-1.5" style={{ color: 'var(--noc-t5)' }}>Display name</label>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={50}
                 placeholder="Your display name"
-                className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2.5 text-white placeholder-white/30 outline-none focus:border-pink-500 transition-colors"
+                className="w-full rounded-xl px-4 py-2.5 outline-none transition-colors"
+                style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
+                onFocus={(e) => (e.target.style.borderColor = 'rgba(217,70,168,0.6)')}
+                onBlur={(e) => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
               />
             </div>
 
             <div>
-              <label className="block text-sm text-white/60 mb-1.5">Bio</label>
+              <label className="block text-sm mb-1.5" style={{ color: 'var(--noc-t5)' }}>Bio</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 maxLength={160}
                 rows={3}
                 placeholder="Tell the world about yourself…"
-                className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2.5 text-white placeholder-white/30 outline-none focus:border-pink-500 transition-colors resize-none"
+                className="w-full rounded-xl px-4 py-2.5 outline-none transition-colors resize-none"
+                style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
+                onFocus={(e) => (e.target.style.borderColor = 'rgba(217,70,168,0.6)')}
+                onBlur={(e) => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
               />
-              <p className="text-white/30 text-xs mt-1 text-right">{bio.length}/160</p>
+              <p className="text-xs mt-1 text-right" style={{ color: 'var(--noc-t6)' }}>{bio.length}/160</p>
             </div>
 
             <button
               type="submit"
               disabled={updateProfile.isPending}
-              className="w-full bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+              className="w-full font-semibold py-3 rounded-xl transition-colors disabled:opacity-50 hover:opacity-90"
+              style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
             >
               {updateProfile.isPending ? 'Saving…' : saved ? '✓ Saved!' : 'Save changes'}
             </button>
@@ -160,29 +167,32 @@ export default function SettingsPage() {
         {activeTab === 'account' && (
           <div className="flex flex-col gap-6">
             {/* Current plan */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-              <p className="text-white/50 text-xs uppercase tracking-widest mb-1">Current plan</p>
+            <div className="rounded-2xl p-5" style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)' }}>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--noc-t6)' }}>Current plan</p>
               <p className="text-xl font-bold">
                 {tierLabel[profile?.premiumTier ?? 'FREE'] ?? 'Free'}
               </p>
               {profile?.premiumUntil && (
-                <p className="text-white/40 text-xs mt-1">
+                <p className="text-xs mt-1" style={{ color: 'var(--noc-t6)' }}>
                   Renews {new Date(profile.premiumUntil).toLocaleDateString()}
                 </p>
               )}
             </div>
 
-            {/* Creator mode */}
+            {/* Creator mode — role-upgrade surface ("applications" per the
+                Phase 2 acceptance boundary; there is no separate route for
+                this today, it lives here) */}
             {profile?.role !== 'CREATOR' && (
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+              <div className="rounded-2xl p-5" style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)' }}>
                 <h3 className="font-semibold mb-1">Become a creator</h3>
-                <p className="text-white/50 text-sm mb-4">
+                <p className="text-sm mb-4" style={{ color: 'var(--noc-t6)' }}>
                   Switch to a creator account to upload videos and access analytics.
                 </p>
                 <button
                   onClick={() => becomeCreator.mutate()}
                   disabled={becomeCreator.isPending}
-                  className="bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-full transition-colors"
+                  className="text-sm font-semibold px-5 py-2 rounded-full transition-colors disabled:opacity-50 hover:opacity-90"
+                  style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
                 >
                   {becomeCreator.isPending ? 'Switching…' : 'Switch to creator'}
                 </button>
@@ -191,14 +201,15 @@ export default function SettingsPage() {
 
             {/* Upgrade prompt */}
             {profile?.premiumTier === 'FREE' && (
-              <div className="bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-2xl p-5">
+              <div className="rounded-2xl p-5" style={{ background: 'rgba(178,90,217,0.10)', border: '1px solid rgba(178,90,217,0.25)' }}>
                 <h3 className="font-semibold mb-1">Upgrade your plan</h3>
-                <p className="text-white/60 text-sm mb-4">
+                <p className="text-sm mb-4" style={{ color: 'var(--noc-t4)' }}>
                   Go ad-free and unlock premium features from $4.99/month.
                 </p>
                 <a
                   href="/pricing"
-                  className="inline-block bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold px-5 py-2 rounded-full transition-colors"
+                  className="inline-block text-sm font-semibold px-5 py-2 rounded-full transition-colors hover:opacity-90"
+                  style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
                 >
                   View plans
                 </a>
@@ -210,32 +221,34 @@ export default function SettingsPage() {
         {/* Billing tab */}
         {activeTab === 'billing' && (
           <div className="flex flex-col gap-6">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <div className="rounded-2xl p-5" style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)' }}>
               <h3 className="font-semibold mb-1">Manage subscription</h3>
-              <p className="text-white/50 text-sm mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--noc-t6)' }}>
                 Update payment method, view invoices, or cancel your subscription.
               </p>
               {profile?.premiumTier !== 'FREE' ? (
                 <button
                   onClick={handleBillingPortal}
                   disabled={portalLoading}
-                  className="bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-semibold px-5 py-2 rounded-full transition-colors disabled:opacity-50"
+                  className="text-sm font-semibold px-5 py-2 rounded-full transition-colors disabled:opacity-50"
+                  style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
                 >
                   {portalLoading ? 'Opening…' : 'Open billing portal'}
                 </button>
               ) : (
                 <a
                   href="/pricing"
-                  className="inline-block bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold px-5 py-2 rounded-full transition-colors"
+                  className="inline-block text-sm font-semibold px-5 py-2 rounded-full transition-colors hover:opacity-90"
+                  style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
                 >
                   Subscribe to a plan
                 </a>
               )}
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <div className="rounded-2xl p-5" style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)' }}>
               <h3 className="font-semibold mb-1">Revenue sharing</h3>
-              <p className="text-white/50 text-sm">
+              <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>
                 Creator Premium and Ultimate plans include 70/30 revenue sharing. Earnings are
                 calculated monthly and paid via Stripe Connect.
               </p>

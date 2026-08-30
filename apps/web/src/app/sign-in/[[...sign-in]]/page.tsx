@@ -73,14 +73,14 @@ function SignInForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm px-4 py-3 rounded-xl">
+        <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>
           {error}
         </div>
       )}
 
       {/* Email */}
       <div>
-        <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+        <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
           Email
         </label>
         <input
@@ -91,22 +91,22 @@ function SignInForm() {
           required
           autoComplete="email"
           maxLength={254}
-          className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none transition-colors placeholder-white/25"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
-          onFocus={(e) => (e.target.style.borderColor = 'rgba(167,139,250,0.6)')}
-          onBlur={(e)  => (e.target.style.borderColor = 'rgba(255,255,255,0.10)')}
+          className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+          style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
+          onFocus={(e) => (e.target.style.borderColor = 'rgba(178,90,217,0.6)')}
+          onBlur={(e)  => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
         />
       </div>
 
       {/* Password */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs text-white/40 font-medium uppercase tracking-wider">
+          <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
             Password
           </label>
           <Link
             href="/forgot-password"
-            className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+            className="text-xs transition-colors text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]"
             tabIndex={-1}
           >
             Forgot password?
@@ -121,15 +121,15 @@ function SignInForm() {
             required
             autoComplete="current-password"
             maxLength={128}
-            className="w-full rounded-xl px-4 py-3 pr-11 text-white text-sm outline-none transition-colors placeholder-white/25"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
-            onFocus={(e) => (e.target.style.borderColor = 'rgba(167,139,250,0.6)')}
-            onBlur={(e)  => (e.target.style.borderColor = 'rgba(255,255,255,0.10)')}
+            className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-colors"
+            style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
+            onFocus={(e) => (e.target.style.borderColor = 'rgba(178,90,217,0.6)')}
+            onBlur={(e)  => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
           />
           <button
             type="button"
             onClick={() => setShowPw((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
             tabIndex={-1}
             aria-label={showPw ? 'Hide password' : 'Show password'}
           >
@@ -141,12 +141,12 @@ function SignInForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-3 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-50 hover:opacity-90 mt-1"
-        style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+        className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 hover:opacity-90 mt-1"
+        style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
       >
         {loading ? (
           <span className="flex items-center justify-center gap-2">
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(11,13,20,0.3)', borderTopColor: '#0B0D14' }} />
             Signing in…
           </span>
         ) : 'Sign in'}
@@ -157,27 +157,27 @@ function SignInForm() {
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#050b18' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--noc-page)' }}>
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(120,60,220,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,90,217,0.18) 0%, transparent 70%)',
         }}
       />
 
       <div className="relative w-full max-w-sm">
-        <Link href="/" className="block text-center text-white font-extrabold text-2xl mb-8">
-          Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+        <Link href="/" className="block text-center font-extrabold text-2xl mb-8" style={{ color: 'var(--noc-t1)' }}>
+          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
         </Link>
 
         <div
           className="rounded-2xl p-8 border"
-          style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'var(--noc-card)', borderColor: 'var(--noc-hairline)' }}
         >
           <div className="mb-6">
-            <h1 className="text-white text-xl font-bold mb-1">Welcome back</h1>
-            <p className="text-white/40 text-sm">Sign in to your account</p>
+            <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--noc-t1)' }}>Welcome back</h1>
+            <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>Sign in to your account</p>
           </div>
 
           <Suspense fallback={null}>
@@ -185,9 +185,9 @@ export default function SignInPage() {
           </Suspense>
         </div>
 
-        <p className="text-white/30 text-center text-sm mt-6">
+        <p className="text-center text-sm mt-6" style={{ color: 'var(--noc-t6)' }}>
           Don&apos;t have an account?{' '}
-          <Link href="/sign-up" className="text-violet-400 hover:text-violet-300 transition-colors">
+          <Link href="/sign-up" className="transition-colors text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]">
             Create one free
           </Link>
         </p>

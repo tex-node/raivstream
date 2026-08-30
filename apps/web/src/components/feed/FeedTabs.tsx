@@ -42,8 +42,8 @@ export function FeedTabs({ activeTab, onChange, signedIn = false }: FeedTabsProp
           onClick={() => onChange(tab.id)}
           className={`text-sm font-semibold pb-1 transition-all border-b-2 ${
             activeTab === tab.id
-              ? 'text-[var(--noc-t1)] border-[var(--noc-t1)]'
-              : 'text-[var(--noc-t5)] border-transparent hover:text-[var(--noc-t3)]'
+              ? 'text-[#F7F8FC] border-[#F7F8FC]'
+              : 'text-[#9397ab] border-transparent hover:text-[#cfd3e5]'
           }`}
         >
           {tab.label}

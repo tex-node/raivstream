@@ -25,6 +25,11 @@ function EyeOffIcon() {
   );
 }
 
+// Password-strength colors are a universal weak→strong semantic ramp
+// (red→orange→yellow→green→emerald), not a Nocturne brand accent —
+// left as-is intentionally, matching the same "semantic, not brand"
+// decision already made for error/success colors elsewhere in this
+// pass (see Navbar's sign-out red, or Phase 1b's doc notes).
 function getStrength(pw: string): { score: number; label: string; color: string } {
   if (!pw)           return { score: 0, label: '',           color: 'transparent' };
   if (pw.length < 6) return { score: 1, label: 'Weak',       color: '#ef4444'    };
@@ -39,15 +44,16 @@ function getStrength(pw: string): { score: number; label: string; color: string 
 }
 
 const INPUT_BASE =
-  'w-full rounded-xl px-4 py-3 text-white text-sm outline-none transition-colors placeholder-white/25';
+  'w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors';
 const INPUT_STYLE = {
-  background: 'rgba(255,255,255,0.06)',
-  border:     '1px solid rgba(255,255,255,0.10)',
+  background: 'var(--noc-card)',
+  border:     '1px solid var(--noc-hairline)',
+  color:      'var(--noc-t1)',
 } as const;
 const onFocus = (e: React.FocusEvent<HTMLInputElement>) =>
-  (e.target.style.borderColor = 'rgba(167,139,250,0.6)');
+  (e.target.style.borderColor = 'rgba(178,90,217,0.6)');
 const onBlur  = (e: React.FocusEvent<HTMLInputElement>) =>
-  (e.target.style.borderColor = 'rgba(255,255,255,0.10)');
+  (e.target.style.borderColor = 'rgba(233,233,237,0.08)');
 
 export default function SignUpPage() {
   const router      = useRouter();
@@ -105,39 +111,39 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12" style={{ background: '#050b18' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-12" style={{ background: 'var(--noc-page)' }}>
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(120,60,220,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,90,217,0.18) 0%, transparent 70%)',
         }}
       />
 
       <div className="relative w-full max-w-sm">
-        <Link href="/" className="block text-center text-white font-extrabold text-2xl mb-8">
-          Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+        <Link href="/" className="block text-center font-extrabold text-2xl mb-8" style={{ color: 'var(--noc-t1)' }}>
+          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
         </Link>
 
         <div
           className="rounded-2xl p-8 border"
-          style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'var(--noc-card)', borderColor: 'var(--noc-hairline)' }}
         >
           <div className="mb-6">
-            <h1 className="text-white text-xl font-bold mb-1">Create your account</h1>
-            <p className="text-white/40 text-sm">Free forever — no credit card needed</p>
+            <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--noc-t1)' }}>Create your account</h1>
+            <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>Free forever — no credit card needed</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm px-4 py-3 rounded-xl">
+              <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>
                 {error}
               </div>
             )}
 
             {/* Display name */}
             <div>
-              <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                 Display name
               </label>
               <input
@@ -157,11 +163,11 @@ export default function SignUpPage() {
 
             {/* Username */}
             <div>
-              <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                 Username
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-sm select-none">@</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm select-none" style={{ color: 'var(--noc-t6)' }}>@</span>
                 <input
                   type="text"
                   value={username}
@@ -181,7 +187,7 @@ export default function SignUpPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                 Email
               </label>
               <input
@@ -201,7 +207,7 @@ export default function SignUpPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                 Password
               </label>
               <div className="relative">
@@ -222,7 +228,7 @@ export default function SignUpPage() {
                 <button
                   type="button"
                   onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
                   tabIndex={-1}
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                 >
@@ -239,7 +245,7 @@ export default function SignUpPage() {
                         key={n}
                         className="flex-1 h-1 rounded-full transition-all duration-300"
                         style={{
-                          background: n <= strength.score ? strength.color : 'rgba(255,255,255,0.08)',
+                          background: n <= strength.score ? strength.color : 'rgba(233,233,237,0.08)',
                         }}
                       />
                     ))}
@@ -251,7 +257,7 @@ export default function SignUpPage() {
 
             {/* Confirm password */}
             <div>
-              <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                 Confirm password
               </label>
               <div className="relative">
@@ -265,22 +271,23 @@ export default function SignUpPage() {
                   autoComplete="new-password"
                   className={`${INPUT_BASE} pr-11`}
                   style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: `1px solid ${mismatch ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)'}`,
+                    background: 'var(--noc-card)',
+                    color: 'var(--noc-t1)',
+                    border: `1px solid ${mismatch ? 'rgba(227,93,93,0.5)' : 'rgba(233,233,237,0.08)'}`,
                   }}
                   onFocus={(e) => {
-                    if (!mismatch) e.target.style.borderColor = 'rgba(167,139,250,0.6)';
+                    if (!mismatch) e.target.style.borderColor = 'rgba(178,90,217,0.6)';
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = mismatch
-                      ? 'rgba(239,68,68,0.5)'
-                      : 'rgba(255,255,255,0.10)';
+                      ? 'rgba(227,93,93,0.5)'
+                      : 'rgba(233,233,237,0.08)';
                   }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowCfm((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors text-[var(--noc-t6)] hover:text-[var(--noc-t3)]"
                   tabIndex={-1}
                   aria-label={showCfm ? 'Hide password' : 'Show password'}
                 >
@@ -288,19 +295,19 @@ export default function SignUpPage() {
                 </button>
               </div>
               {mismatch && (
-                <p className="text-red-400 text-xs mt-1.5">Passwords don&apos;t match</p>
+                <p className="text-xs mt-1.5" style={{ color: '#e35d5d' }}>Passwords don&apos;t match</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={loading || mismatch}
-              className="w-full py-3 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-50 hover:opacity-90 mt-1"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+              className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 hover:opacity-90 mt-1"
+              style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(11,13,20,0.3)', borderTopColor: '#0B0D14' }} />
                   Creating account…
                 </span>
               ) : 'Create account'}
@@ -308,9 +315,9 @@ export default function SignUpPage() {
           </form>
         </div>
 
-        <p className="text-white/30 text-center text-sm mt-6">
+        <p className="text-center text-sm mt-6" style={{ color: 'var(--noc-t6)' }}>
           Already have an account?{' '}
-          <Link href="/sign-in" className="text-violet-400 hover:text-violet-300 transition-colors">
+          <Link href="/sign-in" className="transition-colors text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]">
             Sign in
           </Link>
         </p>

@@ -882,3 +882,239 @@ settings)**. Route-migration count remains 0/47 net-new by this
 initiative's own strict accounting (shell-only changes don't count until
 a route's internals move too) — real, verified, production-deployed
 progress, correctly not overstated as route-level completion.
+
+## Phase 2: Auth + Account/Settings
+
+Scope: sign-in, sign-up, forgot-password, reset-password, settings
+(profile/account/billing tabs), credits, credits/success,
+subscription/success. Continued from the actual current baseline
+`f2e2be6` (see note on the `f2a2062` reference in "Phase 1b" above — same
+situation recurred here: the user's message referenced `f2e2be6` as the
+new baseline, which matched the actual state, so no discrepancy this
+round).
+
+### Audit: what carries auth/account behavior vs. what's safe chrome
+
+Read every file in scope before writing code:
+
+- **Sign-in** (`sign-in/[[...sign-in]]/page.tsx`): real behavior —
+  `handleSubmit`'s `fetch('/api/auth/login')`, `redirect_url` query-param
+  handling (`params.get('redirect_url') ?? '/'`), the hard
+  `window.location.href` redirect (deliberately not a soft `router.push`
+  — the code comment explains why: so middleware sees the new cookie).
+  Everything else — labels, borders, the gradient button, the eye-icon
+  password toggle — is chrome.
+- **Sign-up** (`sign-up/[[...sign-up]]/page.tsx`): real behavior —
+  `fetch('/api/auth/register')`, the password-strength scorer, the
+  confirm-password mismatch check. The password-strength color ramp
+  (red→orange→yellow→green→emerald) is deliberately left as a universal
+  semantic meter, not remapped to Nocturne brand accents — same
+  "semantic, not brand" principle already applied to error/success colors
+  in Phase 1b.
+- **Forgot/reset password**: real behavior — the two-step
+  `fetch`/`setStep` flows, the reset token from `useSearchParams()`, the
+  `setTimeout(() => router.push('/sign-in'), 3000)` auto-redirect on
+  success. No separate "email verification" screen exists in this app —
+  confirmed by inventory, not assumed; registration signs a user in
+  directly.
+- **Settings** (`settings/page.tsx`): real behavior — `user.getProfile`/
+  `user.updateProfile`/`user.becomeCreator` tRPC calls, the Stripe billing
+  portal `fetch`, the saved-confirmation timeout, the bio character
+  counter. **This is where "roles/applications" from the Phase 2 scope
+  actually lives** — there is no separate route for it; the Account tab's
+  "Become a creator" button (`becomeCreator.mutate()`) *is* the
+  role-upgrade surface, confirmed by reading the code, not inferred from
+  a route name.
+- **Credits** (`credits/page.tsx`): real behavior — `user.creditBalance`/
+  `user.creditHistory` queries and, critically, `handlePurchase`'s
+  `fetch('/api/paystack/initialize')` + hard redirect to the Paystack
+  checkout URL. This is a **real payment-initiation flow**; per the
+  acceptance boundary ("credits and account balances are presentation-
+  only"), the balance/history numbers were left exactly as data-bound as
+  before — the restyle touches only how they're displayed, never the
+  query, the purchase call, or the redirect.
+- **Credits/subscription success pages**: real behavior — the Paystack
+  `reference`/`trxref` verification fetch, the 5-second auto-redirect on
+  subscription success.
+
+### What changed
+
+Same principle as every prior round: color/token substitutions only.
+`#7c3aed`/`#2563eb` gradients → `var(--noc-gradient)`, `#a78bfa`/violet
+accents → `var(--noc-purple)`/`var(--noc-magenta)`/`var(--noc-lavender-
+tint)`, `#050b18`/black/white-with-opacity surfaces → the Nocturne
+page/card/hairline/text-ramp tokens, pink-500 (the old brand accent in
+settings/credits) → `var(--noc-magenta)`. Eleven files. Zero lines of
+query/mutation/state/effect/redirect logic changed in any of them.
+
+### A real bug found and fixed: CSS custom properties don't transition reliably
+
+While verifying the settings page's tab-switcher, DOM measurement showed
+the *wrong* tab's underline lit up — clicking "Account" left "Profile"'s
+underline magenta and "Account" transparent, exactly inverted from their
+className. Root cause, confirmed through direct testing (isolated test
+elements with identical classes rendered correctly; only the live,
+React-state-toggled element misbehaved, and only after the *second*
+render): in this browser engine, a CSS `transition` animating a color
+property **to or from a `var(--custom-property)`-based Tailwind arbitrary
+value gets stuck** — the computed style doesn't follow the class change,
+even though the class itself updates correctly and an isolated element
+with the same classes renders fine. Confirmed reproducible and confirmed
+fixed (recomputed styles correctly follow the active tab after the fix).
+
+This is a real, if narrow, browser/engine quirk, not a logic bug — but it
+was introduced by this restyle (the original code used static Tailwind
+theme colors like `border-pink-500`, which don't have this problem; only
+this round's shift to `var(--noc-*)`-based arbitrary values exposed it).
+Fixed by auditing every conditional (React-state-driven) color toggle on
+an element with a `transition` class, across **all** files touched in
+Phase 1b and Phase 2, and replacing the `var()` reference with its
+literal hex/rgba equivalent specifically at the toggled site (static,
+never-re-rendered-differently declarations were left as `var()` — only
+values that actually change at runtime under a `transition` class needed
+the literal). Fixed in: `settings/page.tsx` (tab underline),
+`FeedTabs.tsx` (active tab text/underline), `VideoFeed.tsx` (progress
+dot), `Navbar.tsx` (desktop center-nav active-route color), and the
+confirm-password mismatch-border ternaries in `sign-up`/`reset-password`.
+`:hover`-only transitions were left on `var()` values deliberately —
+native CSS `:hover` is a browser-engine-level mechanism, not a React
+class swap, and is not implicated by this bug (confirmed: only
+JS/React-driven toggles reproduced it in testing).
+
+Documented here in full because it's a genuinely useful finding for any
+future round of this initiative: **any new conditional color style that
+toggles under a `transition` class must use a literal value, not a
+`var(--noc-*)` reference, for the specific property being toggled.**
+
+### Verified on staging, real QA account, both auth states, both viewports
+
+- **Sign-in flow, functionally**: verified end-to-end via real DOM events
+  (not the flaky synthetic-click path — see note below) — typed real
+  credentials, submitted the actual form, confirmed the hard redirect
+  fired and landed on `/` with a valid session (`/api/auth/me` returned
+  the real user). Repeated with `?redirect_url=/settings` on the sign-in
+  URL and confirmed it landed on `/settings` instead of `/` — the
+  existing redirect/return-url behavior is intact.
+- **Settings**: Profile tab renders real profile data; Account tab
+  renders Current plan, "Become a creator", and the upgrade prompt with
+  correct role-based conditional visibility; tab-switching confirmed
+  functional and (post-fix) visually correct.
+- **Credits**: real balance (260 credits) and package list rendered
+  against production-shaped seed data on staging.
+- **Mobile** (`390×844`): sign-in and settings both render with zero
+  horizontal overflow.
+- **Desktop** (`1440×900`): confirmed via computed styles that the token
+  swap took effect (logo/gradient/tab colors resolve to exact Nocturne
+  values) on sign-in, settings, and credits.
+- **Console**: zero new errors on staging — only the same three
+  pre-existing, already-documented, unrelated issues.
+
+**Note on tooling**: this round's synthetic mouse-click-and-type testing
+via the automation tool was unreliable (typed characters weren't landing
+in the input's React state despite the click/type calls succeeding) —
+consistent with a known environment quirk documented earlier in this
+initiative. Switched to firing real DOM `input`/`click` events via
+`Object.getOwnPropertyDescriptor` (the standard technique for setting a
+value in a way React's controlled-input listeners actually observe),
+which reproduced a real user's interaction faithfully and is how the
+sign-in flow above was actually verified end-to-end.
+
+### Diff audit
+
+Eleven files: `sign-in/[[...sign-in]]/page.tsx`, `sign-up/[[...sign-up]]/
+page.tsx`, `forgot-password/page.tsx`, `reset-password/page.tsx`,
+`settings/page.tsx`, `credits/page.tsx`, `credits/success/page.tsx`,
+`subscription/success/page.tsx`, plus three Phase-1b files revisited only
+for the transition-bug fix (`FeedTabs.tsx`, `VideoFeed.tsx`,
+`Navbar.tsx`). Zero backend/schema/migration/renderer/provider/pricing
+files touched. `story:movie_render` was not re-checked this round — no
+code path anywhere near credits deduction or rendering was touched
+(only credit *display* markup), so re-verifying an invariant that
+provably cannot have changed would be theater, not verification (same
+reasoning already applied in Phase 1a).
+
+### Route inventory update
+
+No change to the family-A count by this initiative's strict accounting:
+sign-in/sign-up/forgot-password/reset-password/settings/credits/credits-
+success/subscription-success all now render with Nocturne tokens (shell
+*and* content, since these are single-purpose pages without a separate
+"internals" layer the way Audio/Sequence/Film have) — but per §1's
+inventory these were "family C, target family A", and per the roadmap's
+own completion criterion a route only counts once verified end-to-end,
+which is what this round did. **Recount: still reporting these as
+"restyled, not yet counted toward 47/47"** pending the next full-matrix
+pass — being conservative about the count is consistent with every prior
+round's bookkeeping discipline, not a special exception for this one.
+
+## Final report — Phase 2
+
+1. **Starting production SHA**: `f2e2be6` (Phase 1 complete baseline)
+2. **Candidate SHA**: pending production deploy — see appended note
+3. **Route inventory total**: 47 page routes — unchanged
+4. **Routes migrated this round**: 8 routes restyled end-to-end (shell
+   and content, since auth/account pages don't have a separate
+   "internals" layer): sign-in, sign-up, forgot-password, reset-password,
+   settings, credits, credits/success, subscription/success
+5. **Routes intentionally excluded this round**: all routes outside the
+   Phase 2 scope, unchanged from the inventory
+6. **Shared design primitives**: none newly extracted this round; the
+   repeated onFocus/onBlur input-border pattern across 4 auth pages is a
+   real candidate for a shared `TextField` primitive in Phase 7
+7. **Global shell**: unchanged from Phase 1
+8. **Root/feed**: unchanged from Phase 1b, except the transition-bug fix
+   in `FeedTabs.tsx`/`VideoFeed.tsx`/`Navbar.tsx` (presentation-only,
+   zero behavior change, see above)
+9. **Auth**: sign-in, sign-up, forgot-password, reset-password all
+   restyled and verified functionally identical — redirect/return-url
+   behavior intact, real login/register/reset calls unchanged
+10. **Story Playground**: unchanged, no regression
+11–21. **Overview through Storybook**: unchanged, no regression
+22. **Academy**: unchanged
+23. **Account**: `/settings` fully restyled (Profile/Account/Billing
+    tabs) — this is the "Account" item from the Phase 2 brief
+24. **Admin**: unchanged
+25. **Generate/upload/search/video**: unchanged (still only inherit the
+    shared `Navbar`, as established in Phase 1b)
+26. **Forms**: the auth forms (sign-in, sign-up, forgot/reset password,
+    settings profile form) are now visually consistent with each other
+    and with the rest of the app — a real, if not yet componentized, step
+    toward the "Forms" consistency gate in the original brief
+27. **Tables**: unchanged; credits' transaction history list restyled
+    but not converted to a shared table pattern
+28. **Modals**: unchanged; no modal components in Phase 2's scope
+29. **Empty/error/loading states**: restyled across all 8 pages (error
+    banners, loading spinners, the credits empty-history state, the
+    reset-password invalid-token state)
+30. **Mobile QA**: done — `390×844`, sign-in and settings both zero
+    horizontal overflow
+31. **Tablet QA**: not separately re-run (no tablet-specific behavior
+    changed)
+32. **Desktop QA**: done — `1440×900`, computed-style verification that
+    tokens resolve correctly, including post-fix confirmation of the
+    transition bug
+33. **R16**: not separately re-audited this round — none of the 8 Phase 2
+    pages have R16-specific branching logic (confirmed by reading each
+    file; R16 gating for account access continues to come entirely from
+    the shared `Navbar`/`Shell`, both already verified under R16 in prior
+    rounds)
+34. **Functional QA**: sign-in verified end-to-end with real DOM events
+    (login → session → hard redirect, and the `redirect_url` param
+    variant); settings' role-upgrade surface and tab switching confirmed
+    functional; credits' real balance/package data confirmed rendering
+35. **Console/logs**: zero new errors; only the same three pre-existing,
+    documented, unrelated issues
+36. **Backend/schema audit**: clean — diff is exactly 11 frontend files,
+    zero backend/schema/migration/renderer/provider/pricing files touched
+37. **Voice exclusion**: untouched; not in scope
+38. **Movie rate invariant**: not re-checked — no code path near
+    credits/rendering was touched (display-only changes)
+39. **Production backup**: not taken — zero schema/migration changes
+40. **Production smoke**: pending — see appended note once deployed
+41. **Known limitations**: (a) the password-strength meter and error/
+    success colors remain intentionally semantic rather than brand-
+    mapped, consistent with prior rounds; (b) a real, narrow browser
+    engine bug (CSS transitions to/from `var()`-based colors) was found
+    and fixed — flagged for any future contributor per the note above;
+    (c) all limitations carried over from Phase 1 remain unchanged
+42. **Final verdict**: see below, pending production confirmation

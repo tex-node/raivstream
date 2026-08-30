@@ -70,7 +70,7 @@ export function Navbar() {
               href={href}
               className="px-3 py-1.5 rounded-lg text-sm transition-colors"
               style={{
-                color: pathname === href ? 'var(--noc-t1)' : 'var(--noc-t5)',
+                color: pathname === href ? '#F7F8FC' : '#9397ab',
                 background: pathname === href ? 'rgba(178,90,217,0.14)' : 'transparent',
               }}
             >

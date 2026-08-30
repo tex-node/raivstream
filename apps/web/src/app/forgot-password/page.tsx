@@ -38,44 +38,44 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#050b18' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--noc-page)' }}>
       {/* Ambient glow */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(120,60,220,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,90,217,0.18) 0%, transparent 70%)',
         }}
       />
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}
-        <Link href="/" className="block text-center text-white font-extrabold text-2xl mb-8">
-          Raiv<span style={{ color: '#a78bfa' }}>stream</span>
+        <Link href="/" className="block text-center font-extrabold text-2xl mb-8" style={{ color: 'var(--noc-t1)' }}>
+          Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
         </Link>
 
         <div
           className="rounded-2xl p-8 border"
-          style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'var(--noc-card)', borderColor: 'var(--noc-hairline)' }}
         >
           {step === 'form' ? (
             <>
               <div className="mb-6">
-                <h1 className="text-white text-xl font-bold mb-1">Forgot your password?</h1>
-                <p className="text-white/40 text-sm">
+                <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--noc-t1)' }}>Forgot your password?</h1>
+                <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>
                   Enter your email and we&apos;ll send you a reset link.
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm px-4 py-3 rounded-xl">
+                  <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>
                     {error}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs text-white/40 font-medium mb-1.5 uppercase tracking-wider">
+                  <label className="block text-xs font-medium mb-1.5 uppercase tracking-wider" style={{ color: 'var(--noc-t6)' }}>
                     Email address
                   </label>
                   <input
@@ -87,25 +87,26 @@ export default function ForgotPasswordPage() {
                     maxLength={254}
                     autoComplete="email"
                     autoFocus
-                    className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none transition-colors placeholder-white/25"
+                    className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors"
                     style={{
-                      background:   'rgba(255,255,255,0.06)',
-                      border:       '1px solid rgba(255,255,255,0.10)',
+                      background:   'var(--noc-card)',
+                      border:       '1px solid var(--noc-hairline)',
+                      color:        'var(--noc-t1)',
                     }}
-                    onFocus={(e) => (e.target.style.borderColor = 'rgba(167,139,250,0.6)')}
-                    onBlur={(e)  => (e.target.style.borderColor = 'rgba(255,255,255,0.10)')}
+                    onFocus={(e) => (e.target.style.borderColor = 'rgba(178,90,217,0.6)')}
+                    onBlur={(e)  => (e.target.style.borderColor = 'rgba(233,233,237,0.08)')}
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-50 hover:opacity-90 mt-1"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)' }}
+                  className="w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 hover:opacity-90 mt-1"
+                  style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(11,13,20,0.3)', borderTopColor: '#0B0D14' }} />
                       Sending…
                     </span>
                   ) : 'Send reset link'}
@@ -117,28 +118,28 @@ export default function ForgotPasswordPage() {
             <div className="text-center py-2">
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
-                style={{ background: 'rgba(124,58,237,0.15)' }}
+                style={{ background: 'rgba(178,90,217,0.15)' }}
               >
-                <svg className="w-7 h-7" fill="none" stroke="#a78bfa" viewBox="0 0 24 24">
+                <svg className="w-7 h-7" fill="none" stroke="var(--noc-lavender-tint)" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h2 className="text-white font-bold text-lg mb-2">Check your inbox</h2>
-              <p className="text-white/40 text-sm leading-relaxed mb-1">
-                If <span className="text-white/70">{email}</span> is registered, a password
-                reset link has been sent. It expires in <strong className="text-white/60">1 hour</strong>.
+              <h2 className="font-bold text-lg mb-2" style={{ color: 'var(--noc-t1)' }}>Check your inbox</h2>
+              <p className="text-sm leading-relaxed mb-1" style={{ color: 'var(--noc-t6)' }}>
+                If <span style={{ color: 'var(--noc-t3)' }}>{email}</span> is registered, a password
+                reset link has been sent. It expires in <strong style={{ color: 'var(--noc-t4)' }}>1 hour</strong>.
               </p>
-              <p className="text-white/30 text-xs mt-3">
+              <p className="text-xs mt-3" style={{ color: 'var(--noc-t6)' }}>
                 Don&apos;t see it? Check your spam folder.
               </p>
             </div>
           )}
         </div>
 
-        <p className="text-white/30 text-center text-sm mt-6">
+        <p className="text-center text-sm mt-6" style={{ color: 'var(--noc-t6)' }}>
           Remembered it?{' '}
-          <Link href="/sign-in" className="text-violet-400 hover:text-violet-300 transition-colors">
+          <Link href="/sign-in" className="transition-colors text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)]">
             Back to sign in
           </Link>
         </p>

@@ -40,8 +40,8 @@ function SuccessContent() {
   if (status === 'verifying') {
     return (
       <div className="flex flex-col items-center gap-4">
-        <div className="w-14 h-14 border-4 border-white/20 border-t-pink-500 rounded-full animate-spin" />
-        <p className="text-white/60 text-sm">Verifying your payment…</p>
+        <div className="w-14 h-14 rounded-full animate-spin" style={{ border: '4px solid rgba(233,233,237,0.15)', borderTopColor: 'var(--noc-magenta)' }} />
+        <p className="text-sm" style={{ color: 'var(--noc-t5)' }}>Verifying your payment…</p>
       </div>
     );
   }
@@ -49,28 +49,30 @@ function SuccessContent() {
   if (status === 'success') {
     return (
       <div className="flex flex-col items-center gap-6 text-center">
-        <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center">
-          <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'rgba(47,191,113,0.15)' }}>
+          <svg className="w-10 h-10" style={{ color: '#2fbf71' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Credits added!</h1>
-          <p className="text-white/50 text-sm mt-2">
-            <span className="text-white font-semibold text-lg">{credits?.toLocaleString()}</span> credits
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--noc-t1)' }}>Credits added!</h1>
+          <p className="text-sm mt-2" style={{ color: 'var(--noc-t6)' }}>
+            <span className="font-semibold text-lg" style={{ color: 'var(--noc-t1)' }}>{credits?.toLocaleString()}</span> credits
             have been added to your balance.
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <button
             onClick={() => router.push('/generate')}
-            className="w-full py-3.5 bg-pink-500 hover:bg-pink-600 rounded-2xl font-semibold text-sm transition-colors"
+            className="w-full py-3.5 rounded-2xl font-semibold text-sm transition-colors hover:opacity-90"
+            style={{ background: 'var(--noc-magenta)', color: '#0B0D14' }}
           >
             Start Generating
           </button>
           <button
             onClick={() => router.push('/credits')}
-            className="w-full py-3 border border-white/10 hover:border-white/20 rounded-2xl text-white/60 hover:text-white text-sm transition-colors"
+            className="w-full py-3 rounded-2xl text-sm transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
+            style={{ border: '1px solid var(--noc-hairline)' }}
           >
             View Balance
           </button>
@@ -81,18 +83,19 @@ function SuccessContent() {
 
   return (
     <div className="flex flex-col items-center gap-6 text-center">
-      <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center">
-        <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'rgba(227,93,93,0.15)' }}>
+        <svg className="w-10 h-10" style={{ color: '#e35d5d' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-white">Payment issue</h1>
-        <p className="text-white/50 text-sm mt-2">{error}</p>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--noc-t1)' }}>Payment issue</h1>
+        <p className="text-sm mt-2" style={{ color: 'var(--noc-t6)' }}>{error}</p>
       </div>
       <button
         onClick={() => router.push('/credits')}
-        className="px-8 py-3.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-sm font-semibold transition-colors"
+        className="px-8 py-3.5 rounded-2xl text-sm font-semibold transition-colors"
+        style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)', color: 'var(--noc-t1)' }}
       >
         Back to Credits
       </button>
@@ -102,9 +105,9 @@ function SuccessContent() {
 
 export default function CreditSuccessPage() {
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
       <Suspense fallback={
-        <div className="w-10 h-10 border-4 border-white/20 border-t-pink-500 rounded-full animate-spin" />
+        <div className="w-10 h-10 rounded-full animate-spin" style={{ border: '4px solid rgba(233,233,237,0.15)', borderTopColor: 'var(--noc-magenta)' }} />
       }>
         <SuccessContent />
       </Suspense>
