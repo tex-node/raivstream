@@ -82,13 +82,17 @@ jobs:
           pnpm --filter @raivstream/database exec prisma validate
           pnpm --filter @raivstream/database db:generate
 
+          echo "==> Cleaning previous Next.js build output..."
+          # Must run before type-check, not just before build: tsc reads
+          # .next/types/*, and a deploy that removes/renames an app-router
+          # route leaves stale generated .d.ts files pointing at files that
+          # no longer exist, failing type-check before this cleanup ever ran.
+          rm -rf apps/web/.next
+
           echo "==> Running API and web validation..."
           pnpm --filter @raivstream/api type-check
           pnpm --filter @raivstream/web type-check
           pnpm --filter @raivstream/web lint --max-warnings=0
-
-          echo "==> Cleaning previous Next.js build output..."
-          rm -rf apps/web/.next
 
           echo "==> Building web app..."
           pnpm --filter @raivstream/web build
