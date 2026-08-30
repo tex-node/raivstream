@@ -107,17 +107,8 @@ export function Shell({
   const savedVisible = showSaved && !!user;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100dvh',
-        background: 'var(--noc-page)',
-        maxWidth: '440px',
-        margin: '0 auto',
-        position: 'relative',
-      }}
-    >
+    <div className="noc-shell-viewport">
+    <div className="noc-shell-frame">
       {/* App bar */}
       <div
         style={{
@@ -156,21 +147,12 @@ export function Shell({
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-        ) : !title ? (
-          <Link
-            href="/story-playground"
-            style={{
-              fontWeight: 700,
-              fontSize: '15px',
-              color: 'var(--noc-t1)',
-              textDecoration: 'none',
-              letterSpacing: '-0.01em',
-              flexShrink: 0,
-            }}
-          >
-            Raiv<span style={{ color: 'var(--noc-purple)' }}>stream</span>
-          </Link>
         ) : null}
+        {/* No brand wordmark here: the handoff's own README is explicit
+            that the reviewer-only chrome around the phone preview
+            ("brand + Desktop/Mobile/R16 switch") "are not product UI" —
+            the app bar itself never specifies one, and Home's own H1
+            ("What are we making today?") is the actual heading. */}
 
         <div style={{ flex: 1, minWidth: 0 }}>
           {title && (
@@ -228,6 +210,7 @@ export function Shell({
       {activeTab && (
         <TabBar activeTab={activeTab} projectId={projectId} />
       )}
+    </div>
     </div>
   );
 }
