@@ -1,29 +1,37 @@
 # Application-Wide UI Reconciliation
 
-Status: **PHASE 2 COMPLETE (SHA `470bcc4`) — global shell/top-level nav,
-the legacy feed's shell, and auth + account/settings all restyled onto
-Nocturne; route-by-route migration for the remaining phases (3 onward)
-not yet started.** This document is the live route inventory,
-design-system plan, and phased roadmap for the "RAIVSTREAM —
-APPLICATION-WIDE UI SYSTEM RECONCILIATION" initiative. It is being built
-incrementally across multiple rounds; see "Execution status", "Phase 1
-execution", "Phase 1b: feed shell restyle", and "Phase 2: Auth +
-Account/Settings" for what has actually shipped vs. "Next phase:
-route-by-route migration" for what's planned but not yet built.
+Status: **PHASE 2 FORMALLY CLOSED — PASS (SHA `f70c08d`)** — global
+shell/top-level nav, the legacy feed's shell, the real brand logo, and
+auth + account/settings (formally audited and re-verified against the
+full Phase 2 spec, including a real desktop-composition fix) are all
+restyled onto Nocturne; route-by-route migration for the remaining
+phases (3 onward) not yet started, and not auto-started per explicit
+instruction. This document is the live route inventory, design-system
+plan, and phased roadmap for the "RAIVSTREAM — APPLICATION-WIDE UI
+SYSTEM RECONCILIATION" initiative. It is being built incrementally
+across multiple rounds; see "Execution status", "Phase 1 execution",
+"Phase 1b: feed shell restyle", "Phase 2: Auth + Account/Settings", and
+"PHASE 2 — AUTH + ACCOUNT / SETTINGS (formal audit + re-verification)"
+for what has actually shipped vs. "Next phase: route-by-route migration"
+for what's planned but not yet built.
 
-**Baseline for all future work on this initiative: `470bcc4`**
-(supersedes `f2e2be6`, `9536a4e`, and, before that, `f8ffe55`). This is
-the production SHA as of Phase 2's completion: route inventory +
-UI-family classification + design-system gap analysis + the Audio/
+**Baseline for all future work on this initiative: `f70c08d`**
+(supersedes `470bcc4`, `f2e2be6`, `9536a4e`, and, before that, `f8ffe55`).
+This is the production SHA as of Phase 2's formal close: route inventory
++ UI-family classification + design-system gap analysis + the Audio/
 Sequence/Film/Storybook shell fix + global top-level navigation in
 `Shell` + the legacy feed's own shell (`Navbar`/`FeedTabs`/`VideoFeed`
-chrome/`PaywallModal`) restyled onto Nocturne + sign-in/sign-up/forgot-
-password/reset-password/settings/credits/credits-success/subscription-
-success all fully restyled and verified, root `/` preserved exactly as
-the feed product (not redirected, not removed). It is explicitly *not*
-the endpoint — see the completion criterion at the end of "Next phase"
-below. Any session continuing this initiative should treat `470bcc4` as
-its starting point, re-read this document in full before making changes,
+chrome/`PaywallModal`) restyled onto Nocturne + the real
+`raivstream-logofull.png` brand asset replacing every text wordmark +
+sign-in/sign-up/forgot-password/reset-password/settings/credits/
+credits-success/subscription-success all fully restyled, formally
+audited against a complete route inventory, and re-verified end-to-end
+on both staging and production with disposable accounts via genuine UI
+actions, root `/` preserved exactly as the feed product (not redirected,
+not removed). It is explicitly *not* the endpoint — see the completion
+criterion at the end of "Next phase" below. Any session continuing this
+initiative should treat `f70c08d` as its starting point, re-read this
+document in full before making changes,
 and **not reopen already-qualified Story Playground behavior** (the 8
 canonical `/story-playground/[projectId]/*` screens and the
 responsive-desktop work already shipped and verified in `docs/
@@ -1172,3 +1180,182 @@ application-wide reconciliation being complete. It is complete only when
 the route matrix reaches something close to 47/47 migrated or explicitly
 product-excluded, per the completion criterion recorded in "Next phase:
 route-by-route migration" above.
+
+## PHASE 2 — AUTH + ACCOUNT / SETTINGS (formal audit + re-verification)
+
+This section formalizes and extends the Phase 2 work already recorded
+above (baseline `f2e2be6` → `470bcc4`, then the logo swap → `5e7a7d8`),
+against a more exhaustive audit checklist. It does not repeat what's
+already documented; it adds what a stricter pass required: a real route
+inventory table, HTTP-level hard-load tests, a full disposable-account
+walkthrough via genuine UI actions on both staging and **production**,
+and one real desktop-composition fix.
+
+**Starting SHA for this round: `5e7a7d8`** — confirmed as local branch
+HEAD, the production-deployed SHA (`git rev-parse HEAD` on the VPS), and
+the SHA the instruction named, all three in agreement. Working tree
+carried only the same pre-existing untracked leftovers documented in
+every prior round of this initiative (env backups, old smoke scripts,
+`migration_lock.toml`) — none absorbed into this phase's diff.
+
+### Phase 2 route inventory
+
+| Route | Purpose | Auth required | Role req. | R16 behavior | Current UI family (pre-round) | Data source | Mutations | Target UI | Action |
+|---|---|---|---|---|---|---|---|---|---|
+| `/sign-in` | Credentials sign-in | No | — | Allowed (not blocked) | C (legacy) | — | `fetch /api/auth/login` | A | FULL MIGRATION |
+| `/sign-up` | Registration | No | — | Allowed | C | — | `fetch /api/auth/register` | A | FULL MIGRATION |
+| `/forgot-password` | Request reset link | No | — | Allowed | C | — | `fetch /api/auth/forgot-password` | A | FULL MIGRATION |
+| `/reset-password` | Consume reset token | No | — | Allowed | C | — | `fetch /api/auth/reset-password` | A | FULL MIGRATION |
+| `/settings` (Profile/Account/Billing) | Account home | Yes — middleware-protected, redirects to `/sign-in?redirect_url=...` | none for Profile/Billing view; `becomeCreator` mutation self-service | Middleware-blocked entirely (redirects to `/`) | C | `user.getProfile` | `user.updateProfile`, `user.becomeCreator`, `POST /api/stripe/billing-portal` | A | FULL MIGRATION |
+| `/credits` | Balance + purchase + history | No (client-checked; not middleware-protected) | none | Middleware-blocked entirely (redirects to `/`) | C | `user.creditBalance`, `user.creditHistory` | `POST /api/paystack/initialize` | A | FULL MIGRATION |
+| `/credits/success` | Paystack purchase callback | No | none | Not blocked | C | `GET /api/paystack/verify` | none | A | FULL MIGRATION |
+| `/subscription/success` | Post-subscribe confirmation | Yes — middleware-protected | none | Not blocked | C | none | none | A | FULL MIGRATION |
+
+**Routes searched for and confirmed NOT PRESENT** (verified against
+`packages/database/schema.prisma` and the full `apps/web/src/app` route
+tree, not assumed): a dedicated email-verification route/flow (no
+`emailVerified`/`verificationToken` field exists in the schema —
+registration signs a user in directly), a dedicated
+unauthorized/forbidden page (protected routes redirect to `/sign-in`;
+R16-blocked routes redirect to `/`; both are middleware-level, both
+pre-existing, neither changed), `Application`/`Reservation`/`Membership`/
+`Order` Prisma models (none exist — this product has no participant-
+application, reservation, membership, or order concept at all), and a
+dedicated notification-preferences settings panel (`/notifications`
+exists as a feed-family route showing the notification *list*, not a
+preferences page — out of Phase 2's scope, inherits only the shared
+`Navbar`).
+
+**"Roles/Applications" resolved**: there is no separate route. It is the
+Settings → Account tab's "Become a creator" button
+(`user.becomeCreator.mutate()`), confirmed by reading the code and by
+triggering the real mutation in this round's walkthrough (role flipped
+`VIEWER` → `CREATOR` server-side, verified via a fresh `/api/auth/me`
+fetch, not just the optimistic UI).
+
+### Additional verification this round
+
+- **Route hard-load tests** (Section 36): all 8 routes hard-loaded via
+  `curl -L`, HTTP status and final URL recorded. All returned `200`. The
+  two middleware-protected routes (`/settings`, `/subscription/success`)
+  correctly resolved to `/sign-in?redirect_url=...` when signed out — no
+  404s, no redirect loops. `reset-password` with no token and with a
+  garbage token both returned `200` (client-side state handling, matching
+  the code's `useEffect`-driven `step` logic).
+- **Reset-password invalid-token path, live**: submitted a real password
+  through the form with `?token=invalid-garbage-token-12345` against
+  **production** (safe — no real account touched, purely exercises the
+  reject path) and confirmed the server's actual rejection message
+  rendered cleanly in the restyled error banner: *"Reset link is invalid
+  or has expired. Please request a new one."* — no stack trace, no
+  internal detail, matching Section 33's requirement.
+- **A real profile-save mutation bug in the test methodology, not the
+  product**: the first attempt to verify Settings' "Save changes" via
+  `document.querySelector('button[type="submit"]')` silently hit
+  `Navbar`'s hidden search-form submit button instead (the page has two
+  `button[type="submit"]` elements; `querySelector` returns the first in
+  DOM order, which is Navbar's). Caught by re-fetching the profile
+  server-side and finding the edit hadn't persisted. Corrected by
+  targeting the button by its actual text, then confirmed the real
+  mutation fires and persists (`user.getProfile` re-fetch showed the
+  updated display name). Recorded here because it's a real trap for any
+  future round's own verification scripts, not because the product had a
+  bug.
+- **Full disposable-account walkthrough, staging, via genuine UI
+  actions** (native `input`/`click` events through React's controlled-
+  input listeners, not an API bypass): register → real session confirmed
+  → Settings Profile tab, real `updateProfile` mutation verified
+  persisted → Settings Account tab, real `becomeCreator` mutation
+  verified (`VIEWER` → `CREATOR`, server-confirmed) → Credits, real
+  zero-balance/empty-history state confirmed → Sign out, session cleared
+  confirmed → hard-reload `/settings`, server-enforced redirect to
+  `/sign-in?redirect_url=%2Fsettings` confirmed. Disposable account
+  deleted, `verifiedGone: true`.
+- **The same full walkthrough repeated on production** with a second,
+  separate disposable account (registration → settings → credits →
+  logout → protected-route denial), all zero-cost actions only — no
+  "Buy" click, no balance edits, no other users' data touched. Disposable
+  account deleted, `verifiedGone: true`.
+- **R16, server-enforced, both environments, both viewports**: direct
+  URL access to `/credits?r16=1` and `/settings?r16=1` on both staging
+  and **production** correctly redirected to `/` (middleware-level,
+  `R16_BLOCKED_ROUTES`, unchanged by this round). `/sign-in?r16=1`
+  correctly remained accessible (R16 users still need to authenticate) at
+  both `390×844` and `1440×900`, zero overflow, on production.
+- **A real desktop-composition fix, not just a re-check**: the auth
+  pages' `1440×900` presentation was re-evaluated against the spec's
+  explicit fail condition ("a mobile login card floating in a giant empty
+  screen"). The existing centered-card-with-ambient-glow pattern is a
+  legitimate, established convention (matches Stripe/Linear-style auth
+  screens, and was already this app's own convention across all 4 auth
+  pages) — but it read as borderline rather than unambiguously
+  intentional. Widened the card `max-w-sm` → `max-w-sm lg:max-w-md`
+  (384px → 448px at desktop only; mobile unaffected, confirmed via
+  `getBoundingClientRect` on both staging and production: 448px at
+  `1440×900`, 358px — viewport-constrained, not `max-w-sm`-constrained —
+  at `390×844`) and added a second, asymmetric cyan ambient glow opposite
+  the existing purple one, across all 4 auth pages. This is the one
+  actual code change in this round beyond what "Phase 2" already shipped
+  — see the diff audit below.
+- **Production logs, post-deploy and post-smoke**: `pm2 logs
+  raivstream-web` inspected for the deploy/smoke window. Found: repeated
+  `Failed to find Server Action "..."` errors — classified
+  **ENVIRONMENTAL/EXPECTED**, not a regression: this is standard Next.js
+  behavior whenever a build redeploys while a client still holds an older
+  page in memory (build-hash-scoped server-action IDs become stale) — it
+  would recur after *any* deploy this session, regardless of what
+  changed, and none of Phase 2's files use Server Actions (every auth/
+  account mutation in this codebase goes through `fetch()` calls to
+  `/api/*` routes, confirmed by reading the code). A handful of `[Error:
+  aborted] { code: 'ECONNRESET' }` entries — classified **EXPECTED**,
+  standard client-disconnect artifacts consistent with automated
+  navigation-away during testing. Searched specifically for any error
+  mentioning auth/settings/credits/sign-in/sign-up/forgot/reset/profile:
+  found none beyond the generic `ECONNRESET` already classified. **Zero
+  NEW REGRESSION.**
+
+### Diff audit (this round)
+
+Four files, all within the already-established Phase 2 scope:
+`sign-in/[[...sign-in]]/page.tsx`, `sign-up/[[...sign-up]]/page.tsx`,
+`forgot-password/page.tsx`, `reset-password/page.tsx` — one class-string
+change each (card width) plus one style-string change each (ambient
+glow). Zero backend/schema/migration/renderer/provider/pricing files.
+Confirmed via `git status --short packages/database/` showing only the
+same pre-existing untracked `migration_lock.toml` leftover, not a new
+migration.
+
+### Production safety (this round's deploy)
+
+Fresh backup taken immediately before deploy:
+`/root/raivstream/backups/pre_phase2_auth_account_5e7a7d8_20260830-134843.sql`
+(1.4 MB, real `pg_dump` output against the production `DATABASE_URL`).
+Zero migrations confirmed. `story:movie_render` re-confirmed unchanged at
+exactly 100 credits immediately before deploy. Deployed via the standard
+`main` push → GitHub Actions pipeline (commit `f70c08d`), build succeeded
+in 2m37s, `/api/health` healthy post-deploy, deployed SHA confirmed via
+`git rev-parse HEAD` on the VPS matching the pushed commit exactly.
+
+### Phase 2 final verdict (this round)
+
+**PHASE 2 — AUTH + ACCOUNT / SETTINGS — PASS**
+
+Every route discovered in the formal audit was migrated, verified
+functionally identical (real registration, real sign-in with the
+`redirect_url` return-url mechanism, real profile/role mutations, real
+protected-route and R16 server-enforcement, real error-path rendering),
+hard-load tested, and re-verified on both staging and production with
+disposable accounts created through genuine UI actions and fully cleaned
+up afterward. The one real code change this round (the desktop
+composition widening) was itself verified end-to-end before being
+declared done. No backend/schema/domain file was touched. `story:
+movie_render` remains exactly 100. Zero new production errors.
+
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS —
+PHASE 2 OF 8 COMPLETE**
+
+Final SHA for this round: `f70c08da9dd60001bf64ccc9f6fe53f9d6c5a264`
+(short: `f70c08d`). This is now the baseline for Phase 3 (Legacy Feed
+Family Content Migration), per the roadmap — **not started
+automatically**; Phase 2 is formally closed here and Phase 3 begins only
+on explicit instruction.
