@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
-import { Skeleton } from '@/components/mobile/primitives';
+import { Skeleton, SectionLabel } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
@@ -136,6 +137,44 @@ export default function MobileProjectOverviewPage() {
             Characters
           </button>
         </div>
+
+        {/* The design handoff's 8 mobile screens don't cover Audio, Film, or
+            Storybook — no mobile design was supplied for them. Rather than
+            silently dropping access to already-qualified production
+            capability, these link straight into the existing, unmodified
+            desktop-styled implementation. Hidden for R16, matching the
+            desktop workspace's own tab visibility rule. */}
+        {!isR16 && (
+          <div>
+            <SectionLabel>More</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+              {[
+                { label: 'Audio', tab: 'audio' },
+                { label: 'Sequence', tab: 'sequence' },
+                { label: 'Film', tab: 'film' },
+                { label: 'Storybook', tab: 'storybook' },
+              ].map((item) => (
+                <Link
+                  key={item.tab}
+                  href={`/story-playground/${projectId}?tab=${item.tab}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '11px 0',
+                    borderBottom: '1px solid var(--noc-rule)',
+                    textDecoration: 'none',
+                    color: 'var(--noc-t2)',
+                    fontSize: 13.5,
+                  }}
+                >
+                  {item.label}
+                  <span style={{ color: 'var(--noc-t6)', fontSize: 12 }}>Open →</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Shell>
   );

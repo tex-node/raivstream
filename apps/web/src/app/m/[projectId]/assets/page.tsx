@@ -40,7 +40,7 @@ export default function MobileAssetsPage() {
   const allAssets = scenes.flatMap((scene) =>
     (scene.assets ?? [])
       .filter((a: any) => a.status === 'READY')
-      .map((a: any) => ({ ...a, sceneIndex: scene.orderIndex })),
+      .map((a: any) => ({ ...a, sceneIndex: scene.orderIndex, isActive: a.id === scene.activeImageAssetId })),
   );
   const visibleAssets = filter === 'favorites' ? allAssets.filter((a) => a.isFavorite) : allAssets;
   const favoriteCount = allAssets.filter((a) => a.isFavorite).length;
@@ -103,6 +103,19 @@ export default function MobileAssetsPage() {
                   <p style={{ fontSize: 11, color: 'var(--noc-t6)', margin: '2px 0 0' }}>
                     {asset.width && asset.height ? `${asset.width}×${asset.height}` : asset.assetType}
                   </p>
+                  {(asset.isActive || asset.isLatest || asset.approvedAt) && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                      {asset.isActive && (
+                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(79,214,232,0.14)', color: 'var(--noc-cyan-tint)' }}>ACTIVE</span>
+                      )}
+                      {asset.isLatest && (
+                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(233,233,237,0.08)', color: 'var(--noc-t4)' }}>LATEST</span>
+                      )}
+                      {asset.approvedAt && (
+                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(47,191,113,0.14)', color: '#2fbf71' }}>APPROVED</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
