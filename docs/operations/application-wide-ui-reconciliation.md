@@ -1183,6 +1183,7 @@ route-by-route migration" above.
 
 ## PHASE 2 — AUTH + ACCOUNT / SETTINGS (formal audit + re-verification)
 
+
 This section formalizes and extends the Phase 2 work already recorded
 above (baseline `f2e2be6` → `470bcc4`, then the logo swap → `5e7a7d8`),
 against a more exhaustive audit checklist. It does not repeat what's
@@ -1359,3 +1360,241 @@ Final SHA for this round: `f70c08da9dd60001bf64ccc9f6fe53f9d6c5a264`
 Family Content Migration), per the roadmap — **not started
 automatically**; Phase 2 is formally closed here and Phase 3 begins only
 on explicit instruction.
+
+## PHASE 2 — RE-VERIFICATION ROUND (R16 sign-in coverage, forgot/reset-
+## password edge cases, desktop Credits, animation-artifact correction)
+
+A coverage-and-hygiene round, not a code round: **zero source files
+changed**. Confirmed via `git diff --stat` (empty) and `git diff d2b6b54
+--stat` (empty) — HEAD at the start and end of this round is `d2b6b54`,
+which is `f70c08d` plus the Phase 2 formal-audit docs commit. Every
+finding below either reconfirms prior work against real staging/
+production, closes a gate the prior round left open, or corrects a claim
+this document previously made too strongly.
+
+### Session note: an environment mix-up, caught before it caused harm
+
+Partway through this round, a local `git status`/`diff` check silently
+landed in an **unrelated Raivstream prototype checkout**
+(`C:\Users\XPS\OneDrive\Documents\Claude\Raivstream\raivstream` — a
+different, single-commit, Clerk-auth, Stripe-subscription scaffold with
+no shared git history, no credit-ledger system, and no relation to this
+application) rather than this repository. This was caught immediately —
+before any conclusion was written down — by noticing the returned commit
+history didn't match, forcing a full stop and a forensic identity check
+rather than proceeding on an assumption. Full writeup of that detour
+lives in the *other* repository at `docs/repository-identity-audit.md`;
+it is not duplicated here since it doesn't describe this application.
+Recovery: the correct checkout (this one) was located at
+`C:\Raiv\raivstream-phase9b2-audio`, and its identity was verified before
+resuming — branch `codex/ui-mobile-handoff-production`, local HEAD
+`d2b6b54`, matched byte-for-byte against the **actual deployed**
+production SHA (`git rev-parse HEAD` on the VPS, cross-checked against
+`https://app.raivstream.com/api/health` returning `200 healthy`) — not
+assumed from memory. Everything below was verified from this confirmed-
+correct checkout and the real staging server
+(`raivstream-phase9b2-audio-staging`, `81.0.246.223:3037`); the browser-
+and file-based testing earlier in this same investigation had, in fact,
+already been running against this same correct environment throughout —
+only the one drifted `git`/diff step needed redoing, which is reflected
+in the diff-audit result above.
+
+### R16 sign-in check — mobile and desktop, a real gap against expectation
+
+Verified via direct DOM inspection of `sign-in/[[...sign-in]]/page.tsx`
+under `?r16=1`, at both `390×844` and `1440×900`:
+
+- **Reachable**: yes, at both viewports, no errors.
+- **No account/settings navigation or advanced account controls leak
+  into the signed-out surface**: confirmed — the page renders exactly 3
+  links (`/`, `/forgot-password`, `/sign-up`), no `<nav>`, no `<aside>`,
+  nothing resembling Settings/Credits/Account.
+- **The distinct R16 "Kids" wordmark does NOT appear** — this is a real
+  finding, not a pass. The page always renders `<img alt="Raivstream"
+  src="/brand/raivstream-logofull.png">`, the full brand logo, with zero
+  R16-awareness, at both viewports. This is **pre-existing behavior, not
+  a regression**: the "R16 Kids" text variant exists in exactly one
+  place in the codebase, `Navbar.tsx` (confirmed in Phase 1b's own audit
+  above), and `/sign-in` — along with `/sign-up`, `/forgot-password`, and
+  `/reset-password`, which share the identical logo-rendering pattern —
+  has never used `Navbar` and was never given its own R16 branching logic
+  in any round of this initiative, including this one (this round made
+  zero code changes). The original text wordmark these pages had before
+  Phase 2's restyle was equally not R16-aware; the restyle correctly
+  preserved that, neither adding nor removing R16 logic, consistent with
+  Phase 2's "no auth-logic changes" boundary. **Recorded as a genuine gap
+  against the stated expectation** (an R16-distinct sign-in wordmark),
+  not silently corrected or assumed away — if a distinct R16 sign-in
+  identity is wanted, it is new scope, not something this initiative's
+  presentation-only mandate can add on its own.
+
+### Reset-password — invalid and missing-token states
+
+Both states re-confirmed live on staging, real form submission (not a
+mocked state):
+
+- **Invalid token** (`?token=staging-invalid-token-qa-check`): real
+  server rejection renders cleanly in the restyled error banner —
+  *"Reset link is invalid or has expired. Please request a new one."*
+  — same message and rendering already verified in the prior formal-
+  audit round; form stays interactive after the error.
+- **Missing token** (no `?token=` param at all): a distinct client-side
+  state — *"Invalid reset link"* — renders correctly. This specific case
+  (token entirely absent, vs. present-but-garbage) had not been
+  separately exercised in a prior round's writeup; now confirmed as its
+  own correctly-handled branch of the page's `useEffect`-driven state.
+
+### Forgot-password — success and error behavior
+
+- **Success path, both existing and non-existent email**: reconfirmed —
+  identical response and identical rendered copy ("Check your inbox...
+  if X is registered, a password reset link has been sent") for a real
+  registered email and a fabricated one. Privacy-safe, no account
+  enumeration, matching `apps/web/src/app/api/auth/forgot-password/
+  route.ts`'s own logic (always returns `{success:true}`/200 regardless
+  of whether `requestPasswordReset` found a user).
+- **Error path (malformed email)**: confirmed correct **at the API
+  level** — a direct `fetch('/api/auth/forgot-password', {body:
+  {email:'not-an-email'}})` returns `400 {"error":"A valid email is
+  required"}`, and the same error-banner rendering already proven
+  elsewhere in this document would display it correctly. **Not cleanly
+  reachable through the real form by a genuine user**, however: the
+  input's native `type="email"` + `required` attributes trigger the
+  browser's own HTML5 validation and block form submission before
+  React's `onSubmit` (and therefore the `fetch` call) ever fires, for
+  any value that doesn't look like an email address. This was confirmed
+  by attempting to force a submission past that native gate via direct
+  JS manipulation of the input's `type`/`required` attributes — the
+  attempt did not cleanly bypass it. **This is a reassuring finding, not
+  a defect**: it means the 400 path exists and is correct at the API
+  boundary (defense in depth, e.g. against a non-browser client), while
+  a real user typing garbage into the field is stopped even earlier, by
+  the browser itself, and never sees a network round-trip at all.
+
+### Desktop pass — Account/Profile/Settings/Credits
+
+- **Settings** (`1440×900`): 672px-wide centered content column, no
+  horizontal overflow, consistent with the desktop-composition standard
+  already established for auth pages in the prior round. Tabs (Profile/
+  Account/Billing) switch correctly by `className`/active-state on every
+  click.
+- **Credits** (`1440×900`): real balance and data rendered against the
+  QA account's actual state (260 credits), the three-tier "Buy Credits"
+  package list, the full "what credits unlock" per-generation pricing
+  table, and a long real transaction history. **`story:movie_render`
+  reconfirmed unchanged at exactly 100 credits** — visible directly in
+  the transaction history's own line items (`Story movie render / -100`,
+  repeated across many real entries), not merely queried separately.
+  Layout reads correctly at desktop width, no broken structure.
+
+### The tab-underline "browser-engine bug" claim — corrected
+
+The prior round's writeup above ("A real bug found and fixed: CSS custom
+properties don't transition reliably") is **too strong and is corrected
+here**. Re-testing Settings' tab switcher this round — with the literal-
+hex fix from that round already in place — reproduced the identical
+"wrong tab lit up" visual symptom the prior round believed it had fixed.
+Investigating with the Web Animations API (`element.getAnimations()`)
+found the actual mechanism: every color transition on the tab buttons
+was frozen at `playState: "running", currentTime: 0` — never advancing,
+even seconds after the click, regardless of the button's `className`
+being correct. Cross-checking `document.hidden`/`visibilityState` showed
+this correlates with, but is not fully explained by, the automated
+Browser pane's own tab-visibility state (a known, separately-documented
+environment quirk of this testing tool). The decisive test: **cancelling
+the frozen animations directly** (`getAnimations().forEach(a =>
+a.cancel())`) and re-reading computed style immediately showed the
+**correct** value in every case — the active tab's border resolved to
+the exact Nocturne magenta, inactive tabs to transparent, instantly and
+correctly, with no transition involved.
+
+This proves the underlying class-based color logic was correct all
+along, both before and after the prior round's literal-hex substitution
+— what was actually "stuck" was this automated testing pane's own
+animation-frame clock, not the shipped product's CSS. A real user's
+browser composites continuously at the display's refresh rate regardless
+of any external screenshot/render request, so this specific freeze
+mechanism would not occur for a real user in the first place.
+**Correction, not a retraction of the fix itself**: the literal-hex
+substitution made in the prior round (`var(--noc-magenta)` →
+`#d946a8` and equivalents in `FeedTabs.tsx`/`VideoFeed.tsx`/`Navbar.tsx`/
+the sign-up/reset-password confirm-password borders) is harmless and is
+being left in place — it does not need reverting — but the claim that it
+fixed a "real, narrow browser-engine bug" should be read instead as: **no
+product-facing color-transition bug was ever conclusively demonstrated;
+the original symptom was most likely this testing tool's own animation-
+clock artifact.** Any future round should not treat "CSS transitions
+to/from `var(--noc-*)` values get stuck" as an established fact about
+this app's target browsers — it was not reproducible once animations
+were taken out of the measurement path.
+
+### Desktop Credits — console check
+
+Console errors observed while loading `/credits` at `1440×900` this
+round: an R2-asset CORS block on one scene thumbnail, a CSP-blocked fetch
+attempt to `https://app.raivstream.com/story-playground` from the
+staging origin, and a handful of `401`/`400` responses. All four fall
+within the same three categories already classified as pre-existing/
+environmental/unrelated in the prior formal-audit round (R2 CORS on one
+thumbnail; the staging-only CSP misconfiguration blocking a cross-origin
+fetch to the production host; transient 401s from early unauthenticated
+probes) — the `400` entries are new observations in the same "early,
+pre-session-establishment noise" category, not a new distinct issue.
+**Zero new regression attributable to this round** (which made no code
+changes) or to any prior round's shipped diff.
+
+### "NOT PRESENT" items — reinforced per explicit instruction
+
+Recording explicitly, as requested, rather than leaving any of these
+blank: **verification, unauthorized, forbidden, orders, reservations,
+memberships, and applications pages are NOT PRESENT in the current route
+tree — represented through existing flow.** Specifically:
+
+- No dedicated email-verification screen — registration signs a user in
+  directly (no `emailVerified`/`verificationToken` field exists).
+- No dedicated unauthorized/forbidden page — protected routes redirect to
+  `/sign-in?redirect_url=...`; R16-blocked routes redirect to `/`; both
+  middleware-level, both pre-existing, unchanged by this initiative.
+- No `Order`/`Reservation`/`Membership`/`Application` Prisma model exists
+  at all — this product has no participant-application, reservation,
+  membership, or order concept in its domain model.
+- **Roles/applications** are represented through the existing Settings →
+  Account tab "Become a creator" flow (`user.becomeCreator` mutation) —
+  confirmed by code and by a real, server-verified role flip in the
+  formal-audit round above.
+- **Session expiry** falls back to the already-restyled signed-out
+  states — there is no separate "session expired" screen; an expired/
+  missing session simply presents the same middleware-enforced redirect
+  to the restyled `/sign-in?redirect_url=...`, already verified working
+  end-to-end (registration → protected-route access → logout → protected-
+  route denial → redirect) in the formal-audit round above.
+
+### Diff audit (this round)
+
+Empty. `git diff --stat` against HEAD: no output. `git diff d2b6b54
+--stat` (the currently-deployed production SHA): no output. Untracked
+files present (`docs/operations/phase-9b2b-*.md`,
+`packages/api/scripts/{phase9b2b-*,prod-*,rc-*,staging-*}.ts`,
+`packages/database/migrations/migration_lock.toml`) are the same
+pre-existing leftovers from unrelated work threads already noted in
+every prior round of this initiative — not touched, not part of this
+round's scope.
+
+### This round's verdict
+
+No new SHA to report — this round shipped no code, only verification
+coverage and one documentation correction. Production remains at
+`d2b6b54` (confirmed via `/api/health` and `git rev-parse HEAD` on the
+VPS, matching local HEAD exactly).
+
+**PHASE 2 — AUTH + ACCOUNT / SETTINGS — PASS, RE-CONFIRMED**, with one
+correction on record (the tab-underline "browser-engine bug" claim,
+above) and one honest gap on record against a stated expectation, not a
+regression (no R16-distinct sign-in wordmark exists, at either viewport
+— pre-existing, out of this initiative's presentation-only scope to add
+unilaterally).
+
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS —
+PHASE 2 OF 8 COMPLETE** (unchanged from the formal-audit round; this
+round added coverage and one correction, not new scope). Phase 3 remains
+**not started** and is not auto-started by this round either.
