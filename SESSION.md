@@ -1428,3 +1428,4 @@ Current release state:
 - Credit verification: successful render deducted exactly 1 credit; idempotent replay reused the render and did not deduct again.
 - R16 movie builder API denial and production health checks remained clean.
 - Decision: GO for controlled Phase 9B.1 production release. No commit, push, production migration, production PM2 restart, or production deployment was performed during requalification.
+- Production render smoke completed 2026-08-31: 24-second movie rendered via Film tab (account `texdevices@gmail.com`), 100 credits deducted (matching `story:movie_render` rate), no worker crash logged, app and R16 health clean post-render. Phase 9B.1 status: PRODUCTION COMPLETE.
