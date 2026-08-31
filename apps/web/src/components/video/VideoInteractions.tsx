@@ -102,19 +102,27 @@ export function VideoInteractions({ video, viewerInteraction, initialIsFollowing
           {video.creator.avatarUrl ? (
             <img src={video.creator.avatarUrl} alt={video.creator.displayName} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-pink-500 flex items-center justify-center text-white font-bold">
+            <div className="w-full h-full bg-[#d946a8] flex items-center justify-center text-white font-bold">
               {video.creator.displayName[0]}
             </div>
           )}
         </div>
 
-        {/* Follow button — shows + when not following, ✓ when following */}
+        {/* Follow button — shows + when not following, ✓ when following.
+            "Following" (green) stays a universal affirmative-state color,
+            same "semantic, not brand" treatment already established for the
+            password-strength meter and error/success colors elsewhere in
+            the app. Only the brand accent (pink → Nocturne magenta) swaps.
+            Literal hex, not var(--noc-magenta), for the conditionally-
+            toggled value on this transition-colors element — the
+            established convention in this codebase for any color that
+            actually changes at runtime under a `transition` class. */}
         <button
           onClick={handleFollow}
           disabled={toggleFollow.isPending}
           aria-label={isFollowing ? 'Unfollow' : 'Follow'}
           className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
-            isFollowing ? 'bg-green-500' : 'bg-pink-500'
+            isFollowing ? 'bg-green-500' : 'bg-[#d946a8]'
           }`}
         >
           {isFollowing ? (
@@ -133,7 +141,7 @@ export function VideoInteractions({ video, viewerInteraction, initialIsFollowing
 
       {/* Like */}
       <button onClick={handleLike} className="flex flex-col items-center gap-1">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${liked ? 'bg-pink-500' : 'bg-white/20'}`}>
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${liked ? 'bg-[#d946a8]' : 'bg-white/20'}`}>
           <svg className="w-6 h-6 text-white" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />

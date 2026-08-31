@@ -141,7 +141,7 @@ export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoC
           />
         </div>
       ) : (
-        <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+        <div className="w-full h-full bg-[var(--noc-page)] flex items-center justify-center">
           <span className="text-white/50 text-sm">Processing…</span>
         </div>
       )}
@@ -178,7 +178,7 @@ export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoC
             @{video.creator.username}
           </span>
           {video.creator.verified && (
-            <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-[#4f8bd6]" fill="currentColor" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
             </svg>
           )}

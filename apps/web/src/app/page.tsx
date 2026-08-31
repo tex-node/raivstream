@@ -22,7 +22,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="h-screen bg-black flex flex-col overflow-hidden">
+    <main className="h-screen bg-black lg:bg-[var(--noc-page)] flex flex-col overflow-hidden">
       {/* Floating header — transparent, overlays the feed */}
       <div className="absolute top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 pb-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <div className="pointer-events-auto w-full">
@@ -37,8 +37,24 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Full-screen TikTok feed — visible to everyone */}
-      <VideoFeed feedType={activeTab} />
+      {/*
+        Feed stage. Below `lg` this is a plain flex passthrough — identical
+        DOM/flex nesting to before this change, so VideoFeed's own `flex-1`
+        sizing (and therefore its scroll/wheel/keyboard/query logic, none of
+        which is touched here) behaves pixel-for-pixel as it did before.
+        At `lg` and up, the stage frames the existing feed as a deliberate
+        desktop composition — a bounded, generously-sized vertical video
+        card on the Nocturne page canvas — instead of a full-bleed mobile
+        layout stretched across a wide viewport. VideoFeed's internals are
+        unmodified; only the box it renders inside changes shape.
+      */}
+      <div className="flex-1 relative flex lg:justify-center lg:py-6 lg:px-6">
+        <div
+          className="relative flex-1 flex lg:flex-none lg:w-full lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[580px] lg:h-full lg:rounded-[28px] lg:overflow-hidden lg:border lg:border-[var(--noc-hairline)] lg:shadow-2xl"
+        >
+          <VideoFeed feedType={activeTab} />
+        </div>
+      </div>
 
       {/* Signed-out join CTA — floating at bottom */}
       {!isSignedIn && (
