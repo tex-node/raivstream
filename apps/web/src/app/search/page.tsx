@@ -30,11 +30,11 @@ function SearchResults() {
   const isLoading = usersLoading || videosLoading;
 
   return (
-    <div className="max-w-2xl mx-auto pt-20 px-4 pb-16">
+    <div className="max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto pt-20 px-4 pb-16">
       <h1 className="text-xl font-semibold mt-6 mb-6">
         {query ? (
           <>
-            Results for <span className="text-pink-400">"{query}"</span>
+            Results for <span className="text-[var(--noc-magenta)]">"{query}"</span>
           </>
         ) : (
           'Search'
@@ -58,7 +58,7 @@ function SearchResults() {
                 href={`/${user.username}`}
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors"
               >
-                <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 bg-pink-500 flex items-center justify-center">
+                <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 bg-[#d946a8] flex items-center justify-center">
                   {user.avatarUrl ? (
                     <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full object-cover" />
                   ) : (
@@ -69,7 +69,7 @@ function SearchResults() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold text-white truncate">{user.displayName}</span>
                     {user.verified && (
-                      <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-[#4f8bd6] flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                       </svg>
                     )}
@@ -98,10 +98,10 @@ function SearchResults() {
           {users && users.length > 0 && (
             <h2 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Videos</h2>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {videos.map((video) => (
               <Link key={video.id} href={`/v/${video.id}`} className="group">
-                <div className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden">
+                <div className="relative aspect-[9/16] bg-[var(--noc-page)] rounded-xl overflow-hidden">
                   <img
                     src={video.thumbnailUrl}
                     alt={video.title}
@@ -139,7 +139,7 @@ function SearchResults() {
 
 export default function SearchPage() {
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black lg:bg-[var(--noc-page)] text-white">
       <Navbar />
       <Suspense fallback={
         <div className="flex justify-center py-32">

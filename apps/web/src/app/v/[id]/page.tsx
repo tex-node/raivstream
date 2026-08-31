@@ -27,22 +27,31 @@ export default function VideoPage() {
   }
 
   return (
-    <div className="h-screen bg-black flex flex-col">
+    <div className="h-screen bg-black lg:bg-[var(--noc-page)] flex flex-col">
       <Navbar />
-      <div className="flex-1 relative mt-14">
-        <VideoCard
-          video={{
-            ...data,
-            creator: data.creator as {
-              id: string;
-              username: string;
-              displayName: string;
-              avatarUrl: string | null;
-              verified: boolean;
-            },
-          }}
-          isActive
-        />
+      {/*
+        Same desktop-stage pattern as the root feed (Phase 3A) — below `lg`
+        this is a plain flex passthrough (VideoCard fills the box exactly
+        as it did before), so mobile is unaffected. At `lg` and up it
+        becomes a framed, centered video card instead of full-bleed.
+        VideoCard itself is untouched.
+      */}
+      <div className="flex-1 relative mt-14 flex lg:justify-center lg:py-6 lg:px-6">
+        <div className="relative flex-1 flex lg:flex-none lg:w-full lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[580px] lg:h-full lg:rounded-[28px] lg:overflow-hidden lg:border lg:border-[var(--noc-hairline)] lg:shadow-2xl">
+          <VideoCard
+            video={{
+              ...data,
+              creator: data.creator as {
+                id: string;
+                username: string;
+                displayName: string;
+                avatarUrl: string | null;
+                verified: boolean;
+              },
+            }}
+            isActive
+          />
+        </div>
       </div>
     </div>
   );

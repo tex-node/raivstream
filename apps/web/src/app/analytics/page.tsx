@@ -19,7 +19,7 @@ function StatCard({
 }) {
   const colors = {
     white: 'text-white',
-    pink: 'text-pink-400',
+    pink: 'text-[var(--noc-pink-tint)]',
     green: 'text-green-400',
     yellow: 'text-yellow-400',
   };
@@ -45,7 +45,7 @@ function MiniChart({ data }: { data: Array<{ date: string; views: number }> }) {
         <div
           key={d.date}
           title={`${d.date}: ${d.views} views`}
-          className="flex-1 bg-pink-500/70 hover:bg-pink-400 rounded-t transition-colors"
+          className="flex-1 bg-[#d946a8]/70 hover:bg-[#f0a3d4] rounded-t transition-colors"
           style={{ height: `${Math.max((d.views / max) * 100, 2)}%` }}
         />
       ))}
@@ -138,7 +138,7 @@ export default function AnalyticsPage() {
         <div className="flex gap-3">
           <Link
             href="/pricing"
-            className="px-6 py-2.5 bg-pink-500 hover:bg-pink-600 rounded-full font-semibold text-sm transition-colors"
+            className="px-6 py-2.5 bg-[#d946a8] hover:opacity-90 rounded-full font-semibold text-sm transition-colors"
           >
             Upgrade plan
           </Link>
@@ -148,7 +148,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black lg:bg-[var(--noc-page)] text-white">
       <Navbar />
 
       <div className="max-w-5xl mx-auto pt-24 px-4 pb-20">
@@ -156,7 +156,7 @@ export default function AnalyticsPage() {
           <h1 className="text-2xl font-bold">Creator Analytics</h1>
           <Link
             href="/upload"
-            className="flex items-center gap-2 bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
+            className="flex items-center gap-2 bg-[#d946a8] hover:opacity-90 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
             {videos.map((v) => (
               <div key={v.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/5 transition-colors">
                 {/* Thumbnail */}
-                <div className="w-12 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-900">
+                <div className="w-12 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-[var(--noc-page)]">
                   <VideoThumb
                     title={v.title}
                     thumbnailUrl={v.thumbnailUrl}
@@ -246,7 +246,7 @@ export default function AnalyticsPage() {
 
                 {/* Title + status */}
                 <div className="flex-1 min-w-0">
-                  <Link href={`/v/${v.id}`} className="font-medium text-sm hover:text-pink-400 transition-colors line-clamp-2">
+                  <Link href={`/v/${v.id}`} className="font-medium text-sm hover:text-[var(--noc-pink-tint)] transition-colors line-clamp-2">
                     {v.title}
                   </Link>
                   <div className="flex items-center gap-2 mt-1">
@@ -264,7 +264,7 @@ export default function AnalyticsPage() {
                       {v.status.toLowerCase()}
                     </span>
                     {v.isPremiumOnly && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-400">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-[#d946a8]/20 text-[var(--noc-pink-tint)]">
                         premium
                       </span>
                     )}
@@ -314,7 +314,7 @@ export default function AnalyticsPage() {
           {videos.length === 0 && !videoBreakdown.isLoading && (
             <div className="text-center py-16 text-white/30">
               No videos yet.{' '}
-              <Link href="/upload" className="text-pink-400 hover:underline">
+              <Link href="/upload" className="text-[var(--noc-pink-tint)] hover:underline">
                 Upload your first video
               </Link>
             </div>

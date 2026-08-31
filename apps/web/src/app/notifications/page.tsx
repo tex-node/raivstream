@@ -40,11 +40,11 @@ function NotificationRow({ notif, onRead }: { notif: NotifItem; onRead: (id: str
     >
       {/* Unread dot */}
       <div className="w-2 flex-shrink-0 flex justify-center">
-        {!notif.read && <div className="w-2 h-2 rounded-full bg-pink-500" />}
+        {!notif.read && <div className="w-2 h-2 rounded-full bg-[#d946a8]" />}
       </div>
 
       {/* Sender avatar */}
-      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-pink-500 flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-[#d946a8] flex items-center justify-center">
         {notif.sender.avatarUrl ? (
           <img src={notif.sender.avatarUrl} alt={notif.sender.displayName} className="w-full h-full object-cover" />
         ) : (
@@ -66,21 +66,21 @@ function NotificationRow({ notif, onRead }: { notif: NotifItem; onRead: (id: str
 
       {/* Video thumbnail for LIKE */}
       {notif.type === 'LIKE' && notif.video && (
-        <div className="w-10 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-gray-800">
+        <div className="w-10 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--noc-page)]">
           <img src={notif.video.thumbnailUrl} alt="" className="w-full h-full object-cover" />
         </div>
       )}
 
       {/* Icon badge */}
       <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-        notif.type === 'LIKE' ? 'bg-pink-500/20' : 'bg-violet-500/20'
+        notif.type === 'LIKE' ? 'bg-[#d946a8]/20' : 'bg-[#b25ad9]/20'
       }`}>
         {notif.type === 'LIKE' ? (
-          <svg className="w-3.5 h-3.5 text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5 text-[#f0a3d4]" fill="currentColor" viewBox="0 0 24 24">
             <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         ) : (
-          <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5 text-[var(--noc-lavender-tint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         )}
@@ -113,9 +113,9 @@ export default function NotificationsPage() {
   const hasUnread = notifications.some((n) => !n.read);
 
   return (
-    <div className="min-h-screen text-white" style={{ background: '#050b18' }}>
+    <div className="min-h-screen text-white" style={{ background: 'var(--noc-page)' }}>
       <Navbar />
-      <div className="max-w-lg mx-auto pt-20 px-4 pb-16">
+      <div className="max-w-lg lg:max-w-xl mx-auto pt-20 px-4 pb-16">
 
         {/* Header */}
         <div className="flex items-center justify-between py-6">
@@ -124,7 +124,7 @@ export default function NotificationsPage() {
             <button
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
-              className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+              className="text-xs text-[var(--noc-lavender-tint)] hover:text-[var(--noc-purple)] transition-colors"
             >
               Mark all read
             </button>
