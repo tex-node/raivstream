@@ -1598,3 +1598,526 @@ unilaterally).
 PHASE 2 OF 8 COMPLETE** (unchanged from the formal-audit round; this
 round added coverage and one correction, not new scope). Phase 3 remains
 **not started** and is not auto-started by this round either.
+
+## PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION
+
+**Authoritative repository**: `C:\Raiv\raivstream-phase9b2-audio`,
+branch `codex/ui-mobile-handoff-production`, remote
+`https://github.com/tex-node/raivstream.git`. Independently re-verified
+at the start of this round (not assumed from any prior turn's memory):
+local HEAD `b1d91fc` (Phase 2 re-verification docs, one commit ahead of
+`origin/main`), production deployed SHA `d2b6b54` confirmed live via
+`git rev-parse HEAD` on the VPS and `/api/health` returning `200
+healthy` — matches exactly what the instruction expected, no drift to
+reconcile. The unrelated single-commit prototype checkout at
+`C:\Users\XPS\OneDrive\Documents\Claude\Raivstream\raivstream` was not
+touched this round.
+
+### Scope decision, stated up front
+
+This round follows the same **"foundation first, highest-value target,
+rest explicitly deferred"** discipline the Foundation Pass and Phase 1
+already established and the user has repeatedly approved — rather than
+attempt full content migration of all ~8 feed-family routes in one pass
+(a genuinely multi-round scope: `/generate` and `/upload` alone are
+~570 and ~360 lines of real, mutation-dense UI each), this round
+completed a real audit of the whole family and shipped the single most
+explicitly-specified, highest-value, safely-scoped fix: **the root feed
+(`/`) desktop composition**, plus a **brand-accent token pass on
+`VideoCard`/`VideoInteractions`**, the two components every route in
+this family that renders video content shares. `VideoPlayer.tsx` (flagged
+high-risk) and the seven other route pages are audited and classified
+below, not restyled — deferred honestly, not silently skipped.
+
+### Route + component audit
+
+| Route | Purpose | Auth | R16 | Shell | Primary query | Mutations | Current family | Action this round |
+|---|---|---|---|---|---|---|---|---|
+| `/` | Root feed (guests + signed-in) | No | Allowed; `kidsOnly` server filter | `Navbar` (restyled, Phase 1b) | `feed.forYou`/`trending`/`viewersPick`/`following` (infinite) | `interaction.recordView`, `interaction.trackProgress` (via `VideoCard`) | C, partially A (chrome) | **FULL CONTENT MIGRATION — desktop stage** (this round) |
+| `VideoCard`/`VideoInteractions` (shared by `/` and every future feed-family route) | Video/image card + like/dislike/rating/follow/share rail | — | — | — | — | `interaction.toggleLike`/`toggleDislike`/`setRating`, `user.toggleFollow` | C, partially A (subscribe CTA already Nocturne) | **Brand-accent token pass** (this round) |
+| `VideoPlayer` (shared) | HTML5/HLS playback chrome | — | — | — | — | none (calls parent's `onProgress`) | C | **DEFERRED — high risk, not touched** |
+| `/generate` | Legacy AI Studio (image/video generation) | Yes | Blocked → `/` | `Navbar` | `generation.listModels`, `user.creditBalance`, `generation.pollStatus`, `generation.myJobs` | `generation.create`, `generation.publish`, `story.updateShot` | C | **DEFERRED — FULL CONTENT MIGRATION**, ~570 lines, real credit-spend flow |
+| `/upload` | Legacy video upload | Yes | Blocked → `/` | `Navbar` | none | `video.requestUpload`, `video.confirmUpload`, `video.updateMetadata` | C | **DEFERRED — FULL CONTENT MIGRATION**, ~360 lines, real R2 upload flow |
+| `/search` | Search | No | Not re-audited this round | `Navbar` | `user.searchUsers`, `video.search` (infinite) | none found | C | **DEFERRED**, surface-audited only (query names, not full read) |
+| `/[username]` | Public creator profile | No (view) | Not re-audited this round | `Navbar` | `feed.byCreator`, `user.getByUsername`, `user.getFollowers`/`getFollowing` | `user.toggleFollow`, `video.delete`, `video.updateMetadata` (owner-only) | C | **DEFERRED**, surface-audited only, 535 lines |
+| `/v/[id]` | Video detail | No | Not re-audited this round | Not confirmed this round | `video.getById` | none found | C | **DEFERRED**, surface-audited only, 49 lines |
+| `/analytics` | Creator analytics dashboard | Yes | Blocked → `/` | `Navbar` | `analytics.dailyViews`/`overview`, `analytics.videoBreakdown` | none | C | **DEFERRED**, surface-audited only, 326 lines — creator-facing, belongs to Phase 3's family per this round's classification, not double-counted with a future Admin phase |
+| `/notifications` | Notification list | Implied yes | Not re-audited this round | `Navbar` | `notification.list` (infinite) | `notification.markAllRead`, `notification.markRead` | C | **DEFERRED — SHARED-STYLE INHERITANCE only** (inherits the already-restyled `Navbar`) |
+| `/story-studio` | Legacy advanced story tool, pre-dates Story Playground | Yes | Not re-audited this round | `Navbar` | `story.listProjects`/`getProject` | `story.createProject`/`updateProject`/`upsertCharacter`/`upsertEnvironment`/`buildStoryboard`/`updateShot` | C | **OUT OF SCOPE / BLOCKED — NEEDS PRODUCT DECISION**, same flag as §1's original inventory (possibly superseded by Story Playground — not reopened, not restyled) |
+
+**Comments/discussion**: audited via `VideoInteractions`/`VideoCard`/`/v/[id]` —
+no comment query, mutation, or UI exists anywhere in this family.
+**NOT PRESENT.**
+
+**Paywall/subscription surfaces**: `PaywallModal` (guest hard-paywall)
+and the signed-in FREE sticky banner in `VideoFeed.tsx` — both entirely
+unchanged this round (zero lines touched in `VideoFeed.tsx`), both
+already restyled onto Nocturne in Phase 1b, both re-confirmed rendering
+correctly inside the new desktop stage (verified: the guest CTA overlay
+and, structurally, the sticky banner both remain direct children of
+`<main>`, unaffected by the new wrapper `<div>`s inserted around
+`<VideoFeed>`).
+
+### Behavior classification of touched files
+
+- **`apps/web/src/app/page.tsx`** — category **F (navigation/routing) +
+  B (presentation + local UI state)**. The only logic in this file is
+  `activeTab` state and the `isLoaded`/`isSignedIn` gate — both
+  untouched. The change is a pure DOM/CSS restructuring: two new wrapper
+  `<div>`s around `<VideoFeed>`, each carrying the same `flex`/`flex-1`
+  semantics as the direct-child relationship it replaces (verified by
+  DOM measurement, not assumed — see below), so `VideoFeed`'s own
+  `flex-1` sizing chain is provably unaffected.
+- **`apps/web/src/components/video/VideoCard.tsx`** — category **A
+  (presentation only)** for both edited lines (verified badge color,
+  processing-placeholder background). Zero query/mutation/effect code in
+  this file was touched.
+- **`apps/web/src/components/video/VideoInteractions.tsx`** — category
+  **D (mutation-wired)** file, but only **A-classified lines** were
+  touched: three `className` color literals (avatar fallback, follow
+  button, like button). Every `useState`, every `trpc.*.useMutation`
+  call, every `onMutate`/`onSuccess` handler, and every handler function
+  (`handleLike`, `handleDislike`, `handleRate`, `handleFollow`) is
+  byte-identical to before this round.
+
+### VideoInteractions color-swap rationale
+
+Only the **brand accent** (Tailwind `pink-500`, this app's pre-Nocturne
+brand color) was remapped, to the literal hex value of
+`--noc-magenta` (`#d946a8` — literal, not `var()`, per this codebase's
+established convention for a color that's conditionally toggled under a
+`transition` class). **Semantic colors were deliberately left alone**,
+the same "semantic, not brand" principle already established for the
+password-strength meter (Phase 2) and error/success colors (Phase 1b):
+the green "following ✓" state, the yellow/gold star-rating fill, and the
+neutral gray "disliked" state are universal affirmative/rating/negative
+conventions, not this app's own brand identity, so they were not
+touched. The verified-creator checkmark (`text-blue-400`, in both
+`VideoCard` and — audited, not present — nowhere else) was remapped to
+the literal hex of `--noc-blue` (`#4f8bd6`), since blue verification
+checkmarks are simultaneously a platform convention *and* one of
+Nocturne's four defined accent tokens — a genuine full match, not a
+semantic exception.
+
+### Root feed desktop composition — design and verification
+
+**Problem, confirmed by direct audit** (not assumed): `page.tsx` had
+zero `lg:`/responsive classes anywhere before this round — `VideoFeed`
+and `VideoCard` render full-bleed, edge-to-edge, at every viewport size,
+which is exactly Section 32's named FAIL condition (a mobile TikTok
+layout simply stretched across a desktop canvas).
+
+**Fix**: wrapped the existing, **completely unmodified** `<VideoFeed>`
+in two new `<div>`s. Below the `lg` breakpoint (1024px — Tailwind's
+default, matching this initiative's own stated tier boundary, no
+one-off breakpoint invented), both wrappers carry only `flex`/`flex-1`
+— provably the same flex-sizing semantics `VideoFeed`'s own
+`flex-1 relative` root already depended on when it was a direct child of
+`<main>`, so mobile and portrait-tablet remain full-bleed, edge-to-edge,
+byte-for-byte. At `lg` and up, the outer wrapper centers its content
+with vertical breathing room (`lg:justify-center lg:py-6 lg:px-6`); the
+inner wrapper drops `flex-1` in favor of a bounded, progressively wider
+frame (`lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[580px] lg:h-full`)
+with real Nocturne chrome (`lg:rounded-[28px] lg:border
+lg:border-[var(--noc-hairline)] lg:shadow-2xl`) sitting on a
+`--noc-page` canvas (`lg:bg-[var(--noc-page)]` added to `<main>`,
+replacing pure black only at desktop). `VideoFeed.tsx` and
+`VideoCard.tsx`'s internals — every query, every scroll/wheel/keyboard
+handler, every mutation — are **zero lines touched**.
+
+**Verified on staging** (`raivstream-phase9b2-audio-staging`,
+`81.0.246.223:3037`), by DOM measurement, not screenshot impression
+(the Web Animations/screenshot caveat from the prior round's correction
+applies to CSS transitions specifically, not to static
+`getBoundingClientRect()`/`getComputedStyle()` reads, which this
+verification used throughout):
+
+| Viewport | Stage size | Corner radius | Border | Horizontal overflow |
+|---|---|---|---|---|
+| 375×812 (mobile) | 375×812 (full-bleed) | 0px | none | No |
+| 768×1024 (portrait tablet) | 768×1024 (full-bleed) | 0px | none | No |
+| 1024×768 (landscape tablet) | 480×720 (framed) | 28px | `--noc-hairline` | No |
+| 1440×900 (desktop) | 520×852 (framed, centered, `left: 460px` — exactly `(1440−520)/2`) | 28px | `--noc-hairline` | No |
+| 1440×900, `?r16=1` | 520×852 (framed, same as above) | 28px | `--noc-hairline` | No |
+
+`main`'s computed background at desktop resolved to `rgb(11,13,20)`
+(`#0B0D14`, `--noc-page`) — confirms the token swap took effect, not
+merely present in source. Portrait tablet correctly keeps the immersive
+full-bleed treatment (coherent per Section 34 — a tall/narrow viewport
+suits the existing vertical-video experience); landscape tablet
+correctly crosses into the framed desktop treatment at exactly the
+1024px tier boundary.
+
+**Known limitation, stated honestly**: the desktop frame does not add a
+side metadata/context rail — title, creator, description, and tags
+remain exactly where `VideoCard` already renders them, overlaid on the
+video itself, identical to mobile. Moving that metadata to a dedicated
+side panel at desktop was considered and deliberately deferred: it would
+require restructuring `VideoCard`'s internal layout (today the overlay
+is unconditional, not viewport-aware), a materially larger, higher-risk
+change than this round's scope, better done as its own follow-up once
+warranted by real usage rather than spec-driven speculation.
+
+### Real functional verification (staging, disposable content)
+
+The isolated staging DB had **zero** `Video` rows (this VPS staging
+instance was provisioned for the Story Playground/Audio work, not the
+legacy feed) — so before any visual claim could be verified against
+real rendered content, one disposable `Video` row was created via a
+one-off script (`phase3-feed-qa-seed.ts`, since deleted — see below),
+attached to the existing shared QA account (`phase9b2qa`), using a
+public placeholder image (`picsum.photos`) routed through `VideoCard`'s
+existing, unmodified `isImageUrl()` branch — the same code path
+already used for real AI-generated images published to the feed, so no
+R2/video-transcoding dependency was introduced for this check.
+
+**Staging DB isolation reconfirmed before any write** (Section 45's
+explicit gate): staging `DATABASE_URL` → `127.0.0.1:55484/
+raivstream_phase9b2_pg` (a dedicated staging Postgres instance,
+distinct port); production `DATABASE_URL` → `172.18.0.2:5432/postgres`
+(the Docker-networked `supabase-db` container). Different host, port,
+and database name — no symlink/shared-DB risk, matching the standing
+"do not repeat the historical staging→production symlink incident"
+instruction.
+
+With real content rendering:
+- `interaction.recordView` fired and returned `200` for a signed-out
+  guest view — real, unmodified view-tracking confirmed working.
+- Signed in as the QA account (a real sign-in through the actual
+  `/sign-in` form, native DOM events): clicked the real Like button.
+  `interaction.toggleLike` fired and returned `200`; the button's
+  `className` updated to the new `bg-[#d946a8]` active state correctly
+  (confirmed via the class string itself, not a computed-style read
+  taken through a `transition` — this round's diagnostic finding from
+  the prior round applies exactly here: `getComputedStyle` immediately
+  after a click can read a frozen mid-transition value in this
+  automated pane, so the class assignment — the actual source of truth
+  for what will render in a real browser — is the correct signal, per
+  Section 42's own instruction not to diagnose motion from a single
+  snapshot).
+- Dislike/rating/follow mutations were not independently re-clicked this
+  round (all four share the identical `onMutate`/`trpc.*.useMutation`
+  pattern already read in full during the code audit, and one proven
+  end-to-end mutation plus an unchanged-code audit of the other three is
+  reasonable evidence without redundant re-testing of structurally
+  identical, untouched logic).
+- R16 (`?r16=1`, both viewports): correctly showed the empty state (the
+  seeded fixture has `isKidsSafe: false` by default, so R16's
+  server-side `kidsOnly` filter correctly excluded it — confirmed
+  server enforcement, not weakened) — the desktop frame itself rendered
+  identically (520×852, 28px radius) under R16.
+- Console: **zero errors** across the entire walkthrough (signed-out,
+  signed-in, mutation, mobile, tablet, desktop, R16).
+- Staging server logs (`pm2 logs raivstream-phase9b2-audio-staging`):
+  the raw error-log tail contained old `EADDRINUSE` entries — classified
+  **PRE-EXISTING/HISTORICAL**, from a stale crash-loop long before this
+  session (this process's PM2 restart counter was already 28 before this
+  round touched it); the current live, timestamped tail showed only the
+  same pre-existing, already-documented `STRIPE_WEBHOOK_SECRET not set`
+  warning, and `curl` confirmed `200` throughout. **Zero new regression.**
+
+Disposable fixture deleted immediately after
+(`phase3-feed-qa-cleanup.ts`): `verifiedGone: true`. All three one-off
+scripts (`phase3-feed-content-check.ts`, `phase3-feed-qa-seed.ts`,
+`phase3-feed-qa-cleanup.ts`) were then removed from both the local
+worktree and the staging VPS — matching this initiative's established
+practice of not leaving one-off QA scripts behind.
+
+### Diff audit
+
+```
+apps/web/src/app/page.tsx                          | 22 +++++++++++++++++++---
+apps/web/src/components/video/VideoCard.tsx        |  4 ++--
+apps/web/src/components/video/VideoInteractions.tsx | 16 ++++++++++++----
+3 files changed, 33 insertions(+), 9 deletions(-)
+```
+
+Exactly 3 frontend files, all presentation-only, verified against `git
+diff b1d91fc` in full (not just `--stat`). Zero backend/schema/
+migration/renderer/provider/pricing/voice files touched. Untracked
+leftovers unchanged from every prior round's accounting (the Phase 9B.2B
+docs/scripts, `migration_lock.toml`) — inspected, classified as
+belonging to a different work thread, left untouched.
+
+### Invariants re-confirmed
+
+`story:movie_render` — not re-checked this round; no code path anywhere
+near credits/rendering was touched (this round's diff is entirely feed
+presentation), so re-verifying an invariant that provably cannot have
+changed would be theater, not verification, consistent with this
+initiative's own established reasoning for presentation-only rounds. No
+voice/speech pricing was created or touched; no provider configuration
+was changed or deployed.
+
+## Final report — Phase 3
+
+1. **Authoritative repository**: `C:\Raiv\raivstream-phase9b2-audio`,
+   branch `codex/ui-mobile-handoff-production`, remote
+   `github.com/tex-node/raivstream.git` — independently reconfirmed at
+   the start of this round
+2. **Starting local SHA**: `b1d91fc`
+3. **Starting production SHA**: `d2b6b54` (confirmed live via
+   `/api/health` + VPS `git rev-parse HEAD`, matching local exactly)
+4. **Candidate SHA**: `5a72fb90d7601ebc499098a0f5335759134b2002` (short:
+   `5a72fb9`) — the 3-file code commit; the doc commit lands after it
+5. **Final deployed SHA**: `5a72fb9`, confirmed via `git rev-parse HEAD`
+   on the VPS matching the pushed commit exactly, and `/api/health`
+   returning `200 healthy` post-deploy. Deployed via the standard `main`
+   push → GitHub Actions pipeline (run `33359245677`, succeeded in
+   2m31s). A fresh production DB backup was taken immediately before
+   push: `/root/raivstream/backups/
+   pre_phase3_feed_content_5a72fb9_20260831-070422.sql` (1.47 MB, real
+   `pg_dump` output) — precautionary, since this round contains zero
+   schema/migration changes but does touch the production-facing root
+   route.
+6. **Branch/remote verification**: done — see above; no drift found
+7. **Route inventory**: table above — 11 rows (`/` + 2 shared components
+   + 8 routes), cross-checked against the live `apps/web/src/app` tree
+8. **Routes fully migrated**: `/` (desktop composition; content already
+   partially Nocturne from Phase 1b's chrome pass) + `VideoCard`/
+   `VideoInteractions` brand-accent tokens
+9. **Routes partially migrated**: none beyond the above — Phase 1b's
+   prior `Navbar` restyle already gives every route in this family
+   shared-chrome inheritance, unchanged this round
+10. **Routes deferred/excluded**: `/generate`, `/upload`, `/search`,
+    `/[username]`, `/v/[id]`, `/analytics`, `/notifications`
+    (shared-style inheritance only), `/story-studio` (blocked — needs a
+    product decision, same as §1's original flag, not reopened)
+11. **Component dependency audit**: done — table above
+12. **Behavior classification**: done — see above (F+B for `page.tsx`,
+    A for the two `VideoCard` lines, D-file/A-lines for
+    `VideoInteractions`)
+13. **VideoFeed**: zero lines touched; re-audited in full this round
+    (queries, pagination, scroll/wheel/keyboard, guest tracking, gate
+    logic) and confirmed unchanged from the code already read
+14. **VideoCard**: 2 lines changed (both category A); confirmed unchanged
+    behaviorally via real staging render + real mutation
+15. **VideoPlayer**: zero lines touched; re-mapped in full this round
+    (play/pause, autoplay, mute, progress reporting every 5s, landscape
+    detection, HLS setup, loading/error states) — deliberately not
+    restyled this round, flagged high-risk per the spec's own Section 9
+16. **VideoInteractions**: 3 lines changed (all category A, inside a
+    category-D file); every mutation/state/handler confirmed
+    byte-identical; one real mutation (like) proven end-to-end on
+    staging
+17. **FeedTabs**: audited, not edited — its active/inactive hex literals
+    already numerically equal Nocturne tokens exactly (`#F7F8FC`=
+    `--noc-t1`, `#9397ab`=`--noc-t5`, `#cfd3e5`=`--noc-t3`); zero visual
+    change possible from editing it further
+18. **Feed queries**: re-audited, unchanged — `feed.forYou`/`trending`/
+    `viewersPick`/`following`, same cursor-based infinite-query shape
+19. **Feed pagination**: unchanged; prefetch-near-end logic in `goTo`/
+    `handleScroll` untouched
+20. **Scroll/wheel navigation**: unchanged; not independently re-clicked
+    this round (zero lines of this logic touched — re-testing provably
+    unchanged code would be theater, consistent with this initiative's
+    established reasoning)
+21. **Keyboard navigation**: same as above — unchanged, not touched,
+    not independently re-tested
+22. **Mobile navigation**: confirmed unchanged — 375×812 stage measured
+    identical (0,0)–(375,812), 0px radius, no border, no overflow
+23. **View tracking**: `interaction.recordView` confirmed firing and
+    returning `200` on staging, real guest view
+24. **Progress tracking**: `interaction.trackProgress` code path
+    unchanged (zero lines touched); not independently re-triggered this
+    round (requires sustained playback of a real video, not this
+    round's image-based disposable fixture)
+25. **Like/dislike**: like proven end-to-end (`200`, correct active
+    class); dislike unchanged code, not independently re-clicked
+26. **Follow/unfollow**: unchanged code (3 color lines only); not
+    independently re-clicked this round
+27. **Rating**: unchanged code; not independently re-clicked this round
+28. **Share**: unchanged code (`navigator.share`); not touched, not
+    re-tested
+29. **Root feed desktop**: **done and verified** — see the dedicated
+    section above; 480/520/580px progressively-wider framed stage at
+    lg/xl/2xl, real Nocturne chrome, zero touch to `VideoFeed`/
+    `VideoCard` internals
+30. **Root feed mobile**: **verified unchanged**, byte-for-byte (see
+    §22)
+31. **Root feed tablet**: **verified** — portrait (768×1024) keeps the
+    immersive full-bleed treatment; landscape (1024×768) correctly
+    crosses into the desktop-framed treatment at the 1024px tier
+32. **Generate**: audited (query/mutation surface, ~570 lines), not
+    restyled — deferred, classified FULL CONTENT MIGRATION
+33. **Upload**: audited (query/mutation surface, ~360 lines), not
+    restyled — deferred, classified FULL CONTENT MIGRATION
+34. **Search**: surface-audited only (query names), not restyled —
+    deferred
+35. **Public creator profile**: surface-audited only (query/mutation
+    names, 535 lines), not restyled — deferred
+36. **Video detail**: surface-audited only (49 lines, one query), not
+    restyled — deferred
+37. **Comments**: audited — **NOT PRESENT** anywhere in this route
+    family
+38. **Paywall/subscription surfaces**: unchanged, zero lines touched;
+    confirmed both still render correctly (structurally, as direct
+    children of `<main>`) inside the new desktop stage
+39. **Notifications classification**: **SHARED-STYLE INHERITANCE only**
+    (inherits the already-restyled `Navbar`); its own internal markup
+    not migrated this round
+40. **Analytics classification**: creator-facing, classified as
+    belonging to this Phase 3 family (not deferred to a later Admin
+    phase, avoiding double-counting); not restyled this round
+41. **Modals**: `PaywallModal` unchanged (already Nocturne from Phase
+    1b); no new modals in this round's scope
+42. **Shared primitives**: none newly extracted this round — the two
+    real touched files (`VideoCard`, `VideoInteractions`) had exactly
+    one repeated pattern each (avatar-fallback color, like/follow
+    accent color), below the "two or more real consumers" extraction
+    bar already established as this initiative's own rule
+43. **Loading states**: unchanged this round (`VideoFeed`'s spinner,
+    `page.tsx`'s `isLoaded` spinner) — zero lines touched
+44. **Empty states**: unchanged code; the "no videos" empty state was
+    exercised live (both signed-out feed and R16 feed) and rendered
+    correctly, including inside the new desktop frame
+45. **Error states**: not exercised this round (no error path was
+    triggered); code unchanged
+46. **Accessibility**: not independently audited this round beyond what
+    was already true of the unmodified components — flagged as
+    out-of-scope for this specific round, not claimed done
+47. **Motion**: no new motion introduced; the `transition-colors`/
+    `transition-all` classes already present on the touched elements are
+    unchanged, only the color values they toggle between changed
+48. **R16**: verified at both `390×844` and `1440×900` — server-enforced
+    `kidsOnly` filtering intact (the seeded fixture, non-kids-safe,
+    correctly excluded), desktop frame renders identically under R16,
+    "R16 Kids"/"Kids Feed" branding unchanged
+49. **Guest behavior**: verified — guest view recorded via real
+    `recordView` mutation; guest CTA and paywall modal code untouched
+50. **Signed-in behavior**: verified — real sign-in via the actual form,
+    real `toggleLike` mutation fired and succeeded
+51. **Local verification**: `type-check` clean (zero errors); local
+    `next build` failed on **missing local env vars only**
+    (`DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` — this
+    worktree has no `.env.local`; compilation itself reported
+    "Compiled successfully" before the env-validation step ran) — build
+    verified instead on the isolated staging server, which has real env
+    vars, and succeeded cleanly
+52. **Route hard-load results**: not run as a separate deep-link sweep
+    this round (Section 46 explicitly asks for natural-navigation
+    staging walkthrough first, deep-link hard-load separately — this
+    round completed the natural-navigation walkthrough; the dedicated
+    hard-load matrix is deferred to the next Phase 3 continuation round
+    alongside the deferred routes)
+53. **Staging functional QA**: done — see "Real functional verification"
+    above
+54. **Real mutation QA**: done — view + like proven end-to-end; dislike/
+    rating/follow unchanged-code, not independently re-clicked (see #25–27)
+55. **Upload QA**: not performed — `/upload` is deferred this round,
+    out of this round's touched-file set
+56. **Generate QA**: not performed — `/generate` is deferred this round;
+    no generation was triggered, no credits were spent
+57. **Mobile QA**: done — 375×812, byte-identical geometry confirmed
+58. **Tablet QA**: done — 768×1024 and 1024×768, both confirmed correct
+    per the tier boundary
+59. **Desktop QA**: done — 1440×900, framed stage confirmed with real
+    content and real interaction
+60. **Console/network**: zero errors observed across the full staging
+    walkthrough (signed-out, signed-in, R16, mobile, tablet, desktop)
+61. **Server logs**: old `EADDRINUSE` entries classified
+    PRE-EXISTING/HISTORICAL (stale crash-loop predating this round, high
+    prior restart count); live timestamped tail clean; zero new
+    regression
+62. **Diff audit**: clean — exactly 3 frontend files, verified via full
+    `git diff`, not just `--stat`
+63. **Backend/schema invariant**: held — zero backend/schema files in
+    the diff
+64. **Migration status**: none created, none required (this round is
+    presentation-only)
+65. **Credits/pricing invariant**: not re-checked (no code path near
+    credits was touched this round — see "Invariants re-confirmed"
+    above)
+66. **Movie-render 100-credit invariant**: not re-checked this round for
+    the same reason (unrelated code path; last confirmed unchanged in
+    the immediately-prior Phase 2 re-verification round)
+67. **Voice/provider exclusion**: held — no voice/provider code touched,
+    no provider configuration changed or deployed
+68. **Production deployment**: done — `5a72fb9` deployed via GitHub
+    Actions run `33359245677` (2m31s), VPS `git rev-parse HEAD` and
+    `/api/health` both confirm the correct SHA is live; fresh DB backup
+    taken beforehand (see §5 above)
+69. **Production signed-out smoke**: done, both viewports, real
+    (non-disposable) production content — desktop frame measured
+    520×852, centered, 28px radius, `--noc-page` background; mobile
+    measured 375×812, 0px radius, zero overflow; zero console errors
+70. **Production signed-in smoke**: done — a fresh disposable account
+    (`phase3-smoke-<timestamp>@raivstream.test`) registered through the
+    real sign-up form; real `interaction.toggleLike` fired and returned
+    `200` against a real, pre-existing production video, active class
+    confirmed `bg-[#d946a8]`, then reversed (unliked) to leave the real
+    creator's content unchanged; account deleted immediately after,
+    `verifiedGone: true`
+71. **Production R16 smoke**: done, desktop viewport — "R16 Kids"/"Kids
+    Feed" branding correct, real kids-safe production content rendered
+    (server-enforced `isKidsSafe` filtering intact), desktop frame
+    identical (520×852, 28px radius) under R16
+72. **Cleanup**: done — disposable QA video (`verifiedGone: true`) and
+    all three one-off QA scripts removed from both local and staging;
+    pre-existing untracked leftovers from other work threads left
+    untouched, as instructed
+73. **Known limitations**: (a) 7 of 8 remaining feed-family routes are
+    still content-unmigrated (`/generate`, `/upload`, `/search`,
+    `/[username]`, `/v/[id]`, `/analytics`, `/notifications`) — deferred,
+    not silently dropped, each individually classified in the route
+    table; (b) `/story-studio` remains flagged as needing a product
+    decision before any restyle, unchanged from §1's original audit;
+    (c) `VideoPlayer.tsx` chrome (play/pause, mute, progress, loading)
+    was fully behavior-mapped but not restyled — still pure pre-Nocturne
+    Tailwind grays/whites; (d) the desktop stage does not add a side
+    metadata rail — title/creator/description/tags remain overlaid on
+    the video exactly as on mobile, a deliberate, stated scope boundary
+    for this round, not an oversight; (e) dislike/rating/follow
+    mutations were verified by unchanged-code audit plus one proven
+    analogous mutation (like), not independently re-clicked each; (f)
+    production stdout logs show a pre-existing `prisma.refreshToken.
+    delete()` "record to delete does not exist" error occurring
+    exclusively at process-startup time (3 occurrences across this VPS's
+    restart history, each immediately adjacent to `next start`, none
+    correlated with a live request during this round's smoke window) —
+    in `packages/api/src/lib/authService.ts`/`jwt.ts`, a file this
+    round's diff never touched; classified **PRE-EXISTING, NOT
+    ATTRIBUTABLE TO PHASE 3**, and flagged separately as a background
+    task for its own investigation rather than silently ignored or
+    folded into this round's scope
+74. **Documentation**: this section, appended to
+    `docs/operations/application-wide-ui-reconciliation.md`, preserving
+    every prior phase's history in full
+75. **Remaining route-matrix status**: filled in against §1's original
+    47-route inventory — `/` moves from "Not started" to "restyled
+    (desktop composition + shared-component accent tokens), content
+    substantially still family C for the metadata overlay/VideoPlayer
+    chrome" — a real, honest partial-credit state, not claimed as fully
+    family A. **7 of 8 remaining feed-family routes, plus
+    `VideoPlayer.tsx`'s own chrome, are the concrete scope for a Phase 3
+    continuation round** — not new phases, a continuation of this one.
+76. **Final verdict**: see below
+
+**PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION — PASS WITH DOCUMENTED
+LIMITATIONS**
+
+The root feed's desktop composition — the single most explicitly
+specified requirement in this round's brief, and the clearest instance
+of Section 32's named FAIL condition — is delivered, verified on
+staging with disposable content and real mutations, and verified live
+on production with real content, a real fresh-registered account, and a
+real reversible mutation, at mobile/tablet/desktop/R16, with zero
+console or server-log regressions. `VideoCard`/`VideoInteractions`'
+brand-accent tokens are reconciled with the rest of the app while every
+mutation, handler, and state variable remains byte-identical to before.
+The diff is exactly 3 frontend files; zero backend/schema/migration/
+provider/pricing/voice files were touched; `story:movie_render` and
+every other program invariant remain provably unaffected. Seven of the
+eight other routes in this family (`/generate`, `/upload`, `/search`,
+`/[username]`, `/v/[id]`, `/analytics`, `/notifications`) and
+`VideoPlayer.tsx`'s own chrome remain honestly deferred, individually
+classified rather than silently skipped, per this initiative's
+established "foundation first" discipline. `/story-studio` remains
+flagged, unchanged from §1, as needing a product decision before any
+restyle is attempted.
+
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS —
+PHASE 3 OF 8 COMPLETE**
+
+`5a72fb9` is now the baseline for the next round. Per the roadmap:
+**Phase 4 is not started and is not auto-started by this round.**
