@@ -2121,3 +2121,396 @@ PHASE 3 OF 8 COMPLETE**
 
 `5a72fb9` is now the baseline for the next round. Per the roadmap:
 **Phase 4 is not started and is not auto-started by this round.**
+
+**Retrospective correction, made explicit rather than silently reconciled**:
+the round above is more accurately labeled **Phase 3A**. Phase 3 itself
+(the full legacy feed family) was not complete at that point — 7 of 8
+remaining routes plus `VideoPlayer.tsx` chrome were still unmigrated.
+The verdict lines recorded above stay as written (an accurate record of
+what that specific round delivered), but the **overall program status**
+they imply should be read going forward as: **PASS WITH LIMITATIONS —
+PHASES 1–2 COMPLETE, PHASE 3 IN PROGRESS** — not "Phase 3 of 8 complete."
+See Phase 3B below for the continuation.
+
+## PHASE 3B — REMAINING LEGACY FEED FAMILY CONTENT MIGRATION
+
+**Baseline, independently re-verified** (not assumed): local HEAD
+`9d8f93c` (the Phase 3A doc commit), production deployed SHA `5a72fb9`
+confirmed live via VPS `git rev-parse HEAD` and `/api/health` returning
+`200 healthy` — exactly matching the Phase 3A close, no drift.
+
+### Scope order and what shipped
+
+Per the specified read-heavy-first order: **`/search`, public creator
+profile (`/[username]`), video detail (`/v/[id]`)** were fully
+reconciled this round (brand-accent tokens + a real desktop composition
+where the prior layout was single-column-only). **`/notifications`** and
+**`/analytics`** — audited as carrying substantial internal legacy
+markup, not mere `Navbar` inheritance — also received a full
+brand-accent token pass; `/analytics` already had a reasonable desktop
+composition (`max-w-5xl`, responsive stat-card grid) from before this
+initiative, so only tokens changed there, not layout.
+
+**Deferred, explicitly, not silently**: `VideoPlayer.tsx` chrome,
+`/upload`, `/generate` — the three highest-risk remaining items
+(media lifecycle, storage/upload, credit-spend generation
+respectively) — carried into a **Phase 3C continuation**, not invented
+new scope. `/story-studio` received its required product classification
+(below) rather than a restyle.
+
+### `/story-studio` — product classification (Section 20 gate)
+
+Audited before any styling decision: `/story-studio` is still live-linked
+in `Navbar`'s dropdown ("Advanced Story Studio"), is a protected,
+R16-blocked route in `middleware.ts` — reachable, not orphaned. Its query/
+mutation surface is entirely `story.*` procedures (`story.listProjects`,
+`story.getProject`, `story.createProject`, `story.updateProject`,
+`story.upsertCharacter`, `story.upsertEnvironment`, `story.buildStoryboard`,
+`story.updateShot`) — the **same backend domain and router family that
+powers Story Playground** (`StoryProject`/`Character`/`Chapter`/
+`SceneSeed` models), not `video.*`/`feed.*`. It shares zero domain
+objects with the legacy video-feed family this Phase 3 initiative is
+scoped to.
+
+**Classification: B — ACTIVE STORY-TO-FILM ROUTE.** Visually it's still
+family C (legacy dark-navy/violet), but domain-wise it belongs to the
+story-to-film product line, matching CLAUDE.md's own note that it's "an
+advanced flow for non-R16 users, no longer the main story flow."
+**Deferred to a future story-workspace-focused phase, not Phase 3/4/5 as
+currently roadmapped** — it is not a feed-family route and should not
+block this family's completion gate.
+
+### Route audit and component map
+
+| Route | Purpose | Auth | R16 | Primary query | Mutations | Prior state | Action |
+|---|---|---|---|---|---|---|---|
+| `/search` | User + video search | No | Allowed (unfiltered, unchanged) | `user.searchUsers`, `video.search` (infinite) | none | Single `max-w-2xl` column, fixed `grid-cols-2` | **FULL MIGRATION** — tokens + responsive grid + wider container |
+| `/[username]` | Public creator profile | No (view) | Allowed | `user.getByUsername`, `feed.byCreator` (infinite), `user.getFollowers`/`getFollowing` | `user.toggleFollow`, `video.updateMetadata`, `video.delete` (owner) | Single `max-w-2xl` column, fixed `grid-cols-3` | **FULL MIGRATION** — tokens + responsive grid + wider container |
+| `/v/[id]` | Video detail | No | Allowed | `video.getById` | none (reuses `VideoCard`'s mutations) | Full-bleed, no desktop composition | **FULL MIGRATION** — same desktop-stage pattern as root feed (Phase 3A) |
+| `/notifications` | Notification list | Yes | Not R16-blocked (not in `R16_BLOCKED_ROUTES`) | `notification.list` (infinite) | `notification.markRead`, `notification.markAllRead` | Real internal markup, `#050b18`/pink/violet palette | **FULL MIGRATION** — tokens; kept as a constrained reading-width list (not a grid — a notification feed is inherently linear) |
+| `/analytics` | Creator analytics dashboard | Yes | Blocked → `/` | `analytics.overview`, `analytics.dailyViews`, `analytics.videoBreakdown` (infinite) | none | Already `max-w-5xl` + responsive stat grid; pink/gray tokens only | **PARTIAL MIGRATION** — tokens only, layout already adequate |
+| `VideoPlayer.tsx` | Playback chrome | — | — | — | none (calls parent's `onProgress`) | Pre-Nocturne Tailwind grays | **DEFERRED TO PHASE 3C** — high risk, fully behavior-mapped (again) but not touched |
+| `/upload` | Video upload | Yes | Blocked → `/` | none | `video.requestUpload`, `video.confirmUpload`, `video.updateMetadata` | Pre-Nocturne | **DEFERRED TO PHASE 3C** — real storage/upload flow |
+| `/generate` | Legacy AI Studio | Yes | Blocked → `/` | `generation.listModels`, `user.creditBalance`, `generation.pollStatus`, `generation.myJobs` | `generation.create`, `generation.publish` | Pre-Nocturne | **DEFERRED TO PHASE 3C** — real credit-spend flow |
+| `/story-studio` | Advanced story tool | Yes | Blocked → `/` | `story.*` | `story.*` | Pre-Nocturne | **PRODUCT DECISION MADE — B, deferred to a story-workspace phase, not this family** |
+
+**Comments**: audited across all three new routes (search results,
+profile, video detail) — **NOT PRESENT** anywhere, confirmed again.
+**Share**: unchanged (`navigator.share`, in `VideoInteractions`, not
+touched this round). **Paywall**: no paywall surface is triggered from
+any of these five routes (confirmed by reading each file in full — none
+render `PaywallModal` or check `freeContentOnly`).
+
+### Behavior classification of touched files
+
+All five files: category **A (pure presentation)** for every touched
+line. Zero `useState`, zero `trpc.*.useQuery`/`useMutation` call, zero
+handler function, and zero `useEffect` was added, removed, or modified
+in any of them — confirmed by diffing each file in full, not just
+`--stat`. The one exception worth naming explicitly: `[username]/
+page.tsx`'s `VideoMenu`/edit-modal/delete-modal — all of it was read in
+full to confirm before touching a single className nearby, and remains
+byte-identical.
+
+### A real, pre-existing bug found and flagged (not fixed this round)
+
+While signed in as the QA account on staging, `/analytics` was audited
+functionally, not just visually. The real network response for the
+batched `analytics.overview`/`dailyViews`/`videoBreakdown` call was
+inspected directly: `{"error":{"json":{"message":"Creator account
+required","code":-32003,"data":{"code":"FORBIDDEN","httpStatus":403,...
+}}}}` — the exact shape the page's own
+`overview.error?.data?.code === 'FORBIDDEN'` check is written to catch.
+Despite that, the "Become a creator" upsell screen never rendered — the
+page fell through to its normal layout with silently-empty stats
+instead, confirmed reproducible (re-checked after a further 4+ second
+wait to rule out a query-retry timing explanation). **This is a real,
+pre-existing frontend bug**, unrelated to and untouched by this round's
+diff (the whole conditional block is byte-identical to before) —
+flagged as a separate background task rather than fixed inline, keeping
+this round's diff exactly what it claims to be: color tokens and layout
+only, nothing D/C-classified touched.
+
+### Real functional verification (staging, disposable content)
+
+One disposable `Video` row seeded against the existing QA account
+(`phase9b2qa`), same isolation gate reconfirmed as every prior round
+(staging DB `127.0.0.1:55484/raivstream_phase9b2_pg`, distinct from
+production). With real content:
+
+- **`/search?q=phase`**: both user and video results rendered; avatar
+  color confirmed `rgb(217,70,168)` (`#d946a8`) via computed style;
+  container measured `1024px` wide at `1440×900` (matches
+  `xl:max-w-5xl`); video grid measured 5 columns (`xl:grid-cols-5`).
+- **`/phase9b2qa`**: real profile (followers/following/views, badges
+  section, own-profile "Edit profile" state correctly shown instead of
+  Follow); content column measured `1024px`; video grid measured 6
+  columns (`xl:grid-cols-6`). **A real `video.updateMetadata` mutation**
+  was fired end-to-end through the actual Edit-post modal (title
+  changed, saved, `200` confirmed via network, then reverted the same
+  way) — the first live D-category mutation test of this specific
+  route's own edit flow.
+- **`/v/<id>`**: real title/description/tags/interaction rail rendered
+  inside the new framed stage — `520×796` at `1440×900` (796, not 852,
+  because of this route's own fixed Navbar offset — expected, correct),
+  `28px` radius, centered, `--noc-page` background — the identical
+  pattern proven in Phase 3A, now reused rather than reimplemented.
+- **`/notifications`**: real, correct redirect to `/sign-in?redirect_url=
+  %2Fnotifications` when signed out; after signing in, correctly
+  returned to `/notifications` and rendered the real empty state ("No
+  notifications yet" — genuinely empty for this account, not fabricated).
+- **`/analytics`**: renders (with the pre-existing FORBIDDEN-detection
+  bug noted above, not this round's regression); empty-state copy and
+  upload CTA confirmed rendering with the new token colors.
+- **R16**: `/search?r16=1` correctly allowed, "R16 Kids" branding
+  shown, unfiltered results (unchanged, pre-existing, not scoped to this
+  round); `/analytics?r16=1` correctly redirected to `/`
+  (`R16_BLOCKED_ROUTES`, unchanged, server-enforced).
+- **Mobile** (`375×812`): all five routes confirmed zero horizontal
+  overflow.
+- **Console**: only the two `403` entries from the already-diagnosed,
+  already-flagged `/analytics` bug above — zero other errors across the
+  entire walkthrough.
+
+Disposable fixture deleted immediately after, `verifiedGone: true`. Both
+one-off scripts (`phase3b-seed.ts`, `phase3b-cleanup.ts`) removed from
+local and staging afterward, matching this initiative's established
+practice.
+
+### Diff audit
+
+```
+apps/web/src/app/[username]/page.tsx    | 20 ++++++++---------
+apps/web/src/app/analytics/page.tsx     | 18 +++++++--------
+apps/web/src/app/notifications/page.tsx | 18 +++++++--------
+apps/web/src/app/search/page.tsx        | 14 ++++++------
+apps/web/src/app/v/[id]/page.tsx        | 39 ++++++++++++++++++++-------------
+5 files changed, 59 insertions(+), 50 deletions(-)
+```
+
+Exactly 5 frontend page files, verified against the full `git diff`, not
+just `--stat`. Zero backend/schema/migration/renderer/provider/pricing
+files touched. `story:movie_render` not re-checked — no code path
+anywhere near credits/rendering was touched.
+
+## Final report — Phase 3B
+
+1. **Authoritative repository**: `C:\Raiv\raivstream-phase9b2-audio`,
+   `codex/ui-mobile-handoff-production`, `tex-node/raivstream` —
+   independently reconfirmed
+2. **Starting local SHA**: `9d8f93c`
+3. **Starting production SHA**: `5a72fb9` (confirmed live, matching
+   local exactly, zero drift)
+4. **Phase 3A deployed baseline**: `5a72fb9`
+5. **Candidate SHA**: `8588e43d6caa50c2c90348261fb645c4a9c172a0` (short:
+   `8588e43`)
+6. **Final deployed SHA**: `8588e43`, confirmed via `git rev-parse HEAD`
+   on the VPS and `/api/health` returning `200 healthy`. Deployed via the
+   standard `main` push → GitHub Actions pipeline (run `33371398692`,
+   succeeded in 2m28s). Fresh production DB backup taken immediately
+   before push: `/root/raivstream/backups/
+   pre_phase3b_feed_content_8588e43_20260831-100703.sql` (1.47 MB, real
+   `pg_dump` output).
+7. **Branch/remote verification**: done, no drift
+8. **Route inventory**: table above — 9 rows (5 migrated/partial this
+   round, 3 deferred to Phase 3C, 1 product-classified)
+9. **Search**: full migration — tokens + responsive grid + wider
+   container, verified with real data on staging
+10. **Search behavior invariant**: unchanged — zero query/pagination/
+    filter lines touched, confirmed by full-file diff
+11. **Public creator profile**: full migration — tokens + responsive
+    grid + wider container + own-profile-vs-visitor state both verified
+12. **Follow behavior**: unchanged code (0 lines touched in
+    `toggleFollow`); not independently re-clicked this round (single QA
+    account available, can't follow itself) — the identical mutation
+    pattern was proven end-to-end for `toggleLike` in Phase 3A and for
+    `video.updateMetadata` on this same route this round
+13. **Video detail**: full migration — same proven desktop-stage pattern
+    from Phase 3A, reused not reimplemented, verified with real content
+14. **VideoPlayer audit**: re-confirmed unchanged from Phase 3A's full
+    behavior map (play/pause, autoplay, mute, progress-every-5s,
+    landscape detection, HLS setup) — deferred, not touched
+15. **VideoPlayer changes**: none — deferred to Phase 3C
+16. **Playback regression QA**: not applicable — zero lines touched
+17. **View tracking**: unchanged, not independently re-triggered this
+    round (`/v/[id]` reuses `VideoCard`, already proven in Phase 3A)
+18. **Progress tracking**: unchanged, not independently re-triggered
+19. **Video interactions**: unchanged — Phase 3A's tokens only, not
+    reopened; `/v/[id]` reuses the same component, not a duplicate
+20. **Upload**: not touched — deferred to Phase 3C, classified FULL
+    MIGRATION pending
+21. **Upload QA**: not performed — out of this round's touched-file set
+22. **Generate**: not touched — deferred to Phase 3C, classified FULL
+    MIGRATION pending
+23. **Generate QA**: not performed; no generation triggered, no credits
+    spent
+24. **Generate credit behavior**: unaffected — file untouched
+25. **Notifications**: full migration — tokens for a real, substantial
+    internal markup surface (not mere `Navbar` inheritance); mutations
+    (`markRead`/`markAllRead`) unchanged, 0 lines touched
+26. **Notifications classification**: **FULL MIGRATION** (upgraded from
+    Phase 3A's placeholder "SHARED-STYLE INHERITANCE" guess — a real
+    audit showed real internal markup worth reconciling)
+27. **Analytics**: partial migration — tokens only; layout was already
+    adequate (pre-existing `max-w-5xl` + responsive grid)
+28. **Analytics classification**: creator-facing, tied to feed content —
+    confirmed correctly in this family's scope, not double-counted with
+    Admin
+29. **Story Studio**: audited, not restyled
+30. **Story Studio product classification**: **B — ACTIVE
+    STORY-TO-FILM ROUTE** — deferred to a future story-workspace phase,
+    not a feed-family route, does not block this family's completion gate
+31. **Comments**: **NOT PRESENT**, confirmed again across all three new
+    routes
+32. **Share behavior**: unchanged, not touched
+33. **Paywall/subscription**: **NOT APPLICABLE** — none of these 5 routes
+    trigger a paywall surface, confirmed by reading each file in full
+34. **Loading states**: unchanged code; exercised live on `/search`,
+    `/notifications` (spinner rendering correctly with new colors)
+35. **Empty states**: exercised live and confirmed correct — search "no
+    results" path (not hit this round, real results existed), profile/
+    notifications/analytics "no content yet" states all rendered
+36. **Error states**: the one real error state exercised
+    (`/analytics`'s FORBIDDEN path) is the pre-existing bug documented
+    above — a genuine finding, not a regression
+37. **Modals**: `[username]`'s edit/delete/follow-list modals — unchanged
+    code, real edit-modal mutation proven end-to-end (see #11)
+38. **Accessibility**: not independently audited beyond what was already
+    true of the unmodified components — out of this round's scope,
+    stated plainly rather than claimed
+39. **Motion**: no new motion introduced; only color values inside
+    existing `transition-colors` classes changed
+40. **Mobile QA**: done — `375×812`, all 5 routes, zero overflow
+41. **Tablet QA**: not separately re-run this round — none of the 5
+    touched routes changed their sub-`lg` responsive behavior (the
+    desktop composition additions are all `lg:`-and-up; below that,
+    every touched file's layout is unchanged from before this round)
+42. **Desktop QA**: done — `1440×900`, all 5 routes, computed
+    geometry measured (widths, grid columns, frame dimensions) not
+    just visually inspected
+43. **Route hard-load QA**: not run as a separate deep-link sweep this
+    round — natural-navigation walkthrough completed; deferred to the
+    next continuation alongside Phase 3A's own deferred hard-load matrix
+44. **Signed-out QA**: done — search, profile, video detail all
+    confirmed rendering correctly signed-out; notifications/analytics
+    correctly redirect to sign-in
+45. **Signed-in QA**: done — real sign-in via the actual form; real
+    `video.updateMetadata` mutation proven; notifications/analytics
+    both rendered their real (empty/FORBIDDEN) states
+46. **R16 QA**: done — one allowed route (`/search`) and one blocked
+    route (`/analytics`) both confirmed correct, server-enforced
+47. **Real mutation QA**: `video.updateMetadata` proven end-to-end
+    (edit + revert); `toggleFollow`/`toggleLike`/`toggleDislike`/
+    `setRating` unchanged-code, not independently re-clicked this round
+    (see #12)
+48. **Console/network**: only the two already-diagnosed `/analytics`
+    `403`s; zero other errors across the full walkthrough
+49. **Staging server logs**: not separately inspected this round beyond
+    the live console/network sweep above (no new backend code path was
+    touched, so a dedicated log sweep would be theater — consistent with
+    this initiative's established reasoning for presentation-only diffs)
+50. **Diff audit**: clean — exactly 5 frontend files, verified via full
+    `git diff`
+51. **Backend/schema invariant**: held — zero backend/schema files
+52. **Migration status**: none created, none required
+53. **Credit/pricing invariant**: not re-checked — no nearby code path
+    touched
+54. **Movie-render 100-credit invariant**: not re-checked — same reason
+55. **Voice/provider exclusion**: held — untouched
+56. **Production backup**: done — see §6 above
+57. **Production deploy**: done — `8588e43` deployed via GitHub Actions
+    run `33371398692` (2m28s), VPS `git rev-parse HEAD` and
+    `/api/health` both confirm the correct SHA is live
+58. **Production health**: `200 healthy` post-deploy
+59. **Production signed-out smoke**: done, both viewports, real
+    (non-disposable) production content — `/search?q=a` (5-col grid at
+    desktop), `/fothlog` (real 11-video profile, 6-col grid at desktop),
+    `/v/cmr5qywwb00agmz42pqvfczhj` (real video, framed stage 520×796,
+    28px radius); all three confirmed zero horizontal overflow at
+    375×812
+60. **Production signed-in smoke**: done — a fresh disposable account
+    (`phase3b-smoke-<timestamp>@raivstream.test`) registered through the
+    real sign-up form; real `user.toggleFollow` fired against
+    `@fothlog`'s real profile, `200` confirmed, button state updated to
+    "Following", then reversed (unfollowed) to leave the real creator's
+    follower count unchanged; account deleted immediately after,
+    `verifiedGone: true`
+61. **Production R16 smoke**: done, desktop viewport —
+    `/search?q=a&r16=1` correctly shows "R16 Kids" branding, real
+    results, allowed per unchanged R16 policy
+62. **Production logs**: inspected post-smoke — zero new errors beyond
+    the two already-classified pre-existing issues (the startup-time
+    `refreshToken.delete` count remained at exactly 3, unchanged by this
+    deploy's restart; the `/analytics` `FORBIDDEN`-detection bug is
+    already flagged separately, not a new regression)
+63. **Cleanup**: done — disposable video (`verifiedGone: true`), both
+    staging one-off scripts removed, disposable production smoke account
+    (`verifiedGone: true`) and its one-off cleanup script removed
+64. **Phase 3 final route matrix**: NOT YET FINAL — `VideoPlayer.tsx`,
+    `/upload`, `/generate` remain unmigrated (Phase 3C); `/story-studio`
+    is classified and excluded from this family. Phase 3 is **not**
+    complete at the end of this round.
+65. **Known limitations**: (a) `/analytics`'s FORBIDDEN-detection bug is
+    real, pre-existing, and flagged separately, not fixed this round;
+    (b) `/notifications` was not given a grid/rail desktop treatment —
+    a notification list is inherently linear, so only its reading width
+    was widened (`max-w-lg` → `lg:max-w-xl`), a deliberate judgment call
+    stated plainly; (c) `follow`/`dislike`/`rating` mutations were
+    verified by unchanged-code audit rather than independently
+    re-clicked this round; (d) tablet was not separately re-run (no
+    sub-`lg` behavior changed)
+66. **Deferred surfaces**: `VideoPlayer.tsx` chrome, `/upload`,
+    `/generate` — named explicitly as **Phase 3C**, not silently dropped
+67. **Documentation**: this section, appended, preserving Phase 3A's
+    record in full including its own now-corrected verdict framing
+    (noted above, not rewritten)
+68. **Overall application route-matrix progress**: `/`, `VideoCard`,
+    `VideoInteractions` (Phase 3A) + `/search`, `/[username]`,
+    `/v/[id]`, `/notifications` (full) + `/analytics` (partial — tokens
+    only) now on Nocturne tokens; `/upload`, `/generate` remain
+    unmigrated; `/story-studio` excluded from this family by
+    classification
+69. **Phase 3B verdict**: see below
+70. **Phase 3 verdict**: see below
+71. **Overall program status**: see below
+
+**PHASE 3B — REMAINING LEGACY FEED FAMILY CONTENT MIGRATION — PASS WITH
+DOCUMENTED LIMITATIONS**
+
+Search, public creator profile, and video detail are fully reconciled —
+brand-accent tokens, responsive result/content grids, and (for video
+detail) the same proven desktop-stage composition from Phase 3A, reused
+rather than reimplemented. Notifications received the same full token
+treatment after a real audit showed substantial internal markup, not
+mere chrome inheritance. Analytics received tokens (its layout was
+already adequate). `/story-studio` received its required product
+classification — **B, active story-to-film route**, not a feed-family
+route — rather than a styling decision made implicitly. A real,
+pre-existing bug was found on `/analytics` (a FORBIDDEN-error-shape
+mismatch hiding the "Become a creator" screen) and flagged separately
+rather than folded into this presentation-only round. The diff is
+exactly 5 frontend files; zero backend/schema/migration/provider/
+pricing/voice files touched; every mutation this round exercised
+(`video.updateMetadata` on staging, `user.toggleFollow` on production)
+fired for real and was reverted cleanly. `VideoPlayer.tsx` chrome,
+`/upload`, and `/generate` — the three highest-risk remaining
+items — are explicitly deferred to **Phase 3C**, not silently dropped.
+
+**PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION — IN PROGRESS**
+
+Per the completion gate: every feed-family route discovered in the
+audit must be fully migrated, explicitly deferred to a named phase, or
+product-excluded with justification — no silent "remaining unmigrated"
+pages. That bar is met for classification (every route in §"Route audit
+and component map" above has one of those states), but three real
+routes (`VideoPlayer.tsx` chrome, `/upload`, `/generate`) are not yet
+migrated. Phase 3 is therefore **not** complete — it advances to Phase
+3C, not to Phase 4.
+
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS —
+PHASES 1–2 COMPLETE, PHASE 3 IN PROGRESS**
+
+`8588e43` is the new baseline. Phase 3C (`VideoPlayer.tsx` chrome,
+`/upload`, `/generate`) is the concrete next step for this family. Phase
+4 (Academy + Specialized Storybook Views) remains **not started** and
+is not auto-started by this round.
