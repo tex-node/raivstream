@@ -2496,21 +2496,61 @@ fired for real and was reverted cleanly. `VideoPlayer.tsx` chrome,
 `/upload`, and `/generate` — the three highest-risk remaining
 items — are explicitly deferred to **Phase 3C**, not silently dropped.
 
-**PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION — IN PROGRESS**
+**PHASE 3C — VIDEOPLAYER + UPLOAD + GENERATE COMPLETION PASS —
+FORMALLY CLOSED — PASS (SHA `d6adfd9`)**
 
-Per the completion gate: every feed-family route discovered in the
-audit must be fully migrated, explicitly deferred to a named phase, or
-product-excluded with justification — no silent "remaining unmigrated"
-pages. That bar is met for classification (every route in §"Route audit
-and component map" above has one of those states), but three real
-routes (`VideoPlayer.tsx` chrome, `/upload`, `/generate`) are not yet
-migrated. Phase 3 is therefore **not** complete — it advances to Phase
-3C, not to Phase 4.
+Commit `d6adfd9` on branch `codex/ui-mobile-handoff-production`.
+Three files changed, all frontend-only (zero backend/schema/migration
+files touched):
 
-**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS —
-PHASES 1–2 COMPLETE, PHASE 3 IN PROGRESS**
+- `apps/web/src/components/video/VideoPlayer.tsx` — play overlay
+  converted from `<div>` to `<button type="button" aria-label="Play">`;
+  mute button gained `focus-visible:ring-2 focus-visible:ring-white/60`.
+  Video-player colors (black/white) are semantically correct and left
+  unchanged. All behavior (`useEffect` hooks, HLS setup, progress
+  interval, `isActive` watcher) unchanged.
 
-`8588e43` is the new baseline. Phase 3C (`VideoPlayer.tsx` chrome,
-`/upload`, `/generate`) is the concrete next step for this family. Phase
-4 (Academy + Specialized Storybook Views) remains **not started** and
-is not auto-started by this round.
+- `apps/web/src/app/upload/page.tsx` — page background `bg-black` →
+  `bg-[var(--noc-page)]`; container widened `max-w-xl` → `max-w-2xl`;
+  metadata form restructured to `md:flex-row` desktop two-column layout;
+  drag zone, progress bar, inputs, labels, checkboxes, CTA buttons, and
+  success icon migrated to Nocturne tokens. Transition-toggled colors
+  (drag zone active/idle) use literal hex values per Phase 2 CSS
+  transition bug rule.
+
+- `apps/web/src/app/generate/page.tsx` — page background, header
+  gradient, credit badge, controls card, section labels, mode radio
+  buttons, model select, prompt textarea, seed image input, aspect ratio
+  buttons, duration slider, generate button, output card, spinner,
+  publish buttons, and history cards all migrated to Nocturne tokens.
+  Transition-toggled colors (mode radios, aspect ratio buttons, history
+  cards) use literal hex values. Amber/red/emerald semantic colors
+  preserved unchanged. Credit rate sourced from `featureCreditRate` DB
+  table at runtime — not hardcoded.
+
+Staging build gate: `pnpm --filter @raivstream/web build` — PASS (no
+errors, both `/upload` and `/generate` appear in route manifest).
+Staging runtime gate: PM2 id 30 online, ready in 490ms, zero app
+errors (only expected `STRIPE_WEBHOOK_SECRET` warning).
+Route QA: `/` → 200, `/v/[id]` → 200, `/upload` → 307 (auth wall
+enforced), `/generate` → 307 (auth wall enforced).
+CSS bundle: all 13 `--noc-*` token families confirmed present.
+Transition-safe literals: `#d946a8` and `rgba(217,70,168` confirmed in
+both compiled page bundles.
+VideoPlayer accessibility: `aria-label="Play"`, `type="button"`,
+`focus-visible:ring-2`, `aria-label="Unmute"/"Mute"` confirmed in
+chunk 8244.
+
+**PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION — COMPLETE**
+
+All three deferred routes (VideoPlayer chrome, /upload, /generate) are
+now migrated. Every feed-family route in the audit is fully migrated,
+explicitly deferred to a named phase, or product-excluded with
+justification. The Phase 3 completion gate is met.
+
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS —
+PHASES 1–3 COMPLETE**
+
+`d6adfd9` is the new baseline. Phase 4 (Academy + Specialized
+Storybook Views) remains **not started** and is not auto-started by
+this round.
