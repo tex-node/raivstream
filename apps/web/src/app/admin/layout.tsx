@@ -6,18 +6,18 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 
 const NAV = [
-  { href: '/admin',             label: 'Overview',    icon: '◈' },
-  { href: '/admin/users',       label: 'Users',       icon: '👥' },
-  { href: '/admin/moderation',  label: 'Moderation',  icon: '🛡️' },
-  { href: '/admin/credits',     label: 'Credits',     icon: '⚡' },
-  { href: '/admin/jobs',        label: 'AI Jobs',     icon: '🎬' },
-  { href: '/admin/story-analytics', label: 'Story Analytics', icon: 'A' },
-  { href: '/admin/prompt-quality', label: 'Prompt Quality', icon: 'P' },
+  { href: '/admin',                    label: 'Overview',           icon: '◈' },
+  { href: '/admin/users',              label: 'Users',              icon: '👥' },
+  { href: '/admin/moderation',         label: 'Moderation',         icon: '🛡️' },
+  { href: '/admin/credits',            label: 'Credits',            icon: '⚡' },
+  { href: '/admin/jobs',               label: 'AI Jobs',            icon: '🎬' },
+  { href: '/admin/story-analytics',    label: 'Story Analytics',    icon: 'A' },
+  { href: '/admin/prompt-quality',     label: 'Prompt Quality',     icon: 'P' },
   { href: '/admin/character-insights', label: 'Character Insights', icon: 'C' },
-  { href: '/admin/sequence', label: 'Sequence', icon: 'S' },
-  { href: '/admin/movie-renders', label: 'Movie Renders', icon: 'M' },
-  { href: '/admin/academy', label: 'Academy', icon: 'L' },
-  { href: '/admin/revenue',     label: 'Revenue',     icon: '💳' },
+  { href: '/admin/sequence',           label: 'Sequence',           icon: 'S' },
+  { href: '/admin/movie-renders',      label: 'Movie Renders',      icon: 'M' },
+  { href: '/admin/academy',            label: 'Academy',            icon: 'L' },
+  { href: '/admin/revenue',            label: 'Revenue',            icon: '💳' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +26,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { user, isLoaded } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Close sidebar on route change
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   useEffect(() => {
@@ -37,8 +36,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#050b18' }}>
-        <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--noc-page)]">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--noc-blue)]/30 border-t-[var(--noc-blue)]" />
       </div>
     );
   }
@@ -50,44 +49,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const SidebarContent = () => (
     <>
       {/* Logo */}
-      <div className="px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+      <div className="flex items-center justify-between border-b border-[var(--noc-hairline)] px-6 py-5">
         <div>
-          <Link href="/" className="block">
+          <Link
+            href="/"
+            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-6 w-auto" />
           </Link>
-          <div className="mt-1 text-xs font-semibold px-2 py-0.5 rounded-full inline-block"
-            style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>
+          <div className="mt-1 inline-block rounded-full bg-[var(--noc-purple)]/15 px-2 py-0.5 text-xs font-semibold text-[var(--noc-purple)]">
             Admin
           </div>
         </div>
-        {/* Close button — mobile only */}
         <button
-          className="md:hidden text-white/40 hover:text-white p-1"
+          className="p-1 text-[var(--noc-t4)] hover:text-[var(--noc-t1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60 md:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-label="Close menu"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 space-y-0.5 px-3 py-4" aria-label="Admin navigation">
         {NAV.map(({ href, label, icon }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-              style={{
-                background: active ? 'rgba(167,139,250,0.15)' : 'transparent',
-                color:      active ? '#a78bfa' : 'rgba(255,255,255,0.55)',
-              }}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60 ${
+                active
+                  ? 'bg-[var(--noc-blue)]/12 text-[var(--noc-blue)]'
+                  : 'text-[var(--noc-t3)] hover:bg-white/5 hover:text-[var(--noc-t1)]'
+              }`}
+              aria-current={active ? 'page' : undefined}
             >
-              <span className="text-base">{icon}</span>
+              <span className="text-base" aria-hidden="true">{icon}</span>
               {label}
             </Link>
           );
@@ -95,61 +96,52 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       {/* User info */}
-      <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-        <div className="text-xs text-white/30 mb-0.5">Logged in as</div>
-        <div className="text-sm text-white/70 font-medium truncate">@{user.username}</div>
-        <div className="text-xs mt-0.5 font-semibold" style={{ color: '#a78bfa' }}>{user.role}</div>
+      <div className="border-t border-[var(--noc-hairline)] px-4 py-4">
+        <div className="mb-0.5 text-xs text-[var(--noc-t5)]">Logged in as</div>
+        <div className="truncate text-sm font-medium text-[var(--noc-t2)]">@{user.username}</div>
+        <div className="mt-0.5 text-xs font-semibold text-[var(--noc-purple)]">{user.role}</div>
       </div>
     </>
   );
 
   return (
-    <div className="min-h-screen flex" style={{ background: '#050b18' }}>
+    <div className="flex min-h-screen bg-[var(--noc-page)]">
 
-      {/* ── Mobile overlay backdrop ── */}
+      {/* Mobile overlay backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 md:hidden"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* ── Sidebar — desktop: always visible, mobile: slide-in drawer ── */}
+      {/* Sidebar — desktop: always visible, mobile: slide-in drawer */}
       <aside
-        className={`
-          fixed md:static inset-y-0 left-0 z-50
-          w-56 flex-shrink-0 flex flex-col border-r
-          transition-transform duration-200 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        `}
-        style={{ borderColor: 'rgba(255,255,255,0.07)', background: '#080f1f' }}
+        className={`fixed inset-y-0 left-0 z-50 flex w-56 flex-shrink-0 flex-col border-r border-[var(--noc-hairline)] bg-[#070810] transition-transform duration-200 ease-in-out md:static ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
       >
         <SidebarContent />
       </aside>
 
-      {/* ── Main content ── */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Main content */}
+      <div className="flex min-w-0 flex-1 flex-col">
 
         {/* Mobile top bar */}
-        <header
-          className="md:hidden flex items-center gap-3 px-4 py-3 border-b sticky top-0 z-30"
-          style={{ background: '#080f1f', borderColor: 'rgba(255,255,255,0.07)' }}
-        >
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--noc-hairline)] bg-[#070810] px-4 py-3 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-white/50 hover:text-white p-1 -ml-1"
+            className="-ml-1 p-1 text-[var(--noc-t4)] hover:text-[var(--noc-t1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
             aria-label="Open menu"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-white font-bold text-sm">
+          <span className="text-sm font-bold text-[var(--noc-t1)]">
             {NAV.find((n) => n.href === pathname)?.label ?? 'Admin'}
           </span>
-          <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>
+          <span className="ml-auto rounded-full bg-[var(--noc-purple)]/15 px-2 py-0.5 text-xs font-semibold text-[var(--noc-purple)]">
             {user.role}
           </span>
         </header>

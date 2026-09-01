@@ -2776,8 +2776,80 @@ Protected routes: `/upload` 307, `/generate` 307, `/analytics` 307,
 **PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS — COMPLETE**
 
 Production baseline: `36b5538`.
-Phase 5 (Admin family — `/admin/**` route family, reconciling
-older dark-navy admin UI into Nocturne, preserving all administrative
-authorization and operational behavior) not started and not
-auto-started per explicit instruction. Phase 6 (workspace internals —
-Sequence/Audio/Film and story-playground internals) follows after Phase 5.
+Phase 5 (Admin family) execution record follows.
+
+## Phase 5: Admin family — `/admin/**` Nocturne reconciliation
+
+**Scope**: all 13 files under `apps/web/src/app/admin/` — layout, dashboard,
+users, credits, jobs, moderation, movie-renders, sequence, story-analytics,
+prompt-quality, character-insights, academy, revenue. Plus one new shared
+primitives file (`AdminShell.tsx`).
+
+**Authorization preserved verbatim**:
+- Middleware: `/admin` in both `PROTECTED_ROUTES` and `R16_BLOCKED_ROUTES`
+  — unauthenticated and R16 users blocked at network layer. Not touched.
+- Layout: client-side role check (`ADMIN | MODERATOR`) renders `null` for
+  non-admin authenticated users. Not touched.
+- tRPC: all procedure-level role checks (`protectedAdminProcedure`, etc.)
+  unchanged. Not touched.
+
+**Design changes**:
+- Legacy `background: '#050b18'` / `background: '#080f1f'` → Nocturne
+  `bg-[var(--noc-page)]` / `bg-[#070810]` (noc-bar exact value)
+- Legacy `#a78bfa` violet accent → `var(--noc-blue)` for primary CTAs and
+  active nav; `var(--noc-purple)` for secondary badges and identity accents
+- Legacy gradient buttons `linear-gradient(135deg,#7c3aed,#2563eb)` →
+  `bg-[var(--noc-blue)]`
+- Legacy spinners `border-violet-500/30 border-t-violet-500` →
+  `border-[var(--noc-blue)]/30 border-t-[var(--noc-blue)]`
+- All card surfaces: `rgba(255,255,255,0.03)` inline style →
+  `bg-[var(--noc-card)]`
+- All divider borders: `rgba(255,255,255,0.07–0.10)` inline style →
+  `border-[var(--noc-hairline)]`
+- All text: `text-white/60`, `text-white/40`, etc. → `text-[var(--noc-t2)]`
+  through `text-[var(--noc-t5)]`
+- Focus rings: all inputs/buttons gained `focus-visible:ring-2
+  focus-visible:ring-[var(--noc-blue)]/60`
+- Nav: `aria-current="page"` on active link; `aria-label="Admin navigation"`
+  on `<nav>`
+- `character-insights/page.tsx`: removed outer `bg-[#050b18] min-h-screen`
+  (layout now provides background)
+
+**Semantic colors preserved** (not converted to Nocturne brand tokens):
+- Status: COMPLETED=#22c55e, FAILED=#ef4444, GENERATING=#f59e0b,
+  QUEUED=var(--noc-purple), CANCELLED=#6b7280
+- Role: ADMIN=#ef4444, MODERATOR=#f59e0b, CREATOR=var(--noc-purple),
+  VIEWER=#6b7280
+- Tier: FREE=#6b7280, VIEWER=#22c55e, CREATOR=#f59e0b
+- Revenue credits sold: #22c55e
+- Credit rates: active=#22c55e, inactive=#ef4444
+- Moderation actions: semantic red/amber/emerald
+- Progress bars (emerald semantic — movie render completion): kept as-is
+
+**New file created**:
+`apps/web/src/app/admin/AdminShell.tsx` — four shared primitives:
+`AdminSpinner`, `AdminError`, `AdminCard`, `AdminStatCard`. Consumed by
+all 13 admin pages, replacing scattered inline loading/error/card patterns.
+
+**CSS transition-safe rule**: Admin has no conditional colors animated under
+`transition` classes — all conditional colors in admin are plain `style`
+attributes, not Tailwind class switches. No literal-hex fallback needed.
+
+**Sequence classification**: `/admin/sequence` confirmed ADMIN DIAGNOSTICS
+(uses `trpc.admin.sequenceAnalytics.useQuery` — aggregate analytics only,
+no story text/notes/prompts/private media). Phase 5 eligible; treated as
+admin diagnostic, not creator workspace.
+
+**TypeScript check**: clean (`tsc --noEmit` exit 0, no errors).
+
+**Staging QA**: to be run immediately after this commit.
+
+**Production**: to follow staging QA pass.
+
+**Production baseline going in**: `36b5538`.
+**Feature branch**: `codex/ui-mobile-handoff-production`.
+
+**Route inventory update**: 13 admin routes + layout now fully on family A
+(Nocturne tokens). Phase 5 scope complete. Phase 6 (workspace internals —
+Audio, Sequence, Film, Storybook internals, story-playground-new) not started
+and not auto-started per explicit instruction.

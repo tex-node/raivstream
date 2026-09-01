@@ -2,86 +2,64 @@
 
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { AdminSpinner, AdminStatCard } from '../AdminShell';
 
 export default function AdminRevenuePage() {
   const [page, setPage] = useState(1);
-
   const { data, isLoading, error } = trpc.admin.listPurchases.useQuery({ page, pageSize: 25 });
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6 p-8">
       <div>
-        <h1 className="text-white text-2xl font-bold">Revenue</h1>
-        <p className="text-white/40 text-sm mt-1">Credit purchase history and totals</p>
+        <h1 className="text-2xl font-bold text-[var(--noc-t1)]">Revenue</h1>
+        <p className="mt-1 text-sm text-[var(--noc-t4)]">Credit purchase history and totals</p>
       </div>
 
-      {/* Summary cards */}
       {data && (
         <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-2xl p-5 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
-            <div className="text-xs text-white/40 font-medium uppercase tracking-wider mb-2">All-Time Credits Sold</div>
-            <div className="text-2xl font-bold" style={{ color: '#22c55e' }}>
-              {data.allTimeCreditsSold.toLocaleString()}
-            </div>
-            <div className="text-xs text-white/30 mt-1">credits purchased</div>
-          </div>
-          <div className="rounded-2xl p-5 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
-            <div className="text-xs text-white/40 font-medium uppercase tracking-wider mb-2">Total Transactions</div>
-            <div className="text-2xl font-bold text-white">
-              {data.allTimeTransactions.toLocaleString()}
-            </div>
-            <div className="text-xs text-white/30 mt-1">credit purchases</div>
-          </div>
+          <AdminStatCard label="All-Time Credits Sold" value={data.allTimeCreditsSold} sub="credits purchased" accent="#22c55e" />
+          <AdminStatCard label="Total Transactions"    value={data.allTimeTransactions} sub="credit purchases" />
         </div>
       )}
 
-      {/* Transactions table */}
-      <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+      <div className="overflow-hidden rounded-2xl border border-[var(--noc-hairline)]">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-          </div>
+          <AdminSpinner />
         ) : error ? (
-          <div className="px-6 py-8 text-red-300 text-sm">{error.message}</div>
+          <div className="px-6 py-8 text-sm text-red-300">{error.message}</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                <th className="text-left px-5 py-3 text-white/40 font-medium">User</th>
-                <th className="text-right px-5 py-3 text-white/40 font-medium">Credits</th>
-                <th className="text-left px-5 py-3 text-white/40 font-medium">Description</th>
-                <th className="text-right px-5 py-3 text-white/40 font-medium">Balance After</th>
-                <th className="text-right px-5 py-3 text-white/40 font-medium">Date</th>
+              <tr className="border-b border-[var(--noc-hairline)] bg-[var(--noc-card)]">
+                <th className="px-5 py-3 text-left font-medium text-[var(--noc-t4)]">User</th>
+                <th className="px-5 py-3 text-right font-medium text-[var(--noc-t4)]">Credits</th>
+                <th className="px-5 py-3 text-left font-medium text-[var(--noc-t4)]">Description</th>
+                <th className="px-5 py-3 text-right font-medium text-[var(--noc-t4)]">Balance After</th>
+                <th className="px-5 py-3 text-right font-medium text-[var(--noc-t4)]">Date</th>
               </tr>
             </thead>
             <tbody>
               {data?.transactions.map((tx, i) => (
-                <tr key={tx.id}
-                  className="border-t"
-                  style={{
-                    borderColor: 'rgba(255,255,255,0.05)',
-                    background:  i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
-                  }}
-                >
+                <tr key={tx.id} className={`border-t border-[var(--noc-hairline)] ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
                   <td className="px-5 py-3">
-                    <div className="text-white font-medium">@{tx.user.username}</div>
-                    <div className="text-xs text-white/40">{tx.user.email}</div>
+                    <div className="font-medium text-[var(--noc-t1)]">@{tx.user.username}</div>
+                    <div className="text-xs text-[var(--noc-t4)]">{tx.user.email}</div>
                   </td>
                   <td className="px-5 py-3 text-right font-mono font-bold" style={{ color: '#22c55e' }}>
                     +{tx.amount.toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-white/50 text-xs">{tx.description ?? '—'}</td>
-                  <td className="px-5 py-3 text-right font-mono text-white/60">
+                  <td className="px-5 py-3 text-xs text-[var(--noc-t4)]">{tx.description ?? '—'}</td>
+                  <td className="px-5 py-3 text-right font-mono text-[var(--noc-t3)]">
                     {tx.balanceAfter.toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-right text-white/40 text-xs">
+                  <td className="px-5 py-3 text-right text-xs text-[var(--noc-t4)]">
                     {new Date(tx.createdAt).toLocaleString()}
                   </td>
                 </tr>
               ))}
               {data?.transactions.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-white/30">No purchases yet</td>
+                  <td colSpan={5} className="px-5 py-10 text-center text-[var(--noc-t5)]">No purchases yet</td>
                 </tr>
               )}
             </tbody>
@@ -89,25 +67,22 @@ export default function AdminRevenuePage() {
         )}
       </div>
 
-      {/* Pagination */}
       {data && data.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-white/40">{data.total.toLocaleString()} transactions total</span>
+          <span className="text-[var(--noc-t4)]">{data.total.toLocaleString()} transactions total</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1.5 rounded-lg disabled:opacity-30 text-white/60 hover:text-white transition-colors border"
-              style={{ borderColor: 'rgba(255,255,255,0.10)' }}
+              className="rounded-lg border border-[var(--noc-hairline)] px-3 py-1.5 text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
             >
               ←
             </button>
-            <span className="text-white/60">Page {page} of {data.totalPages}</span>
+            <span className="text-[var(--noc-t3)]">Page {page} of {data.totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
               disabled={page === data.totalPages}
-              className="px-3 py-1.5 rounded-lg disabled:opacity-30 text-white/60 hover:text-white transition-colors border"
-              style={{ borderColor: 'rgba(255,255,255,0.10)' }}
+              className="rounded-lg border border-[var(--noc-hairline)] px-3 py-1.5 text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
             >
               →
             </button>
@@ -117,5 +92,3 @@ export default function AdminRevenuePage() {
     </div>
   );
 }
-
-
