@@ -2656,3 +2656,125 @@ PHASES 1–3 COMPLETE**
 `d6adfd9` is the new baseline (implementation); `797ae58` closes the
 docs. Phase 4 (Academy + Specialized Storybook Views) remains **not
 started** and is not auto-started by this round.
+
+---
+
+## PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS
+
+**Starting state:**
+- LOCAL HEAD: `2ec8d55` (codex/ui-mobile-handoff-production)
+- origin/main: `6665e87` (Phase 3C merge)
+- DEPLOYED PRODUCTION SHA: `6665e87` (confirmed)
+- Provenance: Class A — origin/main = production; audio branch 1 commit
+  ahead with Phase 3C docs-only commit.
+
+**Route inventory (8 routes, 7 unique implementations):**
+
+Academy:
+- `/academy` — `academy/page.tsx` — dashboard (student+instructor combined);
+  also used by `/academy/student` and `/academy/instructor` re-exports
+- `/academy/classes` — `academy/classes/page.tsx` — class management
+- `/academy/classes/[classId]` — `academy/classes/[classId]/page.tsx`
+- `/academy/classes/[classId]/lessons/[lessonId]` — lesson view + progress
+- `/academy/classes/[classId]/assignments/[assignmentId]` — submit work
+- `/academy/submissions/[submissionId]` — submission review/grading
+- `/academy/instructor` → `export { default } from '../page'` (re-export)
+- `/academy/student` → `export { default } from '../page'` (re-export)
+
+Storybook:
+- `/storybook/[projectId]` → `export { default } from '../../story-playground/[projectId]/storybook/page'` (re-export)
+- `/story-playground/[projectId]/storybook` — 438-line full viewer (implementation)
+
+Middleware: Academy and Storybook are NOT in `PROTECTED_ROUTES` or
+`R16_BLOCKED_ROUTES`. Both are publicly accessible on main and R16.
+
+**Behavior classification (SAFE PRESENTATION ONLY — no semantic changes):**
+
+Academy: All tRPC calls (`studentDashboard`, `instructorDashboard`,
+`createCourseFromTemplate`, `joinClass`, `getClass`, `getLesson`,
+`updateLessonProgress`, `getAssignment`, `listStudentProjects`,
+`submitAssignment`, `getSubmission`, `addComment`, `reviewSubmission`,
+`createTemplateAssignments`) preserved unchanged. `tabForStage` helper
+preserved unchanged. `dateLabel`/`statusLabel` helpers in AcademyShell
+preserved unchanged.
+
+Storybook: `useStorybookReadingEngine` not touched. `readAloudEnabled`
+feature flag not touched. Analytics events (6 types) not touched. Touch
+swipe handlers not touched. Keyboard navigation not touched. CSS-based
+fullscreen lifecycle not touched. Sentence highlighting literals not
+touched (transition-safe rule preserved: `bg-[#ffef9f]`,
+`bg-[#dbeafe]`, `text-[#172033]` remain literal hex on transition-colors
+span).
+
+**Design reconciliation decisions:**
+
+Academy: Full Nocturne dark token conversion. Prior warm-cream light
+palette (`bg-[#f7f4ee]`, `bg-white`, `text-[#172033]`, etc.) was legacy
+pre-Nocturne styling. Converted to `--noc-page`, `--noc-card`,
+`--noc-hairline`, `--noc-t1`/`t2`/`t4`, `--noc-blue`, `--noc-magenta`,
+`--noc-purple`. Semantic accent colors preserved unchanged: `#2fbf71`
+(green, join/progress), `#ffcf4a` (yellow, Story Workspace CTA),
+`#b13b63` pink (Add Comment button). Inner card items use `bg-white/5`
+for subtle depth layering. Added `focus-visible:ring-2` to all nav links,
+class/assignment cards, buttons, and form inputs. Inputs get
+`bg-white/5 focus:border-[var(--noc-blue)]` treatment. `pt-20` → `pt-24`
+for correct Navbar clearance.
+
+Storybook: Warm parchment reading surface (`bg-[#fff8ec]`,
+`bg-white` book card) preserved as intentional exception per spec
+Section 44 ("Storybook may use a specialized reading surface layered
+on top of Nocturne"). Accessibility polish only: fixed no-op redundant
+fullscreen className, upgraded `focus:ring-*` → `focus-visible:ring-*`
+on all navigation controls (prev/next, page dots, read-aloud buttons),
+added missing focus rings to Back link, Fullscreen button, and Feedback
+button.
+
+**Files changed (8 total):**
+
+- `apps/web/src/app/academy/AcademyShell.tsx`
+- `apps/web/src/app/academy/page.tsx`
+- `apps/web/src/app/academy/classes/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/lessons/[lessonId]/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/assignments/[assignmentId]/page.tsx`
+- `apps/web/src/app/academy/submissions/[submissionId]/page.tsx`
+- `apps/web/src/app/story-playground/[projectId]/storybook/page.tsx`
+
+**Staging gates (PM2 id 30, port 3037):**
+
+TypeScript: `tsc --noEmit` — PASS (no errors).
+Build: `pnpm --filter @raivstream/web build` — PASS.
+Route QA: `/academy` 200, `/academy/classes` 200, `/academy/student` 200,
+`/academy/instructor` 200, `/storybook/test123` 200 — all PASS.
+CSS token check: `noc-blue`, `noc-card`, `noc-hairline`, `noc-page`,
+`noc-t1`, `noc-t4` all confirmed in `/academy` HTML — PASS.
+Transition-safe: `transition-colors` span confirmed with literal hex
+values `#ffef9f`, `#dbeafe`, `#172033` — PASS.
+R16 gate: `/academy` 200, `/storybook/test123` 200 on R16 — PASS.
+R16 blocked: `/generate` 307, `/upload` 307, `/admin` 307 — PASS.
+
+**Production deployment:**
+
+Commit: `bfa68d8` on `codex/ui-mobile-handoff-production`.
+Merge: `36b5538` onto main.
+Push: origin/main advanced to `36b5538` — CI/CD triggered.
+Production SHA confirmed: `36b5538` at `/root/raivstream`.
+PM2 restart confirmed: `raivstream-web` (id 0) restarted, restart
+count 287→288, uptime ~91s post-deploy.
+
+**Production smokes (app.raivstream.com):**
+
+Route QA: `/` 200, `/academy` 200, `/academy/classes` 200,
+`/storybook/test123` 200 — PASS.
+CSS token check: `noc-blue`, `noc-card`, `noc-hairline`, `noc-page`,
+`noc-t1`, `noc-t4` confirmed in production Academy HTML — PASS.
+R16 accessible: `/academy` 200, `/storybook/test123` 200 — PASS.
+R16 blocked: `/generate` 307, `/upload` 307, `/admin` 307 — PASS.
+Protected routes: `/upload` 307, `/generate` 307, `/analytics` 307,
+`/settings` 307 (all redirect unauthenticated) — PASS.
+
+**PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS — COMPLETE**
+
+Production baseline: `36b5538`.
+Phase 5 (remaining workspace surfaces) not started and not
+auto-started per explicit instruction.
