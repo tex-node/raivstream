@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { AdminSpinner, AdminError } from '../AdminShell';
 
 const FUNNEL_LABELS: Record<string, string> = {
-  story_playground_opened: 'Story Playground Opened',
-  story_generated: 'Story Generated',
+  story_playground_opened:    'Story Playground Opened',
+  story_generated:            'Story Generated',
   scene_generation_completed: 'Scenes Generated',
-  scene_image_completed: 'First Picture Generated',
-  storybook_opened: 'Storybook Opened',
-  storybook_completed: 'Storybook Completed',
+  scene_image_completed:      'First Picture Generated',
+  storybook_opened:           'Storybook Opened',
+  storybook_completed:        'Storybook Completed',
 };
 
 type RecentAnalyticsEvent = {
@@ -21,7 +22,7 @@ type RecentAnalyticsEvent = {
 };
 
 function eventLabel(eventName: string) {
-  return eventName.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return eventName.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 export default function AdminStoryAnalyticsPage() {
@@ -30,59 +31,49 @@ export default function AdminStoryAnalyticsPage() {
   const maxFunnelUsers = Math.max(...(data?.funnel.map((stage) => stage.users) ?? [1]), 1);
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6 p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-white text-2xl font-bold">Story Playground Analytics</h1>
-          <p className="text-white/40 text-sm mt-1">Story completion funnel, image generation, and storybook behavior</p>
+          <h1 className="text-2xl font-bold text-[var(--noc-t1)]">Story Playground Analytics</h1>
+          <p className="mt-1 text-sm text-[var(--noc-t4)]">Story completion funnel, image generation, and storybook behavior</p>
         </div>
         <select
           value={days}
           onChange={(event) => setDays(Number(event.target.value))}
-          className="w-fit rounded-xl px-3 py-2.5 text-sm outline-none"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: 'white' }}
+          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-          <option value={180}>Last 180 days</option>
+          <option value={7}   className="bg-[#0B0D14]">Last 7 days</option>
+          <option value={30}  className="bg-[#0B0D14]">Last 30 days</option>
+          <option value={90}  className="bg-[#0B0D14]">Last 90 days</option>
+          <option value={180} className="bg-[#0B0D14]">Last 180 days</option>
         </select>
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-2xl border px-6 py-5 text-red-300 text-sm" style={{ borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)' }}>
-          {error.message}
-        </div>
-      )}
+      {isLoading && <AdminSpinner />}
+      {error && <AdminError message={error.message} />}
 
       {data && (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {[
+            {([
               ['Stories Created Today', data.cards.storiesCreatedToday],
-              ['Stories Completed', data.cards.storiesCompleted],
-              ['Pictures Generated', data.cards.picturesGenerated],
-              ['Storybooks Opened', data.cards.storybooksOpened],
-              ['Storybooks Completed', data.cards.storybooksCompleted],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border p-5" style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-white/35">{label}</p>
-                <p className="mt-3 text-3xl font-extrabold text-white">{(value as number).toLocaleString()}</p>
+              ['Stories Completed',     data.cards.storiesCompleted],
+              ['Pictures Generated',    data.cards.picturesGenerated],
+              ['Storybooks Opened',     data.cards.storybooksOpened],
+              ['Storybooks Completed',  data.cards.storybooksCompleted],
+            ] as [string, number][]).map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--noc-t4)]">{label}</p>
+                <p className="mt-3 text-3xl font-extrabold text-[var(--noc-t1)]">{value.toLocaleString()}</p>
               </div>
             ))}
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-2xl border p-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="rounded-2xl border border-[var(--noc-hairline)] p-6">
               <div className="mb-5">
-                <h2 className="text-white text-lg font-bold">Story Completion Funnel</h2>
-                <p className="text-white/40 text-sm mt-1">Distinct users per stage in the selected period</p>
+                <h2 className="text-lg font-bold text-[var(--noc-t1)]">Story Completion Funnel</h2>
+                <p className="mt-1 text-sm text-[var(--noc-t4)]">Distinct users per stage in the selected period</p>
               </div>
               <div className="space-y-4">
                 {data.funnel.map((stage) => {
@@ -90,11 +81,11 @@ export default function AdminStoryAnalyticsPage() {
                   return (
                     <div key={stage.eventName}>
                       <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                        <span className="font-semibold text-white/75">{FUNNEL_LABELS[stage.eventName] ?? eventLabel(stage.eventName)}</span>
-                        <span className="font-mono text-white/45">{stage.users.toLocaleString()} users / {stage.events.toLocaleString()} events</span>
+                        <span className="font-semibold text-[var(--noc-t3)]">{FUNNEL_LABELS[stage.eventName] ?? eventLabel(stage.eventName)}</span>
+                        <span className="font-mono text-[var(--noc-t5)]">{stage.users.toLocaleString()} users / {stage.events.toLocaleString()} events</span>
                       </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-white/8">
-                        <div className="h-full rounded-full bg-violet-400" style={{ width: `${width}%` }} />
+                      <div className="h-3 overflow-hidden rounded-full bg-white/[0.08]">
+                        <div className="h-full rounded-full bg-[var(--noc-blue)]" style={{ width: `${width}%` }} />
                       </div>
                     </div>
                   );
@@ -102,23 +93,27 @@ export default function AdminStoryAnalyticsPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border p-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              <h2 className="text-white text-lg font-bold">Popular Signals</h2>
+            <div className="rounded-2xl border border-[var(--noc-hairline)] p-6">
+              <h2 className="text-lg font-bold text-[var(--noc-t1)]">Popular Signals</h2>
               <div className="mt-5 space-y-5">
-                {[
-                  ['Themes', data.popular.themes.length ? data.popular.themes : data.popular.inferredThemes],
+                {([
+                  ['Themes',     data.popular.themes.length ? data.popular.themes : data.popular.inferredThemes],
                   ['Age Ranges', data.popular.ageRanges],
                   ['Characters', data.popular.characters],
-                ].map(([label, items]) => (
-                  <div key={label as string}>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/35">{label as string}</p>
+                ] as [string, Array<{ label: string; count: number }>][]).map(([label, items]) => (
+                  <div key={label}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--noc-t4)]">{label}</p>
                     <div className="flex flex-wrap gap-2">
-                      {(items as Array<{ label: string; count: number }>).length ? (items as Array<{ label: string; count: number }>).map((item) => (
-                        <span key={`${label}-${item.label}`} className="rounded-full px-3 py-1 text-xs font-semibold text-violet-200" style={{ background: 'rgba(167,139,250,0.12)' }}>
+                      {items.length ? items.map((item) => (
+                        <span
+                          key={`${label}-${item.label}`}
+                          className="rounded-full px-3 py-1 text-xs font-semibold text-[var(--noc-purple)]"
+                          style={{ background: 'rgba(178,90,217,0.12)' }}
+                        >
                           {item.label} / {item.count}
                         </span>
                       )) : (
-                        <span className="text-sm text-white/30">No data yet</span>
+                        <span className="text-sm text-[var(--noc-t5)]">No data yet</span>
                       )}
                     </div>
                   </div>
@@ -127,33 +122,33 @@ export default function AdminStoryAnalyticsPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-            <div className="border-b px-5 py-4" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-              <h2 className="text-white text-lg font-bold">Recent Events</h2>
+          <section className="overflow-hidden rounded-2xl border border-[var(--noc-hairline)]">
+            <div className="border-b border-[var(--noc-hairline)] px-5 py-4">
+              <h2 className="text-lg font-bold text-[var(--noc-t1)]">Recent Events</h2>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                  <th className="text-left px-5 py-3 text-white/40 font-medium">Event</th>
-                  <th className="text-left px-5 py-3 text-white/40 font-medium">Project</th>
-                  <th className="text-left px-5 py-3 text-white/40 font-medium">Properties</th>
-                  <th className="text-right px-5 py-3 text-white/40 font-medium">Created</th>
+                <tr className="border-b border-[var(--noc-hairline)] bg-[var(--noc-card)]">
+                  <th className="px-5 py-3 text-left font-medium text-[var(--noc-t4)]">Event</th>
+                  <th className="px-5 py-3 text-left font-medium text-[var(--noc-t4)]">Project</th>
+                  <th className="px-5 py-3 text-left font-medium text-[var(--noc-t4)]">Properties</th>
+                  <th className="px-5 py-3 text-right font-medium text-[var(--noc-t4)]">Created</th>
                 </tr>
               </thead>
               <tbody>
                 {data.recentEvents.map((event: RecentAnalyticsEvent, index: number) => (
-                  <tr key={event.id} className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)', background: index % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                    <td className="px-5 py-3 font-semibold text-white/75">{eventLabel(event.eventName)}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-white/45">{event.projectId ?? '-'}</td>
-                    <td className="px-5 py-3 max-w-md">
-                      <p className="truncate font-mono text-xs text-white/45">{JSON.stringify(event.properties ?? {})}</p>
+                  <tr key={event.id} className={`border-t border-[var(--noc-hairline)] ${index % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
+                    <td className="px-5 py-3 font-semibold text-[var(--noc-t2)]">{eventLabel(event.eventName)}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-[var(--noc-t5)]">{event.projectId ?? '-'}</td>
+                    <td className="max-w-md px-5 py-3">
+                      <p className="truncate font-mono text-xs text-[var(--noc-t5)]">{JSON.stringify(event.properties ?? {})}</p>
                     </td>
-                    <td className="px-5 py-3 text-right text-white/40 text-xs">{new Date(event.createdAt).toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right text-xs text-[var(--noc-t4)]">{new Date(event.createdAt).toLocaleString()}</td>
                   </tr>
                 ))}
                 {data.recentEvents.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-5 py-10 text-center text-white/30">No story analytics events yet</td>
+                    <td colSpan={4} className="px-5 py-10 text-center text-[var(--noc-t5)]">No story analytics events yet</td>
                   </tr>
                 )}
               </tbody>

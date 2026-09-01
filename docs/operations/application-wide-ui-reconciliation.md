@@ -2656,3 +2656,200 @@ PHASES 1–3 COMPLETE**
 `d6adfd9` is the new baseline (implementation); `797ae58` closes the
 docs. Phase 4 (Academy + Specialized Storybook Views) remains **not
 started** and is not auto-started by this round.
+
+---
+
+## PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS
+
+**Starting state:**
+- LOCAL HEAD: `2ec8d55` (codex/ui-mobile-handoff-production)
+- origin/main: `6665e87` (Phase 3C merge)
+- DEPLOYED PRODUCTION SHA: `6665e87` (confirmed)
+- Provenance: Class A — origin/main = production; audio branch 1 commit
+  ahead with Phase 3C docs-only commit.
+
+**Route inventory (8 routes, 7 unique implementations):**
+
+Academy:
+- `/academy` — `academy/page.tsx` — dashboard (student+instructor combined);
+  also used by `/academy/student` and `/academy/instructor` re-exports
+- `/academy/classes` — `academy/classes/page.tsx` — class management
+- `/academy/classes/[classId]` — `academy/classes/[classId]/page.tsx`
+- `/academy/classes/[classId]/lessons/[lessonId]` — lesson view + progress
+- `/academy/classes/[classId]/assignments/[assignmentId]` — submit work
+- `/academy/submissions/[submissionId]` — submission review/grading
+- `/academy/instructor` → `export { default } from '../page'` (re-export)
+- `/academy/student` → `export { default } from '../page'` (re-export)
+
+Storybook:
+- `/storybook/[projectId]` → `export { default } from '../../story-playground/[projectId]/storybook/page'` (re-export)
+- `/story-playground/[projectId]/storybook` — 438-line full viewer (implementation)
+
+Middleware: Academy and Storybook are NOT in `PROTECTED_ROUTES` or
+`R16_BLOCKED_ROUTES`. Both are publicly accessible on main and R16.
+
+**Behavior classification (SAFE PRESENTATION ONLY — no semantic changes):**
+
+Academy: All tRPC calls (`studentDashboard`, `instructorDashboard`,
+`createCourseFromTemplate`, `joinClass`, `getClass`, `getLesson`,
+`updateLessonProgress`, `getAssignment`, `listStudentProjects`,
+`submitAssignment`, `getSubmission`, `addComment`, `reviewSubmission`,
+`createTemplateAssignments`) preserved unchanged. `tabForStage` helper
+preserved unchanged. `dateLabel`/`statusLabel` helpers in AcademyShell
+preserved unchanged.
+
+Storybook: `useStorybookReadingEngine` not touched. `readAloudEnabled`
+feature flag not touched. Analytics events (6 types) not touched. Touch
+swipe handlers not touched. Keyboard navigation not touched. CSS-based
+fullscreen lifecycle not touched. Sentence highlighting literals not
+touched (transition-safe rule preserved: `bg-[#ffef9f]`,
+`bg-[#dbeafe]`, `text-[#172033]` remain literal hex on transition-colors
+span).
+
+**Design reconciliation decisions:**
+
+Academy: Full Nocturne dark token conversion. Prior warm-cream light
+palette (`bg-[#f7f4ee]`, `bg-white`, `text-[#172033]`, etc.) was legacy
+pre-Nocturne styling. Converted to `--noc-page`, `--noc-card`,
+`--noc-hairline`, `--noc-t1`/`t2`/`t4`, `--noc-blue`, `--noc-magenta`,
+`--noc-purple`. Semantic accent colors preserved unchanged: `#2fbf71`
+(green, join/progress), `#ffcf4a` (yellow, Story Workspace CTA),
+`#b13b63` pink (Add Comment button). Inner card items use `bg-white/5`
+for subtle depth layering. Added `focus-visible:ring-2` to all nav links,
+class/assignment cards, buttons, and form inputs. Inputs get
+`bg-white/5 focus:border-[var(--noc-blue)]` treatment. `pt-20` → `pt-24`
+for correct Navbar clearance.
+
+Storybook: Warm parchment reading surface (`bg-[#fff8ec]`,
+`bg-white` book card) preserved as intentional exception per spec
+Section 44 ("Storybook may use a specialized reading surface layered
+on top of Nocturne"). Accessibility polish only: fixed no-op redundant
+fullscreen className, upgraded `focus:ring-*` → `focus-visible:ring-*`
+on all navigation controls (prev/next, page dots, read-aloud buttons),
+added missing focus rings to Back link, Fullscreen button, and Feedback
+button.
+
+**Files changed (8 total):**
+
+- `apps/web/src/app/academy/AcademyShell.tsx`
+- `apps/web/src/app/academy/page.tsx`
+- `apps/web/src/app/academy/classes/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/lessons/[lessonId]/page.tsx`
+- `apps/web/src/app/academy/classes/[classId]/assignments/[assignmentId]/page.tsx`
+- `apps/web/src/app/academy/submissions/[submissionId]/page.tsx`
+- `apps/web/src/app/story-playground/[projectId]/storybook/page.tsx`
+
+**Staging gates (PM2 id 30, port 3037):**
+
+TypeScript: `tsc --noEmit` — PASS (no errors).
+Build: `pnpm --filter @raivstream/web build` — PASS.
+Route QA: `/academy` 200, `/academy/classes` 200, `/academy/student` 200,
+`/academy/instructor` 200, `/storybook/test123` 200 — all PASS.
+CSS token check: `noc-blue`, `noc-card`, `noc-hairline`, `noc-page`,
+`noc-t1`, `noc-t4` all confirmed in `/academy` HTML — PASS.
+Transition-safe: `transition-colors` span confirmed with literal hex
+values `#ffef9f`, `#dbeafe`, `#172033` — PASS.
+R16 gate: `/academy` 200, `/storybook/test123` 200 on R16 — PASS.
+R16 blocked: `/generate` 307, `/upload` 307, `/admin` 307 — PASS.
+
+**Production deployment:**
+
+Commit: `bfa68d8` on `codex/ui-mobile-handoff-production`.
+Merge: `36b5538` onto main.
+Push: origin/main advanced to `36b5538` — CI/CD triggered.
+Production SHA confirmed: `36b5538` at `/root/raivstream`.
+PM2 restart confirmed: `raivstream-web` (id 0) restarted, restart
+count 287→288, uptime ~91s post-deploy.
+
+**Production smokes (app.raivstream.com):**
+
+Route QA: `/` 200, `/academy` 200, `/academy/classes` 200,
+`/storybook/test123` 200 — PASS.
+CSS token check: `noc-blue`, `noc-card`, `noc-hairline`, `noc-page`,
+`noc-t1`, `noc-t4` confirmed in production Academy HTML — PASS.
+R16 accessible: `/academy` 200, `/storybook/test123` 200 — PASS.
+R16 blocked: `/generate` 307, `/upload` 307, `/admin` 307 — PASS.
+Protected routes: `/upload` 307, `/generate` 307, `/analytics` 307,
+`/settings` 307 (all redirect unauthenticated) — PASS.
+
+**PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS — COMPLETE**
+
+Production baseline: `36b5538`.
+Phase 5 (Admin family) execution record follows.
+
+## Phase 5: Admin family — `/admin/**` Nocturne reconciliation
+
+**Scope**: all 13 files under `apps/web/src/app/admin/` — layout, dashboard,
+users, credits, jobs, moderation, movie-renders, sequence, story-analytics,
+prompt-quality, character-insights, academy, revenue. Plus one new shared
+primitives file (`AdminShell.tsx`).
+
+**Authorization preserved verbatim**:
+- Middleware: `/admin` in both `PROTECTED_ROUTES` and `R16_BLOCKED_ROUTES`
+  — unauthenticated and R16 users blocked at network layer. Not touched.
+- Layout: client-side role check (`ADMIN | MODERATOR`) renders `null` for
+  non-admin authenticated users. Not touched.
+- tRPC: all procedure-level role checks (`protectedAdminProcedure`, etc.)
+  unchanged. Not touched.
+
+**Design changes**:
+- Legacy `background: '#050b18'` / `background: '#080f1f'` → Nocturne
+  `bg-[var(--noc-page)]` / `bg-[#070810]` (noc-bar exact value)
+- Legacy `#a78bfa` violet accent → `var(--noc-blue)` for primary CTAs and
+  active nav; `var(--noc-purple)` for secondary badges and identity accents
+- Legacy gradient buttons `linear-gradient(135deg,#7c3aed,#2563eb)` →
+  `bg-[var(--noc-blue)]`
+- Legacy spinners `border-violet-500/30 border-t-violet-500` →
+  `border-[var(--noc-blue)]/30 border-t-[var(--noc-blue)]`
+- All card surfaces: `rgba(255,255,255,0.03)` inline style →
+  `bg-[var(--noc-card)]`
+- All divider borders: `rgba(255,255,255,0.07–0.10)` inline style →
+  `border-[var(--noc-hairline)]`
+- All text: `text-white/60`, `text-white/40`, etc. → `text-[var(--noc-t2)]`
+  through `text-[var(--noc-t5)]`
+- Focus rings: all inputs/buttons gained `focus-visible:ring-2
+  focus-visible:ring-[var(--noc-blue)]/60`
+- Nav: `aria-current="page"` on active link; `aria-label="Admin navigation"`
+  on `<nav>`
+- `character-insights/page.tsx`: removed outer `bg-[#050b18] min-h-screen`
+  (layout now provides background)
+
+**Semantic colors preserved** (not converted to Nocturne brand tokens):
+- Status: COMPLETED=#22c55e, FAILED=#ef4444, GENERATING=#f59e0b,
+  QUEUED=var(--noc-purple), CANCELLED=#6b7280
+- Role: ADMIN=#ef4444, MODERATOR=#f59e0b, CREATOR=var(--noc-purple),
+  VIEWER=#6b7280
+- Tier: FREE=#6b7280, VIEWER=#22c55e, CREATOR=#f59e0b
+- Revenue credits sold: #22c55e
+- Credit rates: active=#22c55e, inactive=#ef4444
+- Moderation actions: semantic red/amber/emerald
+- Progress bars (emerald semantic — movie render completion): kept as-is
+
+**New file created**:
+`apps/web/src/app/admin/AdminShell.tsx` — four shared primitives:
+`AdminSpinner`, `AdminError`, `AdminCard`, `AdminStatCard`. Consumed by
+all 13 admin pages, replacing scattered inline loading/error/card patterns.
+
+**CSS transition-safe rule**: Admin has no conditional colors animated under
+`transition` classes — all conditional colors in admin are plain `style`
+attributes, not Tailwind class switches. No literal-hex fallback needed.
+
+**Sequence classification**: `/admin/sequence` confirmed ADMIN DIAGNOSTICS
+(uses `trpc.admin.sequenceAnalytics.useQuery` — aggregate analytics only,
+no story text/notes/prompts/private media). Phase 5 eligible; treated as
+admin diagnostic, not creator workspace.
+
+**TypeScript check**: clean (`tsc --noEmit` exit 0, no errors).
+
+**Staging QA**: to be run immediately after this commit.
+
+**Production**: to follow staging QA pass.
+
+**Production baseline going in**: `36b5538`.
+**Feature branch**: `codex/ui-mobile-handoff-production`.
+
+**Route inventory update**: 13 admin routes + layout now fully on family A
+(Nocturne tokens). Phase 5 scope complete. Phase 6 (workspace internals —
+Audio, Sequence, Film, Storybook internals, story-playground-new) not started
+and not auto-started per explicit instruction.
