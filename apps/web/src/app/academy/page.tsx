@@ -19,7 +19,7 @@ export default function AcademyHomePage() {
   if (!isSignedIn) {
     return (
       <AcademyShell title="Academy" subtitle="Sign in to join a class or run a filmmaking course.">
-        <Link href="/sign-in" className="inline-block rounded-xl bg-[#172033] px-5 py-3 font-black text-white">Sign In</Link>
+        <Link href="/sign-in" className="inline-block rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Sign In</Link>
       </AcademyShell>
     );
   }
@@ -35,20 +35,20 @@ export default function AcademyHomePage() {
           <Card>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-black uppercase text-[#2f80ed]">Continue Learning</p>
+                <p className="text-sm font-black uppercase text-[var(--noc-blue)]">Continue Learning</p>
                 <h2 className="text-2xl font-black">My Classes</h2>
               </div>
-              <Link href="/story-playground" className="rounded-xl bg-[#ffcf4a] px-4 py-3 text-sm font-black text-[#172033]">Open Story Workspace</Link>
+              <Link href="/story-playground" className="rounded-xl bg-[#ffcf4a] px-4 py-3 text-sm font-black text-[#172033] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60">Open Story Workspace</Link>
             </div>
             <div className="mt-4 grid gap-3">
               {memberships.map((membership: any) => (
-                <Link key={membership.id} href={`/academy/classes/${membership.class.id}`} className="rounded-xl bg-[#f7f4ee] p-4 hover:ring-2 hover:ring-[#2f80ed]">
+                <Link key={membership.id} href={`/academy/classes/${membership.class.id}`} className="rounded-xl bg-white/5 p-4 hover:ring-2 hover:ring-[var(--noc-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black">{membership.class.title}</h3>
-                      <p className="text-sm font-bold text-[#596070]">{membership.class.course.title}</p>
+                      <p className="text-sm font-bold text-[var(--noc-t4)]">{membership.class.course.title}</p>
                     </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-black">{membership.progressPercent}% complete</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black">{membership.progressPercent}% complete</span>
                   </div>
                 </Link>
               ))}
@@ -57,18 +57,18 @@ export default function AcademyHomePage() {
           </Card>
 
           <Card>
-            <p className="text-sm font-black uppercase text-[#b13b63]">My Assignments</p>
+            <p className="text-sm font-black uppercase text-[var(--noc-magenta)]">My Assignments</p>
             <h2 className="text-2xl font-black">Due and In Progress</h2>
             <div className="mt-4 grid gap-3">
               {memberships.flatMap((membership: any) => membership.class.assignments.map((assignment: any) => ({ assignment, klass: membership.class }))).slice(0, 8).map(({ assignment, klass }: any) => {
                 const submission = assignment.submissions?.[0];
                 return (
-                  <Link key={assignment.id} href={`/academy/classes/${klass.id}/assignments/${assignment.id}`} className="rounded-xl border border-[#172033]/10 p-4 hover:bg-[#fff9ed]">
+                  <Link key={assignment.id} href={`/academy/classes/${klass.id}/assignments/${assignment.id}`} className="rounded-xl border border-[var(--noc-hairline)] p-4 hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-black">{assignment.title}</h3>
-                      <span className="rounded-full bg-[#eef7ff] px-3 py-1 text-xs font-black text-[#2f80ed]">{submission ? statusLabel(submission.status) : 'Not Submitted'}</span>
+                      <span className="rounded-full bg-[var(--noc-blue)]/10 px-3 py-1 text-xs font-black text-[var(--noc-blue)]">{submission ? statusLabel(submission.status) : 'Not Submitted'}</span>
                     </div>
-                    <p className="mt-1 text-sm font-bold text-[#596070]">{klass.title} · Due {dateLabel(assignment.dueAt)}</p>
+                    <p className="mt-1 text-sm font-bold text-[var(--noc-t4)]">{klass.title} · Due {dateLabel(assignment.dueAt)}</p>
                   </Link>
                 );
               })}
@@ -82,26 +82,26 @@ export default function AcademyHomePage() {
             <p className="text-sm font-black uppercase text-[#2fbf71]">Join Class</p>
             <h2 className="text-2xl font-black">Invite Code</h2>
             <form onSubmit={(event) => { event.preventDefault(); if (inviteCode.trim()) joinClass.mutate({ inviteCode }); }} className="mt-4 flex gap-2">
-              <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="RAIV-ABC123" className="min-w-0 flex-1 rounded-xl border-2 border-[#172033]/10 px-4 py-3 font-bold outline-none" />
-              <button disabled={joinClass.isPending} className="rounded-xl bg-[#2fbf71] px-4 py-3 font-black text-white disabled:opacity-50">Join</button>
+              <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="RAIV-ABC123" className="min-w-0 flex-1 rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t6)] outline-none focus:border-[var(--noc-blue)]" />
+              <button disabled={joinClass.isPending} className="rounded-xl bg-[#2fbf71] px-4 py-3 font-black text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2fbf71]/60">Join</button>
             </form>
-            {joinClass.error && <p className="mt-3 text-sm font-bold text-[#b13b63]">{joinClass.error.message}</p>}
+            {joinClass.error && <p className="mt-3 text-sm font-bold text-[var(--noc-magenta)]">{joinClass.error.message}</p>}
           </Card>
 
           <Card>
-            <p className="text-sm font-black uppercase text-[#7c3aed]">Instructor</p>
+            <p className="text-sm font-black uppercase text-[var(--noc-purple)]">Instructor</p>
             <h2 className="text-2xl font-black">Run a Course</h2>
-            <p className="mt-2 text-sm font-semibold text-[#596070]">Duplicate the one-month AI Storytelling and Virtual Filmmaking template, then create a class.</p>
-            <button onClick={() => createTemplate.mutate()} disabled={createTemplate.isPending} className="mt-4 w-full rounded-xl bg-[#172033] px-4 py-3 font-black text-white disabled:opacity-50">Create Course Template</button>
+            <p className="mt-2 text-sm font-semibold text-[var(--noc-t4)]">Duplicate the one-month AI Storytelling and Virtual Filmmaking template, then create a class.</p>
+            <button onClick={() => createTemplate.mutate()} disabled={createTemplate.isPending} className="mt-4 w-full rounded-xl bg-[var(--noc-blue)] px-4 py-3 font-black text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Create Course Template</button>
           </Card>
 
           <Card>
-            <p className="text-sm font-black uppercase text-[#f59e0b]">Instructor Dashboard</p>
+            <p className="text-sm font-black uppercase text-amber-400">Instructor Dashboard</p>
             <h2 className="text-2xl font-black">Review Queue</h2>
-            <p className="mt-2 text-sm font-bold text-[#596070]">{awaitingReview.length} submissions awaiting review.</p>
+            <p className="mt-2 text-sm font-bold text-[var(--noc-t4)]">{awaitingReview.length} submissions awaiting review.</p>
             <div className="mt-4 grid gap-2">
               {instructorClasses.slice(0, 4).map((klass: any) => (
-                <Link key={klass.id} href={`/academy/classes/${klass.id}`} className="rounded-xl bg-[#f7f4ee] px-4 py-3 font-black">{klass.title}</Link>
+                <Link key={klass.id} href={`/academy/classes/${klass.id}`} className="rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-black hover:border-[var(--noc-blue)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">{klass.title}</Link>
               ))}
               {instructorClasses.length === 0 && <EmptyState>No instructor classes yet.</EmptyState>}
             </div>

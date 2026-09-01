@@ -209,18 +209,18 @@ export default function StoryBookViewerPage() {
   };
 
   return (
-    <div className={`${isFullscreen ? 'min-h-screen bg-[#fff8ec]' : 'min-h-screen bg-[#fff8ec]'} text-[#172033]`}>
+    <div className="min-h-screen bg-[#fff8ec] text-[#172033]">
       {!isFullscreen && <Navbar />}
       <main className={`${isFullscreen ? 'px-3 py-3' : 'mx-auto max-w-6xl px-4 pb-12 pt-24'} transition-all`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <Link href="/story-playground" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10">
+          <Link href="/story-playground" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#172033]/20">
             <ArrowLeft size={18} />
             {isR16 ? 'Back' : 'Story Playground'}
           </Link>
           <button
             type="button"
             onClick={() => setIsFullscreen((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#172033] px-4 py-2 text-sm font-black text-white"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#172033] px-4 py-2 text-sm font-black text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
           >
             <Maximize2 size={16} />
             {isFullscreen ? 'Exit' : 'Fullscreen'}
@@ -229,7 +229,7 @@ export default function StoryBookViewerPage() {
             <button
               type="button"
               onClick={() => setFeedbackOpen((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10"
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-[#172033] ring-2 ring-[#172033]/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#172033]/20"
             >
               <MessageSquare size={16} />
               Feedback
@@ -298,7 +298,7 @@ export default function StoryBookViewerPage() {
                     type="button"
                     aria-label={index === 0 ? 'Cover page' : `Page ${index}`}
                     onClick={() => selectPage(index)}
-                    className={`h-3 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-[#2f80ed] focus:ring-offset-2 ${currentPage === index ? 'w-8 bg-[#2f80ed]' : 'w-3 bg-[#d7cfbf]'}`}
+                    className={`h-3 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2f80ed] focus-visible:ring-offset-2 ${currentPage === index ? 'w-8 bg-[#2f80ed]' : 'w-3 bg-[#d7cfbf]'}`}
                   />
                 ))}
               </div>
@@ -342,7 +342,7 @@ export default function StoryBookViewerPage() {
                       type="button"
                       onClick={() => selectPage(1)}
                       disabled={storyBook.pageCount === 0}
-                      className="inline-flex w-fit items-center gap-2 rounded-xl bg-[#2f80ed] px-6 py-4 text-lg font-black text-white disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-[#2f80ed]/25"
+                      className="inline-flex w-fit items-center gap-2 rounded-xl bg-[#2f80ed] px-6 py-4 text-lg font-black text-white disabled:opacity-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2f80ed]/25"
                     >
                       {isR16 ? 'Read Story' : reading.hasSavedProgress ? 'Continue Reading' : 'Start Reading'}
                       <ChevronRight size={22} />
@@ -353,7 +353,7 @@ export default function StoryBookViewerPage() {
                         onClick={onReadAloud}
                         disabled={storyBook.pageCount === 0}
                         aria-label={isR16 ? 'Read To Me' : 'Read Aloud'}
-                        className="inline-flex w-fit items-center gap-2 rounded-xl bg-[#172033] px-6 py-4 text-lg font-black text-white disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-[#172033]/25"
+                        className="inline-flex w-fit items-center gap-2 rounded-xl bg-[#172033] px-6 py-4 text-lg font-black text-white disabled:opacity-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#172033]/25"
                       >
                         {isR16 ? 'Read To Me' : 'Read Aloud'}
                       </button>
@@ -396,7 +396,7 @@ export default function StoryBookViewerPage() {
                 type="button"
                 onClick={goBack}
                 disabled={currentPage === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ece4d4] px-5 py-3 font-black text-[#172033] disabled:opacity-40 focus:outline-none focus:ring-4 focus:ring-[#172033]/15"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ece4d4] px-5 py-3 font-black text-[#172033] disabled:opacity-40 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#172033]/15"
               >
                 <ChevronLeft size={20} />
                 {isR16 ? 'Back' : 'Previous'}
@@ -408,7 +408,7 @@ export default function StoryBookViewerPage() {
                     onClick={onReadAloud}
                     disabled={currentPage === 0 || reading.isCompleted}
                     aria-label={reading.isReading ? (reading.isPaused ? (isR16 ? 'Keep Reading' : 'Resume') : 'Pause') : (isR16 ? 'Read To Me' : 'Read Aloud')}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#172033] px-5 py-3 text-sm font-black text-white disabled:opacity-40 focus:outline-none focus:ring-4 focus:ring-[#172033]/25"
+                    className="inline-flex items-center justify-center rounded-xl bg-[#172033] px-5 py-3 text-sm font-black text-white disabled:opacity-40 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#172033]/25"
                   >
                     {reading.isReading ? (reading.isPaused ? (isR16 ? 'Keep Reading' : 'Resume') : 'Pause') : (isR16 ? 'Read To Me' : 'Read Aloud')}
                   </button>
@@ -421,7 +421,7 @@ export default function StoryBookViewerPage() {
                 type="button"
                 onClick={goNext}
                 disabled={currentPage === maxPage}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f80ed] px-5 py-3 font-black text-white disabled:opacity-40 focus:outline-none focus:ring-4 focus:ring-[#2f80ed]/25"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f80ed] px-5 py-3 font-black text-white disabled:opacity-40 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2f80ed]/25"
               >
                 {currentPage === maxPage ? (isR16 ? 'The End' : 'Finish') : isR16 ? 'Next Page' : 'Next'}
                 <ChevronRight size={20} />
