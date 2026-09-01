@@ -137,19 +137,19 @@ export default function UploadPage() {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
         <Navbar />
         <div className="flex items-center justify-center h-screen">
-          <p className="text-white/50">Redirecting to sign in…</p>
+          <p className="text-[var(--noc-t4)]">Redirecting to sign in…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
-      <div className="max-w-xl mx-auto pt-24 px-4 pb-16">
+      <div className="max-w-2xl mx-auto pt-24 px-4 pb-16">
         <h1 className="text-2xl font-bold mb-8">Upload Video</h1>
 
         {/* ── Step: select file ── */}
@@ -167,12 +167,12 @@ export default function UploadPage() {
               onClick={() => fileRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center gap-4 cursor-pointer transition-colors ${
                 dragOver
-                  ? 'border-pink-500 bg-pink-500/10'
-                  : 'border-white/20 hover:border-white/40'
+                  ? 'border-[#d946a8] bg-[rgba(217,70,168,0.1)]'
+                  : 'border-[rgba(233,233,237,0.08)] hover:border-[rgba(233,233,237,0.2)]'
               }`}
             >
               <svg
-                className="w-16 h-16 text-white/40"
+                className="w-16 h-16 text-[var(--noc-t5)]"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -186,8 +186,8 @@ export default function UploadPage() {
               </svg>
               <div className="text-center">
                 <p className="font-semibold">Drag & drop your video here</p>
-                <p className="text-white/50 text-sm mt-1">or click to browse</p>
-                <p className="text-white/30 text-xs mt-3">
+                <p className="text-[var(--noc-t4)] text-sm mt-1">or click to browse</p>
+                <p className="text-[var(--noc-t6)] text-xs mt-3">
                   MP4, MOV, WebM · 9:16 vertical · 15–60 seconds · max 500 MB
                 </p>
               </div>
@@ -216,20 +216,20 @@ export default function UploadPage() {
               />
             )}
             <div className="w-full">
-              <div className="flex justify-between text-sm text-white/60 mb-2">
+              <div className="flex justify-between text-sm text-[var(--noc-t4)] mb-2">
                 <span>
                   {uploadProgress < 100 ? 'Uploading…' : 'Processing…'}
                 </span>
                 <span>{uploadProgress}%</span>
               </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-2 bg-[var(--noc-card)] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-pink-500 transition-all duration-300 rounded-full"
+                  className="h-full bg-[var(--noc-magenta)] transition-all duration-300 rounded-full"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
               {uploadProgress === 100 && (
-                <p className="text-center text-white/40 text-xs mt-3">
+                <p className="text-center text-[var(--noc-t5)] text-xs mt-3">
                   Upload complete — confirming with server…
                 </p>
               )}
@@ -239,88 +239,90 @@ export default function UploadPage() {
 
         {/* ── Step: metadata ── */}
         {step === 'metadata' && (
-          <form onSubmit={handleSubmitMetadata} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmitMetadata} className="flex flex-col gap-5 md:flex-row md:items-start md:gap-8">
             {previewUrl && (
               <video
                 src={previewUrl}
-                className="w-40 h-72 object-cover rounded-xl mx-auto"
+                className="w-40 h-72 object-cover rounded-xl shrink-0 mx-auto md:mx-0"
                 muted
               />
             )}
 
-            <div>
-              <label className="block text-sm text-white/70 mb-1">Title *</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                maxLength={100}
-                placeholder="Give your video a title"
-                className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-white placeholder-white/30 outline-none focus:border-pink-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-white/70 mb-1">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={500}
-                rows={3}
-                placeholder="Tell viewers about your video…"
-                className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-white placeholder-white/30 outline-none focus:border-pink-500 resize-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-white/70 mb-1">
-                Tags (comma-separated)
-              </label>
-              <input
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="funny, dance, tutorial"
-                className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-white placeholder-white/30 outline-none focus:border-pink-500"
-              />
-            </div>
-
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex flex-col gap-5 flex-1">
+              <div>
+                <label className="block text-sm text-[var(--noc-t4)] mb-1">Title *</label>
                 <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="w-4 h-4 accent-pink-500"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  maxLength={100}
+                  placeholder="Give your video a title"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-4 py-2.5 text-[var(--noc-t1)] placeholder-[var(--noc-t6)] outline-none focus:border-[var(--noc-magenta)]"
                 />
-                <span className="text-sm">Public</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPremiumOnly}
-                  onChange={(e) => setIsPremiumOnly(e.target.checked)}
-                  className="w-4 h-4 accent-pink-500"
-                />
-                <span className="text-sm">Premium only</span>
-              </label>
-            </div>
+              </div>
 
-            <button
-              type="submit"
-              disabled={updateMetadata.isPending}
-              className="w-full bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
-            >
-              {updateMetadata.isPending ? 'Publishing…' : 'Publish Video'}
-            </button>
+              <div>
+                <label className="block text-sm text-[var(--noc-t4)] mb-1">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Tell viewers about your video…"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-4 py-2.5 text-[var(--noc-t1)] placeholder-[var(--noc-t6)] outline-none focus:border-[var(--noc-magenta)] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-[var(--noc-t4)] mb-1">
+                  Tags (comma-separated)
+                </label>
+                <input
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="funny, dance, tutorial"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-4 py-2.5 text-[var(--noc-t1)] placeholder-[var(--noc-t6)] outline-none focus:border-[var(--noc-magenta)]"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="w-4 h-4 accent-[var(--noc-magenta)]"
+                  />
+                  <span className="text-sm text-[var(--noc-t2)]">Public</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isPremiumOnly}
+                    onChange={(e) => setIsPremiumOnly(e.target.checked)}
+                    className="w-4 h-4 accent-[var(--noc-magenta)]"
+                  />
+                  <span className="text-sm text-[var(--noc-t2)]">Premium only</span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={updateMetadata.isPending}
+                className="w-full bg-[var(--noc-magenta)] hover:opacity-90 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-opacity"
+              >
+                {updateMetadata.isPending ? 'Publishing…' : 'Publish Video'}
+              </button>
+            </div>
           </form>
         )}
 
         {/* ── Step: done ── */}
         {step === 'done' && (
           <div className="flex flex-col items-center gap-6 text-center">
-            <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center">
               <svg
-                className="w-10 h-10 text-green-400"
+                className="w-10 h-10 text-emerald-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -335,20 +337,20 @@ export default function UploadPage() {
             </div>
             <div>
               <h2 className="text-xl font-bold">Video published!</h2>
-              <p className="text-white/50 text-sm mt-1">
+              <p className="text-[var(--noc-t4)] text-sm mt-1">
                 Your video is live and ready to watch.
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={resetForm}
-                className="px-5 py-2 rounded-full border border-white/20 hover:border-white/40 text-sm transition-colors"
+                className="px-5 py-2 rounded-full border border-[var(--noc-hairline)] hover:border-[var(--noc-t5)] text-[var(--noc-t3)] text-sm transition-colors"
               >
                 Upload another
               </button>
               <button
                 onClick={() => router.push('/')}
-                className="px-5 py-2 rounded-full bg-pink-500 hover:bg-pink-600 text-sm font-semibold transition-colors"
+                className="px-5 py-2 rounded-full bg-[var(--noc-magenta)] hover:opacity-90 text-white text-sm font-semibold transition-opacity"
               >
                 Go to feed
               </button>
