@@ -2776,5 +2776,8 @@ Protected routes: `/upload` 307, `/generate` 307, `/analytics` 307,
 **PHASE 4 — ACADEMY + SPECIALIZED STORYBOOK VIEWS — COMPLETE**
 
 Production baseline: `36b5538`.
-Phase 5 (remaining workspace surfaces) not started and not
-auto-started per explicit instruction.
+Phase 5 (Admin family — `/admin/**` route family, reconciling
+older dark-navy admin UI into Nocturne, preserving all administrative
+authorization and operational behavior) not started and not
+auto-started per explicit instruction. Phase 6 (workspace internals —
+Sequence/Audio/Film and story-playground internals) follows after Phase 5.
