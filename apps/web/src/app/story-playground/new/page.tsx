@@ -957,37 +957,37 @@ export default function StoryPlaygroundPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0D14] text-[#F7F8FC]">
+    <div className="min-h-screen bg-[#0B0D14] text-[var(--noc-t1)]">
       <Navbar />
       <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-24">
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[rgba(79,214,232,0.12)] px-4 py-2 text-sm font-semibold text-[#4fd6e8]">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[rgba(79,139,214,0.12)] px-4 py-2 text-sm font-semibold text-[var(--noc-blue)]">
               <Sparkles size={16} />
               {isR16 ? 'R16 Story Playground' : 'Story Playground'}
             </div>
-            <h1 className="max-w-3xl text-4xl font-black leading-tight text-[#F7F8FC] md:text-6xl">
+            <h1 className="max-w-3xl text-4xl font-black leading-tight text-[var(--noc-t1)] md:text-6xl">
               What story should we create?
             </h1>
-            <p className="mt-4 max-w-2xl text-lg text-[#9397ab]">
+            <p className="mt-4 max-w-2xl text-lg text-[var(--noc-t4)]">
               Start with a tiny idea. We will ask a few easy questions, then turn it into a short story you can keep building.
             </p>
           </div>
 
           <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 shadow-[0_18px_0_rgba(23,32,51,0.08)]">
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#d946a8,#b25ad9)] text-[#F7F8FC]">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#d946a8,#b25ad9)] text-[var(--noc-t1)]">
                 <BookOpen size={24} />
               </div>
               <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-[#9397ab]">Step {step === 'spark' ? '1' : step === 'questions' ? '2' : '3'} of 3</p>
+                <p className="text-sm font-bold uppercase tracking-wide text-[var(--noc-t4)]">Step {step === 'spark' ? '1' : step === 'questions' ? '2' : '3'} of 3</p>
                 <p className="font-black">{step === 'spark' ? 'Story Spark' : step === 'questions' ? 'Questions' : 'Your Story'}</p>
               </div>
             </div>
 
             <div className="h-3 overflow-hidden rounded-full bg-[rgba(233,233,237,0.08)]">
               <div
-                className="h-full rounded-full bg-[#2fbf71] transition-all"
+                className="h-full rounded-full bg-[var(--noc-blue)] transition-all"
                 style={{ width: step === 'spark' ? '33%' : step === 'questions' ? '66%' : '100%' }}
               />
             </div>
@@ -995,7 +995,7 @@ export default function StoryPlaygroundPage() {
         </section>
 
         {message && (
-          <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 text-sm font-semibold text-[#9397ab]">
+          <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 text-sm font-semibold text-[var(--noc-t4)]">
             {message}
           </div>
         )}
@@ -1014,11 +1014,11 @@ export default function StoryPlaygroundPage() {
           <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-6">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#4fd6e8]">{isR16 ? 'Choose a look' : 'Visual Style'}</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'Choose a look' : 'Visual Style'}</p>
                 <h2 className="text-2xl font-black">{isR16 ? 'What should your story look like?' : 'Choose a generation look'}</h2>
               </div>
               {project?.visualStyle && (
-                <p className="rounded-full bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[#b5abfc]">
+                <p className="rounded-full bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[var(--noc-purple)]">
                   {visibleStyleOptions.find((option) => option.value === selectedVisualStyle)?.[isR16 ? 'r16Label' : 'label'] ?? 'Storybook'}
                 </p>
               )}
@@ -1034,12 +1034,12 @@ export default function StoryPlaygroundPage() {
                     disabled={updateVisualStyle.isPending && selected}
                     className={`min-h-24 rounded-xl border p-3 text-left transition-all ${
                       selected
-                        ? 'border-[#b25ad9] bg-[rgba(178,90,217,0.15)] text-[#b5abfc]'
-                        : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[#F7F8FC] hover:border-[#b25ad9]'
+                        ? 'border-[var(--noc-purple)] bg-[rgba(178,90,217,0.15)] text-[var(--noc-purple)]'
+                        : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t1)] hover:border-[var(--noc-purple)]'
                     }`}
                   >
                     <span className="block text-sm font-black">{isR16 ? option.r16Label : option.label}</span>
-                    {!isR16 && <span className="mt-1 block text-xs font-semibold text-[#9397ab]">{option.description}</span>}
+                    {!isR16 && <span className="mt-1 block text-xs font-semibold text-[var(--noc-t4)]">{option.description}</span>}
                   </button>
                 );
               })}
@@ -1055,15 +1055,15 @@ export default function StoryPlaygroundPage() {
                 onChange={(event) => setIdea(event.target.value)}
                 placeholder="A dog going to school"
                 rows={5}
-                className="min-h-48 w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 text-2xl font-bold text-[#F7F8FC] outline-none transition-colors placeholder:text-[#75798c] focus:border-[#b25ad9]"
+                className="min-h-48 w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 text-2xl font-bold text-[var(--noc-t1)] outline-none transition-colors placeholder:text-[var(--noc-t5)] focus:border-[var(--noc-purple)]"
               />
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button type="button" className="flex min-h-24 items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(233,233,237,0.12)] bg-[rgba(79,139,214,0.10)] px-4 py-3 text-left font-bold text-[#9397ab]">
+                <button type="button" className="flex min-h-24 items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(233,233,237,0.12)] bg-[rgba(79,139,214,0.10)] px-4 py-3 text-left font-bold text-[var(--noc-t4)]">
                   <ImagePlus size={22} />
                   Add a picture later
                 </button>
-                <button type="button" className="flex min-h-24 items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(233,233,237,0.12)] bg-[rgba(217,70,168,0.06)] px-4 py-3 text-left font-bold text-[#9397ab]">
+                <button type="button" className="flex min-h-24 items-center justify-center gap-3 rounded-xl border border-dashed border-[rgba(233,233,237,0.12)] bg-[rgba(217,70,168,0.06)] px-4 py-3 text-left font-bold text-[var(--noc-t4)]">
                   <Mic size={22} />
                   Voice idea later
                 </button>
@@ -1072,7 +1072,7 @@ export default function StoryPlaygroundPage() {
               <button
                 onClick={startStory}
                 disabled={isBusy || idea.trim().length < 3 || !isSignedIn}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-6 py-4 text-lg font-black text-white transition-colors hover:bg-[#256fd0] disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-6 py-4 text-lg font-black text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isBusy ? 'Starting...' : 'Start Story'}
                 <ChevronRight size={22} />
@@ -1086,7 +1086,7 @@ export default function StoryPlaygroundPage() {
                   <button
                     key={example}
                     onClick={() => setIdea(example)}
-                    className="rounded-xl bg-[rgba(233,233,237,0.07)] px-4 py-3 text-left font-bold text-[#F7F8FC] border border-[rgba(233,233,237,0.10)] transition-transform hover:-translate-y-0.5"
+                    className="rounded-xl bg-[rgba(233,233,237,0.07)] px-4 py-3 text-left font-bold text-[var(--noc-t1)] border border-[rgba(233,233,237,0.10)] transition-transform hover:-translate-y-0.5"
                   >
                     {example}
                   </button>
@@ -1100,24 +1100,24 @@ export default function StoryPlaygroundPage() {
           <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#b5abfc]">{isR16 ? 'My Stories' : 'Recent Stories'}</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">{isR16 ? 'My Stories' : 'Recent Stories'}</p>
                 <h2 className="text-3xl font-black">{isR16 ? 'Keep Going' : 'Continue Your Stories'}</h2>
-                <p className="mt-1 font-semibold text-[#9397ab]">
+                <p className="mt-1 font-semibold text-[var(--noc-t4)]">
                   {isR16 ? 'Pick a story to keep writing, add pictures, or read your book.' : 'Resume drafts, add scene pictures, or open storybooks that are ready to read.'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-black uppercase tracking-wide">
-                <span className="rounded-full bg-[rgba(79,214,232,0.12)] px-3 py-2 text-[#4fd6e8]">{isR16 ? 'Keep Going' : 'Continue Reading'}</span>
-                <span className="rounded-full bg-[rgba(79,139,214,0.10)] px-3 py-2 text-[#b5abfc]">{isR16 ? 'Read Book' : 'Storybooks Ready'}</span>
+                <span className="rounded-full bg-[rgba(79,139,214,0.12)] px-3 py-2 text-[var(--noc-blue)]">{isR16 ? 'Keep Going' : 'Continue Reading'}</span>
+                <span className="rounded-full bg-[rgba(79,139,214,0.10)] px-3 py-2 text-[var(--noc-purple)]">{isR16 ? 'Read Book' : 'Storybooks Ready'}</span>
               </div>
             </div>
 
             {myProjectsLoading ? (
-              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[#9397ab]">
+              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
                 {isR16 ? 'Loading your stories...' : 'Loading recent stories...'}
               </div>
             ) : recentProjects.length === 0 ? (
-              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[#9397ab]">
+              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
                 Your stories will appear here after you create one.
               </div>
             ) : (
@@ -1137,7 +1137,7 @@ export default function StoryPlaygroundPage() {
                         {thumbnail ? (
                           <img src={thumbnail} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[#b5abfc]">
+                          <div className="flex h-full items-center justify-center text-[var(--noc-purple)]">
                             <BookOpen size={42} />
                           </div>
                         )}
@@ -1146,13 +1146,13 @@ export default function StoryPlaygroundPage() {
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
                             <h3 className="line-clamp-2 text-xl font-black">{storyProject.title}</h3>
-                            <p className="mt-1 line-clamp-2 text-sm font-bold text-[#9397ab]">{storyProject.originalIdea || (isR16 ? 'A story made by you.' : 'No original idea saved.')}</p>
+                            <p className="mt-1 line-clamp-2 text-sm font-bold text-[var(--noc-t4)]">{storyProject.originalIdea || (isR16 ? 'A story made by you.' : 'No original idea saved.')}</p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-[rgba(79,214,232,0.12)] px-3 py-1 text-xs font-black text-[#4fd6e8]">
+                          <span className="shrink-0 rounded-full bg-[rgba(79,139,214,0.12)] px-3 py-1 text-xs font-black text-[var(--noc-blue)]">
                             {projectProgress(storyProject)}
                           </span>
                         </div>
-                        <div className="mb-4 grid grid-cols-2 gap-2 text-xs font-bold text-[#9397ab]">
+                        <div className="mb-4 grid grid-cols-2 gap-2 text-xs font-bold text-[var(--noc-t4)]">
                           <span>Updated {formatStoryDate(storyProject.updatedAt)}</span>
                           <span>{storyProject.audienceMode === 'KIDS' ? (isR16 ? 'Kids' : 'R16/Kids') : 'General'}</span>
                           <span>{isR16 ? `${sceneCount} cards` : `${sceneCount} scene cards`}</span>
@@ -1167,14 +1167,14 @@ export default function StoryPlaygroundPage() {
                             {isR16 ? 'Keep Going' : 'Continue'}
                           </button>
                           {storybookReady ? (
-                            <Link href={`/story-playground/${storyProject.id}/storybook`} className="rounded-xl bg-[#2fbf71] px-4 py-2 text-center text-sm font-black text-white">
+                            <Link href={`/story-playground/${storyProject.id}/storybook`} className="rounded-xl bg-[var(--noc-blue)] px-4 py-2 text-center text-sm font-black text-white">
                               {isR16 ? 'Read Book' : 'Open Storybook'}
                             </Link>
                           ) : (
                             <button
                               type="button"
                               onClick={() => resumeProject(storyProject)}
-                              className="rounded-xl bg-[rgba(233,233,237,0.08)] px-4 py-2 text-sm font-black text-[#F7F8FC]"
+                              className="rounded-xl bg-[rgba(233,233,237,0.08)] px-4 py-2 text-sm font-black text-[var(--noc-t1)]"
                             >
                               Edit Story
                             </button>
@@ -1183,7 +1183,7 @@ export default function StoryPlaygroundPage() {
                             <button
                               type="button"
                               onClick={() => addPicturesToProject(storyProject)}
-                              className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-[#F7F8FC]"
+                              className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-[var(--noc-t1)]"
                             >
                               Add Pictures
                             </button>
@@ -1193,7 +1193,7 @@ export default function StoryPlaygroundPage() {
                               type="button"
                               onClick={() => archiveStoryProject(storyProject)}
                               disabled={archiveProject.isPending && archiveProject.variables?.projectId === storyProject.id}
-                              className="rounded-xl border border-[rgba(217,70,168,0.30)] bg-[rgba(217,70,168,0.08)] px-4 py-2 text-sm font-black text-[#f0a3d4] disabled:opacity-50"
+                              className="rounded-xl border border-[rgba(217,70,168,0.30)] bg-[rgba(217,70,168,0.08)] px-4 py-2 text-sm font-black text-[var(--noc-magenta)] disabled:opacity-50"
                             >
                               {archiveProject.isPending && archiveProject.variables?.projectId === storyProject.id ? 'Archiving...' : 'Archive'}
                             </button>
@@ -1211,8 +1211,8 @@ export default function StoryPlaygroundPage() {
         {step === 'questions' && activeQuestion && (
           <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-8">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-bold text-[#9397ab]">Question {activeQuestionIndex + 1} of {questions.length}</p>
-              <p className="font-bold text-[#b5abfc]">{answeredCount} answered</p>
+              <p className="font-bold text-[var(--noc-t4)]">Question {activeQuestionIndex + 1} of {questions.length}</p>
+              <p className="font-bold text-[var(--noc-purple)]">{answeredCount} answered</p>
             </div>
 
             <h2 className="mb-6 text-3xl font-black">{activeQuestion.questionText}</h2>
@@ -1224,8 +1224,8 @@ export default function StoryPlaygroundPage() {
                   disabled={answerQuestion.isPending}
                   className={`min-h-24 rounded-xl border px-5 py-4 text-left text-lg font-black transition-all ${
                     activeQuestion.selectedAnswer === option
-                      ? 'border-[#b25ad9] bg-[rgba(178,90,217,0.15)] text-[#b5abfc]'
-                      : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[#F7F8FC] hover:border-[#b25ad9]'
+                      ? 'border-[var(--noc-purple)] bg-[rgba(178,90,217,0.15)] text-[var(--noc-purple)]'
+                      : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t1)] hover:border-[var(--noc-purple)]'
                   }`}
                 >
                   {option}
@@ -1237,14 +1237,14 @@ export default function StoryPlaygroundPage() {
               <button
                 onClick={() => setActiveQuestionIndex((index) => Math.max(0, index - 1))}
                 disabled={activeQuestionIndex === 0}
-                className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-bold text-[#F7F8FC] disabled:opacity-40"
+                className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-bold text-[var(--noc-t1)] disabled:opacity-40"
               >
                 Back
               </button>
               <button
                 onClick={generateCurrentStory}
                 disabled={!canGenerate || generateStory.isPending}
-                className="rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-40"
+                className="rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white disabled:opacity-40"
               >
                 {generateStory.isPending ? 'Creating story...' : 'Create My Story'}
               </button>
@@ -1257,17 +1257,17 @@ export default function StoryPlaygroundPage() {
             <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
               <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-8">
                 <div className="mb-6">
-                  <p className="mb-2 font-bold text-[#4fd6e8]">{project?.ageRange ? `Ages ${project.ageRange}` : 'Short story'}</p>
+                  <p className="mb-2 font-bold text-[var(--noc-blue)]">{project?.ageRange ? `Ages ${project.ageRange}` : 'Short story'}</p>
                   <h2 className="text-4xl font-black">{project?.title ?? 'Your Story'}</h2>
-                  {project?.theme && <p className="mt-2 font-semibold text-[#9397ab]">Theme: {project.theme}</p>}
+                  {project?.theme && <p className="mt-2 font-semibold text-[var(--noc-t4)]">Theme: {project.theme}</p>}
                 </div>
 
                 <div className="space-y-8">
                   {chapters.map((chapter) => (
                     <article key={chapter.id} className="border-t border-[rgba(233,233,237,0.10)] pt-6 first:border-t-0 first:pt-0">
-                      <p className="mb-2 text-sm font-black uppercase tracking-wide text-[#9397ab]">Chapter {chapter.chapterNumber}</p>
+                      <p className="mb-2 text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">Chapter {chapter.chapterNumber}</p>
                       <h3 className="mb-3 text-2xl font-black">{chapter.title}</h3>
-                      <p className="mb-5 rounded-xl bg-[rgba(233,233,237,0.06)] px-4 py-3 font-semibold text-[#9397ab]">{chapter.summary}</p>
+                      <p className="mb-5 rounded-xl bg-[rgba(233,233,237,0.06)] px-4 py-3 font-semibold text-[var(--noc-t4)]">{chapter.summary}</p>
                       <div className="whitespace-pre-line text-lg leading-8 text-[#243044]">{chapter.body}</div>
                     </article>
                   ))}
@@ -1283,16 +1283,16 @@ export default function StoryPlaygroundPage() {
                   {continueStory.isPending ? 'Adding chapter...' : generateScenes.isPending ? 'Making scenes...' : 'Continue Story'}
                   <ChevronRight size={20} />
                 </button>
-                <button className="w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-4 text-left font-black text-[#F7F8FC]" onClick={() => setMessage('A funnier version tool will be added next.')}>
+                <button className="w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-4 text-left font-black text-[var(--noc-t1)]" onClick={() => setMessage('A funnier version tool will be added next.')}>
                   Make It Funnier
                 </button>
-                <button className="w-full rounded-xl bg-[#d9ccff] px-5 py-4 text-left font-black text-[#F7F8FC]" onClick={() => setMessage('A more magical version tool will be added next.')}>
+                <button className="w-full rounded-xl bg-[#d9ccff] px-5 py-4 text-left font-black text-[var(--noc-t1)]" onClick={() => setMessage('A more magical version tool will be added next.')}>
                   Make It More Magical
                 </button>
-                <button className="w-full rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-4 text-left font-black text-[#F7F8FC]" onClick={() => setMessage('A shorter version tool will be added next.')}>
+                <button className="w-full rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-4 text-left font-black text-[var(--noc-t1)]" onClick={() => setMessage('A shorter version tool will be added next.')}>
                   Shorten
                 </button>
-                <button className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-5 py-4 text-left font-black text-[#F7F8FC]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                <button className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-5 py-4 text-left font-black text-[var(--noc-t1)]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                   Read Again
                 </button>
                 <button
@@ -1305,7 +1305,7 @@ export default function StoryPlaygroundPage() {
                 {projectId && scenes.length > 0 && (
                   <Link
                     href={`/story-playground/${projectId}/storybook`}
-                    className="block w-full rounded-xl bg-[#2fbf71] px-5 py-4 text-left font-black text-white"
+                    className="block w-full rounded-xl bg-[var(--noc-blue)] px-5 py-4 text-left font-black text-white"
                   >
                     {isR16 ? 'Read Story' : 'Read Storybook'}
                   </Link>
@@ -1316,9 +1316,9 @@ export default function StoryPlaygroundPage() {
             <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-6">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-wide text-[#4fd6e8]">{isR16 ? 'My Characters' : 'Character Director'}</p>
+                  <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'My Characters' : 'Character Director'}</p>
                   <h3 className="text-3xl font-black">{isR16 ? 'Who is in the story?' : 'Direct character identity and arcs'}</h3>
-                  <p className="mt-1 font-semibold text-[#9397ab]">
+                  <p className="mt-1 font-semibold text-[var(--noc-t4)]">
                     {isR16 ? 'Choose what they are like, what they want, and who their friends are.' : 'Character memory now drives future prompts, image consistency, relationships, and evolution from this point forward.'}
                   </p>
                 </div>
@@ -1326,7 +1326,7 @@ export default function StoryPlaygroundPage() {
                   <button
                     onClick={openNewCharacterEditor}
                     disabled={!projectId}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[#F7F8FC] disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[var(--noc-t1)] disabled:opacity-50"
                   >
                     <Plus size={18} />
                     {isR16 ? 'Add Friend' : 'Add Character'}
@@ -1334,7 +1334,7 @@ export default function StoryPlaygroundPage() {
                   <button
                     onClick={() => projectId && generateCharacterBible.mutate({ projectId, replaceExisting: true })}
                     disabled={!projectId || generateCharacterBible.isPending || generateScenes.isPending}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white disabled:opacity-50"
                   >
                     <UserRound size={18} />
                     {generateCharacterBible.isPending ? 'Refreshing...' : isR16 ? 'Refresh Friends' : 'Refresh Characters'}
@@ -1343,7 +1343,7 @@ export default function StoryPlaygroundPage() {
               </div>
 
               {characterMemory.length === 0 ? (
-                <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[#9397ab]">
+                <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
                   Character cards will appear after your story is created.
                 </div>
               ) : (
@@ -1352,21 +1352,21 @@ export default function StoryPlaygroundPage() {
                     <button
                       key={character.id}
                       onClick={() => openCharacterEditor(character)}
-                      className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4 text-left transition-transform hover:-translate-y-1 hover:border-[#b25ad9]"
+                      className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4 text-left transition-transform hover:-translate-y-1 hover:border-[var(--noc-purple)]"
                     >
-                      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(79,214,232,0.12)] text-[#b5abfc]">
+                      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(79,139,214,0.12)] text-[var(--noc-purple)]">
                         <UserRound size={28} />
                       </div>
                       <h4 className="text-xl font-black">{character.name}</h4>
-                      <p className="mt-1 text-sm font-bold text-[#9397ab]">
+                      <p className="mt-1 text-sm font-bold text-[var(--noc-t4)]">
                         {[character.ageDescription, character.gender, character.species].filter(Boolean).join(' ') || character.role || 'Story character'}
                       </p>
-                      <p className="mt-3 line-clamp-3 text-sm font-semibold text-[#9397ab]">
+                      <p className="mt-3 line-clamp-3 text-sm font-semibold text-[var(--noc-t4)]">
                         {character.visualDescription || 'Add a clear visual description.'}
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {(character.personalityTraits ?? []).slice(0, 3).map((trait) => (
-                          <span key={trait} className="rounded-full bg-[rgba(79,214,232,0.12)] px-3 py-1 text-xs font-black text-[#b5abfc]">
+                          <span key={trait} className="rounded-full bg-[rgba(79,139,214,0.12)] px-3 py-1 text-xs font-black text-[var(--noc-purple)]">
                             {characterOptionLabel(trait)}
                           </span>
                         ))}
@@ -1376,7 +1376,7 @@ export default function StoryPlaygroundPage() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-[#9397ab]">
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-[var(--noc-t4)]">
                         <span>{isR16 ? 'Pictures' : 'Pictures Generated'}: {scenes.filter((scene) => sceneCharacterLabels(scene.characters).includes(character.name) && scene.imageUrl).length}</span>
                         <span>{isR16 ? 'Friends' : 'Relationships'}: {character.relationships?.length ?? 0}</span>
                       </div>
@@ -1389,9 +1389,9 @@ export default function StoryPlaygroundPage() {
             <section id="story-scenes" className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-6">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-wide text-[#b5abfc]">{isR16 ? 'Picture cards' : 'Scene film-strip'}</p>
+                  <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">{isR16 ? 'Picture cards' : 'Scene film-strip'}</p>
                   <h3 className="text-3xl font-black">{isR16 ? 'Story pictures' : 'Scenes for pictures and video'}</h3>
-                  <p className="mt-1 font-semibold text-[#9397ab]">
+                  <p className="mt-1 font-semibold text-[var(--noc-t4)]">
                     {isR16 ? 'Tap a card to fix the name or what happens.' : 'Generate a scene image, regenerate it, and keep every version as reference material.'}
                   </p>
                 </div>
@@ -1406,7 +1406,7 @@ export default function StoryPlaygroundPage() {
               </div>
 
               {scenes.length === 0 ? (
-                <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[#9397ab]">
+                <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
                   {generateScenes.isPending ? 'Making scene cards...' : 'Scene cards will appear after your story is created.'}
                 </div>
               ) : (
@@ -1417,7 +1417,7 @@ export default function StoryPlaygroundPage() {
                     return (
                       <div
                         key={scene.id}
-                        className="w-60 shrink-0 rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3 text-left transition-transform hover:-translate-y-1 hover:border-[#b25ad9]"
+                        className="w-60 shrink-0 rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3 text-left transition-transform hover:-translate-y-1 hover:border-[var(--noc-purple)]"
                       >
                         <button type="button" onClick={() => openSceneEditor(scene)} className="block w-full text-left">
                           <div
@@ -1425,26 +1425,26 @@ export default function StoryPlaygroundPage() {
                             style={scene.imageUrl ? { backgroundImage: `url("${scene.imageUrl}")` } : undefined}
                           >
                             {isGenerating ? (
-                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[rgba(11,13,20,0.82)] text-[#b5abfc]">
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[rgba(11,13,20,0.82)] text-[var(--noc-purple)]">
                                 <Loader2 className="animate-spin" size={34} />
                                 <span className="px-4 text-center text-sm font-black">{isR16 ? 'Making your picture...' : 'Generating image...'}</span>
                               </div>
                             ) : hasFailed ? (
-                              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[rgba(217,70,168,0.10)] px-4 text-center text-[#f0a3d4]">
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[rgba(217,70,168,0.10)] px-4 text-center text-[var(--noc-magenta)]">
                                 <ImagePlus size={32} />
                                 <span className="text-sm font-black">{isR16 ? 'Picture did not finish' : 'Generation failed'}</span>
                               </div>
                             ) : !scene.imageUrl ? (
-                              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[rgba(178,90,217,0.15)] text-2xl font-black text-[#b5abfc]">
+                              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[rgba(178,90,217,0.15)] text-2xl font-black text-[var(--noc-purple)]">
                                 {index + 1}
                               </div>
                             ) : null}
                           </div>
-                          <p className="mb-1 text-xs font-black uppercase tracking-wide text-[#9397ab]">Scene {index + 1}</p>
+                          <p className="mb-1 text-xs font-black uppercase tracking-wide text-[var(--noc-t4)]">Scene {index + 1}</p>
                           <h4 className="line-clamp-1 text-lg font-black">{scene.title}</h4>
-                          <p className="mt-2 line-clamp-3 text-sm font-semibold text-[#9397ab]">{scene.description}</p>
+                          <p className="mt-2 line-clamp-3 text-sm font-semibold text-[var(--noc-t4)]">{scene.description}</p>
                           {sceneCharacterLabels(scene.characters).length > 0 && (
-                            <p className="mt-3 rounded-lg bg-[rgba(79,214,232,0.12)] px-2 py-1 text-xs font-black text-[#b5abfc]">
+                            <p className="mt-3 rounded-lg bg-[rgba(79,139,214,0.12)] px-2 py-1 text-xs font-black text-[var(--noc-purple)]">
                               {sceneCharacterLabels(scene.characters).join(', ')}
                             </p>
                           )}
@@ -1453,19 +1453,19 @@ export default function StoryPlaygroundPage() {
                           <button
                             type="button"
                             onClick={() => toggleDirectorPanel(scene.id)}
-                            className="flex w-full items-center justify-between gap-2 text-left text-xs font-black text-[#F7F8FC]"
+                            className="flex w-full items-center justify-between gap-2 text-left text-xs font-black text-[var(--noc-t1)]"
                           >
                             <span>{isR16 ? 'Make it special' : 'Direct This Scene'}</span>
                             <ChevronRight className={`transition-transform ${openDirectorSceneIds.includes(scene.id) ? 'rotate-90' : ''}`} size={15} />
                           </button>
-                          <p className="mt-2 line-clamp-2 text-xs font-bold text-[#9397ab]">{directorSummary(scene)}</p>
+                          <p className="mt-2 line-clamp-2 text-xs font-bold text-[var(--noc-t4)]">{directorSummary(scene)}</p>
                           {openDirectorSceneIds.includes(scene.id) && (
                             <div className="mt-3 space-y-3">
                               {DIRECTOR_OPTION_GROUPS.map((group) => {
                                 const Icon = group.icon;
                                 return (
                                   <div key={`${scene.id}-${group.key}`}>
-                                    <div className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-[#9397ab]">
+                                    <div className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-[var(--noc-t4)]">
                                       <Icon size={13} />
                                       {isR16 ? group.r16Label : group.label}
                                     </div>
@@ -1480,8 +1480,8 @@ export default function StoryPlaygroundPage() {
                                             disabled={updateSceneDirector.isPending && updateSceneDirector.variables?.sceneId === scene.id}
                                             className={`rounded-full border px-2.5 py-1 text-[11px] font-black transition-colors ${
                                               selected
-                                                ? 'border-[#2fbf71] bg-[rgba(79,214,232,0.12)] text-[#b5abfc]'
-                                                : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[#9397ab] hover:border-[#b25ad9]'
+                                                ? 'border-[var(--noc-blue)] bg-[rgba(79,139,214,0.12)] text-[var(--noc-purple)]'
+                                                : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)] hover:border-[var(--noc-purple)]'
                                             }`}
                                           >
                                             {isR16 && option.r16Label ? option.r16Label : option.label}
@@ -1492,7 +1492,7 @@ export default function StoryPlaygroundPage() {
                                   </div>
                                 );
                               })}
-                              <p className="rounded-lg bg-[rgba(79,139,214,0.10)] px-2 py-2 text-[11px] font-bold text-[#b5abfc]">
+                              <p className="rounded-lg bg-[rgba(79,139,214,0.10)] px-2 py-2 text-[11px] font-bold text-[var(--noc-purple)]">
                                 {isR16 ? 'Make a new picture when you are ready.' : 'Settings are saved only. Regenerate to apply them to the next image.'}
                               </p>
                             </div>
@@ -1512,7 +1512,7 @@ export default function StoryPlaygroundPage() {
                             <button
                               type="button"
                               onClick={() => setHistoryScene(scene)}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-sm font-black text-[#F7F8FC]"
+                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-sm font-black text-[var(--noc-t1)]"
                             >
                               <History size={16} />
                               Image History ({scene.assets?.length ?? 0})
@@ -1521,20 +1521,20 @@ export default function StoryPlaygroundPage() {
                           {projectId && (
                             <Link
                               href={`/story-playground/${projectId}/storybook`}
-                              className="inline-flex items-center justify-center rounded-xl bg-[#2fbf71] px-3 py-2 text-sm font-black text-white"
+                              className="inline-flex items-center justify-center rounded-xl bg-[var(--noc-blue)] px-3 py-2 text-sm font-black text-white"
                             >
                               {isR16 ? 'Read Story' : 'Open Storybook'}
                             </Link>
                           )}
                           {scene.imageUrl && latestReadyAsset(scene) && (
                             <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2">
-                              <p className="mb-2 text-xs font-black text-[#9397ab]">{isR16 ? 'Do you like it?' : 'Rate this image'}</p>
+                              <p className="mb-2 text-xs font-black text-[var(--noc-t4)]">{isR16 ? 'Do you like it?' : 'Rate this image'}</p>
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
                                   onClick={() => rateSceneImage(scene, 'UP')}
                                   disabled={submitPromptQualityFeedback.isPending}
-                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'UP' ? 'bg-[rgba(79,214,232,0.12)] text-[#b5abfc]' : 'bg-[rgba(79,139,214,0.10)] text-[#b5abfc]'}`}
+                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'UP' ? 'bg-[rgba(79,139,214,0.12)] text-[var(--noc-purple)]' : 'bg-[rgba(79,139,214,0.10)] text-[var(--noc-purple)]'}`}
                                 >
                                   <ThumbsUp size={16} />
                                 </button>
@@ -1542,7 +1542,7 @@ export default function StoryPlaygroundPage() {
                                   type="button"
                                   onClick={() => rateSceneImage(scene, 'DOWN')}
                                   disabled={submitPromptQualityFeedback.isPending}
-                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'DOWN' ? 'bg-[rgba(217,70,168,0.15)] text-[#f0a3d4]' : 'bg-[rgba(233,233,237,0.04)] text-[#9397ab]'}`}
+                                  className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-sm font-black ${feedbackRatings[latestReadyAsset(scene)!.id] === 'DOWN' ? 'bg-[rgba(217,70,168,0.15)] text-[var(--noc-magenta)]' : 'bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
                                 >
                                   <ThumbsDown size={16} />
                                 </button>
@@ -1552,7 +1552,7 @@ export default function StoryPlaygroundPage() {
                                   value={feedbackComments[latestReadyAsset(scene)!.id] ?? ''}
                                   onChange={(event) => setFeedbackComments((current) => ({ ...current, [latestReadyAsset(scene)!.id]: event.target.value }))}
                                   placeholder="What would you improve?"
-                                  className="mt-2 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-2 py-2 text-xs font-semibold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                                  className="mt-2 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-2 py-2 text-xs font-semibold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                                 />
                               )}
                             </div>
@@ -1569,7 +1569,7 @@ export default function StoryPlaygroundPage() {
               <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[#0B0D14] p-5 text-white md:p-6">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-sm font-black uppercase tracking-wide text-[#f0a3d4]">Enhanced prompt composer</p>
+                    <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">Enhanced prompt composer</p>
                     <h3 className="text-3xl font-black">Hidden prompts for AI Studio</h3>
                     <p className="mt-1 font-semibold text-white/60">
                       Scene + character bible + mood + setting + visual style becomes provider-ready prompts. This is hidden on R16.
@@ -1578,7 +1578,7 @@ export default function StoryPlaygroundPage() {
                   <button
                     onClick={() => projectId && composeAllScenePrompts.mutate({ projectId, outputType: 'IMAGE', provider: 'FLUX' })}
                     disabled={!projectId || scenes.length === 0 || composeAllScenePrompts.isPending}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[#F7F8FC] disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-[var(--noc-t1)] disabled:opacity-50"
                   >
                     {composeAllScenePrompts.isPending ? 'Saving...' : 'Enhance All'}
                   </button>
@@ -1627,10 +1627,10 @@ export default function StoryPlaygroundPage() {
 
       {editingScene && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[#0B0D14] p-5 text-[#F7F8FC] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="w-full max-w-lg rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#b5abfc]">Edit scene</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">Edit scene</p>
                 <h3 className="text-2xl font-black">{isR16 ? 'Fix this picture card' : 'Adjust scene card'}</h3>
               </div>
               <button onClick={() => setEditingScene(null)} className="rounded-full bg-[rgba(233,233,237,0.06)] p-2">
@@ -1640,52 +1640,52 @@ export default function StoryPlaygroundPage() {
 
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-sm font-black text-[#9397ab]">Name</span>
+                <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Name</span>
                 <input
                   value={sceneForm.title}
                   onChange={(event) => setSceneForm({ ...sceneForm, title: event.target.value })}
-                  className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                  className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'What happens?' : 'Description'}</span>
+                <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'What happens?' : 'Description'}</span>
                 <textarea
                   value={sceneForm.description}
                   onChange={(event) => setSceneForm({ ...sceneForm, description: event.target.value })}
                   rows={4}
-                  className="w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                  className="w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                 />
               </label>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Place</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Place</span>
                   <input
                     value={sceneForm.locationType}
                     onChange={(event) => setSceneForm({ ...sceneForm, locationType: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Where</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Where</span>
                   <input
                     value={sceneForm.indoorOutdoor}
                     onChange={(event) => setSceneForm({ ...sceneForm, indoorOutdoor: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Feeling</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Feeling</span>
                   <input
                     value={sceneForm.mood}
                     onChange={(event) => setSceneForm({ ...sceneForm, mood: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
               </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button onClick={() => setEditingScene(null)} className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-black text-[#F7F8FC]">
+              <button onClick={() => setEditingScene(null)} className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-black text-[var(--noc-t1)]">
                 Cancel
               </button>
               <button
@@ -1702,10 +1702,10 @@ export default function StoryPlaygroundPage() {
 
       {editingCharacter && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[#F7F8FC] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#4fd6e8]">{isR16 ? 'Edit friend' : 'Edit character reference'}</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'Edit friend' : 'Edit character reference'}</p>
                 <h3 className="text-2xl font-black">{editingCharacter.name}</h3>
               </div>
               <button onClick={() => setEditingCharacter(null)} className="rounded-full bg-[rgba(233,233,237,0.06)] p-2">
@@ -1716,59 +1716,59 @@ export default function StoryPlaygroundPage() {
             <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Name</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Name</span>
                   <input
                     value={characterForm.name}
                     onChange={(event) => setCharacterForm({ ...characterForm, name: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Role</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Role</span>
                   <input
                     value={characterForm.role}
                     onChange={(event) => setCharacterForm({ ...characterForm, role: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Species</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Species</span>
                   <input
                     value={characterForm.species}
                     onChange={(event) => setCharacterForm({ ...characterForm, species: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Age</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Age</span>
                   <input
                     value={characterForm.ageDescription}
                     onChange={(event) => setCharacterForm({ ...characterForm, ageDescription: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Gender</span>
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Gender</span>
                   <input
                     value={characterForm.gender}
                     onChange={(event) => setCharacterForm({ ...characterForm, gender: event.target.value })}
-                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                    className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                   />
                 </label>
               </div>
               <label className="block">
-                <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'How should this friend look?' : 'Visual description used in every prompt'}</span>
+                <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'How should this friend look?' : 'Visual description used in every prompt'}</span>
                 <textarea
                   value={characterForm.visualDescription}
                   onChange={(event) => setCharacterForm({ ...characterForm, visualDescription: event.target.value })}
                   rows={5}
-                  className="w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]"
+                  className="w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]"
                 />
               </label>
               <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
-                <p className="mb-3 text-sm font-black text-[#9397ab]">{isR16 ? 'What are they like?' : 'Personality'}</p>
+                <p className="mb-3 text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'What are they like?' : 'Personality'}</p>
                 <div className="flex flex-wrap gap-2">
                   {PERSONALITY_OPTIONS.map((trait) => {
                     const selected = characterForm.personalityTraits.includes(trait);
@@ -1777,7 +1777,7 @@ export default function StoryPlaygroundPage() {
                         key={trait}
                         type="button"
                         onClick={() => togglePersonalityTrait(trait)}
-                        className={`rounded-full px-3 py-2 text-sm font-black ${selected ? 'bg-[rgba(79,214,232,0.15)] text-[#4fd6e8] border border-[rgba(79,214,232,0.4)]' : 'bg-[rgba(233,233,237,0.04)] text-[#9397ab] border border-[rgba(233,233,237,0.10)]'}`}
+                        className={`rounded-full px-3 py-2 text-sm font-black ${selected ? 'bg-[rgba(79,139,214,0.15)] text-[var(--noc-blue)] border border-[rgba(79,139,214,0.4)]' : 'bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)] border border-[rgba(233,233,237,0.10)]'}`}
                       >
                         {characterOptionLabel(trait)}
                       </button>
@@ -1787,84 +1787,84 @@ export default function StoryPlaygroundPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'What do they want?' : 'Motivation'}</span>
-                  <select value={characterForm.motivation} onChange={(event) => setCharacterForm({ ...characterForm, motivation: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'What do they want?' : 'Motivation'}</span>
+                  <select value={characterForm.motivation} onChange={(event) => setCharacterForm({ ...characterForm, motivation: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {MOTIVATION_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'What feels scary?' : 'Fear'}</span>
-                  <select value={characterForm.fear} onChange={(event) => setCharacterForm({ ...characterForm, fear: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'What feels scary?' : 'Fear'}</span>
+                  <select value={characterForm.fear} onChange={(event) => setCharacterForm({ ...characterForm, fear: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {FEAR_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Goal</span>
-                  <select value={characterForm.goal} onChange={(event) => setCharacterForm({ ...characterForm, goal: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Goal</span>
+                  <select value={characterForm.goal} onChange={(event) => setCharacterForm({ ...characterForm, goal: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {CHARACTER_GOAL_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'Favorite face' : 'Favorite Expression'}</span>
-                  <select value={characterForm.favoriteExpression} onChange={(event) => setCharacterForm({ ...characterForm, favoriteExpression: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'Favorite face' : 'Favorite Expression'}</span>
+                  <select value={characterForm.favoriteExpression} onChange={(event) => setCharacterForm({ ...characterForm, favoriteExpression: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {EXPRESSION_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">Walking Style</span>
-                  <select value={characterForm.walkingStyle} onChange={(event) => setCharacterForm({ ...characterForm, walkingStyle: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">Walking Style</span>
+                  <select value={characterForm.walkingStyle} onChange={(event) => setCharacterForm({ ...characterForm, walkingStyle: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {WALKING_STYLE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-black text-[#9397ab]">{isR16 ? 'Talking style' : 'Speaking Style'}</span>
-                  <select value={characterForm.speakingStyle} onChange={(event) => setCharacterForm({ ...characterForm, speakingStyle: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <span className="mb-1 block text-sm font-black text-[var(--noc-t4)]">{isR16 ? 'Talking style' : 'Speaking Style'}</span>
+                  <select value={characterForm.speakingStyle} onChange={(event) => setCharacterForm({ ...characterForm, speakingStyle: event.target.value })} className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     <option value="">Choose</option>
                     {SPEAKING_STYLE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
                 </label>
               </div>
               <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-black text-[#9397ab]">
+                <div className="mb-3 flex items-center gap-2 text-sm font-black text-[var(--noc-t4)]">
                   <HeartHandshake size={18} />
                   {isR16 ? 'Who are their friends?' : 'Relationship'}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <input value={characterForm.relationshipTargetName} onChange={(event) => setCharacterForm({ ...characterForm, relationshipTargetName: event.target.value })} placeholder={isR16 ? 'Friend name' : 'Target character name'} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]" />
-                  <select value={characterForm.relationshipType} onChange={(event) => setCharacterForm({ ...characterForm, relationshipType: event.target.value })} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <input value={characterForm.relationshipTargetName} onChange={(event) => setCharacterForm({ ...characterForm, relationshipTargetName: event.target.value })} placeholder={isR16 ? 'Friend name' : 'Target character name'} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]" />
+                  <select value={characterForm.relationshipType} onChange={(event) => setCharacterForm({ ...characterForm, relationshipType: event.target.value })} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     {RELATIONSHIP_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
-                  <select value={characterForm.relationshipStrength} onChange={(event) => setCharacterForm({ ...characterForm, relationshipStrength: event.target.value })} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]">
+                  <select value={characterForm.relationshipStrength} onChange={(event) => setCharacterForm({ ...characterForm, relationshipStrength: event.target.value })} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]">
                     {RELATIONSHIP_STRENGTH_OPTIONS.map((option) => <option key={option} value={option}>{characterOptionLabel(option)}</option>)}
                   </select>
-                  {!isR16 && <input value={characterForm.relationshipNotes} onChange={(event) => setCharacterForm({ ...characterForm, relationshipNotes: event.target.value })} placeholder="Relationship notes" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]" />}
+                  {!isR16 && <input value={characterForm.relationshipNotes} onChange={(event) => setCharacterForm({ ...characterForm, relationshipNotes: event.target.value })} placeholder="Relationship notes" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]" />}
                 </div>
               </div>
               {!isR16 && (
                 <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
-                  <p className="mb-3 text-sm font-black text-[#9397ab]">Character Evolution</p>
+                  <p className="mb-3 text-sm font-black text-[var(--noc-t4)]">Character Evolution</p>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <input value={characterForm.evolutionStage} onChange={(event) => setCharacterForm({ ...characterForm, evolutionStage: event.target.value })} placeholder="Stage, e.g. braver" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]" />
-                    <input value={characterForm.evolutionSceneOrder} onChange={(event) => setCharacterForm({ ...characterForm, evolutionSceneOrder: event.target.value })} placeholder="From scene #" type="number" min={1} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]" />
-                    <input value={characterForm.evolutionNotes} onChange={(event) => setCharacterForm({ ...characterForm, evolutionNotes: event.target.value })} placeholder="Evolution notes" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[#F7F8FC] placeholder:text-[#75798c] outline-none focus:border-[#b25ad9]" />
+                    <input value={characterForm.evolutionStage} onChange={(event) => setCharacterForm({ ...characterForm, evolutionStage: event.target.value })} placeholder="Stage, e.g. braver" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]" />
+                    <input value={characterForm.evolutionSceneOrder} onChange={(event) => setCharacterForm({ ...characterForm, evolutionSceneOrder: event.target.value })} placeholder="From scene #" type="number" min={1} className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]" />
+                    <input value={characterForm.evolutionNotes} onChange={(event) => setCharacterForm({ ...characterForm, evolutionNotes: event.target.value })} placeholder="Evolution notes" className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-purple)]" />
                   </div>
                 </div>
               )}
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button onClick={() => setEditingCharacter(null)} className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-black text-[#F7F8FC]">
+              <button onClick={() => setEditingCharacter(null)} className="rounded-xl bg-[rgba(233,233,237,0.08)] px-5 py-3 font-black text-[var(--noc-t1)]">
                 Cancel
               </button>
               <button
                 onClick={saveCharacter}
                 disabled={!characterForm.name.trim() || !characterForm.visualDescription.trim() || updateCharacterMemory.isPending || createCharacterMemory.isPending}
-                className="rounded-xl bg-[#2fbf71] px-5 py-3 font-black text-white disabled:opacity-50"
+                className="rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white disabled:opacity-50"
               >
                 {updateCharacterMemory.isPending || createCharacterMemory.isPending ? 'Saving...' : isR16 ? 'Save Friend' : 'Save Character'}
               </button>
@@ -1875,10 +1875,10 @@ export default function StoryPlaygroundPage() {
 
       {previewPrompt && canUseAdvancedPrompts && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-[#101827] p-5 text-white shadow-2xl">
+          <div className="w-full max-w-3xl rounded-2xl bg-[var(--noc-page)] p-5 text-white shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#f0a3d4]">Enhanced prompt preview</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">Enhanced prompt preview</p>
                 <h3 className="text-2xl font-black">{previewPrompt.provider} v{previewPrompt.version}</h3>
               </div>
               <button onClick={() => setPreviewPrompt(null)} className="rounded-full bg-white/10 p-2">
@@ -1916,10 +1916,10 @@ export default function StoryPlaygroundPage() {
 
       {historyScene && !isR16 && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4">
-          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[#F7F8FC] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-[#b5abfc]">Image history</p>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">Image history</p>
                 <h3 className="text-2xl font-black">{historyScene.title}</h3>
               </div>
               <button onClick={() => setHistoryScene(null)} className="rounded-full bg-[rgba(233,233,237,0.06)] p-2">
@@ -1928,7 +1928,7 @@ export default function StoryPlaygroundPage() {
             </div>
 
             {(historyScene.assets?.length ?? 0) === 0 ? (
-              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[#9397ab]">
+              <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
                 No images have been generated for this scene yet.
               </div>
             ) : (
@@ -1940,16 +1940,16 @@ export default function StoryPlaygroundPage() {
                       style={asset.assetUrl ? { backgroundImage: `url("${asset.assetUrl}")` } : undefined}
                     />
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className={`rounded-full px-2 py-1 text-xs font-black ${asset.status === 'READY' ? 'bg-[rgba(79,214,232,0.12)] text-[#b5abfc]' : asset.status === 'FAILED' ? 'bg-[rgba(217,70,168,0.12)] text-[#f0a3d4]' : 'bg-[rgba(233,233,237,0.06)] text-[#9397ab]'}`}>
+                      <span className={`rounded-full px-2 py-1 text-xs font-black ${asset.status === 'READY' ? 'bg-[rgba(79,139,214,0.12)] text-[var(--noc-purple)]' : asset.status === 'FAILED' ? 'bg-[rgba(217,70,168,0.12)] text-[var(--noc-magenta)]' : 'bg-[rgba(233,233,237,0.06)] text-[var(--noc-t4)]'}`}>
                         {asset.isLatest ? 'LATEST' : asset.status}
                       </span>
-                      <span className="text-xs font-bold text-[#9397ab]">{asset.model}</span>
+                      <span className="text-xs font-bold text-[var(--noc-t4)]">{asset.model}</span>
                     </div>
-                    <p className="mt-2 text-xs font-semibold text-[#9397ab]">
+                    <p className="mt-2 text-xs font-semibold text-[var(--noc-t4)]">
                       {new Date(asset.createdAt).toLocaleString()}
                     </p>
                     {asset.errorMessage && (
-                      <p className="mt-2 line-clamp-2 text-xs font-bold text-[#f0a3d4]">{asset.errorMessage}</p>
+                      <p className="mt-2 line-clamp-2 text-xs font-bold text-[var(--noc-magenta)]">{asset.errorMessage}</p>
                     )}
                   </div>
                 ))}
