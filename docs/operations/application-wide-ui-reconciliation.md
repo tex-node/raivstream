@@ -2499,24 +2499,119 @@ items — are explicitly deferred to **Phase 3C**, not silently dropped.
 **PHASE 3C — VIDEOPLAYER + UPLOAD + GENERATE COMPLETION PASS —
 FORMALLY CLOSED — PASS (SHA `d6adfd9`)**
 
-Commit `d6adfd9` on branch `codex/ui-mobile-handoff-production`.
-Three files changed, all frontend-only (zero backend/schema/migration
-files touched):
+**Starting-state record**
+
+- Local branch HEAD at Phase 3C start: `69fefed`
+  (docs-only commit — Phase 3B report — on top of `8588e43`)
+- Production SHA at Phase 3C start: `2f8dabc`
+  (4 Phase 9B.1 operations/documentation commits above `8588e43`)
+- Ancestry finding: `git merge-base 69fefed 2f8dabc` resolves through
+  `8588e43`; both local and production diverged from the same Phase 3B
+  code commit. The `2f8dabc`→`8588e43` gap is 4 legitimate Phase 9B.1
+  ops-doc commits (`Mark Phase 9B.1 production complete in CLAUDE.md`
+  and related). This is NOT repository drift — production legitimately
+  advanced while the UI-reconciliation branch accumulated docs-only
+  commits on the same code base.
+- Phase 3C branches from `69fefed`; `d6adfd9` is the implementation
+  commit; `797ae58` adds the docs closure. Both land on
+  `codex/ui-mobile-handoff-production`; production deploy targets
+  `origin/main`.
+
+**Pre-implementation audit (completed before any edit)**
+
+Nocturne token audit — `globals.css` inspected; all 13 token families
+confirmed available: `--noc-page`, `--noc-bar`, `--noc-card`,
+`--noc-hairline`, `--noc-rule`, `--noc-gradient`, `--noc-t1`–`t6`,
+`--noc-magenta`, `--noc-purple`, `--noc-blue`, `--noc-cyan`,
+`--noc-pink-tint`, `--noc-lavender-tint`, `--noc-cyan-tint`. Phase 2
+CSS transition bug rule confirmed: any color toggled under a CSS
+`transition` class must use a literal hex value, not a `var()` ref.
+
+VideoPlayer behavior map (completed before edits):
+- Source setup: one `useEffect` on `[videoUrl]` — sets `bgVideoRef.src`
+  + either HLS attach or `video.src`; returns HLS `.destroy()` cleanup.
+- Landscape detection: `loadedmetadata` listener compares `videoWidth`
+  vs `videoHeight`; drives `isLandscape` state which switches
+  `object-cover` ↔ `object-contain` and controls blurred backdrop
+  opacity.
+- Loading state: `canplay` listener clears `isLoading`; `onWaiting` /
+  `onPlaying` callbacks toggle it mid-playback.
+- Active/pause control: `useEffect` on `[isActive]` — calls
+  `video.play()` / `video.pause()` and resets `currentTime = 0` on
+  deactivation; mirrors on `bgVideoRef`.
+- Progress: interval every 5 s while `isActive && onProgress`; fires
+  `onProgress(currentTime, duration)`. All mutations
+  (`interaction.recordView`, `interaction.trackProgress`) are owned by
+  `VideoCard`, not `VideoPlayer`.
+- User controls: `togglePlay` (click on foreground `<video>` + overlay
+  button), `toggleMute` (mute button with `stopPropagation`).
+- Safe visual boundary: overlay button, mute button, loading spinner,
+  thumbnail `<img>` — all pure chrome; no behavioral changes permitted.
+
+/upload trace (completed before edits):
+- Validation: `file.type.startsWith('video/')` — client guard only;
+  R2 presigned URL is type-matched server-side in `video.requestUpload`.
+- Upload path: `requestUpload` (tRPC) → presigned PUT URL → XHR PUT to
+  R2 with `Content-Type` header → progress events → `confirmUpload`
+  (`mode: 'mvp'` — instant READY, no transcoding queue) → `metadata`
+  step.
+- Completion: `updateMetadata` tRPC mutation; `onSuccess` → step
+  `'done'`. No navigation side-effect; user chooses "Upload another" or
+  "Go to feed".
+- Auth: `PROTECTED_ROUTES` in `middleware.ts`; unauthenticated → 307 to
+  `/sign-in?redirect_url=/upload`. R16 subdomain → 307 to `/`.
+- Safe visual boundary: all step containers, drag zone, progress bar,
+  metadata form inputs/labels/checkboxes/buttons, success state. Error
+  banner (`bg-red-500/...`) kept semantic (no Nocturne substitute).
+
+/generate product classification and rate trace (completed before edits):
+- Classification: **A — ACTIVE FEED-FAMILY GENERATION ROUTE** ("AI
+  Studio"). Generates images and short videos, publishes results to the
+  feed, maintains per-user job history. Not a storybook/sequence tool.
+- Credit rate: NOT hardcoded in UI. The component calls
+  `generation.listModels` (tRPC) which returns model records joined to
+  the `featureCreditRate` table; the selected model's `featureCreditRate`
+  value is displayed at runtime. Rate varies per model; it is independent
+  of the `story:movie_render = 100` invariant which applies only to the
+  story-film pipeline. The `story:movie_render = 100` constant was
+  confirmed NOT referenced anywhere in `generate/page.tsx`.
+- Auth/access: `PROTECTED_ROUTES` + `R16_BLOCKED_ROUTES` in
+  `middleware.ts`. R16 subdomain → 307 to `/`; unauthenticated → 307 to
+  `/sign-in`. Credit preflight runs server-side before any generation
+  job is queued.
+- Safe visual boundary: all presentation chrome (page bg, header
+  gradient, cards, inputs, buttons, spinners, history list). Semantic
+  amber/red/emerald states (insufficient credits, errors, success) kept
+  unchanged.
+
+/story-studio — classification preserved: no new code evidence
+contradicts the prior classification. Not in scope for Phase 3C.
+
+/analytics creator-state defect — flagged in Phase 3B; kept out of
+this pass as it does not block Phase 3C qualification.
+
+**Implementation (commit `d6adfd9`)**
+
+Branch `codex/ui-mobile-handoff-production`. Three files changed, all
+frontend-only (zero backend/schema/migration files touched):
 
 - `apps/web/src/components/video/VideoPlayer.tsx` — play overlay
-  converted from `<div>` to `<button type="button" aria-label="Play">`;
-  mute button gained `focus-visible:ring-2 focus-visible:ring-white/60`.
-  Video-player colors (black/white) are semantically correct and left
-  unchanged. All behavior (`useEffect` hooks, HLS setup, progress
-  interval, `isActive` watcher) unchanged.
+  converted from `<div onClick>` to `<button type="button"
+  aria-label="Play">`, preserving all click behavior; mute button
+  gained `focus-visible:ring-2 focus-visible:ring-white/60` and correct
+  `aria-label="Unmute"/"Mute"` toggle. Video-player colors (black/white)
+  are semantically correct for video chrome and left unchanged. All
+  behavior (`useEffect` hooks, HLS setup, progress interval, `isActive`
+  watcher) unchanged. Diff is presentation-only.
 
 - `apps/web/src/app/upload/page.tsx` — page background `bg-black` →
   `bg-[var(--noc-page)]`; container widened `max-w-xl` → `max-w-2xl`;
-  metadata form restructured to `md:flex-row` desktop two-column layout;
-  drag zone, progress bar, inputs, labels, checkboxes, CTA buttons, and
-  success icon migrated to Nocturne tokens. Transition-toggled colors
-  (drag zone active/idle) use literal hex values per Phase 2 CSS
-  transition bug rule.
+  metadata form restructured to `md:flex-row` desktop two-column layout
+  (video preview as `shrink-0` sidebar); drag zone, progress bar,
+  inputs, labels, checkboxes, CTA buttons, and success icon migrated to
+  Nocturne tokens. Transition-toggled colors (drag zone active/idle) use
+  literal hex values per Phase 2 CSS transition bug rule. Error banner
+  semantic red preserved.
 
 - `apps/web/src/app/generate/page.tsx` — page background, header
   gradient, credit badge, controls card, section labels, mode radio
@@ -2525,21 +2620,28 @@ files touched):
   publish buttons, and history cards all migrated to Nocturne tokens.
   Transition-toggled colors (mode radios, aspect ratio buttons, history
   cards) use literal hex values. Amber/red/emerald semantic colors
-  preserved unchanged. Credit rate sourced from `featureCreditRate` DB
-  table at runtime — not hardcoded.
+  preserved unchanged. Credit rate display left as-is (runtime value
+  from `featureCreditRate` table — no hardcoded number changed).
 
-Staging build gate: `pnpm --filter @raivstream/web build` — PASS (no
-errors, both `/upload` and `/generate` appear in route manifest).
-Staging runtime gate: PM2 id 30 online, ready in 490ms, zero app
-errors (only expected `STRIPE_WEBHOOK_SECRET` warning).
+**Staging gates**
+
+Build: `pnpm --filter @raivstream/web build` on VPS staging — PASS (no
+errors; `/upload` and `/generate` present in route manifest).
+Runtime: PM2 id 30 `raivstream-phase9b2-audio-staging`, port 3037,
+ready in 490ms, zero app errors (only expected
+`STRIPE_WEBHOOK_SECRET` warning and OpenAI moderation 400 on scan of
+existing content — both known staging-env absences).
 Route QA: `/` → 200, `/v/[id]` → 200, `/upload` → 307 (auth wall
 enforced), `/generate` → 307 (auth wall enforced).
-CSS bundle: all 13 `--noc-*` token families confirmed present.
-Transition-safe literals: `#d946a8` and `rgba(217,70,168` confirmed in
-both compiled page bundles.
+CSS bundle (`e5b84936c16ccb50.css`): all 13 `--noc-*` token families
+confirmed present in staging stylesheet.
+Compiled bundle checks: `#d946a8` and `rgba(217,70,168` (transition-
+safe literals) confirmed in both upload and generate page bundles.
 VideoPlayer accessibility: `aria-label="Play"`, `type="button"`,
 `focus-visible:ring-2`, `aria-label="Unmute"/"Mute"` confirmed in
-chunk 8244.
+server chunk 8244.
+Staging DB isolation: `raivstream_phase9b2_pg` on `127.0.0.1:55484` —
+confirmed separate from production prior to file sync.
 
 **PHASE 3 — LEGACY FEED FAMILY CONTENT MIGRATION — COMPLETE**
 
@@ -2551,6 +2653,6 @@ justification. The Phase 3 completion gate is met.
 **OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS —
 PHASES 1–3 COMPLETE**
 
-`d6adfd9` is the new baseline. Phase 4 (Academy + Specialized
-Storybook Views) remains **not started** and is not auto-started by
-this round.
+`d6adfd9` is the new baseline (implementation); `797ae58` closes the
+docs. Phase 4 (Academy + Specialized Storybook Views) remains **not
+started** and is not auto-started by this round.
