@@ -142,7 +142,7 @@ export function VideoCard({ video, isActive, isLocked = false, onEnded }: VideoC
         </div>
       ) : (
         <div className="w-full h-full bg-[var(--noc-page)] flex items-center justify-center">
-          <span className="text-white/50 text-sm">Processing…</span>
+          <span className="text-[var(--noc-t4)] text-sm">Processing…</span>
         </div>
       )}
 

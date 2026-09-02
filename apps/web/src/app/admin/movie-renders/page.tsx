@@ -48,7 +48,7 @@ export default function MovieRenderDiagnosticsPage() {
           className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           {[7, 14, 30, 60, 90].map((value) => (
-            <option key={value} value={value} className="bg-[#0B0D14]">{value} days</option>
+            <option key={value} value={value} className="bg-[var(--noc-page)]">{value} days</option>
           ))}
         </select>
       </div>

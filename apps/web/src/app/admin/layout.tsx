@@ -117,7 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Sidebar — desktop: always visible, mobile: slide-in drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-56 flex-shrink-0 flex-col border-r border-[var(--noc-hairline)] bg-[#070810] transition-transform duration-200 ease-in-out md:static ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-56 flex-shrink-0 flex-col border-r border-[var(--noc-hairline)] bg-[var(--noc-bar)] transition-transform duration-200 ease-in-out md:static ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
@@ -128,7 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex min-w-0 flex-1 flex-col">
 
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--noc-hairline)] bg-[#070810] px-4 py-3 md:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--noc-hairline)] bg-[var(--noc-bar)] px-4 py-3 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="-ml-1 p-1 text-[var(--noc-t4)] hover:text-[var(--noc-t1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"

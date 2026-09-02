@@ -163,7 +163,7 @@ export default function StoryStudioPage() {
 
   if (isLoaded && !isSignedIn) {
     return (
-      <div className="min-h-screen bg-[#0B0D14] flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-[var(--noc-page)] flex flex-col items-center justify-center gap-4">
         <Navbar />
         <p className="text-[var(--noc-t4)] text-lg">Sign in to use Story Studio</p>
         <a href="/sign-in" className="bg-[var(--noc-magenta)] hover:opacity-90 text-white px-6 py-2.5 rounded-full font-semibold transition-colors">
@@ -174,7 +174,7 @@ export default function StoryStudioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0D14] text-[var(--noc-t1)]">
+    <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 pt-20 pb-16">
         <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">

@@ -957,7 +957,7 @@ export default function StoryPlaygroundPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0D14] text-[var(--noc-t1)]">
+    <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
       <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-24">
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
@@ -1003,7 +1003,7 @@ export default function StoryPlaygroundPage() {
         {isLoaded && !isSignedIn && (
           <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-6">
             <p className="mb-4 text-lg font-bold">Sign in to save and continue your stories.</p>
-            <Link href="/sign-in?redirect_url=/story-playground" className="inline-flex items-center gap-2 rounded-xl bg-[#0B0D14] px-5 py-3 font-bold text-white">
+            <Link href="/sign-in?redirect_url=/story-playground" className="inline-flex items-center gap-2 rounded-xl bg-[var(--noc-page)] px-5 py-3 font-bold text-white">
               Sign in
               <ChevronRight size={18} />
             </Link>
@@ -1298,7 +1298,7 @@ export default function StoryPlaygroundPage() {
                 <button
                   onClick={() => projectId && saveProject.mutate({ projectId })}
                   disabled={!projectId || saveProject.isPending}
-                  className="w-full rounded-xl bg-[#0B0D14] px-5 py-4 text-left font-black text-white disabled:opacity-50"
+                  className="w-full rounded-xl bg-[var(--noc-page)] px-5 py-4 text-left font-black text-white disabled:opacity-50"
                 >
                   Save Story
                 </button>
@@ -1566,7 +1566,7 @@ export default function StoryPlaygroundPage() {
             </section>
 
             {canUseAdvancedPrompts && (
-              <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[#0B0D14] p-5 text-white md:p-6">
+              <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[var(--noc-page)] p-5 text-white md:p-6">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">Enhanced prompt composer</p>
@@ -1627,7 +1627,7 @@ export default function StoryPlaygroundPage() {
 
       {editingScene && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--noc-page)] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">Edit scene</p>
@@ -1702,7 +1702,7 @@ export default function StoryPlaygroundPage() {
 
       {editingCharacter && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[var(--noc-page)] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'Edit friend' : 'Edit character reference'}</p>
@@ -1916,7 +1916,7 @@ export default function StoryPlaygroundPage() {
 
       {historyScene && !isR16 && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4">
-          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-[#0B0D14] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
+          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-[var(--noc-page)] p-5 text-[var(--noc-t1)] shadow-2xl border border-[rgba(233,233,237,0.10)]">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-purple)]">Image history</p>

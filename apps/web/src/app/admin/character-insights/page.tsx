@@ -53,10 +53,10 @@ export default function CharacterInsightsPage() {
           onChange={(event) => setDays(Number(event.target.value))}
           className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
-          <option value={7}   className="bg-[#0B0D14]">Last 7 days</option>
-          <option value={30}  className="bg-[#0B0D14]">Last 30 days</option>
-          <option value={90}  className="bg-[#0B0D14]">Last 90 days</option>
-          <option value={180} className="bg-[#0B0D14]">Last 180 days</option>
+          <option value={7}   className="bg-[var(--noc-page)]">Last 7 days</option>
+          <option value={30}  className="bg-[var(--noc-page)]">Last 30 days</option>
+          <option value={90}  className="bg-[var(--noc-page)]">Last 90 days</option>
+          <option value={180} className="bg-[var(--noc-page)]">Last 180 days</option>
         </select>
       </div>
 
