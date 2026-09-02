@@ -2853,3 +2853,73 @@ admin diagnostic, not creator workspace.
 (Nocturne tokens). Phase 5 scope complete. Phase 6 (workspace internals —
 Audio, Sequence, Film, Storybook internals, story-playground-new) not started
 and not auto-started per explicit instruction.
+
+---
+
+## PHASE 6 — WORKSPACE INTERNALS (2026-09-01)
+
+**Status: COMPLETE / PASS**
+
+**Scope**: Nocturne design-system reconciliation of advanced workspace
+internals. UI-only — no domain, schema, auth, credit, generation, or
+R16 logic changed.
+
+**Files changed (commit `d183962` on `codex/ui-mobile-handoff-production`,
+merged to `main` as `249673c`):**
+
+- `apps/web/src/app/story-playground/new/page.tsx` (1963 lines)
+- `apps/web/src/app/story-playground/[projectId]/page.tsx` (1781 lines)
+- `apps/web/src/app/story-studio/page.tsx` (421 lines)
+
+**Excluded (out of Phase 6 scope):**
+- `story-playground/[projectId]/storybook/page.tsx` — Phase 4 storybook viewer, already audited
+- All `/admin/**` — Phase 5 done
+- Academy — Phase 4 done
+
+**Token mapping applied:**
+
+| Legacy token | Nocturne replacement | Notes |
+|---|---|---|
+| `#2fbf71` (green) | `var(--noc-blue)` | CTAs, progress bars, track toggles |
+| `#8fdfe8` / `#4fd6e8` (cyan) | `var(--noc-blue)` | Audio headers, status chips |
+| `#ffcf4a` (amber) | `var(--noc-t2)` | Sequence/Film section labels |
+| `#b5abfc` (lavender) | `var(--noc-purple)` | Labels, restore buttons |
+| `#f0a3d4` (pink text) | `var(--noc-magenta)` | Reject/remove/error states |
+| `#9397ab` / `#75798c` (muted) | `var(--noc-t4)` / `var(--noc-t5)` | Subdued text |
+| `#F7F8FC` (near-white) | `var(--noc-t1)` | Main text on dark backgrounds |
+| `#111827` | `var(--noc-bar)` | Sequence/Animatic section headers |
+| `#101827` | `var(--noc-page)` | Prompt-preview modal background |
+| `rgba(79,214,232,*)` cyan alpha | `rgba(79,139,214,*)` noc-blue alpha | Chip/badge fills |
+| `rgba(143,223,232,*)` teal alpha | `rgba(79,139,214,*)` noc-blue alpha | Audio cue block fills |
+| `rgba(181,171,252,*)` lavender alpha | `rgba(178,90,217,*)` noc-purple alpha | Version/restore fills |
+| `rgba(47,191,113,*)` green alpha | `rgba(79,139,214,*)` noc-blue alpha | Readiness panel |
+| `bg-pink-500/600` | `bg-[var(--noc-magenta)]` + `hover:opacity-90` | story-studio CTAs |
+| `bg-violet-500/600` | `bg-[var(--noc-purple)]` | story-studio video CTA |
+| `bg-emerald-500/600` | `bg-[var(--noc-blue)]` | story-studio open/storyboard CTAs |
+| `bg-black`, `bg-black/30` | `bg-[#0B0D14]`, `bg-white/[0.05]` | story-studio surfaces |
+| `border-white/10`, `bg-white/5` | `border-[var(--noc-hairline)]`, `bg-[var(--noc-card)]` | story-studio cards/inputs |
+| `text-white/45..60` | `text-[var(--noc-t4)]` | story-studio subdued text |
+| `text-white/35` | `text-[var(--noc-t5)]` | story-studio faint text |
+
+**Preserved unchanged (invariants):**
+- Nocturne gradient definitions: `bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)]` — kept as-is
+- Semantic status colors in admin: `#22c55e` (credits), `#ef4444` (failed) — out of Phase 6 scope
+- All `trpc.*` mutations and queries — unmodified
+- Credit cost display (`data?.creditCost`, `creditsCharged`) — unmodified
+- R16 visibility rules (`hideOnR16: true`) for sequence/audio/film tabs — unmodified
+- `Shell` wrapping in `[projectId]/page.tsx` — already Nocturne from Foundation Pass
+- Auth/ownership guards — unmodified
+- `story:movie_render = 100 credits` — unmodified
+
+**TypeScript**: `tsc --noEmit` exit 0, zero errors.
+
+**Production deployment**: pushed to `origin/main` as `249673c`. CI/CD deployed via GitHub Actions. Production health confirmed: `{"status":"healthy"}`.
+
+**QA smokes (production, unauthenticated):**
+- `GET /story-playground/new` → 200 ✓
+- `GET /story-studio` → 307 (auth redirect, pre-existing) ✓
+- `GET /story-playground/[id]` → 200 ✓
+- `GET /api/health` → 200, `{"status":"healthy"}` ✓
+- Nocturne CSS tokens verified in production HTML (`var(--noc-page)`, `var(--noc-card)`, `var(--noc-gradient)`) ✓
+
+**Production baseline after Phase 6**: SHA `249673c`.

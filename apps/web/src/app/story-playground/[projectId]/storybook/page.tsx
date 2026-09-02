@@ -327,7 +327,7 @@ export default function StoryBookViewerPage() {
                   )}
                 </div>
                 <div className="flex flex-col justify-center">
-                  <p className="mb-3 text-sm font-black uppercase tracking-wide text-[#2fbf71]">{isR16 ? 'Your picture book' : 'Storybook'}</p>
+                  <p className="mb-3 text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'Your picture book' : 'Storybook'}</p>
                   <h1 className="text-4xl font-black leading-tight md:text-6xl">{storyBook.project.title}</h1>
                   <p className="mt-5 text-2xl font-bold leading-snug text-[#596070]">
                     {storyBook.project.mainCharacter ? `A story with ${storyBook.project.mainCharacter}.` : 'A story made by you.'}
