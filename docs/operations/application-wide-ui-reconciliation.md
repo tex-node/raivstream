@@ -2923,3 +2923,30 @@ merged to `main` as `249673c`):**
 - Nocturne CSS tokens verified in production HTML (`var(--noc-page)`, `var(--noc-card)`, `var(--noc-gradient)`) ✓
 
 **Production baseline after Phase 6**: SHA `249673c`.
+
+### Phase 6 Closure Audit Addendum (2026-09-02)
+
+**SHA confirmation**: `git log origin/main` in production worktree `C:\Raiv\raivstream` confirms `249673c` as the deployed SHA at time of closure audit — independent of token-presence evidence.
+
+**Route matrix classification:**
+
+| Route | Files | Disposition |
+|---|---|---|
+| `/story-playground/new` | `new/page.tsx` | MIGRATED — Phase 6 initial sweep |
+| `/story-playground/[projectId]` | `[projectId]/page.tsx` | MIGRATED — Phase 6 initial sweep (all tabs: Story, Characters, Scenes, Assets, Sequence, Audio, Film) |
+| `/story-studio` | `story-studio/page.tsx` | MIGRATED — Phase 6 initial sweep |
+| `/story-playground/[projectId]/storybook` | `[projectId]/storybook/page.tsx` | MIGRATED — closure audit (`text-[#2fbf71]` at line 330, previously classified Phase 4 excluded but carried residual token) |
+| `/story-playground/[projectId]/story` | `[projectId]/story/page.tsx` + `StoryScreen` | ALREADY ACCEPTABLE — thin shell + component has no legacy tokens |
+| `/story-playground/[projectId]/characters` | `[projectId]/characters/page.tsx` + `CastScreen` | ALREADY ACCEPTABLE — thin shell + component has no legacy tokens |
+| `/story-playground/[projectId]/characters/[id]` | `[projectId]/characters/[id]/page.tsx` + `CharacterDetailScreen` | ALREADY ACCEPTABLE — thin shell + component has no legacy tokens |
+| `/story-playground/[projectId]/scenes` | `[projectId]/scenes/page.tsx` + `ScenesScreen` | ALREADY ACCEPTABLE — thin shell + component has no legacy tokens |
+| `/story-playground/[projectId]/scenes/[id]` | `[projectId]/scenes/[id]/page.tsx` + `SceneDirectorScreen` | ALREADY ACCEPTABLE — thin shell + component has no legacy tokens |
+| `/story-playground/[projectId]/assets` | `[projectId]/assets/page.tsx` + `AssetsScreen` | MIGRATED — closure audit (3 tokens in `AssetsScreen.tsx`: `#f0a3d4`, `rgba(79,214,232,..)`, `var(--noc-cyan-tint)`, `rgba(47,191,113,..)`, `#2fbf71`) |
+| `/story-playground` | `story-playground/page.tsx` + `HomeScreen` | MIGRATED — closure audit (`#b5abfc` icon color in `HomeScreen.tsx`) |
+| `/story-playground/[projectId]/storybook` (top-level `/storybook/[id]`) | `storybook/[projectId]/page.tsx` | ALREADY ACCEPTABLE — no legacy tokens |
+| `/admin/**` | (all admin pages) | EXCLUDED — Phase 5 complete |
+| `/academy/**` | (all academy pages) | EXCLUDED — Phase 4 complete |
+
+**Closure-audit commit**: `4ba2af3` on feature branch, merged to `origin/main` as `49afdc1`.
+
+**Production baseline after Phase 6 closure audit**: SHA `49afdc1`.
