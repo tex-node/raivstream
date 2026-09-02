@@ -99,7 +99,7 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
                     style={{ position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}
                     aria-label={asset.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                   >
-                    <Heart size={16} fill={asset.isFavorite ? '#f0a3d4' : 'none'} color={asset.isFavorite ? '#f0a3d4' : 'rgba(247,248,252,0.45)'} strokeWidth={1.8} />
+                    <Heart size={16} fill={asset.isFavorite ? '#d946a8' : 'none'} color={asset.isFavorite ? '#d946a8' : 'rgba(247,248,252,0.45)'} strokeWidth={1.8} />
                   </button>
                 </div>
                 <div style={{ padding: '8px 10px' }}>
@@ -112,13 +112,13 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
                   {(asset.isActive || asset.isLatest || asset.approvedAt) && (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
                       {asset.isActive && (
-                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(79,214,232,0.14)', color: 'var(--noc-cyan-tint)' }}>ACTIVE</span>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(79,139,214,0.14)', color: 'var(--noc-blue)' }}>ACTIVE</span>
                       )}
                       {asset.isLatest && (
                         <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(233,233,237,0.08)', color: 'var(--noc-t4)' }}>LATEST</span>
                       )}
                       {asset.approvedAt && (
-                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(47,191,113,0.14)', color: '#2fbf71' }}>APPROVED</span>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, borderRadius: 5, padding: '2px 5px', background: 'rgba(79,139,214,0.14)', color: 'var(--noc-blue)' }}>APPROVED</span>
                       )}
                     </div>
                   )}

@@ -172,7 +172,7 @@ export function HomeScreen() {
                   textDecoration: 'none',
                 }}
               >
-                <Icon size={17} color="#b5abfc" strokeWidth={1.8} />
+                <Icon size={17} color="#b25ad9" strokeWidth={1.8} />
                 <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--noc-t1)' }}>{label}</span>
               </Link>
             ))}
