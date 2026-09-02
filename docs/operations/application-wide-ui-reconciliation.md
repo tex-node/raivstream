@@ -2950,3 +2950,77 @@ merged to `main` as `249673c`):**
 **Closure-audit commit**: `4ba2af3` on feature branch, merged to `origin/main` as `49afdc1`.
 
 **Production baseline after Phase 6 closure audit**: SHA `49afdc1`.
+
+---
+
+## Phase 7 — Shared Primitives + Design System Consolidation
+
+**Status: PASS / COMPLETE**
+**Date: 2026-09-02**
+**Merge SHA**: `1881ff7e6c25c24288d227b0e23c5e602e6f400c`
+**Production baseline before Phase 7**: `49afdc1`
+**Production baseline after Phase 7**: `1881ff7`
+
+### Scope
+
+Phase 7 replaced all remaining hardcoded hex literals that match a Nocturne design-system token with the corresponding CSS custom property. 42 `.tsx` files in `apps/web/src/` were touched. Zero backend, schema, API, auth, R16, credit, pricing, worker, renderer, audio, or voice changes.
+
+**Token substitutions (exact-value, zero visual delta — 20 of 21 changes):**
+- `bg-[#0B0D14]` → `bg-[var(--noc-page)]` — 6 occurrences in `story-playground/new/page.tsx`, 2 in `story-studio/page.tsx`
+- `bg-[#070810]` → `bg-[var(--noc-bar)]` — 2 occurrences in `admin/layout.tsx`
+- `bg-[#0B0D14]` on `<option>` elements → `bg-[var(--noc-page)]` — 4 admin dropdown files (character-insights, movie-renders, prompt-quality, story-analytics)
+
+**Change with visual delta (1 of 21):**
+- `VideoCard.tsx:145`: `text-white/50` → `text-[var(--noc-t4)]` on "Processing…" placeholder text inside `bg-[var(--noc-page)]` div. Muted placeholder text is now more readable against the page background. Not a regression.
+
+**Preserved (PLAYER OVERLAY/CONTRAST):**
+- 12 white/translucent values in `VideoCard.tsx` on video player surfaces (gradient overlay, action button circles, creator name, title, description, tags) — all correctly preserved as `bg-white/20`, `text-white`, etc. for legibility over any video content.
+
+**Preserved (INTENTIONAL SPECIALIZATION):**
+- Storybook reading palette: `bg-[#f5f0e8]`, `text-[#2d2416]`, `text-[#5c4a2e]`, `bg-[#e8e0d0]` — warm/parchment palette is intentional for the storybook reading experience.
+- Non-token hex values: `#0d1526` (dark blue tint), `#0d1420` (media-specific) — not equal to any Nocturne token.
+
+### Candidate Chain
+
+- `5ea4af5` — Phase 7 core (34 files)
+- `d439e18` — Phase 7 closure gate (8 files)
+- Merged to `main` as `1881ff7` via `git merge --no-ff codex/ui-mobile-handoff-production`
+
+### Pre-Production Gate
+
+- **TypeScript**: `tsc --noEmit` exit 0, zero errors
+- **Next.js compilation**: PASS (3.7 min, no type or lint errors)
+- **Token audit**: `UNDEFINED_TOKENS=0`, `UNEXPLAINED_LEGACY=0`
+- **Verdict**: PASS WITH VISUAL QUALIFICATION REQUIRED IN PRODUCTION (staging HTTPS blocker prevented pre-release screenshot QA)
+
+### Production Release
+
+- **CI/CD run**: GitHub Actions "Deploy to VPS" run `33686390704`, completed in 2m50s
+- **Deploy confirmed**: SHA `1881ff7` running in production, PM2 id 0 online, 0 unstable restarts
+- **Health**: `{"status":"healthy","database":{"status":"ok","latencyMs":2}}`
+
+### Production Visual Qualification
+
+All three viewports qualified against the live production application at `https://app.raivstream.com`.
+
+| Route | 390×844 | 768×1024 | 1440×900 |
+|---|---|---|---|
+| `/` (root/feed) | PASS | PASS | PASS |
+| Video overlays | PASS | — | PASS |
+| `/sign-in` | PASS | PASS | PASS |
+| `/academy` | PASS | — | PASS |
+| `/story-playground` | PASS | PASS | PASS |
+| `/story-studio` (signed-out guard) | PASS | — | — |
+| `r16.raivstream.com` | PASS | — | PASS |
+
+- **Console**: clean — only pre-existing `net::ERR_CONNECTION_RESET` video stream error
+- **PM2 error log**: only transient post-deployment "Failed to find Server Action" entries (standard Next.js stale-client-bundle artifact, self-resolving)
+- **Credit rate invariant**: `packages/api/src/lib/credits.ts` and `packages/db/prisma/schema.prisma` show zero diff from `49afdc1` to `1881ff7`. `story:movie_render = 100 credits` row unchanged.
+
+### Formal Verdict
+
+**PHASE 7 — SHARED PRIMITIVES + DESIGN SYSTEM CONSOLIDATION — PASS**
+**PHASE 7 — SHARED PRIMITIVES + DESIGN SYSTEM CONSOLIDATION — COMPLETE**
+**OVERALL APPLICATION-WIDE UI RECONCILIATION — PASS WITH LIMITATIONS — PHASE 7 OF 8 COMPLETE**
+
+Phase 8 — Final Whole-App Visual Acceptance — is now unlocked.
