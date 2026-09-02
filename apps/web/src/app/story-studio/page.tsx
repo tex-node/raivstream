@@ -215,39 +215,39 @@ export default function StoryStudioPage() {
                   value={projectTitle}
                   onChange={(e) => setProjectTitle(e.target.value)}
                   placeholder="Series or story title"
-                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
+                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
                 />
                 <input
                   value={logline}
                   onChange={(e) => setLogline(e.target.value)}
                   placeholder="One-sentence logline"
-                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
+                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
                 />
                 <textarea
                   value={storyText}
                   onChange={(e) => setStoryText(e.target.value)}
                   placeholder="Paste or draft the story. Each paragraph or sentence can become a storyboard shot."
                   rows={7}
-                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none resize-none focus:border-[var(--noc-blue)]/60"
+                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none resize-none focus:border-[var(--noc-blue)]/60"
                 />
                 <textarea
                   value={visualStyle}
                   onChange={(e) => setVisualStyle(e.target.value)}
                   placeholder="Visual style"
                   rows={2}
-                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none resize-none focus:border-[var(--noc-blue)]/60"
+                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none resize-none focus:border-[var(--noc-blue)]/60"
                 />
                 <input
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}
                   placeholder="Tone"
-                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
+                  className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none focus:border-[var(--noc-blue)]/60"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleCreateProject}
                     disabled={!projectTitle.trim() || createProject.isPending}
-                    className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15 disabled:opacity-40"
+                    className="rounded-lg bg-[var(--noc-card)] px-3 py-2 text-sm font-semibold hover:bg-[rgba(233,233,237,0.15)] disabled:opacity-40"
                   >
                     New Project
                   </button>
@@ -277,21 +277,21 @@ export default function StoryStudioPage() {
             <div className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-4">
               <h2 className="font-semibold text-sm mb-3">Character Builder</h2>
               <div className="space-y-2">
-                <input value={characterForm.name} onChange={(e) => setCharacterForm({ ...characterForm, name: e.target.value })} placeholder="Name" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
-                <input value={characterForm.role} onChange={(e) => setCharacterForm({ ...characterForm, role: e.target.value })} placeholder="Role" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
-                <textarea value={characterForm.description} onChange={(e) => setCharacterForm({ ...characterForm, description: e.target.value })} placeholder="Backstory and function in the story" rows={3} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none resize-none" />
-                <textarea value={characterForm.visualTraits} onChange={(e) => setCharacterForm({ ...characterForm, visualTraits: e.target.value })} placeholder="Consistent visual traits, wardrobe, age, silhouette" rows={2} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none resize-none" />
-                <input value={characterForm.referenceUrl} onChange={(e) => setCharacterForm({ ...characterForm, referenceUrl: e.target.value })} placeholder="Reference image URL" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
+                <input value={characterForm.name} onChange={(e) => setCharacterForm({ ...characterForm, name: e.target.value })} placeholder="Name" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
+                <input value={characterForm.role} onChange={(e) => setCharacterForm({ ...characterForm, role: e.target.value })} placeholder="Role" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
+                <textarea value={characterForm.description} onChange={(e) => setCharacterForm({ ...characterForm, description: e.target.value })} placeholder="Backstory and function in the story" rows={3} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none resize-none" />
+                <textarea value={characterForm.visualTraits} onChange={(e) => setCharacterForm({ ...characterForm, visualTraits: e.target.value })} placeholder="Consistent visual traits, wardrobe, age, silhouette" rows={2} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none resize-none" />
+                <input value={characterForm.referenceUrl} onChange={(e) => setCharacterForm({ ...characterForm, referenceUrl: e.target.value })} placeholder="Reference image URL" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
                 <button
                   onClick={() => activeProjectId && saveCharacter.mutate({ projectId: activeProjectId, ...characterForm })}
                   disabled={!activeProjectId || !characterForm.name.trim() || !characterForm.description.trim() || saveCharacter.isPending}
-                  className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15 disabled:opacity-40"
+                  className="w-full rounded-lg bg-[var(--noc-card)] px-3 py-2 text-sm font-semibold hover:bg-[rgba(233,233,237,0.15)] disabled:opacity-40"
                 >
                   Add Character
                 </button>
                 <div className="space-y-2 pt-2">
                   {project?.characters.map((character: { id: string; name: string; description: string; visualTraits: string | null }) => (
-                    <div key={character.id} className="rounded-lg border border-[var(--noc-hairline)] bg-white/[0.04] p-3">
+                    <div key={character.id} className="rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-3">
                       <p className="font-semibold text-sm">{character.name}</p>
                       <p className="text-xs text-[var(--noc-t4)] line-clamp-2">{character.visualTraits || character.description}</p>
                     </div>
@@ -314,10 +314,10 @@ export default function StoryStudioPage() {
                   className={`min-h-56 rounded-xl border p-3 text-left transition-colors ${
                     selectedShotId === shot.id
                       ? 'border-[var(--noc-magenta)] bg-[var(--noc-magenta)]/10'
-                      : 'border-[var(--noc-hairline)] bg-white/[0.04] hover:border-white/30'
+                      : 'border-[var(--noc-hairline)] bg-[var(--noc-card)] hover:border-[var(--noc-hairline)]'
                   }`}
                 >
-                  <div className="aspect-[9/16] rounded-lg bg-white/[0.05] mb-3 overflow-hidden flex items-center justify-center">
+                  <div className="aspect-[9/16] rounded-lg bg-[var(--noc-card)] mb-3 overflow-hidden flex items-center justify-center">
                     {shot.assetUrl ? (
                       /\.(mp4|webm|mov)(\?|$)/i.test(shot.assetUrl) ? (
                         <video src={shot.assetUrl} className="h-full w-full object-cover" muted playsInline />
@@ -344,21 +344,21 @@ export default function StoryStudioPage() {
             <div className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-4">
               <h2 className="font-semibold text-sm mb-3">Environment Designer</h2>
               <div className="space-y-2">
-                <input value={environmentForm.name} onChange={(e) => setEnvironmentForm({ ...environmentForm, name: e.target.value })} placeholder="Environment name" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
-                <textarea value={environmentForm.description} onChange={(e) => setEnvironmentForm({ ...environmentForm, description: e.target.value })} placeholder="Location, props, textures, production details" rows={3} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none resize-none" />
-                <input value={environmentForm.mood} onChange={(e) => setEnvironmentForm({ ...environmentForm, mood: e.target.value })} placeholder="Mood" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
-                <input value={environmentForm.lighting} onChange={(e) => setEnvironmentForm({ ...environmentForm, lighting: e.target.value })} placeholder="Lighting" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
-                <input value={environmentForm.referenceUrl} onChange={(e) => setEnvironmentForm({ ...environmentForm, referenceUrl: e.target.value })} placeholder="Reference image URL" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none" />
+                <input value={environmentForm.name} onChange={(e) => setEnvironmentForm({ ...environmentForm, name: e.target.value })} placeholder="Environment name" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
+                <textarea value={environmentForm.description} onChange={(e) => setEnvironmentForm({ ...environmentForm, description: e.target.value })} placeholder="Location, props, textures, production details" rows={3} className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none resize-none" />
+                <input value={environmentForm.mood} onChange={(e) => setEnvironmentForm({ ...environmentForm, mood: e.target.value })} placeholder="Mood" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
+                <input value={environmentForm.lighting} onChange={(e) => setEnvironmentForm({ ...environmentForm, lighting: e.target.value })} placeholder="Lighting" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
+                <input value={environmentForm.referenceUrl} onChange={(e) => setEnvironmentForm({ ...environmentForm, referenceUrl: e.target.value })} placeholder="Reference image URL" className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none" />
                 <button
                   onClick={() => activeProjectId && saveEnvironment.mutate({ projectId: activeProjectId, ...environmentForm })}
                   disabled={!activeProjectId || !environmentForm.name.trim() || !environmentForm.description.trim() || saveEnvironment.isPending}
-                  className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15 disabled:opacity-40"
+                  className="w-full rounded-lg bg-[var(--noc-card)] px-3 py-2 text-sm font-semibold hover:bg-[rgba(233,233,237,0.15)] disabled:opacity-40"
                 >
                   Add Environment
                 </button>
                 <div className="space-y-2 pt-2">
                   {project?.environments.map((environment: { id: string; name: string; description: string }) => (
-                    <div key={environment.id} className="rounded-lg border border-[var(--noc-hairline)] bg-white/[0.04] p-3">
+                    <div key={environment.id} className="rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-3">
                       <p className="font-semibold text-sm">{environment.name}</p>
                       <p className="text-xs text-[var(--noc-t4)] line-clamp-2">{environment.description}</p>
                     </div>
@@ -373,17 +373,17 @@ export default function StoryStudioPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs text-[var(--noc-t4)]">Image prompt</label>
-                    <textarea readOnly value={selectedShot.imagePrompt} rows={5} className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-xs text-[var(--noc-t3)] outline-none resize-none" />
+                    <textarea readOnly value={selectedShot.imagePrompt} rows={5} className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-xs text-[var(--noc-t3)] outline-none resize-none" />
                   </div>
                   <div>
                     <label className="text-xs text-[var(--noc-t4)]">Video prompt</label>
-                    <textarea readOnly value={selectedShot.videoPrompt} rows={5} className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-xs text-[var(--noc-t3)] outline-none resize-none" />
+                    <textarea readOnly value={selectedShot.videoPrompt} rows={5} className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-xs text-[var(--noc-t3)] outline-none resize-none" />
                   </div>
                   <input
                     value={assetUrl}
                     onChange={(e) => setAssetUrl(e.target.value)}
                     placeholder="Paste generated image or clip URL as storyboard reference"
-                    className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.05] px-3 py-2 text-sm outline-none"
+                    className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm outline-none"
                   />
                   <button
                     onClick={() => updateShot.mutate({
@@ -393,7 +393,7 @@ export default function StoryStudioPage() {
                       seedImageUrl: assetUrl,
                     })}
                     disabled={!assetUrl.trim() || updateShot.isPending}
-                    className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15 disabled:opacity-40"
+                    className="w-full rounded-lg bg-[var(--noc-card)] px-3 py-2 text-sm font-semibold hover:bg-[rgba(233,233,237,0.15)] disabled:opacity-40"
                   >
                     Save Reference To Shot
                   </button>

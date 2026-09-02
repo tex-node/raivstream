@@ -70,7 +70,7 @@ export default function ModerationPage() {
       )}
 
       {/* Tabs */}
-      <div className="mb-5 flex gap-1 rounded-xl bg-white/[0.04] p-1">
+      <div className="mb-5 flex gap-1 rounded-xl bg-[var(--noc-card)] p-1">
         {STATUS_TABS.map(({ value, label, color }) => (
           <button
             key={value}
@@ -148,7 +148,7 @@ export default function ModerationPage() {
 
                       <div className="absolute bottom-0 left-0 right-0 p-2">
                         <div className="truncate text-xs font-medium text-white">{video.title}</div>
-                        <div className="truncate text-xs text-white/50">@{video.creator.username}</div>
+                        <div className="truncate text-xs text-[var(--noc-t4)]">@{video.creator.username}</div>
                       </div>
 
                       <div className="absolute right-2 top-2">
@@ -169,7 +169,7 @@ export default function ModerationPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="rounded-lg bg-white/[0.06] px-3 py-1.5 text-sm text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+                    className="rounded-lg bg-[var(--noc-card)] px-3 py-1.5 text-sm text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
                   >
                     ← Prev
                   </button>
@@ -177,7 +177,7 @@ export default function ModerationPage() {
                   <button
                     onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
                     disabled={page === data.totalPages}
-                    className="rounded-lg bg-white/[0.06] px-3 py-1.5 text-sm text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+                    className="rounded-lg bg-[var(--noc-card)] px-3 py-1.5 text-sm text-[var(--noc-t3)] transition-colors hover:text-[var(--noc-t1)] disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
                   >
                     Next →
                   </button>
@@ -280,7 +280,7 @@ export default function ModerationPage() {
                   onChange={(e) => setReason(e.target.value)}
                   rows={2}
                   placeholder="Add a note…"
-                  className="w-full resize-none rounded-lg border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2 text-sm text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-blue)]"
+                  className="w-full resize-none rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-blue)]"
                 />
               </div>
 

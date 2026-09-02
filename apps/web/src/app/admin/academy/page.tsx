@@ -35,7 +35,7 @@ export default function AdminAcademyPage() {
             <Link
               key={klass.id}
               href={`/academy/classes/${klass.id}`}
-              className="grid gap-2 px-5 py-4 text-sm hover:bg-white/[0.04] md:grid-cols-[1fr_1fr_1fr_auto]"
+              className="grid gap-2 px-5 py-4 text-sm hover:bg-[var(--noc-card)] md:grid-cols-[1fr_1fr_1fr_auto]"
             >
               <span className="font-semibold text-[var(--noc-t1)]">{klass.title}</span>
               <span className="text-[var(--noc-t4)]">{klass.course.title}</span>

@@ -69,7 +69,7 @@ function AdjustCreditsModal({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 500 or -100"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
               required
             />
           </div>
@@ -81,7 +81,7 @@ function AdjustCreditsModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Promotional bonus"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
               required
             />
           </div>
@@ -187,12 +187,12 @@ export default function AdminUsersPage() {
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="Search email / username…"
-          className="w-72 rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-blue)]"
+          className="w-72 rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] placeholder:text-[var(--noc-t5)] outline-none focus:border-[var(--noc-blue)]"
         />
         <select
           value={role ?? ''}
           onChange={(e) => { setRole((e.target.value as Role) || undefined); setPage(1); }}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value="">All roles</option>
           <option value="VIEWER">Viewer</option>

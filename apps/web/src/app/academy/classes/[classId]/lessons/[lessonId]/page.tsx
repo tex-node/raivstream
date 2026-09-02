@@ -28,9 +28,9 @@ export default function AcademyLessonPage() {
             <p className="whitespace-pre-wrap text-base font-semibold leading-7 text-[var(--noc-t2)]">{data.lessonContent || 'Lesson content will appear here.'}</p>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={() => updateProgress.mutate({ classId, lessonId, status: 'IN_PROGRESS' })} className="rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Save Progress</button>
+            <button onClick={() => updateProgress.mutate({ classId, lessonId, status: 'IN_PROGRESS' })} className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Save Progress</button>
             <button onClick={() => updateProgress.mutate({ classId, lessonId, status: 'COMPLETED' })} className="rounded-xl bg-[#2fbf71] px-4 py-3 font-black text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2fbf71]/60">Mark Complete</button>
-            <Link href={`/academy/classes/${classId}`} className="rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Back to Class</Link>
+            <Link href={`/academy/classes/${classId}`} className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Back to Class</Link>
           </div>
         </Card>
 
@@ -38,7 +38,7 @@ export default function AcademyLessonPage() {
           <Card>
             <p className="text-sm font-black uppercase text-[#2fbf71]">Objectives</p>
             <div className="mt-3 grid gap-2">
-              {objectives.map((objective: string) => <div key={objective} className="rounded-xl bg-white/5 p-3 font-bold">{objective}</div>)}
+              {objectives.map((objective: string) => <div key={objective} className="rounded-xl bg-[var(--noc-card)] p-3 font-bold">{objective}</div>)}
               {objectives.length === 0 && <EmptyState>No objectives listed.</EmptyState>}
             </div>
           </Card>

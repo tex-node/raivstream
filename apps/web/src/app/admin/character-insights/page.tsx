@@ -13,9 +13,9 @@ function TopList({ title, items }: { title: string; items?: Array<{ name: string
           <p className="text-sm font-semibold text-[var(--noc-t4)]">No data yet.</p>
         ) : (
           items?.map((item) => (
-            <div key={item.name} className="flex items-center justify-between rounded-xl bg-white/[0.05] px-3 py-2">
+            <div key={item.name} className="flex items-center justify-between rounded-xl bg-[var(--noc-card)] px-3 py-2">
               <span className="font-bold text-[var(--noc-t2)]">{item.name}</span>
-              <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-black text-[var(--noc-t3)]">{item.count}</span>
+              <span className="rounded-full bg-[var(--noc-card)] px-2 py-1 text-xs font-black text-[var(--noc-t3)]">{item.count}</span>
             </div>
           ))
         )}
@@ -51,7 +51,7 @@ export default function CharacterInsightsPage() {
         <select
           value={days}
           onChange={(event) => setDays(Number(event.target.value))}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-3 font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value={7}   className="bg-[#0B0D14]">Last 7 days</option>
           <option value={30}  className="bg-[#0B0D14]">Last 30 days</option>
@@ -109,7 +109,7 @@ export default function CharacterInsightsPage() {
             <h2 className="text-lg font-black text-[var(--noc-t1)]">Recent Characters</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {data.recentCharacters.map((character: RecentCharacterRow) => (
-                <div key={character.id} className="rounded-xl bg-white/[0.05] p-4">
+                <div key={character.id} className="rounded-xl bg-[var(--noc-card)] p-4">
                   <h3 className="font-black text-[var(--noc-t1)]">{character.name}</h3>
                   <p className="mt-1 text-xs font-semibold text-[var(--noc-t4)]">{character.projectTitle}</p>
                   <p className="mt-3 text-sm font-bold text-[var(--noc-t3)]">{character.traits.join(', ') || 'No traits yet'}</p>

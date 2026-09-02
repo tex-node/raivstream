@@ -35,7 +35,7 @@ export default function AcademyClassPage() {
             </div>
             <div className="mt-4 space-y-4">
               {modules.map((module: any) => (
-                <div key={module.id} className="rounded-2xl bg-white/5 p-4">
+                <div key={module.id} className="rounded-2xl bg-[var(--noc-card)] p-4">
                   <h3 className="text-lg font-black">{module.title}</h3>
                   <p className="text-sm font-semibold text-[var(--noc-t4)]">{module.description}</p>
                   <div className="mt-3 grid gap-2">
@@ -83,11 +83,11 @@ export default function AcademyClassPage() {
 
         <div className="space-y-5">
           <Card>
-            <p className="text-sm font-black uppercase text-[#2fbf71]">Class Roster</p>
+            <p className="text-sm font-black uppercase text-[var(--noc-blue)]">Class Roster</p>
             <h2 className="text-2xl font-black">{students.length} Students</h2>
             <div className="mt-4 grid gap-2">
               {students.map((membership: any) => (
-                <div key={membership.id} className="rounded-xl bg-white/5 p-3">
+                <div key={membership.id} className="rounded-xl bg-[var(--noc-card)] p-3">
                   <p className="font-black">{membership.user.displayName}</p>
                   <p className="text-xs font-bold text-[var(--noc-t4)]">@{membership.user.username} · {membership.progressPercent}% complete</p>
                   <p className="text-xs font-bold text-[var(--noc-t4)]">Last active {dateLabel(membership.lastActiveAt)}</p>

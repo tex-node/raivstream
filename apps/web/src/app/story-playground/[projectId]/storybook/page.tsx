@@ -220,7 +220,7 @@ export default function StoryBookViewerPage() {
           <button
             type="button"
             onClick={() => setIsFullscreen((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#172033] px-4 py-2 text-sm font-black text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--noc-card)] px-4 py-2 text-sm font-black text-[var(--noc-t1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-hairline)]"
           >
             <Maximize2 size={16} />
             {isFullscreen ? 'Exit' : 'Fullscreen'}

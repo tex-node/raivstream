@@ -84,7 +84,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60 ${
                 active
                   ? 'bg-[var(--noc-blue)]/12 text-[var(--noc-blue)]'
-                  : 'text-[var(--noc-t3)] hover:bg-white/5 hover:text-[var(--noc-t1)]'
+                  : 'text-[var(--noc-t3)] hover:bg-[var(--noc-card)] hover:text-[var(--noc-t1)]'
               }`}
               aria-current={active ? 'page' : undefined}
             >

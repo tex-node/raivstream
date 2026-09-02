@@ -31,7 +31,7 @@ export function Card({ children, className = '' }: { children: React.ReactNode; 
 }
 
 export function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-[var(--noc-hairline)] bg-white/[0.03] p-8 text-center font-bold text-[var(--noc-t4)]">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-[var(--noc-hairline)] bg-[var(--noc-card)] p-8 text-center font-bold text-[var(--noc-t4)]">{children}</div>;
 }
 
 export function dateLabel(value?: string | Date | null) {

@@ -40,7 +40,7 @@ export default function AdminStoryAnalyticsPage() {
         <select
           value={days}
           onChange={(event) => setDays(Number(event.target.value))}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value={7}   className="bg-[#0B0D14]">Last 7 days</option>
           <option value={30}  className="bg-[#0B0D14]">Last 30 days</option>
@@ -84,7 +84,7 @@ export default function AdminStoryAnalyticsPage() {
                         <span className="font-semibold text-[var(--noc-t3)]">{FUNNEL_LABELS[stage.eventName] ?? eventLabel(stage.eventName)}</span>
                         <span className="font-mono text-[var(--noc-t5)]">{stage.users.toLocaleString()} users / {stage.events.toLocaleString()} events</span>
                       </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-white/[0.08]">
+                      <div className="h-3 overflow-hidden rounded-full bg-[var(--noc-card)]">
                         <div className="h-full rounded-full bg-[var(--noc-blue)]" style={{ width: `${width}%` }} />
                       </div>
                     </div>

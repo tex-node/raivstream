@@ -12,8 +12,8 @@ export default function VideoPage() {
 
   if (isLoading) {
     return (
-      <div className="h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+      <div className="h-screen bg-[var(--noc-page)] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-[var(--noc-hairline)] border-t-[var(--noc-t1)] rounded-full animate-spin" />
       </div>
     );
   }

@@ -106,7 +106,7 @@ export default function AdminPromptQualityPage() {
         <select
           value={days}
           onChange={(event) => setDays(Number(event.target.value))}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value={7}   className="bg-[#0B0D14]">Last 7 days</option>
           <option value={30}  className="bg-[#0B0D14]">Last 30 days</option>
@@ -130,13 +130,13 @@ export default function AdminPromptQualityPage() {
                 <h2 className="mt-2 text-lg font-bold text-[var(--noc-t1)]">{summary.actualProviderModel}</h2>
                 <p className="mt-1 text-xs text-[var(--noc-t4)]">{summary.enhancerProvider}</p>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                  <span className="rounded-lg bg-white/[0.05] p-2 text-[var(--noc-t4)]">
+                  <span className="rounded-lg bg-[var(--noc-card)] p-2 text-[var(--noc-t4)]">
                     Rating<br /><b className="text-[var(--noc-t1)]">{summary.averageRating === null ? '-' : summary.averageRating.toFixed(2)}</b>
                   </span>
-                  <span className="rounded-lg bg-white/[0.05] p-2 text-[var(--noc-t4)]">
+                  <span className="rounded-lg bg-[var(--noc-card)] p-2 text-[var(--noc-t4)]">
                     Regen<br /><b className="text-[var(--noc-t1)]">{summary.averageRegenerations.toFixed(2)}</b>
                   </span>
-                  <span className="rounded-lg bg-white/[0.05] p-2 text-[var(--noc-t4)]">
+                  <span className="rounded-lg bg-[var(--noc-card)] p-2 text-[var(--noc-t4)]">
                     Time<br /><b className="text-[var(--noc-t1)]">{formatMs(summary.averageGenerationTimeMs)}</b>
                   </span>
                 </div>

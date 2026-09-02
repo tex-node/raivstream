@@ -1571,7 +1571,7 @@ export default function StoryPlaygroundPage() {
                   <div>
                     <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">Enhanced prompt composer</p>
                     <h3 className="text-3xl font-black">Hidden prompts for AI Studio</h3>
-                    <p className="mt-1 font-semibold text-white/60">
+                    <p className="mt-1 font-semibold text-[var(--noc-t3)]">
                       Scene + character bible + mood + setting + visual style becomes provider-ready prompts. This is hidden on R16.
                     </p>
                   </div>
@@ -1588,22 +1588,22 @@ export default function StoryPlaygroundPage() {
                   {scenes.map((scene) => {
                     const latest = latestPromptForScene(scene);
                     return (
-                      <div key={scene.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-xs font-black uppercase tracking-wide text-white/40">Scene {scene.orderIndex}</p>
+                      <div key={scene.id} className="rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-4">
+                        <p className="text-xs font-black uppercase tracking-wide text-[var(--noc-t5)]">Scene {scene.orderIndex}</p>
                         <h4 className="mt-1 text-lg font-black">{scene.title}</h4>
-                        <p className="mt-2 line-clamp-2 text-sm font-semibold text-white/55">{scene.description}</p>
+                        <p className="mt-2 line-clamp-2 text-sm font-semibold text-[var(--noc-t4)]">{scene.description}</p>
                         <div className="mt-4 grid gap-2">
                           <button
                             onClick={() => projectId && composeScenePrompt.mutate({ projectId, sceneId: scene.id, outputType: 'IMAGE', provider: 'FLUX', saveVersion: true })}
                             disabled={!projectId || composeScenePrompt.isPending}
-                            className="rounded-xl bg-white/10 px-3 py-2 text-sm font-black text-white hover:bg-white/15 disabled:opacity-50"
+                            className="rounded-xl bg-[var(--noc-card)] px-3 py-2 text-sm font-black text-white hover:bg-[rgba(233,233,237,0.15)] disabled:opacity-50"
                           >
                             Regenerate Prompt
                           </button>
                           <button
                             onClick={() => latest && setPreviewPrompt(latest)}
                             disabled={!latest}
-                            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-black text-white/75 hover:text-white disabled:opacity-40"
+                            className="rounded-xl border border-[var(--noc-hairline)] px-3 py-2 text-sm font-black text-[var(--noc-t2)] hover:text-[var(--noc-t1)] disabled:opacity-40"
                           >
                             Preview Enhanced Prompt
                           </button>
@@ -1881,29 +1881,29 @@ export default function StoryPlaygroundPage() {
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">Enhanced prompt preview</p>
                 <h3 className="text-2xl font-black">{previewPrompt.provider} v{previewPrompt.version}</h3>
               </div>
-              <button onClick={() => setPreviewPrompt(null)} className="rounded-full bg-white/10 p-2">
+              <button onClick={() => setPreviewPrompt(null)} className="rounded-full bg-[var(--noc-card)] p-2">
                 <X size={20} />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <p className="mb-2 text-xs font-black uppercase tracking-wide text-white/40">Prompt</p>
-                <textarea readOnly value={previewPrompt.prompt} rows={8} className="w-full resize-none rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-white/80 outline-none" />
+                <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--noc-t5)]">Prompt</p>
+                <textarea readOnly value={previewPrompt.prompt} rows={8} className="w-full resize-none rounded-xl border border-[var(--noc-hairline)] bg-black/25 p-3 text-sm text-[var(--noc-t2)] outline-none" />
               </div>
               {previewPrompt.negativePrompt && (
                 <div>
-                  <p className="mb-2 text-xs font-black uppercase tracking-wide text-white/40">Negative prompt</p>
-                  <textarea readOnly value={previewPrompt.negativePrompt} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-white/80 outline-none" />
+                  <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--noc-t5)]">Negative prompt</p>
+                  <textarea readOnly value={previewPrompt.negativePrompt} rows={3} className="w-full resize-none rounded-xl border border-[var(--noc-hairline)] bg-black/25 p-3 text-sm text-[var(--noc-t2)] outline-none" />
                 </div>
               )}
-              <div className="flex flex-wrap gap-2 text-xs font-bold text-white/60">
-                <span className="rounded-full bg-white/10 px-3 py-1">{previewPrompt.outputType}</span>
-                <span className="rounded-full bg-white/10 px-3 py-1">{previewPrompt.aspectRatio}</span>
-                {previewPrompt.duration && <span className="rounded-full bg-white/10 px-3 py-1">{previewPrompt.duration}s</span>}
+              <div className="flex flex-wrap gap-2 text-xs font-bold text-[var(--noc-t3)]">
+                <span className="rounded-full bg-[var(--noc-card)] px-3 py-1">{previewPrompt.outputType}</span>
+                <span className="rounded-full bg-[var(--noc-card)] px-3 py-1">{previewPrompt.aspectRatio}</span>
+                {previewPrompt.duration && <span className="rounded-full bg-[var(--noc-card)] px-3 py-1">{previewPrompt.duration}s</span>}
               </div>
             </div>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button onClick={() => setPreviewPrompt(null)} className="rounded-xl bg-white/10 px-5 py-3 font-black text-white">
+              <button onClick={() => setPreviewPrompt(null)} className="rounded-xl bg-[var(--noc-card)] px-5 py-3 font-black text-white">
                 Close
               </button>
               <button onClick={() => sendPromptToAiStudio(previewPrompt)} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-5 py-3 font-black text-white">

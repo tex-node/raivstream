@@ -66,7 +66,7 @@ export default function AdminSequencePage() {
                       <span>{item.label}</span>
                       <span>{item.count}</span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-white/10">
+                    <div className="mt-1 h-2 rounded-full bg-[var(--noc-card)]">
                       <div
                         className="h-2 rounded-full bg-[var(--noc-blue)]"
                         style={{ width: `${data.sequenceCount ? (item.count / data.sequenceCount) * 100 : 0}%` }}
@@ -83,7 +83,7 @@ export default function AdminSequencePage() {
                 {data.transitionUsage.length === 0 ? (
                   <p className="text-sm font-bold text-[var(--noc-t5)]">No transition data yet.</p>
                 ) : data.transitionUsage.map((item: TransitionUsageItem) => (
-                  <div key={item.transition} className="flex justify-between rounded-xl bg-white/[0.05] px-3 py-2 text-sm font-bold">
+                  <div key={item.transition} className="flex justify-between rounded-xl bg-[var(--noc-card)] px-3 py-2 text-sm font-bold">
                     <span className="text-[var(--noc-t2)]">{label(item.transition)}</span>
                     <span className="text-[var(--noc-t1)]">{item.count}</span>
                   </div>
@@ -97,7 +97,7 @@ export default function AdminSequencePage() {
                 {data.cameraUsage.length === 0 ? (
                   <p className="text-sm font-bold text-[var(--noc-t5)]">No camera data yet.</p>
                 ) : data.cameraUsage.map((item: CameraUsageItem) => (
-                  <div key={item.cameraMovement} className="flex justify-between rounded-xl bg-white/[0.05] px-3 py-2 text-sm font-bold">
+                  <div key={item.cameraMovement} className="flex justify-between rounded-xl bg-[var(--noc-card)] px-3 py-2 text-sm font-bold">
                     <span className="text-[var(--noc-t2)]">{label(item.cameraMovement)}</span>
                     <span className="text-[var(--noc-t1)]">{item.count}</span>
                   </div>
