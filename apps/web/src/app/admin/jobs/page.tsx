@@ -44,7 +44,7 @@ export default function AdminJobsPage() {
         <select
           value={status ?? ''}
           onChange={(e) => { setStatus((e.target.value as JobStatus) || undefined); setPage(1); }}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value="">All statuses</option>
           <option value="QUEUED">Queued</option>
@@ -57,7 +57,7 @@ export default function AdminJobsPage() {
         <select
           value={model ?? ''}
           onChange={(e) => { setModel((e.target.value as JobModel) || undefined); setPage(1); }}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value="">All models</option>
           <option value="GROK_IMAGINE">Grok Imagine</option>

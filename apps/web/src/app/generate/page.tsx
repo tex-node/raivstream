@@ -242,7 +242,7 @@ export default function GeneratePage() {
 
               {/* Step 2 — Model dropdown */}
               <div>
-                <label htmlFor="model-select" className="text-xs text-white/50 font-medium uppercase tracking-wider block mb-3">
+                <label htmlFor="model-select" className="text-xs text-[var(--noc-t4)] font-medium uppercase tracking-wider block mb-3">
                   2 · Model
                 </label>
                 <div className="relative">
@@ -354,7 +354,7 @@ export default function GeneratePage() {
                       className={`flex-1 py-2 rounded-xl border text-xs font-semibold transition-all ${
                         aspectRatio === ar.value
                           ? 'border-[#d946a8] bg-[rgba(217,70,168,0.2)] text-[#f0a3d4]'
-                          : 'border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.04)] text-[#9397ab] hover:border-[rgba(233,233,237,0.15)]'
+                          : 'border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t5)] hover:border-[rgba(233,233,237,0.15)]'
                       }`}
                     >
                       <span className="block text-lg mb-0.5">{ar.icon}</span>
@@ -414,7 +414,7 @@ export default function GeneratePage() {
               >
                 {isGenerating ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-[var(--noc-hairline)] border-t-[var(--noc-t1)] rounded-full animate-spin" />
                     Generating…
                   </>
                 ) : (

@@ -621,14 +621,14 @@ export default function StoryWorkspacePage() {
         <div>
           <Link href="/story-playground" className="text-sm font-black text-[var(--noc-purple)] hover:text-[var(--noc-magenta)]">{isR16 ? 'My Stories' : 'Story Workspace'}</Link>
           <h1 className="mt-2 text-3xl font-black md:text-5xl">{project.title}</h1>
-          <p className="mt-3 max-w-3xl font-semibold text-white/70">{project.originalIdea ?? project.logline ?? (isR16 ? 'A story made by you.' : 'No original idea saved.')}</p>
+          <p className="mt-3 max-w-3xl font-semibold text-[var(--noc-t2)]">{project.originalIdea ?? project.logline ?? (isR16 ? 'A story made by you.' : 'No original idea saved.')}</p>
           <div className="mt-5 flex flex-wrap gap-2 text-xs font-black">
-            <span className="rounded-full bg-white/10 px-3 py-2">{project.audienceMode === 'KIDS' ? 'R16/Kids' : 'General'}</span>
-            <span className="rounded-full bg-white/10 px-3 py-2">{label(project.visualStyle) || 'Storybook'}</span>
-            <span className="rounded-full bg-white/10 px-3 py-2">Updated {dateLabel(project.updatedAt)}</span>
+            <span className="rounded-full bg-[var(--noc-card)] px-3 py-2">{project.audienceMode === 'KIDS' ? 'R16/Kids' : 'General'}</span>
+            <span className="rounded-full bg-[var(--noc-card)] px-3 py-2">{label(project.visualStyle) || 'Storybook'}</span>
+            <span className="rounded-full bg-[var(--noc-card)] px-3 py-2">Updated {dateLabel(project.updatedAt)}</span>
           </div>
         </div>
-        <div className="aspect-[9/12] overflow-hidden rounded-2xl bg-white/10">
+        <div className="aspect-[9/12] overflow-hidden rounded-2xl bg-[var(--noc-card)]">
           {summary.coverThumbnail ? <img src={summary.coverThumbnail} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><BookOpen size={52} /></div>}
         </div>
       </div>
@@ -880,7 +880,7 @@ export default function StoryWorkspacePage() {
               const scene = scenes.find((item) => item.assets?.some((asset) => asset.id === assetId));
               const asset = scene?.assets?.find((item) => item.id === assetId);
               if (!asset) return null;
-              return <div key={assetId}><p className="mb-2 text-sm font-bold text-white/60">{scene?.activeImageAssetId === asset.id ? 'Current' : asset.isLatest ? 'Latest' : asset.isFavorite ? 'Favorite' : 'Previous'}</p>{asset.assetUrl && <img src={asset.assetUrl} alt="" className="w-full rounded-xl" />}</div>;
+              return <div key={assetId}><p className="mb-2 text-sm font-bold text-[var(--noc-t3)]">{scene?.activeImageAssetId === asset.id ? 'Current' : asset.isLatest ? 'Latest' : asset.isFavorite ? 'Favorite' : 'Previous'}</p>{asset.assetUrl && <img src={asset.assetUrl} alt="" className="w-full rounded-xl" />}</div>;
             })}
           </div>
         </div>
@@ -940,12 +940,12 @@ export default function StoryWorkspacePage() {
             <div>
               <p className="text-sm font-black uppercase text-[var(--noc-t2)]">Sequence Workspace</p>
               <h2 className="text-3xl font-black">{sequence.title}</h2>
-              <p className="mt-2 max-w-3xl text-sm font-semibold text-white/65">Arrange the story like an edit decision list. No movie is rendered here.</p>
+              <p className="mt-2 max-w-3xl text-sm font-semibold text-[var(--noc-t3)]">Arrange the story like an edit decision list. No movie is rendered here.</p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-sm font-black md:min-w-[420px]">
-              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Runtime</p><p className="text-2xl">{formatRuntime(data.runtime.totalRuntimeSeconds)}</p></div>
-              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Shots</p><p className="text-2xl">{data.runtime.activeShotCount}</p></div>
-              <div className="rounded-xl bg-white/10 p-3"><p className="text-white/50">Avg Shot</p><p className="text-2xl">{data.runtime.averageShotLength}s</p></div>
+              <div className="rounded-xl bg-[var(--noc-card)] p-3"><p className="text-[var(--noc-t4)]">Runtime</p><p className="text-2xl">{formatRuntime(data.runtime.totalRuntimeSeconds)}</p></div>
+              <div className="rounded-xl bg-[var(--noc-card)] p-3"><p className="text-[var(--noc-t4)]">Shots</p><p className="text-2xl">{data.runtime.activeShotCount}</p></div>
+              <div className="rounded-xl bg-[var(--noc-card)] p-3"><p className="text-[var(--noc-t4)]">Avg Shot</p><p className="text-2xl">{data.runtime.averageShotLength}s</p></div>
             </div>
           </div>
         </div>
@@ -1003,23 +1003,23 @@ export default function StoryWorkspacePage() {
             <div className="rounded-2xl border border-[rgba(233,233,237,0.08)] bg-[var(--noc-bar)] p-4 text-white">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div><p className="text-xs font-black uppercase text-[var(--noc-t2)]">Storyboard Animatic</p><h3 className="text-xl font-black">Preview Timing</h3></div>
-                <span className="text-sm font-black text-white/60">{formatRuntime(elapsed)} / {formatRuntime(data.runtime.totalRuntimeSeconds)}</span>
+                <span className="text-sm font-black text-[var(--noc-t3)]">{formatRuntime(elapsed)} / {formatRuntime(data.runtime.totalRuntimeSeconds)}</span>
               </div>
               <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-                <div className="aspect-[9/12] overflow-hidden rounded-xl bg-white/10">
+                <div className="aspect-[9/12] overflow-hidden rounded-xl bg-[var(--noc-card)]">
                   {previewShot && sequenceAsset(previewShot)?.assetUrl ? <img src={sequenceAsset(previewShot)?.assetUrl ?? ''} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Camera /></div>}
                 </div>
                 <div className="flex flex-col justify-between gap-4">
                   <div>
                     <p className="text-sm font-black text-[var(--noc-t2)]">Shot {previewShot ? previewShotIndex + 1 : 0} of {enabledShots.length}</p>
                     <h4 className="mt-1 text-2xl font-black">{previewShot?.storyScene.title ?? 'No active shots'}</h4>
-                    <p className="mt-2 text-sm font-semibold text-white/60">{previewShot?.durationSeconds ?? 0}s | {label(previewShot?.transition) || 'Cut'} | {label(previewShot?.cameraMovement) || 'Static'}</p>
+                    <p className="mt-2 text-sm font-semibold text-[var(--noc-t3)]">{previewShot?.durationSeconds ?? 0}s | {label(previewShot?.transition) || 'Cut'} | {label(previewShot?.cameraMovement) || 'Static'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex(0); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><RotateCcw size={16} /></button>
-                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.max(0, index - 1)); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><SkipBack size={16} /></button>
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex(0); }} className="rounded-xl bg-[var(--noc-card)] px-3 py-2 font-black"><RotateCcw size={16} /></button>
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.max(0, index - 1)); }} className="rounded-xl bg-[var(--noc-card)] px-3 py-2 font-black"><SkipBack size={16} /></button>
                     <button onClick={sequencePlaying ? () => setSequencePlaying(false) : startPreview} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 font-black text-white">{sequencePlaying ? <Pause size={16} /> : <Play size={16} />}</button>
-                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.min(enabledShots.length - 1, index + 1)); }} className="rounded-xl bg-white/10 px-3 py-2 font-black"><SkipForward size={16} /></button>
+                    <button onClick={() => { setSequencePlaying(false); setPreviewShotIndex((index) => Math.min(enabledShots.length - 1, index + 1)); }} className="rounded-xl bg-[var(--noc-card)] px-3 py-2 font-black"><SkipForward size={16} /></button>
                   </div>
                 </div>
               </div>

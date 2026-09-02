@@ -63,7 +63,7 @@ function EditRateRow({
             type="number"
             value={cost}
             onChange={(e) => setCost(e.target.value)}
-            className="w-24 rounded-lg border border-[var(--noc-blue)]/40 bg-white/[0.08] px-3 py-1.5 font-mono text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+            className="w-24 rounded-lg border border-[var(--noc-blue)]/40 bg-[var(--noc-card)] px-3 py-1.5 font-mono text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
           />
         </td>
         <td className="px-5 py-3 text-xs text-[var(--noc-t4)]">{rate.unitLabel}</td>
@@ -73,14 +73,14 @@ function EditRateRow({
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Description…"
-            className="w-full rounded-lg border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-1.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+            className="w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-1.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
           />
         </td>
         <td className="px-5 py-3">
           <select
             value={active ? 'true' : 'false'}
             onChange={(e) => setActive(e.target.value === 'true')}
-            className="rounded-lg border border-[var(--noc-hairline)] bg-white/[0.06] px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+            className="rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
             style={{ color: active ? '#22c55e' : '#ef4444' }}
           >
             <option value="true">Active</option>
@@ -133,7 +133,7 @@ function EditRateRow({
         {isAdmin && (
           <button
             onClick={() => setEditing(true)}
-            className="rounded-lg bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-[var(--noc-t3)] transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+            className="rounded-lg bg-[var(--noc-card)] px-3 py-1.5 text-xs font-medium text-[var(--noc-t3)] transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
           >
             Edit
           </button>
@@ -179,7 +179,7 @@ function AddRateModal({ onClose }: { onClose: () => void }) {
               value={featureKey}
               onChange={(e) => setFeatureKey(e.target.value)}
               placeholder="generate:my_model"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 font-mono text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 font-mono text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
               required
             />
           </div>
@@ -191,7 +191,7 @@ function AddRateModal({ onClose }: { onClose: () => void }) {
               value={cost}
               onChange={(e) => setCost(e.target.value)}
               placeholder="100"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
               required
             />
           </div>
@@ -203,7 +203,7 @@ function AddRateModal({ onClose }: { onClose: () => void }) {
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               placeholder="request"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
             />
           </div>
 
@@ -214,7 +214,7 @@ function AddRateModal({ onClose }: { onClose: () => void }) {
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder="Short description…"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
             />
           </div>
 
@@ -298,7 +298,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
               value={lookup}
               onChange={(e) => setLookup(e.target.value)}
               placeholder="email@example.com or @username"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
             />
           </div>
 
@@ -308,7 +308,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
               <select
                 value={action}
                 onChange={(e) => setAction(e.target.value as typeof action)}
-                className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+                className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
               >
                 <option value="gift">Gift / Coupon</option>
                 <option value="refund">Refund</option>
@@ -322,7 +322,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
                 min={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+                className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
               />
             </div>
           </div>
@@ -333,7 +333,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Promo coupon, support refund, manual correction..."
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
             />
           </div>
 
@@ -343,7 +343,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
               value={referenceId}
               onChange={(e) => setReferenceId(e.target.value)}
               placeholder="coupon-launch-5000"
-              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
+              className="w-full rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-blue)]"
             />
           </div>
 

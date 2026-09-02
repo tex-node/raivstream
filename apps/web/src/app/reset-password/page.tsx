@@ -128,9 +128,9 @@ function ResetContent() {
       <div className="text-center py-2">
         <div
           className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
-          style={{ background: 'rgba(47,191,113,0.12)' }}
+          style={{ background: 'rgba(79,139,214,0.12)' }}
         >
-          <svg className="w-7 h-7" style={{ color: '#2fbf71' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-7 h-7" style={{ color: 'var(--noc-blue)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         </div>

@@ -25,10 +25,10 @@ function StatCard({
   };
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-      <p className="text-white/50 text-xs uppercase tracking-widest mb-2">{label}</p>
+    <div className="bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-2xl p-5">
+      <p className="text-[var(--noc-t4)] text-xs uppercase tracking-widest mb-2">{label}</p>
       <p className={`text-3xl font-extrabold ${colors[color]}`}>{value}</p>
-      {sub && <p className="text-white/40 text-xs mt-1">{sub}</p>}
+      {sub && <p className="text-[var(--noc-t5)] text-xs mt-1">{sub}</p>}
     </div>
   );
 }
@@ -45,7 +45,7 @@ function MiniChart({ data }: { data: Array<{ date: string; views: number }> }) {
         <div
           key={d.date}
           title={`${d.date}: ${d.views} views`}
-          className="flex-1 bg-[#d946a8]/70 hover:bg-[#f0a3d4] rounded-t transition-colors"
+          className="flex-1 bg-[var(--noc-magenta)]/70 hover:bg-[var(--noc-pink-tint)] rounded-t transition-colors"
           style={{ height: `${Math.max((d.views / max) * 100, 2)}%` }}
         />
       ))}
@@ -81,7 +81,7 @@ function VideoThumb({
 
   return (
     <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-zinc-800 flex items-center justify-center">
-      <svg className="w-5 h-5 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-5 h-5 text-[var(--noc-t6)]" fill="currentColor" viewBox="0 0 24 24">
         <path d="M8 5v14l11-7z" />
       </svg>
     </div>
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+      <div className="min-h-screen bg-[var(--noc-page)] flex items-center justify-center text-[var(--noc-t1)]">
         <p>Please sign in to view analytics.</p>
       </div>
     );
@@ -120,18 +120,18 @@ export default function AnalyticsPage() {
 
   if (overview.isLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+      <div className="min-h-screen bg-[var(--noc-page)] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-[var(--noc-hairline)] border-t-[var(--noc-t1)] rounded-full animate-spin" />
       </div>
     );
   }
 
   if (overview.error?.data?.code === 'FORBIDDEN') {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-6 px-4 text-center">
+      <div className="min-h-screen bg-[var(--noc-page)] flex flex-col items-center justify-center text-[var(--noc-t1)] gap-6 px-4 text-center">
         <div className="text-5xl">🎬</div>
         <h1 className="text-2xl font-bold">Become a creator</h1>
-        <p className="text-white/50 max-w-sm">
+        <p className="text-[var(--noc-t4)] max-w-sm">
           You need a creator account to access analytics. Upgrade to Creator Premium or become a
           creator for free.
         </p>
@@ -148,7 +148,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black lg:bg-[var(--noc-page)] text-white">
+    <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
 
       <div className="max-w-5xl mx-auto pt-24 px-4 pb-20">
@@ -200,15 +200,15 @@ export default function AnalyticsPage() {
 
         {/* Daily views chart */}
         {dailyViews.data && dailyViews.data.length > 0 && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
+          <div className="bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-2xl p-6 mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">Views — Last 30 Days</h2>
-              <span className="text-white/40 text-xs">
+              <span className="text-[var(--noc-t5)] text-xs">
                 {dailyViews.data.reduce((s, d) => s + d.views, 0).toLocaleString()} total
               </span>
             </div>
             <MiniChart data={dailyViews.data} />
-            <div className="flex justify-between text-white/30 text-xs mt-2">
+            <div className="flex justify-between text-[var(--noc-t6)] text-xs mt-2">
               <span>{dailyViews.data[0]?.date}</span>
               <span>{dailyViews.data[dailyViews.data.length - 1]?.date}</span>
             </div>
@@ -216,13 +216,13 @@ export default function AnalyticsPage() {
         )}
 
         {/* Video breakdown table */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div className="bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--noc-hairline)]">
             <h2 className="font-semibold">Your Videos</h2>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white outline-none"
+              className="bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-lg px-3 py-1.5 text-sm text-[var(--noc-t1)] outline-none"
             >
               <option value="publishedAt">Newest</option>
               <option value="viewCount">Most Viewed</option>
@@ -232,9 +232,9 @@ export default function AnalyticsPage() {
             </select>
           </div>
 
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-[var(--noc-hairline)]">
             {videos.map((v) => (
-              <div key={v.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/5 transition-colors">
+              <div key={v.id} className="flex items-center gap-4 px-6 py-4 hover:bg-[var(--noc-card)] transition-colors">
                 {/* Thumbnail */}
                 <div className="w-12 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-[var(--noc-page)]">
                   <VideoThumb
@@ -258,7 +258,7 @@ export default function AnalyticsPage() {
                           ? 'bg-yellow-500/20 text-yellow-400'
                           : v.status === 'FAILED'
                           ? 'bg-red-500/20 text-red-400'
-                          : 'bg-white/10 text-white/50'
+                          : 'bg-[var(--noc-card)] text-[var(--noc-t4)]'
                       }`}
                     >
                       {v.status.toLowerCase()}
@@ -269,7 +269,7 @@ export default function AnalyticsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-white/30 text-xs mt-1">
+                  <p className="text-[var(--noc-t6)] text-xs mt-1">
                     {new Date(v.publishedAt).toLocaleDateString()}
                   </p>
                 </div>
@@ -278,21 +278,21 @@ export default function AnalyticsPage() {
                 <div className="hidden sm:grid grid-cols-4 gap-6 text-center text-sm">
                   <div>
                     <p className="font-semibold">{v.viewCount.toLocaleString()}</p>
-                    <p className="text-white/40 text-xs">views</p>
+                    <p className="text-[var(--noc-t5)] text-xs">views</p>
                   </div>
                   <div>
                     <p className="font-semibold">{v.likeCount.toLocaleString()}</p>
-                    <p className="text-white/40 text-xs">likes</p>
+                    <p className="text-[var(--noc-t5)] text-xs">likes</p>
                   </div>
                   <div>
                     <p className="font-semibold">
                       {v.avgStarRating > 0 ? v.avgStarRating.toFixed(1) : '—'}
                     </p>
-                    <p className="text-white/40 text-xs">stars</p>
+                    <p className="text-[var(--noc-t5)] text-xs">stars</p>
                   </div>
                   <div>
                     <p className="font-semibold">{(v.completionRate * 100).toFixed(0)}%</p>
-                    <p className="text-white/40 text-xs">completion</p>
+                    <p className="text-[var(--noc-t5)] text-xs">completion</p>
                   </div>
                 </div>
               </div>
@@ -300,11 +300,11 @@ export default function AnalyticsPage() {
           </div>
 
           {videoBreakdown.hasNextPage && (
-            <div className="px-6 py-4 border-t border-white/10">
+            <div className="px-6 py-4 border-t border-[var(--noc-hairline)]">
               <button
                 onClick={() => videoBreakdown.fetchNextPage()}
                 disabled={videoBreakdown.isFetchingNextPage}
-                className="w-full py-2.5 rounded-xl border border-white/20 hover:border-white/40 text-sm text-white/60 transition-colors"
+                className="w-full py-2.5 rounded-xl border border-[var(--noc-hairline)] hover:border-[rgba(233,233,237,0.20)] text-sm text-[var(--noc-t3)] transition-colors"
               >
                 {videoBreakdown.isFetchingNextPage ? 'Loading…' : 'Load more'}
               </button>
@@ -312,7 +312,7 @@ export default function AnalyticsPage() {
           )}
 
           {videos.length === 0 && !videoBreakdown.isLoading && (
-            <div className="text-center py-16 text-white/30">
+            <div className="text-center py-16 text-[var(--noc-t6)]">
               No videos yet.{' '}
               <Link href="/upload" className="text-[var(--noc-pink-tint)] hover:underline">
                 Upload your first video

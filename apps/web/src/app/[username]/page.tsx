@@ -50,7 +50,7 @@ function LibraryThumb({
 
   return (
     <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-zinc-800 flex items-center justify-center">
-      <svg className="w-8 h-8 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-8 h-8 text-[var(--noc-t6)]" fill="currentColor" viewBox="0 0 24 24">
         <path d="M8 5v14l11-7z" />
       </svg>
     </div>
@@ -84,10 +84,10 @@ function VideoMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => v
       </button>
 
       {open && (
-        <div className="absolute top-8 right-0 w-32 bg-[#1a1f2e] border border-white/10 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute top-8 right-0 w-32 bg-[var(--noc-page)] border border-[var(--noc-hairline)] rounded-xl shadow-xl overflow-hidden">
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); onEdit(); }}
-            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-[var(--noc-card)] transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -145,11 +145,11 @@ function FollowListModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-[#0d1525] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[75vh]">
+      <div className="w-full max-w-sm bg-[var(--noc-page)] border border-[var(--noc-hairline)] rounded-2xl shadow-2xl flex flex-col max-h-[75vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--noc-hairline)]">
           <h2 className="font-bold text-white capitalize">{type}</h2>
-          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-[var(--noc-t5)] hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -160,12 +160,12 @@ function FollowListModal({
         <div className="overflow-y-auto flex-1 py-2">
           {q.isLoading && (
             <div className="flex justify-center py-8">
-              <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-[var(--noc-hairline)] border-t-[var(--noc-t1)] rounded-full animate-spin" />
             </div>
           )}
 
           {!q.isLoading && users.length === 0 && (
-            <p className="text-center text-white/30 text-sm py-8">No {type} yet</p>
+            <p className="text-center text-[var(--noc-t6)] text-sm py-8">No {type} yet</p>
           )}
 
           {users.map((u) => (
@@ -173,9 +173,9 @@ function FollowListModal({
               key={u.id}
               href={`/${u.username}`}
               onClick={onClose}
-              className="flex items-center gap-3 px-5 py-3 hover:bg-white/5 transition-colors"
+              className="flex items-center gap-3 px-5 py-3 hover:bg-[var(--noc-card)] transition-colors"
             >
-              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-[#d946a8] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-[var(--noc-magenta)] flex items-center justify-center">
                 {u.avatarUrl ? (
                   <img src={u.avatarUrl} alt={u.displayName} className="w-full h-full object-cover" />
                 ) : (
@@ -186,14 +186,14 @@ function FollowListModal({
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-semibold text-white truncate">{u.displayName}</span>
                   {u.verified && (
-                    <svg className="w-3.5 h-3.5 text-[#4f8bd6] flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 text-[var(--noc-blue)] flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                     </svg>
                   )}
                 </div>
-                <p className="text-xs text-white/40">@{u.username} · {u.followerCount.toLocaleString()} followers</p>
+                <p className="text-xs text-[var(--noc-t5)]">@{u.username} · {u.followerCount.toLocaleString()} followers</p>
               </div>
-              <svg className="w-4 h-4 text-white/20 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-[var(--noc-t6)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
@@ -203,7 +203,7 @@ function FollowListModal({
             <button
               onClick={() => q.fetchNextPage()}
               disabled={q.isFetchingNextPage}
-              className="w-full py-3 text-sm text-white/40 hover:text-white/60 transition-colors"
+              className="w-full py-3 text-sm text-[var(--noc-t5)] hover:text-[var(--noc-t3)] transition-colors"
             >
               {q.isFetchingNextPage ? 'Loading…' : 'Load more'}
             </button>
@@ -252,7 +252,7 @@ export default function ProfilePage() {
   if (profileQuery.isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-[var(--noc-hairline)] border-t-[var(--noc-t1)] rounded-full animate-spin" />
       </div>
     );
   }
@@ -274,11 +274,11 @@ export default function ProfilePage() {
 
         {/* Profile header */}
         <div className="flex flex-col items-center text-center py-8 gap-4">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/20">
+          <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[var(--noc-hairline)]">
             {profile.avatarUrl ? (
               <img src={profile.avatarUrl} alt={profile.displayName} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-[#d946a8] flex items-center justify-center text-4xl font-bold">
+              <div className="w-full h-full bg-[var(--noc-magenta)] flex items-center justify-center text-4xl font-bold">
                 {profile.displayName[0]}
               </div>
             )}
@@ -288,15 +288,15 @@ export default function ProfilePage() {
             <div className="flex items-center gap-2 justify-center">
               <h1 className="text-xl font-bold">{profile.displayName}</h1>
               {profile.verified && (
-                <svg className="w-5 h-5 text-[#4f8bd6]" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-[var(--noc-blue)]" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
               )}
             </div>
-            <p className="text-white/50 text-sm">@{profile.username}</p>
+            <p className="text-[var(--noc-t4)] text-sm">@{profile.username}</p>
           </div>
 
-          {profile.bio && <p className="text-white/80 text-sm max-w-xs">{profile.bio}</p>}
+          {profile.bio && <p className="text-[var(--noc-t2)] text-sm max-w-xs">{profile.bio}</p>}
 
           {/* Follower / following counts — clickable to open list modal */}
           <div className="flex gap-8">
@@ -305,18 +305,18 @@ export default function ProfilePage() {
               className="text-center hover:opacity-70 transition-opacity cursor-pointer"
             >
               <p className="font-bold text-lg">{profile.followerCount.toLocaleString()}</p>
-              <p className="text-white/50 text-xs">Followers</p>
+              <p className="text-[var(--noc-t4)] text-xs">Followers</p>
             </button>
             <button
               onClick={() => setFollowListType('following')}
               className="text-center hover:opacity-70 transition-opacity cursor-pointer"
             >
               <p className="font-bold text-lg">{profile.followingCount.toLocaleString()}</p>
-              <p className="text-white/50 text-xs">Following</p>
+              <p className="text-[var(--noc-t4)] text-xs">Following</p>
             </button>
             <div className="text-center">
               <p className="font-bold text-lg">{profile.totalViews.toLocaleString()}</p>
-              <p className="text-white/50 text-xs">Views</p>
+              <p className="text-[var(--noc-t4)] text-xs">Views</p>
             </div>
           </div>
 
@@ -324,9 +324,9 @@ export default function ProfilePage() {
             <div className="flex gap-2 flex-wrap justify-center">
               {profile.badges.map((ub: { badge: { id: string; name: string; description: string; iconUrl: string | null } }) => (
                 <div key={ub.badge.id} title={ub.badge.description}
-                  className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1">
+                  className="flex items-center gap-1.5 bg-[var(--noc-card)] rounded-full px-3 py-1">
                   {ub.badge.iconUrl && <img src={ub.badge.iconUrl} alt="" className="w-4 h-4" />}
-                  <span className="text-xs text-white/80">{ub.badge.name}</span>
+                  <span className="text-xs text-[var(--noc-t2)]">{ub.badge.name}</span>
                 </div>
               ))}
             </div>
@@ -334,7 +334,7 @@ export default function ProfilePage() {
 
           {isOwnProfile ? (
             <Link href="/settings"
-              className="px-8 py-2 rounded-full border border-white/30 hover:border-white/60 font-semibold text-sm transition-colors">
+              className="px-8 py-2 rounded-full border border-[var(--noc-hairline)] hover:border-[rgba(233,233,237,0.20)] font-semibold text-sm transition-colors">
               Edit profile
             </Link>
           ) : (
@@ -343,8 +343,8 @@ export default function ProfilePage() {
               disabled={toggleFollow.isPending}
               className={`px-8 py-2 rounded-full font-semibold text-sm transition-colors ${
                 profile.isFollowing
-                  ? 'border border-white/30 hover:border-white/60 text-white'
-                  : 'bg-[#d946a8] hover:opacity-90 text-white'
+                  ? 'border border-[var(--noc-hairline)] hover:border-[rgba(233,233,237,0.20)] text-white'
+                  : 'bg-[var(--noc-magenta)] hover:opacity-90 text-white'
               }`}>
               {profile.isFollowing ? 'Following' : 'Follow'}
             </button>
@@ -353,12 +353,12 @@ export default function ProfilePage() {
 
         {/* Video grid */}
         <div className="mt-2">
-          <h2 className="text-xs font-semibold text-white/40 mb-4 uppercase tracking-wider">
+          <h2 className="text-xs font-semibold text-[var(--noc-t5)] mb-4 uppercase tracking-wider">
             Videos · {videos.length}
           </h2>
 
           {videos.length === 0 ? (
-            <div className="text-center py-16 text-white/30 text-sm">
+            <div className="text-center py-16 text-[var(--noc-t6)] text-sm">
               {isOwnProfile
                 ? <><span>No videos yet. </span><Link href="/upload" className="text-[var(--noc-magenta)] hover:underline">Upload your first one</Link></>
                 : 'No videos yet.'}
@@ -405,7 +405,7 @@ export default function ProfilePage() {
 
           {videosQuery.hasNextPage && (
             <button onClick={() => videosQuery.fetchNextPage()} disabled={videosQuery.isFetchingNextPage}
-              className="w-full mt-6 py-3 rounded-xl border border-white/20 hover:border-white/40 text-sm text-white/60 transition-colors">
+              className="w-full mt-6 py-3 rounded-xl border border-[var(--noc-hairline)] hover:border-[rgba(233,233,237,0.20)] text-sm text-[var(--noc-t3)] transition-colors">
               {videosQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
             </button>
           )}
@@ -424,41 +424,41 @@ export default function ProfilePage() {
       {/* ── Edit modal ───────────────────────────────────────────────────────── */}
       {editState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0d1525] border border-white/10 rounded-2xl p-6 shadow-2xl">
+          <div className="w-full max-w-md bg-[var(--noc-page)] border border-[var(--noc-hairline)] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-5">Edit post</h2>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Title</label>
+                <label className="block text-xs font-medium text-[var(--noc-t4)] mb-1.5">Title</label>
                 <input
                   type="text"
                   value={editState.title}
                   onChange={(e) => setEditState({ ...editState, title: e.target.value })}
                   maxLength={100}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[var(--noc-t6)] focus:outline-none focus:border-[var(--noc-purple)] transition-colors"
                   placeholder="Post title"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Description</label>
+                <label className="block text-xs font-medium text-[var(--noc-t4)] mb-1.5">Description</label>
                 <textarea
                   value={editState.description}
                   onChange={(e) => setEditState({ ...editState, description: e.target.value })}
                   maxLength={500}
                   rows={3}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[var(--noc-t6)] focus:outline-none focus:border-[var(--noc-purple)] transition-colors resize-none"
                   placeholder="Add a description…"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Tags <span className="text-white/30">(comma-separated)</span></label>
+                <label className="block text-xs font-medium text-[var(--noc-t4)] mb-1.5">Tags <span className="text-[var(--noc-t6)]">(comma-separated)</span></label>
                 <input
                   type="text"
                   value={editState.tags}
                   onChange={(e) => setEditState({ ...editState, tags: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full bg-[var(--noc-card)] border border-[var(--noc-hairline)] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-[var(--noc-t6)] focus:outline-none focus:border-[var(--noc-purple)] transition-colors"
                   placeholder="funny, dance, viral"
                 />
               </div>
@@ -471,7 +471,7 @@ export default function ProfilePage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setEditState(null)}
-                className="flex-1 py-2.5 rounded-xl border border-white/20 text-sm text-white/70 hover:border-white/40 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-[var(--noc-hairline)] text-sm text-[var(--noc-t2)] hover:border-[rgba(233,233,237,0.20)] transition-colors"
               >
                 Cancel
               </button>
@@ -487,7 +487,7 @@ export default function ProfilePage() {
                     .filter(Boolean)
                     .slice(0, 20),
                 })}
-                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold text-white transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-[var(--noc-purple)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold text-white transition-opacity"
               >
                 {updateMeta.isPending ? 'Saving…' : 'Save changes'}
               </button>
@@ -499,14 +499,14 @@ export default function ProfilePage() {
       {/* ── Delete confirmation modal ─────────────────────────────────────────── */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#0d1525] border border-white/10 rounded-2xl p-6 shadow-2xl">
+          <div className="w-full max-w-sm bg-[var(--noc-page)] border border-[var(--noc-hairline)] rounded-2xl p-6 shadow-2xl">
             <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
               <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </div>
             <h2 className="text-lg font-bold text-white mb-1">Delete post?</h2>
-            <p className="text-sm text-white/50 mb-6">This will permanently delete the post and all its likes, comments and watch history. This cannot be undone.</p>
+            <p className="text-sm text-[var(--noc-t4)] mb-6">This will permanently delete the post and all its likes, comments and watch history. This cannot be undone.</p>
 
             {deleteVideo.error && (
               <p className="mb-3 text-xs text-red-400">{deleteVideo.error.message}</p>
@@ -515,7 +515,7 @@ export default function ProfilePage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteId(null)}
-                className="flex-1 py-2.5 rounded-xl border border-white/20 text-sm text-white/70 hover:border-white/40 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-[var(--noc-hairline)] text-sm text-[var(--noc-t2)] hover:border-[rgba(233,233,237,0.20)] transition-colors"
               >
                 Cancel
               </button>

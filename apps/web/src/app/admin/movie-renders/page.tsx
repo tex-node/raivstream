@@ -45,10 +45,10 @@ export default function MovieRenderDiagnosticsPage() {
         <select
           value={days}
           onChange={(event) => setDays(Number(event.target.value))}
-          className="rounded-xl border border-[var(--noc-hairline)] bg-white/[0.06] px-3 py-2 text-sm font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
+          className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2 text-sm font-bold text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           {[7, 14, 30, 60, 90].map((value) => (
-            <option key={value} value={value} className="bg-[#0B0D14]">{value} days</option>
+            <option key={value} value={value} className="bg-[var(--noc-page)]">{value} days</option>
           ))}
         </select>
       </div>
@@ -109,7 +109,7 @@ export default function MovieRenderDiagnosticsPage() {
                         </a>
                       )}
                     </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--noc-card)]">
                       <div className="h-full bg-emerald-400" style={{ width: `${Math.min(100, Math.max(0, job.progressPercent ?? 0))}%` }} />
                     </div>
                   </article>
@@ -122,7 +122,7 @@ export default function MovieRenderDiagnosticsPage() {
                 <h2 className="text-xl font-black text-[var(--noc-t1)]">Status Counts</h2>
                 <div className="mt-4 space-y-2">
                   {Object.entries(data.jobsByStatus).map(([status, count]) => (
-                    <div key={status} className="flex items-center justify-between rounded-xl bg-white/[0.05] px-3 py-2 text-sm font-bold">
+                    <div key={status} className="flex items-center justify-between rounded-xl bg-[var(--noc-card)] px-3 py-2 text-sm font-bold">
                       <span className="text-[var(--noc-t2)]">{status}</span>
                       <span className="text-[var(--noc-t1)]">{String(count)}</span>
                     </div>
@@ -134,7 +134,7 @@ export default function MovieRenderDiagnosticsPage() {
                 <h2 className="text-xl font-black text-[var(--noc-t1)]">Recent Events</h2>
                 <div className="mt-4 max-h-[440px] space-y-2 overflow-y-auto">
                   {data.recentEvents.map((event: any) => (
-                    <div key={event.id} className="rounded-xl bg-white/[0.05] p-3">
+                    <div key={event.id} className="rounded-xl bg-[var(--noc-card)] p-3">
                       <p className="text-sm font-black text-[var(--noc-t1)]">{event.eventName}</p>
                       <p className="text-xs font-semibold text-[var(--noc-t4)]">{event.stage ?? 'render'} · {formatDate(event.createdAt)}</p>
                     </div>

@@ -50,17 +50,17 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-8 text-center">
           <div className="text-4xl">⚠️</div>
           <h2 className="text-white font-semibold text-lg">Something went wrong</h2>
-          <p className="text-white/50 text-sm max-w-xs">
+          <p className="text-[var(--noc-t4)] text-sm max-w-xs">
             An unexpected error occurred. The rest of the app is still working.
           </p>
           <button
             onClick={() => this.setState({ hasError: false, errorId: null })}
-            className="bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            className="bg-[var(--noc-magenta)] hover:opacity-90 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
           >
             Try again
           </button>
           {process.env.NODE_ENV === 'development' && this.state.errorId && (
-            <p className="text-white/20 text-xs font-mono">ref: {this.state.errorId}</p>
+            <p className="text-[var(--noc-t6)] text-xs font-mono">ref: {this.state.errorId}</p>
           )}
         </div>
       );
@@ -75,7 +75,7 @@ export function SafeRender({ children, label = 'component' }: { children: ReactN
   return (
     <ErrorBoundary
       fallback={
-        <div className="flex items-center justify-center h-full text-white/20 text-xs p-4">
+        <div className="flex items-center justify-center h-full text-[var(--noc-t6)] text-xs p-4">
           {label} unavailable
         </div>
       }

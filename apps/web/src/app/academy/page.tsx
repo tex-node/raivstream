@@ -42,13 +42,13 @@ export default function AcademyHomePage() {
             </div>
             <div className="mt-4 grid gap-3">
               {memberships.map((membership: any) => (
-                <Link key={membership.id} href={`/academy/classes/${membership.class.id}`} className="rounded-xl bg-white/5 p-4 hover:ring-2 hover:ring-[var(--noc-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">
+                <Link key={membership.id} href={`/academy/classes/${membership.class.id}`} className="rounded-xl bg-[var(--noc-card)] p-4 hover:ring-2 hover:ring-[var(--noc-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black">{membership.class.title}</h3>
                       <p className="text-sm font-bold text-[var(--noc-t4)]">{membership.class.course.title}</p>
                     </div>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black">{membership.progressPercent}% complete</span>
+                    <span className="rounded-full bg-[var(--noc-card)] px-3 py-1 text-xs font-black">{membership.progressPercent}% complete</span>
                   </div>
                 </Link>
               ))}
@@ -79,11 +79,11 @@ export default function AcademyHomePage() {
 
         <div className="space-y-5">
           <Card>
-            <p className="text-sm font-black uppercase text-[#2fbf71]">Join Class</p>
+            <p className="text-sm font-black uppercase text-[var(--noc-blue)]">Join Class</p>
             <h2 className="text-2xl font-black">Invite Code</h2>
             <form onSubmit={(event) => { event.preventDefault(); if (inviteCode.trim()) joinClass.mutate({ inviteCode }); }} className="mt-4 flex gap-2">
-              <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="RAIV-ABC123" className="min-w-0 flex-1 rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t6)] outline-none focus:border-[var(--noc-blue)]" />
-              <button disabled={joinClass.isPending} className="rounded-xl bg-[#2fbf71] px-4 py-3 font-black text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2fbf71]/60">Join</button>
+              <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="RAIV-ABC123" className="min-w-0 flex-1 rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-bold text-[var(--noc-t1)] placeholder:text-[var(--noc-t6)] outline-none focus:border-[var(--noc-blue)]" />
+              <button disabled={joinClass.isPending} className="rounded-xl bg-[var(--noc-blue)] px-4 py-3 font-black text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">Join</button>
             </form>
             {joinClass.error && <p className="mt-3 text-sm font-bold text-[var(--noc-magenta)]">{joinClass.error.message}</p>}
           </Card>
@@ -101,7 +101,7 @@ export default function AcademyHomePage() {
             <p className="mt-2 text-sm font-bold text-[var(--noc-t4)]">{awaitingReview.length} submissions awaiting review.</p>
             <div className="mt-4 grid gap-2">
               {instructorClasses.slice(0, 4).map((klass: any) => (
-                <Link key={klass.id} href={`/academy/classes/${klass.id}`} className="rounded-xl border border-[var(--noc-hairline)] bg-white/5 px-4 py-3 font-black hover:border-[var(--noc-blue)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">{klass.title}</Link>
+                <Link key={klass.id} href={`/academy/classes/${klass.id}`} className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-4 py-3 font-black hover:border-[var(--noc-blue)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60">{klass.title}</Link>
               ))}
               {instructorClasses.length === 0 && <EmptyState>No instructor classes yet.</EmptyState>}
             </div>
