@@ -46,6 +46,13 @@ import {
 import { queueMovieRenderJob } from '../lib/movieRenderWorker';
 import { buildAudioBlueprint, combineRenderHash, hashAudioBlueprint, nextAudioVersionFromExisting, summarizeUnmaterializedSpeechCues } from '../lib/audioPlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
+import {
+  storyIntelligenceProvider,
+  isStoryIntelligenceEnabled,
+  type StoryBlueprint,
+  type DirectedScene,
+  StoryIntelligenceError,
+} from '../lib/storyIntelligence';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -2278,6 +2285,22 @@ export const storyRouter = router({
           selectedAnswer: question.selectedAnswer!,
         }));
 
+      // Story Blueprint — Phase A: plan before drafting when enabled
+      let blueprint: StoryBlueprint | null = null;
+      if (isStoryIntelligenceEnabled()) {
+        try {
+          blueprint = await storyIntelligenceProvider.planStory({ idea, answers, audienceMode });
+          await trackStoryAnalytics(ctx, {
+            event: 'story_playground_opened' as StoryAnalyticsEventName,
+            projectId: project.id,
+            audienceMode,
+            properties: { stage: 'blueprint', provider: storyIntelligenceProvider.name },
+          });
+        } catch (error) {
+          console.warn('[story.generateStory] blueprint failed — continuing without:', error instanceof StoryIntelligenceError ? error.code : error);
+        }
+      }
+
       const story = await storyTextService.generateStory(idea, answers, audienceMode);
       const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
@@ -2294,6 +2317,7 @@ export const storyRouter = router({
             body: story.body,
             generationPrompt: idea,
             providerMetadata: story.providerMetadata ?? {},
+            ...(blueprint ? { blueprint: blueprint as object } : {}),
           },
         });
 
@@ -2719,14 +2743,70 @@ export const storyRouter = router({
         return project.sceneSeeds;
       }
 
-      const scenes = buildSimpleScenes(project);
+      // Scene Director — Phase A: use intelligence when enabled, fall back to simple scenes
+      type SceneRecord = {
+        title: string;
+        description: string;
+        locationType?: string;
+        indoorOutdoor?: string;
+        mood?: string;
+        characters: unknown[];
+        directorMetadata?: object;
+      };
+      let sceneRecords: SceneRecord[];
+      let directorProvider: string | undefined;
+
+      if (isStoryIntelligenceEnabled()) {
+        const chapter = project.chapters[0];
+        const blueprint = chapter?.blueprint ? (chapter.blueprint as unknown as StoryBlueprint) : null;
+        if (blueprint) {
+          const characterContext = project.characterMemory
+            .map((c) => `${c.name}${c.role ? ` (${c.role})` : ''}${c.visualDescription ? `: ${c.visualDescription}` : ''}`)
+            .join('\n');
+          const existingSceneHints = project.sceneSeeds.map((s) => ({
+            title: s.title,
+            description: s.description ?? '',
+            locationType: s.locationType ?? undefined,
+            mood: s.mood ?? undefined,
+          }));
+          const storyBody = chapter.enhancedBody ?? chapter.body ?? '';
+          try {
+            const directedScenes = await storyIntelligenceProvider.directScenes({
+              blueprint,
+              storyTitle: project.title ?? 'Untitled',
+              storyBody,
+              audienceMode: project.audienceMode as 'KIDS' | 'GENERAL',
+              sceneCount: Math.max(blueprint.beats.length, 6),
+              characterContext,
+              existingSceneHints: existingSceneHints.length > 0 ? existingSceneHints : undefined,
+            });
+            sceneRecords = directedScenes.map((ds) => ({
+              title: ds.title,
+              description: ds.action,
+              locationType: ds.location,
+              mood: ds.mood,
+              characters: ds.characters,
+              directorMetadata: ds as object,
+            }));
+            directorProvider = storyIntelligenceProvider.name;
+          } catch (error) {
+            console.warn('[story.generateScenes] scene director failed — falling back to simple scenes:', error instanceof StoryIntelligenceError ? error.code : error);
+            sceneRecords = buildSimpleScenes(project);
+          }
+        } else {
+          sceneRecords = buildSimpleScenes(project);
+        }
+      } else {
+        sceneRecords = buildSimpleScenes(project);
+      }
+
       try {
         const createdScenes = await ctx.prisma.$transaction(async (tx: any) => {
           if (input.replaceExisting) {
             await tx.storySceneSeed.deleteMany({ where: { projectId: project.id } });
           }
 
-          return Promise.all(scenes.map((scene, index) =>
+          return Promise.all(sceneRecords.map((scene, index) =>
             tx.storySceneSeed.create({
               data: {
                 projectId: project.id,
@@ -2738,6 +2818,7 @@ export const storyRouter = router({
                 indoorOutdoor: scene.indoorOutdoor,
                 mood: scene.mood,
                 characters: scene.characters,
+                ...(scene.directorMetadata ? { directorMetadata: scene.directorMetadata } : {}),
               },
             }),
           ));
@@ -2746,7 +2827,7 @@ export const storyRouter = router({
           event: 'scene_generation_completed',
           projectId: project.id,
           audienceMode: project.audienceMode,
-          properties: { sceneCount: createdScenes.length, reusedExisting: false },
+          properties: { sceneCount: createdScenes.length, reusedExisting: false, ...(directorProvider ? { provider: directorProvider } : {}) },
         });
         return createdScenes;
       } catch (error) {
@@ -2758,6 +2839,49 @@ export const storyRouter = router({
         });
         throw error;
       }
+    }),
+
+  enhanceNarrative: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        include: {
+          chapters: { orderBy: { chapterNumber: 'asc' } },
+          characterMemory: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      const chapter = project.chapters[0];
+      if (!chapter) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Create the story before enhancing narrative.' });
+
+      if (!isStoryIntelligenceEnabled()) {
+        return { enhancedBody: chapter.enhancedBody ?? null, skipped: true };
+      }
+
+      const blueprint = chapter.blueprint ? (chapter.blueprint as unknown as StoryBlueprint) : null;
+      if (!blueprint) {
+        return { enhancedBody: chapter.enhancedBody ?? null, skipped: true };
+      }
+
+      const characterContext = project.characterMemory
+        .map((c) => `${c.name}${c.role ? ` (${c.role})` : ''}${c.visualDescription ? `: ${c.visualDescription}` : ''}`)
+        .join('\n');
+
+      const enhanced = await storyIntelligenceProvider.enhanceNarrative({
+        blueprint,
+        storyTitle: project.title ?? 'Untitled',
+        storyBody: chapter.body,
+        audienceMode: project.audienceMode as 'KIDS' | 'GENERAL',
+        characterContext,
+      });
+
+      await ctx.prisma.storyChapter.update({
+        where: { id: chapter.id },
+        data: { enhancedBody: enhanced },
+      });
+
+      return { enhancedBody: enhanced, skipped: false };
     }),
 
   updateScene: protectedProcedure

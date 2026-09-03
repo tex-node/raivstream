@@ -1110,8 +1110,10 @@ model StoryChapter {
   title            String
   summary          String
   body             String
+  enhancedBody     String?
   generationPrompt String?
   providerMetadata Json?
+  blueprint        Json?
 
   sceneSeeds       StorySceneSeed[]
 
@@ -1180,6 +1182,7 @@ model StorySceneSeed {
   lighting       String?
   scenePace      String?
   directorChangedAt DateTime?
+  directorMetadata Json?
   characters     Json?
   prompts        StoryScenePrompt[]
   assets         StorySceneAsset[]
