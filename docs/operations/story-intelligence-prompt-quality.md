@@ -3,7 +3,7 @@
 **Branch:** `feat/story-intelligence-phase-a`  
 **Commit:** `1c4ca14`  
 **Date:** 2026-09-03  
-**Status:** Implementation complete — staging qualification required before production deployment
+**Status:** PRODUCTION DEPLOYED — 2026-09-04
 
 ---
 
@@ -175,14 +175,51 @@ For each generated story, verify:
 
 ## 7. Production deployment gate
 
-**NOT YET OPEN.** The gate opens only when all items in section 6 are checked and results logged here.
+**GATE: OPEN — PRODUCTION DEPLOYED 2026-09-04**
 
-Deployment steps (when gate opens):
-1. Set `STORY_INTELLIGENCE_V1_ENABLED=true` in production PM2 env (`ecosystem.config.js` or `.env.production`)
-2. Apply migration: `prisma migrate deploy` from `packages/database/` against production DB
-3. Zero-downtime restart: `pm2 reload raivstream-web`
-4. Verify production health: `curl -s https://app.raivstream.com/api/health`
-5. Generate one canary story in production and confirm `blueprint` column populated in DB
+### 7.1 Controlled production release record
+
+| Item | Value |
+|------|-------|
+| Candidate SHA | `9b6bd50` |
+| Merge SHA (origin/main) | `9b6bd50` (fast-forward, zero drift) |
+| Origin/main before merge | `f64ec26` |
+| CI run ID | `33924144257` |
+| CI result | PASS (3m4s) |
+| Production SHA verified | `9b6bd50` ✓ |
+| Production process | `raivstream-web` PM2 id 0, online |
+| Migration applied | `20260903120000_story_intelligence_phase_a` — all 14 migrations clean |
+| Columns verified (DB) | `story_chapters.blueprint` ✓ `story_chapters."enhancedBody"` ✓ `story_scene_seeds."directorMetadata"` ✓ |
+| Feature flag | `STORY_INTELLIGENCE_V1_ENABLED=true` (enabled 2026-09-04) |
+| Provider | OpenAI (`gpt-4o-mini`) — `OPENAI_API_KEY` PRESENT |
+| Tests | 172/172 PASS |
+| TypeScript (API) | clean |
+| TypeScript (web) | clean |
+| Lint (web) | clean |
+| Health (app) | healthy, DB 2ms |
+| Health (r16) | healthy, DB 3ms |
+| Old-project compatibility | PASS — null Phase A fields loaded without error |
+| Signed-out auth | 401 ✓ |
+| Non-owner auth | 401 ✓ |
+| Smoke account | `texdevices+qa-phase-a-prod@gmail.com` (FREE, disposable) |
+| Smoke project | `cmtnirxor0004101uy0vr5wum` — "Phase A Release Smoke" |
+| Blueprint persisted | `story_chapters.blueprint_set = t` ✓ |
+| Director executed | `directorMetadata` on 5/5 scenes ✓ |
+| enhancedBody | Not exercised (optional — not required) |
+| R16 | healthy, boundary intact |
+| Server error log | empty (no errors) |
+| Credit invariant | `credits.ts` untouched by Phase A; no new billing rates |
+| NEW PHASE A BILLING RATE | NONE ✓ |
+| Voice status | PAUSED — not deployed |
+| Phase B | NOT STARTED |
+
+### 7.2 Known limitations (release)
+
+- Smoke QA project (`cmtnirxor0004101uy0vr5wum`) remains in production DB — no API deletion endpoint; should be manually deleted post-release.
+- No automated backup mechanism found on VPS — migration is additive-only (IF NOT EXISTS, all nullable); manual column-drop is the migration rollback path if needed.
+- `narrative_enhancer_v1` not exercised in production smoke (not required — optional path, covered in staging benchmark).
+- Server-side provider console output not visible in PM2 stdout in production mode (Next.js production suppresses console routing) — classified as transient/expected behaviour, not a Phase A defect.
+- API package lint has a pre-existing error in `academy.ts:200` (`@next/next/no-assign-module-variable`); CI runs web-package lint only, not API lint — this is pre-existing in main and not introduced by Phase A.
 
 **CREDIT SAFETY INVARIANT:** `story:movie_render = 100 credits` must not be changed at any point in this deployment.
 
