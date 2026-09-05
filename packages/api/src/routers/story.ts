@@ -53,6 +53,12 @@ import {
   type DirectedScene,
   StoryIntelligenceError,
 } from '../lib/storyIntelligence';
+import {
+  composeV2,
+  isVisualPromptComposerV2Enabled,
+  VpcError,
+} from '../lib/visualPromptComposer';
+import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntelligence/types';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -858,6 +864,7 @@ type ScenePromptContext = {
   lighting?: string | null;
   scenePace?: string | null;
   characters?: unknown;
+  directorMetadata?: unknown;  // Phase A DirectedScene stored as JSON
   project: {
     title: string;
     originalIdea?: string | null;
@@ -1226,6 +1233,58 @@ function composeScenePromptText(input: {
   };
 }
 
+// Parse Phase A DirectedScene JSON safely (null if absent or invalid)
+function safeParseDirectedScene(raw: unknown): DirectedScene | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const result = directedSceneSchema.safeParse(raw);
+  return result.success ? result.data : null;
+}
+
+// Parse Phase A StoryBlueprint JSON safely (null if absent or invalid)
+function safeParseStoryBlueprint(raw: unknown): StoryBlueprint | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const result = storyBlueprintSchema.safeParse(raw);
+  return result.success ? result.data : null;
+}
+
+// Build V2 base prompt from structured composer
+function composeV2BasePrompt(
+  input: Parameters<typeof composeEnhancedScenePrompt>[1],
+  meta: typeof PROMPT_PROVIDER_META[PromptProvider],
+  ds: DirectedScene | null,
+  blueprint: StoryBlueprint | null,
+) {
+  const medium: 'IMAGE' | 'VIDEO' = input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE';
+  const v2Out = composeV2({
+    scene: input.scene,
+    project: input.scene.project as any,
+    medium,
+    maxPromptLength: meta.maxPromptLength,
+    maxNegativePromptLength: meta.maxNegativePromptLength,
+    audienceMode: input.audienceMode,
+    directedScene: ds,
+    blueprint,
+  });
+  return {
+    ...v2Out,
+    // Shape compatible with composeScenePromptText output
+    prompt: v2Out.prompt,
+    negativePrompt: v2Out.negativePrompt,
+    aspectRatio: meta.defaultAspectRatio,
+    duration: input.outputType === 'SHORT_VIDEO' ? (meta.defaultDuration ?? 5) : undefined,
+    maxPromptLength: meta.maxPromptLength,
+    providerLabel: meta.label,
+    director: directorSettingsFromScene(input.scene),
+    providerHints: {
+      camera: medium === 'VIDEO' ? 'stable gentle motion, consistent subject' : 'single clean keyframe, clear character',
+      lighting: 'warm, clear, style-consistent lighting',
+      composition: '9:16 vertical, no text or UI',
+    },
+    isV2: true,
+    v2Canonical: v2Out.canonical,
+  };
+}
+
 async function composeEnhancedScenePrompt(
   ctx: any,
   input: {
@@ -1237,12 +1296,37 @@ async function composeEnhancedScenePrompt(
     analyticsSource: 'preview' | 'generation';
   },
 ) {
-  const base = composeScenePromptText(input);
   const meta = PROMPT_PROVIDER_META[input.provider];
-  const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
-  const characterIdentity = characters.length
-    ? characters.map((character) => character.promptIngredient).join('; ')
-    : 'use the established main character design from the story';
+
+  // V2 path: parse Phase A structures and use structured composer
+  let base: ReturnType<typeof composeScenePromptText> & { isV2?: boolean; v2Canonical?: unknown };
+  let characterIdentity: string;
+
+  if (isVisualPromptComposerV2Enabled()) {
+    const ds = safeParseDirectedScene(input.scene.directorMetadata);
+    // Blueprint is not on scene directly — it lives on the chapter; not loaded here by default.
+    // V2 runs without blueprint continuity when chapter is not in scope (still a significant improvement).
+    const blueprint: StoryBlueprint | null = null;
+    try {
+      const v2 = composeV2BasePrompt(input, meta, ds, blueprint);
+      base = v2 as any;
+      characterIdentity = v2.characterIdentity;
+    } catch (err) {
+      // Non-fatal fallback: log and fall through to V1
+      console.warn('[vpc2] V2 composer failed, falling back to V1:', err instanceof VpcError ? err.code : err);
+      base = composeScenePromptText(input);
+      const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
+      characterIdentity = characters.length
+        ? characters.map((character) => character.promptIngredient).join('; ')
+        : 'use the established main character design from the story';
+    }
+  } else {
+    base = composeScenePromptText(input);
+    const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
+    characterIdentity = characters.length
+      ? characters.map((character) => character.promptIngredient).join('; ')
+      : 'use the established main character design from the story';
+  }
   await trackStoryAnalytics(ctx, {
     event: 'prompt_enhancement_started',
     projectId: input.projectId,
@@ -1745,6 +1829,8 @@ async function generateSceneImageAsset(
           promptEnhancerModel: composed.enhancerModel,
           providerHints: composed.providerHints,
           sourceCreativeCriticRunId: input.creativeCriticRunId ?? null,
+          promptComposerVersion: (composed as any).isV2 ? 'visual_prompt_v2' : 'v1',
+          vpcCanonical: (composed as any).isV2 ? (composed as any).v2Canonical : undefined,
         },
       },
     });
