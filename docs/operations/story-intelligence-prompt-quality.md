@@ -200,7 +200,7 @@ For each generated story, verify:
 | Health (r16) | healthy, DB 3ms |
 | Old-project compatibility | PASS — null Phase A fields loaded without error |
 | Signed-out auth | 401 ✓ |
-| Non-owner auth | 401 ✓ |
+| Non-owner auth | 401 ✓ (unauthenticated only — see §7.3 for authenticated non-owner) |
 | Smoke account | `texdevices+qa-phase-a-prod@gmail.com` (FREE, disposable) |
 | Smoke project | `cmtnirxor0004101uy0vr5wum` — "Phase A Release Smoke" |
 | Blueprint persisted | `story_chapters.blueprint_set = t` ✓ |
@@ -215,13 +215,63 @@ For each generated story, verify:
 
 ### 7.2 Known limitations (release)
 
-- Smoke QA project (`cmtnirxor0004101uy0vr5wum`) remains in production DB — no API deletion endpoint; should be manually deleted post-release.
-- No automated backup mechanism found on VPS — migration is additive-only (IF NOT EXISTS, all nullable); manual column-drop is the migration rollback path if needed.
-- `narrative_enhancer_v1` not exercised in production smoke (not required — optional path, covered in staging benchmark).
-- Server-side provider console output not visible in PM2 stdout in production mode (Next.js production suppresses console routing) — classified as transient/expected behaviour, not a Phase A defect.
-- API package lint has a pre-existing error in `academy.ts:200` (`@next/next/no-assign-module-variable`); CI runs web-package lint only, not API lint — this is pre-existing in main and not introduced by Phase A.
+- Smoke QA project (`cmtnirxor0004101uy0vr5wum`) remains in production DB — no API deletion endpoint exists; marked as test/QA data; manual admin deletion is the cleanup path.
+- Migration was additive and low-risk, with no destructive DDL or data rewrite. No automated VPS backup mechanism was identified during the release audit, so backup/recovery readiness remains an operational limitation.
+- `narrative_enhancer_v1` not exercised in production smoke (optional path — covered in staging benchmark; 12/12 stories).
+- Server-side provider console output not visible in PM2 stdout in production mode (Next.js production suppresses console routing) — expected behaviour, not a Phase A defect.
+- API package lint has a pre-existing error in `academy.ts:200` (`@next/next/no-assign-module-variable`); CI runs web-package lint only — this is pre-existing in main and not introduced by Phase A.
+- `providerMetadata` JSON field on `StoryChapter` (containing `model` and `provider` keys) is a pre-existing schema field (predates Phase A); it is surfaced only in the admin prompt-quality page (`/admin/prompt-quality`), not in any user-facing or R16 UI.
 
 **CREDIT SAFETY INVARIANT:** `story:movie_render = 100 credits` must not be changed at any point in this deployment.
+
+---
+
+### 7.3 Post-production closure (2026-09-05)
+
+Two evidence gaps from the initial release were closed in a follow-up session.
+
+#### Authenticated non-owner authorization
+
+| Item | Detail |
+|------|--------|
+| Owner account | `texdevices+qa-phase-a-prod@gmail.com` (FREE tier) |
+| Non-owner account | `texdevices+qa-nonowner-closure@gmail.com` (distinct registered user) |
+| Owner `story.getProject` | HTTP 200 ✓ |
+| Non-owner `story.getProject` | HTTP 404, `code: NOT_FOUND`, `"Story project not found"` ✓ |
+| Non-owner `story.generateStory` | HTTP 404, `code: NOT_FOUND` ✓ |
+| Ownership behavior | `findFirst({where:{id, userId}})` → null → NOT_FOUND — enumeration-safe ✓ |
+| OWNER AUTH | **PASS** |
+| AUTHENTICATED NON-OWNER | **PASS** |
+
+No authorization weakness. Phase A owner-protected operations deny authenticated non-owners via NOT_FOUND (intentional — prevents project-ID enumeration).
+
+#### Production R16 Story Intelligence smoke
+
+| Item | Detail |
+|------|--------|
+| Project | `cmto0965l00068yp919llqnyv` — "A bunny who learns to share", `audienceMode: KIDS` |
+| Pipeline exercised | `generateStory` with `STORY_INTELLIGENCE_V1_ENABLED=true` |
+| Provider used | External OpenAI (`gpt-4o-mini`) — confirmed via blueprint presence |
+| Story content | Child-safe — bunny, meadow, carrot cake, sharing ✓ |
+| Blueprint content | Child-safe — Lighthearted tone, beats about sharing, protagonist "Benny the Bunny" ✓ |
+| Provider name in UI | NOT exposed in user-facing or R16 UI ✓ |
+| Model name in UI | NOT exposed in user-facing or R16 UI ✓ |
+| System instructions | NOT in response ✓ |
+| Schema version tag | Present in `blueprint.version` field (internal only — no UI rendering) ✓ |
+| `providerMetadata` field | Pre-existing schema field; rendered only in `/admin/prompt-quality` (operator-only) ✓ |
+| R16 blocked routes | `/admin`, `/generate`, `/credits`, `/pricing` → HTTP 307 redirect to `/` ✓ |
+| PRODUCTION R16 STORY INTELLIGENCE | **PASS** |
+
+#### Post-closure health
+
+| Item | Value |
+|------|-------|
+| app.raivstream.com health | healthy, DB 18ms ✓ |
+| r16.raivstream.com health | healthy, DB 2ms ✓ |
+| PM2 `raivstream-web` | online, 8h uptime, 298 restarts (stable) ✓ |
+| Server error log | empty ✓ |
+| Credit invariant | `credits.ts` untouched, `story:movie_render` unchanged, NEW PHASE A BILLING RATE = NONE ✓ |
+| QA project cleanup | `cmtnirxor0004101uy0vr5wum` left in place — no deletion endpoint; `cmto0965l00068yp919llqnyv` (R16 smoke) left in place — same reason. Manual admin cleanup debt documented. |
 
 ---
 
