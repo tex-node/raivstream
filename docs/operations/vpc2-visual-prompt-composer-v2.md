@@ -3,7 +3,7 @@
 **Branch:** `feat/visual-prompt-composer-v2`  
 **Base commit:** `07c3752` (from `main`)  
 **Date:** 2026-09-05  
-**Status:** LOCAL QUALIFICATION COMPLETE — not yet deployed
+**Status:** LOCAL QUALIFICATION COMPLETE + HUMAN REVIEW PASS — not yet deployed
 
 ---
 
@@ -250,6 +250,8 @@ Minimum 6 benchmark stories reviewed manually, scored 1–5 per dimension:
 | Overlay protection in negative | Are all 6 required overlay terms in negative prompt? |
 
 Threshold: average ≥ 4.0 / 5.0 across reviewed scenes.
+
+Review result recorded in `docs/operations/vpc2-human-review-2026-09-05.md`: **PASS**, average **4.92 / 5.00**.
 
 ---
 

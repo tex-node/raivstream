@@ -197,7 +197,7 @@ async function createTemplateCourse(ctx: Context, titleSuffix = '') {
 
   const lessons: any[] = [];
   for (const [moduleIndex, moduleTemplate] of FILMMAKING_COURSE_TEMPLATE.modules.entries()) {
-    const module = await (ctx.prisma as any).academyCourseModule.create({
+    const courseModule = await (ctx.prisma as any).academyCourseModule.create({
       data: {
         courseId: course.id,
         title: moduleTemplate.title,
@@ -208,7 +208,7 @@ async function createTemplateCourse(ctx: Context, titleSuffix = '') {
     for (const [lessonIndex, lessonTemplate] of moduleTemplate.lessons.entries()) {
       lessons.push(await (ctx.prisma as any).academyLesson.create({
         data: {
-          moduleId: module.id,
+          moduleId: courseModule.id,
           title: lessonTemplate.title,
           summary: lessonTemplate.summary,
           learningObjectives: lessonTemplate.learningObjectives,

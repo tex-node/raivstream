@@ -147,6 +147,26 @@ function resolveSceneCharacterNames(scene: VpcComposerInput['scene'], ds: Direct
   return [];
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveDepictedCharacterNames(
+  explicitSceneCharacterNames: string[],
+  characterMemory: VpcComposerInput['project']['characterMemory'],
+  action: string,
+): string[] {
+  if (explicitSceneCharacterNames.length) return explicitSceneCharacterNames;
+  const actionText = action.toLowerCase();
+  return (characterMemory ?? [])
+    .filter((character) => {
+      const name = character.name?.trim();
+      if (!name) return false;
+      return new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`).test(actionText);
+    })
+    .map((character) => character.name);
+}
+
 function lightingSpecToString(spec: LightingSpec): string {
   const parts: string[] = [spec.quality];
   if (spec.moodHint) parts.push(`${spec.moodHint} mood`);
@@ -176,13 +196,6 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
     throw new VpcError('MISSING_SCENE_CONTEXT', 'Scene must have id and title');
   }
 
-  // Resolve scene character names (from DirectedScene or scene.characters field)
-  const sceneCharacterNames = resolveSceneCharacterNames(scene, ds);
-
-  // Derive character locks from Character Bible
-  const characterMemory = project.characterMemory ?? [];
-  const characterLocks = deriveCharacterLocks(characterMemory, sceneCharacterNames);
-
   // Core scene fields
   const action = resolveAction(scene, ds);
   const emotion = resolveEmotion(scene, ds);
@@ -190,6 +203,14 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
   const timeOfDay = resolveTimeOfDay(scene, ds);
   const weather = resolveWeather(scene);
   const mood = resolveMood(scene, ds);
+
+  // Resolve scene character names from explicit scene data first, then infer
+  // from the resolved action. Identity locks may still include background
+  // references, but composition should be based on who is actually depicted.
+  const characterMemory = project.characterMemory ?? [];
+  const sceneCharacterNames = resolveSceneCharacterNames(scene, ds);
+  const depictedCharacterNames = resolveDepictedCharacterNames(sceneCharacterNames, characterMemory, action);
+  const characterLocks = deriveCharacterLocks(characterMemory, depictedCharacterNames.length ? depictedCharacterNames : sceneCharacterNames);
 
   // Style
   const styleKey = normaliseStoryVisualStyle(project.visualStyle);
@@ -207,8 +228,9 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
 
   // Composition
   // "class" only means a group of students when preceded by "the" or "whole", not "to class"
-  const hasGroupAction = /\b(group|crowd|everyone|all|children|family|team)\b|\b(the|whole)\s+class\b/i.test(action);
-  const composition = resolveComposition(characterLocks.length, hasGroupAction);
+  const hasGroupAction = /\b(group|crowd|everyone|all|children|family|team)\b|\b(the|whole|entire)\s+class\b/i.test(action);
+  const depictedCharacterCount = depictedCharacterNames.length || (characterLocks.length ? 1 : 0);
+  const composition = resolveComposition(depictedCharacterCount, hasGroupAction);
 
   // Lighting
   const lighting = resolveLighting(scene, ds);
@@ -324,7 +346,12 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
     {
       priority: 2,
       label: 'character_identity',
-      text: `Characters, preserve exact visual identity: ${characterIdentityString}`,
+      text: [
+        `Characters, preserve exact visual identity: ${characterIdentityString}`,
+        depictedCharacterNames.length
+          ? `Depict in this scene: ${depictedCharacterNames.join(', ')}. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action`
+          : undefined,
+      ].filter(Boolean).join('. '),
       required: true,
     },
     {

@@ -221,6 +221,17 @@ describe('Multi-character', () => {
     expect(amadi?.physicalDescription).not.toContain('yellow');
     expect(tobi?.physicalDescription).not.toContain('red school');
   });
+
+  it('treats only action-mentioned characters as depicted when scene character data is absent', () => {
+    const input = makeInput({
+      project: { ...baseProject, characterMemory: [amadiCharacter, tobiCharacter] },
+      scene: { ...baseScene, description: 'Amadi reads a letter quietly at his desk.' },
+    });
+    const out = composeV2(input);
+    expect(out.prompt).toContain('Depict in this scene: Amadi');
+    expect(out.prompt).toContain('Use other listed character locks only as continuity reference');
+    expect(out.canonical.composition.layout).not.toBe('two_shot');
+  });
 });
 
 // ─── 4. Camera tests ─────────────────────────────────────────────────────────

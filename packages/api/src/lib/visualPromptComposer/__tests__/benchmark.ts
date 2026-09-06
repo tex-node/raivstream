@@ -7,6 +7,7 @@ import type { VpcComposerInput, CharacterMemoryInput } from '../types';
 
 const MAX_PROMPT = 1800;
 const MAX_NEG = 900;
+const PRINT_PROMPTS = process.env.VPC2_PRINT_PROMPTS === 'true';
 
 type BenchmarkStory = {
   id: string;
@@ -305,6 +306,12 @@ function runBenchmark() {
       console.log(`    Camera: ${symbol(sc.cameraPresent)} | Composition: ${symbol(sc.compositionPresent)} | Continuity: ${symbol(sc.continuityPresent)}`);
       console.log(`    Style: ${symbol(sc.stylePreserved)} | Overlay guard: ${symbol(sc.overlayProtectionPresent)}`);
       console.log(`    Len: ${sc.promptLength}ch / ${sc.negLength}ch neg | Conflicts: ${sc.conflictsFound} | Latency: ${latMs.toFixed(2)}ms | Cost: $${sc.composerCost}`);
+      if (PRINT_PROMPTS) {
+        console.log('    Positive prompt:');
+        console.log(`      ${out.prompt}`);
+        console.log('    Negative prompt:');
+        console.log(`      ${out.negativePrompt}`);
+      }
       if (out.canonical.detectedConflicts.length) {
         console.log(`    ⚠ Conflicts: ${out.canonical.detectedConflicts.join('; ')}`);
       }
