@@ -38,7 +38,8 @@
     "dev:mobile": "turbo run dev --filter=@raivstream/mobile",
     "deploy:web": "cd apps/web && vercel --prod",
     "deploy:mobile": "cd apps/mobile && eas build --platform all",
-    "runpod": "tsx scripts/runpod.ts"
+    "runpod": "tsx scripts/runpod.ts",
+    "fal:refund:recover": "tsx scripts/fal-refund-recovery.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
