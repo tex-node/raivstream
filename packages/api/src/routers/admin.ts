@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { router, adminProcedure, moderatorProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { ffmpegAvailable } from '../lib/movieRenderWorker';
+import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -279,6 +280,27 @@ export const adminRouter = router({
         })),
         recentEvents,
       };
+    }),
+
+  /**
+   * Read-only FAL refund outbox observability. Makes no financial changes —
+   * only counts/aggregates for operator review and future alerting.
+   */
+  refundOperations: adminProcedure
+    .input(
+      z
+        .object({
+          recentFailuresLimit: z.number().int().min(1).max(50).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const options = { recentFailuresLimit: input?.recentFailuresLimit };
+      const [overview, alertState] = await Promise.all([
+        getRefundOperationsOverview(ctx.prisma, options),
+        detectRefundRecoveryAlerts(ctx.prisma, options),
+      ]);
+      return { overview, alerts: alertState.alerts };
     }),
 
   storyAnalytics: adminProcedure

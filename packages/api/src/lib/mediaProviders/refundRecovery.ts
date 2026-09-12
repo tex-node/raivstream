@@ -14,6 +14,7 @@
 
 import type { PrismaClient } from '@raivstream/database';
 import { executeRefundOperation, FAL_REFUND_MAX_ATTEMPTS } from './webhookProcessing';
+import { getRefundOperationsOverview } from './refundOperationsMonitor';
 
 export const DEFAULT_RECOVERY_LIMIT = 25;
 export const MAX_RECOVERY_LIMIT = 100;
@@ -119,12 +120,24 @@ export async function runRefundRecovery(
   return { found: operations.length, completed, skipped, failed };
 }
 
+export interface RecoveryObservability {
+  exhausted: number;
+  recoverable: number;
+}
+
 export interface RecoveryCommandDeps {
   prisma: PrismaClient;
   env?: RecoveryEnv;
   limitRaw?: string;
   log?: (message: string) => void;
   runRecovery?: (prisma: PrismaClient, limit: number) => Promise<RecoverySummary>;
+  /** Read-only post-run counters for operator visibility (best-effort). */
+  getOverview?: (prisma: PrismaClient) => Promise<RecoveryObservability>;
+}
+
+async function defaultRecoveryOverview(prisma: PrismaClient): Promise<RecoveryObservability> {
+  const overview = await getRefundOperationsOverview(prisma);
+  return { exhausted: overview.counts.exhausted, recoverable: overview.counts.recoverable };
 }
 
 /**
@@ -147,6 +160,20 @@ export async function executeRecoveryCommand(deps: RecoveryCommandDeps): Promise
     log(
       `refund-recovery: found=${summary.found} completed=${summary.completed} skipped=${summary.skipped} failed=${summary.failed}`,
     );
+
+    // Best-effort read-only observability; never changes the exit-code contract.
+    try {
+      const overview = await (deps.getOverview ?? defaultRecoveryOverview)(deps.prisma);
+      log(`refund-recovery: exhausted=${overview.exhausted} remaining=${overview.recoverable}`);
+      if (overview.exhausted > 0) {
+        log(
+          `refund-recovery: WARNING ${overview.exhausted} operation(s) reached the attempt limit and need operator review`,
+        );
+      }
+    } catch {
+      /* observability is optional; ignore */
+    }
+
     return 0;
   } catch {
     log('refund-recovery: failed — unrecoverable error');

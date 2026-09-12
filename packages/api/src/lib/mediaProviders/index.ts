@@ -18,6 +18,7 @@ export { verifyFalWebhookSignature, fetchFalJwks, __resetFalJwksCacheForTests } 
 export type { FalJwk, FalWebhookHeaders, VerifyFalWebhookOptions } from './fal/falWebhook';
 export * from './webhookProcessing';
 export * from './outputValidation';
+export * from './refundOperationsMonitor';
 
 import type { MediaProvider } from './types';
 import { readFalMediaConfig, type FalMediaConfig } from './config';

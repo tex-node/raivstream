@@ -16,6 +16,7 @@ const NAV = [
   { href: '/admin/character-insights', label: 'Character Insights', icon: 'C' },
   { href: '/admin/sequence',           label: 'Sequence',           icon: 'S' },
   { href: '/admin/movie-renders',      label: 'Movie Renders',      icon: 'M' },
+  { href: '/admin/fal-refunds',        label: 'FAL Refunds',        icon: 'R' },
   { href: '/admin/academy',            label: 'Academy',            icon: 'L' },
   { href: '/admin/revenue',            label: 'Revenue',            icon: '💳' },
 ];
