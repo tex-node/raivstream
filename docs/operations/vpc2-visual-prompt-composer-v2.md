@@ -163,9 +163,8 @@ Integration in `packages/api/src/routers/story.ts` → `composeEnhancedSceneProm
 // V2 path (flag on)
 if (isVisualPromptComposerV2Enabled()) {
   const ds = safeParseDirectedScene(input.scene.directorMetadata);
-  const blueprint: StoryBlueprint | null = null; // chapter not yet threaded in
   try {
-    const v2 = composeV2BasePrompt(input, meta, ds, blueprint);
+    const v2 = composeV2BasePrompt(input, ds);
     base = v2 as any;
     characterIdentity = v2.characterIdentity;
   } catch (err) {
@@ -174,6 +173,29 @@ if (isVisualPromptComposerV2Enabled()) {
   }
 }
 ```
+
+### 4.1 Blueprint continuity threading
+
+`composeV2BasePrompt()` now reads the persisted Phase A blueprint from the authoritative
+`StoryChapter.blueprint` column through `scene.chapter.blueprint`:
+
+```typescript
+const blueprint = safeParseStoryBlueprint(input.scene.chapter?.blueprint);
+```
+
+- `StoryChapter.blueprint` (`Json?`) is selected by the three scene-prompt call sites
+  (`generateSceneImageAsset`, `composeScenePrompt`, `composeAllScenePrompts`) via
+  `chapter: { select: { blueprint: true } }`.
+- Parsing reuses the existing Phase A `storyBlueprintSchema` (Zod); no new validator and
+  no schema/migration change were introduced.
+- When the column is absent or `null` (historical projects), the composer runs with
+  `blueprint = null` — continuity falls back to DirectedScene rules plus character locks.
+- When the column is present but malformed/legacy JSON, `safeParseStoryBlueprint()` fails
+  safe to `null` (no throw, no fabricated fields); the scene still composes.
+- Blueprint continuity rules are consumed by `resolveContinuity()` and surface in
+  `canonical.continuity` and the `continuity` prompt section when budget allows.
+- The persisted blueprint is read-only here; it is never rewritten, and none of its
+  internals are exposed to R16 responses (R16 sanitisation happens at the router layer).
 
 Provenance stored in `GenerationJob.metadata`:
 ```typescript
@@ -257,7 +279,7 @@ Review result recorded in `docs/operations/vpc2-human-review-2026-09-05.md`: **P
 
 ## 8. Known limitations
 
-- `StoryBlueprint` chapter continuity rules are not yet threaded from `composeEnhancedScenePrompt` to the V2 composer input (`blueprint` is currently hardcoded to `null`). Phase A blueprint data is written to `StoryChapter.blueprint`; a future PR can wire it through the call chain.
+- ~~`StoryBlueprint` chapter continuity rules are not yet threaded...~~ **Resolved.** The persisted Phase A blueprint (`StoryChapter.blueprint`) is now threaded through `scene.chapter.blueprint` into `composeV2BasePrompt()` (see §4.1). Null and malformed legacy JSON both degrade safely to `blueprint = null`. No schema or migration change. Regression coverage: `packages/api/src/routers/__tests__/vpc2BlueprintContinuity.test.ts`.
 - Location-string conflict detection uses keyword matching — produces false positives for ambiguous locations ("school gate", "front door"). Non-fatal.
 - `scene.characters` field is typed `unknown` in the DB schema; VPC-2 handles this gracefully but cannot rely on structured character ordering from that field.
 

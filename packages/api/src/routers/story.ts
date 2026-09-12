@@ -865,6 +865,7 @@ type ScenePromptContext = {
   scenePace?: string | null;
   characters?: unknown;
   directorMetadata?: unknown;  // Phase A DirectedScene stored as JSON
+  chapter?: { blueprint?: unknown } | null;  // Phase A StoryBlueprint stored as JSON on StoryChapter
   project: {
     title: string;
     originalIdea?: string | null;
@@ -1250,10 +1251,12 @@ function safeParseStoryBlueprint(raw: unknown): StoryBlueprint | null {
 // Build V2 base prompt from structured composer
 function composeV2BasePrompt(
   input: Parameters<typeof composeEnhancedScenePrompt>[1],
-  meta: typeof PROMPT_PROVIDER_META[PromptProvider],
   ds: DirectedScene | null,
-  blueprint: StoryBlueprint | null,
 ) {
+  const meta = PROMPT_PROVIDER_META[input.provider];
+  // Phase A blueprint is persisted on StoryChapter and threaded in via scene.chapter.
+  // Malformed or legacy JSON safely degrades to null (V2 composes without blueprint continuity).
+  const blueprint = safeParseStoryBlueprint(input.scene.chapter?.blueprint);
   const medium: 'IMAGE' | 'VIDEO' = input.outputType === 'SHORT_VIDEO' ? 'VIDEO' : 'IMAGE';
   const v2Out = composeV2({
     scene: input.scene,
@@ -1285,7 +1288,7 @@ function composeV2BasePrompt(
   };
 }
 
-async function composeEnhancedScenePrompt(
+export async function composeEnhancedScenePrompt(
   ctx: any,
   input: {
     scene: ScenePromptContext;
@@ -1304,11 +1307,8 @@ async function composeEnhancedScenePrompt(
 
   if (isVisualPromptComposerV2Enabled()) {
     const ds = safeParseDirectedScene(input.scene.directorMetadata);
-    // Blueprint is not on scene directly — it lives on the chapter; not loaded here by default.
-    // V2 runs without blueprint continuity when chapter is not in scope (still a significant improvement).
-    const blueprint: StoryBlueprint | null = null;
     try {
-      const v2 = composeV2BasePrompt(input, meta, ds, blueprint);
+      const v2 = composeV2BasePrompt(input, ds);
       base = v2 as any;
       characterIdentity = v2.characterIdentity;
     } catch (err) {
@@ -1698,6 +1698,7 @@ async function generateSceneImageAsset(
           characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
+      chapter: { select: { blueprint: true } },
       prompts: {
         where: { outputType: 'IMAGE', provider: 'FLUX' },
         orderBy: { version: 'desc' },
@@ -3073,6 +3074,7 @@ export const storyRouter = router({
               characterMemory: { orderBy: { createdAt: 'asc' } },
             },
           },
+          chapter: { select: { blueprint: true } },
         },
       });
       if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
@@ -3163,6 +3165,7 @@ export const storyRouter = router({
               characterMemory: { orderBy: { createdAt: 'asc' } },
             },
           },
+          chapter: { select: { blueprint: true } },
         },
       });
       if (scenes.length === 0) {
