@@ -16,6 +16,8 @@ export type { FalQueueTransport } from './fal/falMediaProvider';
 export * from './fal/contracts';
 export { verifyFalWebhookSignature, fetchFalJwks, __resetFalJwksCacheForTests } from './fal/falWebhook';
 export type { FalJwk, FalWebhookHeaders, VerifyFalWebhookOptions } from './fal/falWebhook';
+export * from './webhookProcessing';
+export * from './outputValidation';
 
 import type { MediaProvider } from './types';
 import { readFalMediaConfig, type FalMediaConfig } from './config';

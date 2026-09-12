@@ -375,6 +375,7 @@ model User {
   analyticsEvents     AnalyticsEvent[]
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
+  creditOperations    CreditOperation[]
   passwordResetTokens PasswordResetToken[]
   notifications       Notification[] @relation("ReceivedNotifications")
   sentNotifications   Notification[] @relation("SentNotifications")
@@ -729,6 +730,46 @@ model CreditTransaction {
   @@index([userId, createdAt])
   @@index([type])
   @@map("credit_transactions")
+}
+
+// Durable outbox for credit operations (e.g. crash-safe refunds).
+// `idempotencyKey` is unique, so a refund intent can be created exactly once,
+// atomically with the GenerationJob terminal transition. A pending row survives
+// process crashes and can be retried until it reaches COMPLETED.
+enum CreditOperationType {
+  REFUND
+}
+
+enum CreditOperationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model CreditOperation {
+  id             String                @id @default(cuid())
+  idempotencyKey String                @unique
+  type           CreditOperationType   @default(REFUND)
+  status         CreditOperationStatus @default(PENDING)
+
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationJobId String? // plain reference (not an FK) to stay decoupled, like AnalyticsEvent.projectId
+  featureKey      String?
+  amount          Int // positive credits to return
+  referenceId     String? // mirrors idempotencyKey for the resulting CreditTransaction
+  attempts        Int      @default(0)
+  lastError       String? // redacted message only; never secrets
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([generationJobId])
+  @@map("credit_operations")
 }
 
 // Admin-configurable credit cost per feature key

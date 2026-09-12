@@ -35,3 +35,6 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+// Provider-neutral media layer (server-only; no live calls by default).
+export * from './lib/mediaProviders';
