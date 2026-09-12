@@ -152,15 +152,38 @@ describe('getRefundOperationsOverview', () => {
 });
 
 describe('alert-ready detection', () => {
-  it('produces deduplicated candidates for exhausted, stale, and systemic failures', async () => {
+  it('produces deduplicated candidates with severities for exhausted and stale', async () => {
     const { prisma } = makePrisma(OPS);
     const state = await detectRefundRecoveryAlerts(prisma, { now: NOW, maxAttempts: 5 });
     const keys = state.alerts.map((a) => a.dedupKey);
     expect(new Set(keys).size).toBe(keys.length); // deduplicated
-    expect(keys).toContain('fal-refund:exhausted');
-    expect(keys).toContain('fal-refund:stale-failed');
-    expect(keys).toContain('fal-refund:failure:connection');
-    expect(keys).toContain('fal-refund:failure:timeout');
+    expect(state.alerts.find((a) => a.dedupKey === 'fal-refund:exhausted')?.severity).toBe('CRITICAL');
+    expect(state.alerts.find((a) => a.dedupKey === 'fal-refund:stale-failed')?.severity).toBe('WARNING');
+    // Only one failure per category in OPS → below the repeated-failure threshold.
+    expect(keys).not.toContain('fal-refund:failure:connection');
+    expect(keys).not.toContain('fal-refund:failure:timeout');
+  });
+
+  it('suppresses repeated-failure alerts below the threshold and escalates at/above it', async () => {
+    const repeated = (n: number, error: string) =>
+      Array.from({ length: n }, (_, i) => ({
+        idempotencyKey: `fal-refund:rep-${i}`,
+        status: 'FAILED',
+        attempts: 1,
+        amount: 1,
+        createdAt: hours(1),
+        updatedAt: min(30),
+        lastError: error,
+      }));
+
+    const two = await detectRefundRecoveryAlerts(makePrisma(repeated(2, 'ECONNREFUSED')).prisma, { now: NOW, maxAttempts: 5 });
+    expect(two.alerts.some((a) => a.kind === 'RECENT_FAILURE')).toBe(false);
+
+    const three = await detectRefundRecoveryAlerts(makePrisma(repeated(3, 'ECONNREFUSED')).prisma, { now: NOW, maxAttempts: 5 });
+    expect(three.alerts.find((a) => a.dedupKey === 'fal-refund:failure:connection')?.severity).toBe('WARNING');
+
+    const ten = await detectRefundRecoveryAlerts(makePrisma(repeated(10, 'request timed out')).prisma, { now: NOW, maxAttempts: 5 });
+    expect(ten.alerts.find((a) => a.dedupKey === 'fal-refund:failure:timeout')?.severity).toBe('CRITICAL');
   });
 
   it('returns no alerts for a clean outbox', () => {

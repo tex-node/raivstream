@@ -19,6 +19,7 @@ export type { FalJwk, FalWebhookHeaders, VerifyFalWebhookOptions } from './fal/f
 export * from './webhookProcessing';
 export * from './outputValidation';
 export * from './refundOperationsMonitor';
+export * from './refundAlertDispatch';
 
 import type { MediaProvider } from './types';
 import { readFalMediaConfig, type FalMediaConfig } from './config';

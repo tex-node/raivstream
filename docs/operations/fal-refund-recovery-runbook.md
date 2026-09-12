@@ -66,20 +66,59 @@ Safety: queries are parameterized and bounded (recent failures ≤ 50); error te
 redacted (URLs, connection strings, emails, long tokens); idempotency keys are
 shown only as a stable non-reversible tag; no user records or secrets are returned.
 
-## 4. Alert-ready detection (no scheduler)
+## 4. Alerts — detection, severity, dedup/cooldown
 
 `detectRefundRecoveryAlerts()` returns deduplicated candidates with stable
-`dedupKey`s for a future scheduler/monitor:
+`dedupKey`s. `runRefundAlertCycle()` (read-only) chains detect → cooldown → dry-run
+delivery and is exposed via the staging-only monitor command.
 
-| kind | dedupKey | trigger |
-|---|---|---|
-| `EXHAUSTED` | `fal-refund:exhausted` | any operation at/over the attempt limit |
-| `STALE_FAILED` | `fal-refund:stale-failed` | failed operations beyond the stale threshold |
-| `RECENT_FAILURE` | `fal-refund:failure:<category>` | recent failures of a given category (timeout/connection/constraint/storage/provider) |
+### 4.1 Alert model and severity rules
 
-This function does **not** send notifications. A future scheduler/worker may call it
-and fan out to an alerting channel. Do not add cron/PM2/worker without a separate
-approval.
+| Kind | dedupKey | Trigger | Severity |
+|---|---|---|---|
+| `EXHAUSTED` | `fal-refund:exhausted` | any operation at/over the attempt limit | **CRITICAL** |
+| `STALE_FAILED` | `fal-refund:stale-failed` | failed operations beyond the stale threshold (default 24h) | **WARNING** |
+| `RECENT_FAILURE` | `fal-refund:failure:<category>` | ≥ 3 recent failures of one category (timeout/connection/constraint/storage/provider) | **WARNING** (≥ 10 → **CRITICAL**) |
+
+Repeated-failure thresholds: `REPEATED_FAILURE_THRESHOLD = 3`,
+`REPEATED_FAILURE_CRITICAL_THRESHOLD = 10`. Categories are coarse and derived from
+redacted error text.
+
+### 4.2 Deduplication and cooldown
+
+- Alerts are deduplicated by `dedupKey` (deterministic).
+- `selectAlertsToNotify()` suppresses re-notification of the same key within a
+  cooldown window (default **6h**; override `FAL_REFUND_ALERT_COOLDOWN_MS`) and
+  returns `nextState` (dedupKey → last-notified ISO) suitable for persistence.
+- The monitor command persists cooldown state only if `FAL_REFUND_ALERT_STATE_FILE`
+  is set (staging-only path outside the repo); otherwise it is stateless/dry-run.
+
+### 4.3 Monitoring command (read-only, dry-run)
+
+```bash
+# on the isolated staging host
+RAIVSTREAM_ENV=staging pnpm fal:refund:monitor
+# optional cooldown persistence:
+FAL_REFUND_ALERT_STATE_FILE=/root/raivstream-secrets/fal-refund-alert-state.json \
+  RAIVSTREAM_ENV=staging pnpm fal:refund:monitor
+```
+
+- Read-only: never claims/completes refunds, never mutates balances/ledger, never
+  calls FAL/R2/generation.
+- Default sink prints redacted dry-run lines: `[refund-alert][dry-run] severity=… key=… count=… :: …`
+- Exit codes: `0` ran, `1` runtime error, `2` staging-guard refusal.
+- **No external notification, scheduler, cron, PM2 worker, or automated recovery
+  is activated.** Delivery remains dry-run.
+
+### 4.4 Operator response
+
+| Severity | Response |
+|---|---|
+| **CRITICAL** (`EXHAUSTED`, ≥10 repeated failures) | Investigate immediately; an operation is stuck at the attempt limit or a systemic failure is occurring. Do not edit balances. Follow §5 escalation. |
+| **WARNING** (`STALE_FAILED`, ≥3 repeated failures) | Review on the next working pass; inspect the category and recent error previews; confirm whether a retry is warranted via the manual recovery command. |
+| **INFO** | Informational; no action required. |
+
+A future scheduler must not exceed the dry-run boundary without separate approval.
 
 ## 5. Escalation — an operation reached the attempt limit
 

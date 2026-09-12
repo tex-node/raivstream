@@ -207,9 +207,17 @@ export async function getRefundOperationsOverview(
 
 export type RefundAlertKind = 'EXHAUSTED' | 'STALE_FAILED' | 'RECENT_FAILURE';
 
+export type AlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+
+/** Repeated same-category failures at/above this count produce an alert. */
+export const REPEATED_FAILURE_THRESHOLD = 3;
+/** Repeated same-category failures at/above this count escalate to CRITICAL. */
+export const REPEATED_FAILURE_CRITICAL_THRESHOLD = 10;
+
 export interface RefundRecoveryAlert {
   kind: RefundAlertKind;
-  /** Stable identifier for deduplication by a future scheduler. */
+  severity: AlertSeverity;
+  /** Stable identifier for deduplication by a scheduler/monitor. */
   dedupKey: string;
   count: number;
   message: string;
@@ -227,6 +235,7 @@ export function buildRefundRecoveryAlerts(overview: RefundOperationsOverview): R
   if (overview.counts.exhausted > 0) {
     alerts.push({
       kind: 'EXHAUSTED',
+      severity: 'CRITICAL',
       dedupKey: 'fal-refund:exhausted',
       count: overview.counts.exhausted,
       message: `${overview.counts.exhausted} refund operation(s) reached the attempt limit and require operator review`,
@@ -236,6 +245,7 @@ export function buildRefundRecoveryAlerts(overview: RefundOperationsOverview): R
   if (overview.counts.staleFailed > 0) {
     alerts.push({
       kind: 'STALE_FAILED',
+      severity: 'WARNING',
       dedupKey: 'fal-refund:stale-failed',
       count: overview.counts.staleFailed,
       message: `${overview.counts.staleFailed} failed refund operation(s) older than the stale threshold`,
@@ -248,8 +258,10 @@ export function buildRefundRecoveryAlerts(overview: RefundOperationsOverview): R
     byCategory.set(failure.errorCategory, (byCategory.get(failure.errorCategory) ?? 0) + 1);
   }
   for (const [category, count] of byCategory) {
+    if (count < REPEATED_FAILURE_THRESHOLD) continue;
     alerts.push({
       kind: 'RECENT_FAILURE',
+      severity: count >= REPEATED_FAILURE_CRITICAL_THRESHOLD ? 'CRITICAL' : 'WARNING',
       dedupKey: `fal-refund:failure:${category.toLowerCase()}`,
       count,
       message: `${count} recent refund failure(s) categorized as ${category}`,
