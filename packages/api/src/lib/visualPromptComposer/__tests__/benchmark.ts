@@ -29,7 +29,7 @@ type BenchmarkStory = {
   }>;
 };
 
-const STORIES: BenchmarkStory[] = [
+export const STORIES: BenchmarkStory[] = [
   {
     id: 'b01',
     title: 'Max Goes to School',
@@ -368,4 +368,8 @@ function runBenchmark() {
   console.log('═══════════════════════════════════════════════════════\n');
 }
 
-runBenchmark();
+const isDirectRun = typeof process !== 'undefined'
+  && Array.isArray(process.argv)
+  && /(^|[\\/])benchmark\.(ts|js|mjs|cjs)$/.test(process.argv[1] ?? '');
+
+if (isDirectRun) runBenchmark();

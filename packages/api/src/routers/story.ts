@@ -1169,7 +1169,7 @@ async function refreshStoryDna(ctx: any, projectId: string) {
   return storyDna;
 }
 
-function composeScenePromptText(input: {
+export function composeScenePromptText(input: {
   scene: ScenePromptContext;
   outputType: PromptOutputType;
   provider: PromptProvider;
