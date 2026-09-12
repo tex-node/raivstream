@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import {
   createFalMediaProvider,
   createMockMediaProvider,
@@ -20,6 +20,9 @@ import {
   parseH3MaxOutput,
   toVeedFabricInput,
   parseVeedFabricOutput,
+  verifyFalWebhookSignature,
+  fetchFalJwks,
+  __resetFalJwksCacheForTests,
   type FalMediaConfig,
   type FalQueueTransport,
 } from '../index';
@@ -93,7 +96,7 @@ describe('fal adapter scaffolding (calls disabled)', () => {
     });
     const ref = await provider.image!.submitImage({ prompt: 'a cat', aspectRatio: '9:16' }, { idempotencyKey: 'k2' });
     expect(ref).toMatchObject({ provider: 'fal', kind: 'image', requestId: 'req_1', model: FAL_ENDPOINTS.image });
-    expect(transport.submit).toHaveBeenCalledWith(FAL_ENDPOINTS.image, expect.objectContaining({ prompt: 'a cat', image_size: '9:16' }), { webhookUrl: undefined });
+    expect(transport.submit).toHaveBeenCalledWith(FAL_ENDPOINTS.image, expect.objectContaining({ prompt: 'a cat', image_size: 'portrait_16_9' }), { webhookUrl: undefined });
 
     const status = await provider.image!.getStatus(ref);
     expect(status.status).toBe('completed');
@@ -188,14 +191,75 @@ describe('webhook verification + idempotency', () => {
   });
 });
 
+describe('fal ED25519 webhook verification', () => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const jwk = { x: (publicKey.export({ format: 'jwk' }) as { x: string }).x };
+  const baseHeaders = { requestId: 'req_1', userId: 'user_1', timestamp: '1700000000' };
+  const rawBody = JSON.stringify({ request_id: 'req_1', status: 'OK' });
+  const bodyHash = createHash('sha256').update(rawBody).digest('hex');
+  const message = Buffer.from([baseHeaders.requestId, baseHeaders.userId, baseHeaders.timestamp, bodyHash].join('\n'), 'utf8');
+  const signature = cryptoSign(null, message, privateKey).toString('hex');
+
+  it('accepts a valid ED25519 signature', () => {
+    expect(
+      verifyFalWebhookSignature({ headers: { ...baseHeaders, signature }, rawBody, jwks: [jwk], nowSeconds: 1700000000 }),
+    ).toBe(true);
+  });
+
+  it('rejects tampered body, wrong key, stale timestamp, and missing header', () => {
+    expect(
+      verifyFalWebhookSignature({ headers: { ...baseHeaders, signature }, rawBody: rawBody + 'x', jwks: [jwk], nowSeconds: 1700000000 }),
+    ).toBe(false);
+    expect(
+      verifyFalWebhookSignature({ headers: { ...baseHeaders, signature }, rawBody, jwks: [{ x: 'AAAA' }], nowSeconds: 1700000000 }),
+    ).toBe(false);
+    expect(
+      verifyFalWebhookSignature({ headers: { ...baseHeaders, signature }, rawBody, jwks: [jwk], nowSeconds: 1700000999 }),
+    ).toBe(false);
+    expect(
+      verifyFalWebhookSignature({ headers: { ...baseHeaders, signature: undefined }, rawBody, jwks: [jwk], nowSeconds: 1700000000 }),
+    ).toBe(false);
+  });
+
+  it('fetches and caches JWKS without real network (injected fetch)', async () => {
+    __resetFalJwksCacheForTests();
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }) as unknown as Response);
+    const first = await fetchFalJwks({ fetchImpl: fetchImpl as unknown as typeof fetch, now: 1000, maxAgeMs: 10_000 });
+    const second = await fetchFalJwks({ fetchImpl: fetchImpl as unknown as typeof fetch, now: 2000, maxAgeMs: 10_000 });
+    expect(first).toEqual([jwk]);
+    expect(second).toEqual([jwk]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    __resetFalJwksCacheForTests();
+  });
+});
+
 describe('fal model contract mapping', () => {
-  it('maps FLUX.2 image input and parses images output', () => {
-    expect(toFlux2Input({ prompt: 'p', imageUrls: ['https://in/1.png'], aspectRatio: '9:16' })).toMatchObject({
+  it('maps reconciled FLUX.2 text-to-image input and rejects image inputs', () => {
+    expect(toFlux2Input({ prompt: 'p', aspectRatio: '9:16' })).toMatchObject({
       prompt: 'p',
-      image_url: 'https://in/1.png',
-      image_size: '9:16',
+      image_size: 'portrait_16_9',
     });
-    expect(parseFlux2Output({ images: [{ url: 'https://fal/x.png' }] }).urls).toEqual(['https://fal/x.png']);
+    expect(toFlux2Input({ prompt: 'p', width: 1024, height: 1024 })).toMatchObject({
+      image_size: { width: 1024, height: 1024 },
+    });
+    expect(() => toFlux2Input({ prompt: 'p', imageUrls: ['https://in/1.png'] })).toThrowError(/text-to-image/);
+  });
+
+  it('parses FLUX.2 output images, metadata and nsfw flag', () => {
+    const parsed = parseFlux2Output({
+      images: [{ url: 'https://fal/x.png', content_type: 'image/png', width: 1024, height: 1024, file_size: 123 }],
+      seed: 7,
+      has_nsfw_concepts: [false],
+    });
+    expect(parsed.urls).toEqual(['https://fal/x.png']);
+    expect(parsed.media[0]).toMatchObject({
+      url: 'https://fal/x.png',
+      contentType: 'image/png',
+      width: 1024,
+      height: 1024,
+      fileSize: 123,
+    });
+    expect(parsed.usage?.metrics).toMatchObject({ seed: 7, nsfwFlagged: 'false' });
     expect(parseFlux2Output({ images: [{ url: 'not-a-url' }] }).urls).toEqual([]);
   });
 

@@ -156,7 +156,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
   function parseByKind(kind: MediaKind, raw: unknown): MediaJobStatusResult {
     const parsed =
       kind === 'image' ? parseFlux2Output(raw) : kind === 'video' ? parseH3MaxOutput(raw) : parseVeedFabricOutput(raw);
-    return { status: 'completed', outputUrls: parsed.urls, usage: parsed.usage, raw };
+    return { status: 'completed', outputUrls: parsed.urls, artifacts: parsed.media, usage: parsed.usage, raw };
   }
 
   async function statusFor(ref: MediaJobRef, endpoint: string): Promise<MediaJobStatusResult> {

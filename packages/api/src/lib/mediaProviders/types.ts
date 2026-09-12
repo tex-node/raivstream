@@ -75,10 +75,21 @@ export interface MediaJobRef {
   model?: string;
 }
 
+/** Describes a single generated file before Raivstream storage persistence. */
+export interface MediaArtifact {
+  url: string;
+  contentType?: string;
+  width?: number;
+  height?: number;
+  fileSize?: number;
+}
+
 export interface MediaJobStatusResult {
   status: MediaJobStatus;
   /** Permanent-provider or storage URLs; empty until completed. */
   outputUrls: string[];
+  /** Provider file metadata for server-side storage handling. Never send to clients. */
+  artifacts?: MediaArtifact[];
   error?: NormalizedMediaError;
   usage?: MediaUsage;
   /** Raw provider payload for diagnostics server-side only. Never send to clients. */
