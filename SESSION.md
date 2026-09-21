@@ -274,6 +274,13 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Story flow fixes — no advance without a story + playground tabs
+
+- **Workspace gating:** a project with no generated story (`chapters.length === 0`) now shows ONLY the Overview tab, with a "Generate Story" button (calls `story.generateStory`) + a link back to the Story Wizard. This fixes the dead-end where a story-less project reached the Characters/Scenes tabs (and produced confusing errors there, e.g. "Unexpected end of JSON input" from operating on missing story data). `chooseTab`, the tab bar, and the requested-tab effect are all gated; the tab resets to Overview until a story exists.
+- **Playground tabs:** `/story-playground/new` now has **Create Story** and **My Stories** tabs — the previously-generated-stories library moved off the create flow onto its own tab.
+- **Questions under the story:** the story step now renders the guided-development questions directly beneath the generated story (with a **Regenerate Story** action that re-runs generation with the answers), so questions load under the story being generated.
+- Verified: web type-check + strict lint clean.
+
 ### 2026-09-21: Story enhance actions wired — paragraph rewrite is clickable
 
 - `StoryScreen` (`/story-playground/[projectId]/story`) action chips (Develop this idea / Strengthen conflict / Explore another ending / Make this funnier / Increase tension) were inert `<span>`s; now real buttons calling the new `story.rewriteParagraph` proc (Rewriting… state + error surface, `getWorkspace` invalidated, selection cleared).

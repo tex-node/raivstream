@@ -325,6 +325,12 @@ export default function StoryWorkspacePage() {
   });
 
   const workspace = trpc.story.getWorkspace.useQuery({ projectId }, { enabled: isLoaded && isSignedIn });
+  // A project cannot advance past Overview until its story is generated.
+  const hasStory = Boolean(workspace.data?.project && (workspace.data.project.chapters?.length ?? 0) > 0);
+  const gatedVisibleTabs = useMemo(
+    () => (hasStory ? visibleTabs : TABS.filter((item) => item.key === 'overview')),
+    [visibleTabs, hasStory],
+  );
   const sequenceQuery = trpc.story.getOrCreateSequence.useQuery(
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && !isR16 && tab === 'sequence') },
@@ -350,6 +356,12 @@ export default function StoryWorkspacePage() {
   const submitAcademyAssignment = trpc.academy.submitAssignment.useMutation({ onSuccess: () => setMessage('Academy assignment submitted.') });
   const trackTab = trpc.story.trackWorkspaceTab.useMutation();
   const continueStory = trpc.story.continueStory.useMutation({ onSuccess: () => refresh('Story continued.') });
+  const generateStory = trpc.story.generateStory.useMutation({
+    onSuccess: () => {
+      refresh('Story generated.');
+      utils.story.getWorkspace.invalidate({ projectId });
+    },
+  });
   const updateProject = trpc.story.updateProject.useMutation({ onSuccess: () => refresh('Story saved.') });
   const updateCharacter = trpc.story.updateCharacterMemory.useMutation({ onSuccess: () => { setEditingCharacter(null); refresh(isR16 ? 'Character saved.' : 'Character Director saved.'); } });
   const createCharacter = trpc.story.createCharacterMemory.useMutation({ onSuccess: () => { setEditingCharacter(null); refresh(isR16 ? 'Friend added.' : 'Character added.'); } });
@@ -450,9 +462,14 @@ export default function StoryWorkspacePage() {
   }
 
   useEffect(() => {
-    if (requestedTab && visibleTabs.some((item) => item.key === requestedTab)) setTab(requestedTab);
+    if (requestedTab && gatedVisibleTabs.some((item) => item.key === requestedTab)) setTab(requestedTab);
     if (isR16 && (requestedTab === 'sequence' || requestedTab === 'audio' || requestedTab === 'film')) setTab('storybook');
-  }, [requestedTab, isR16]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestedTab, isR16, gatedVisibleTabs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A project cannot advance past Overview until its story is generated.
+  useEffect(() => {
+    if (!hasStory && tab !== 'overview') setTab('overview');
+  }, [hasStory, tab]);
 
   useEffect(() => {
     if (!projectId || !tab) return;
@@ -522,6 +539,7 @@ export default function StoryWorkspacePage() {
 
   const chooseTab = (nextTab: WorkspaceTab) => {
     if (isR16 && (nextTab === 'sequence' || nextTab === 'film')) return;
+    if (!gatedVisibleTabs.some((item) => item.key === nextTab)) return;
     setTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', nextTab);
@@ -685,7 +703,33 @@ export default function StoryWorkspacePage() {
     );
   };
 
-  const renderOverview = () => (
+  const renderOverview = () => {
+    if (!hasStory) {
+      return (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-[rgba(79,139,214,0.30)] bg-[rgba(79,139,214,0.08)] p-6 md:p-8">
+            <h2 className="text-3xl font-black">{isR16 ? 'Write your story first' : 'No story yet'}</h2>
+            <p className="mt-2 font-semibold text-[var(--noc-t4)]">
+              {isR16 ? 'Generate the story before adding characters, scenes, or pictures.' : 'Generate the story before adding characters, scenes, or pictures.'}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                onClick={() => generateStory.mutate({ projectId })}
+                disabled={generateStory.isPending}
+                className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-white disabled:opacity-50"
+              >
+                {generateStory.isPending ? 'Generating story…' : 'Generate Story'}
+              </button>
+              <Link href="/story-playground" className="rounded-xl bg-[var(--noc-page)] px-5 py-3 font-black text-white">
+                {isR16 ? 'Open Story Maker' : 'Open Story Wizard'}
+              </Link>
+            </div>
+            {generateStory.error && <p className="mt-3 text-sm font-bold text-[#e35d5d]">{generateStory.error.message}</p>}
+          </div>
+        </div>
+      );
+    }
+    return (
     <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-5">
         {[
@@ -710,7 +754,8 @@ export default function StoryWorkspacePage() {
           : <button onClick={() => chooseTab('sequence')} className="rounded-2xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-5 py-4 text-left font-black text-white">Open Sequence</button>}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderStory = () => (
     <section className="rounded-2xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.04)] p-5">
@@ -1769,9 +1814,9 @@ export default function StoryWorkspacePage() {
         {message && <div className="mt-4 rounded-xl bg-[rgba(79,139,214,0.12)] px-4 py-3 font-bold text-[var(--noc-blue)]">{message}</div>}
         <nav className="sticky top-0 z-30 mt-5 -mx-4 overflow-x-auto border-y border-[rgba(233,233,237,0.08)] bg-[rgba(7,8,16,0.92)] px-4 py-3 backdrop-blur">
           <div className="flex min-w-max gap-2">
-            {visibleTabs.map((item) => (
+{gatedVisibleTabs.map((item) => (
               <button key={item.key} onClick={() => chooseTab(item.key)} className={`rounded-full px-4 py-2 text-sm font-black ${tab === item.key ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-[var(--noc-t1)]' : 'bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)] border border-[rgba(233,233,237,0.10)]'}`}>
-                {isR16 ? item.r16Label : item.label}
+                {item.label}
               </button>
             ))}
             {canUseTechnical && <Link href="/admin/character-insights" className="rounded-full bg-[rgba(178,90,217,0.15)] px-4 py-2 text-sm font-black text-[var(--noc-purple)]">Insights</Link>}

@@ -381,6 +381,7 @@ export default function StoryPlaygroundPage() {
   const [openDirectorSceneIds, setOpenDirectorSceneIds] = useState<string[]>([]);
   const [editingStory, setEditingStory] = useState(false);
   const [editDrafts, setEditDrafts] = useState<Record<string, { title: string; summary: string; body: string }>>({});
+  const [homeTab, setHomeTab] = useState<'create' | 'library'>('create');
   const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({});
   const [feedbackRatings, setFeedbackRatings] = useState<Record<string, 'UP' | 'DOWN'>>({});
   const [sceneForm, setSceneForm] = useState({
@@ -1032,6 +1033,21 @@ export default function StoryPlaygroundPage() {
     <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
       <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-24">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setHomeTab('create')}
+            className={`rounded-full px-5 py-2 text-sm font-black ${homeTab === 'create' ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-white' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
+          >
+            {isR16 ? 'Create Story' : 'Create Story'}
+          </button>
+          <button
+            onClick={() => setHomeTab('library')}
+            className={`rounded-full px-5 py-2 text-sm font-black ${homeTab === 'library' ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-white' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
+          >
+            {isR16 ? 'My Stories' : 'My Stories'}
+          </button>
+        </div>
+        {homeTab === 'create' && (<>
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[rgba(79,139,214,0.12)] px-4 py-2 text-sm font-semibold text-[var(--noc-blue)]">
@@ -1191,7 +1207,8 @@ export default function StoryPlaygroundPage() {
           </section>
         )}
 
-        {isSignedIn && (
+        </>)}
+        {homeTab === 'library' && isSignedIn && (
           <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -1303,6 +1320,7 @@ export default function StoryPlaygroundPage() {
           </section>
         )}
 
+        {homeTab === 'create' && (<>
         {step === 'questions' && activeQuestion && (
           <section className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 md:p-8">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1406,6 +1424,40 @@ export default function StoryPlaygroundPage() {
                     );
                   })}
                 </div>
+
+                {!isR16 && questions.length > 0 && activeQuestion && (
+                  <div className="mt-8 rounded-2xl border border-[rgba(79,139,214,0.25)] bg-[rgba(79,139,214,0.06)] p-5">
+                    <p className="mb-1 text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">Guided questions</p>
+                    <h3 className="mb-3 text-2xl font-black">Develop this story</h3>
+                    <p className="mb-4 text-lg font-bold">{activeQuestion.questionText}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {toOptions(activeQuestion.answerOptions).map((option) => (
+                        <button
+                          key={option}
+                          onClick={() => chooseAnswer(activeQuestion, option)}
+                          disabled={answerQuestion.isPending}
+                          className={`rounded-xl border px-4 py-3 text-left font-black transition-all ${
+                            activeQuestion.selectedAnswer === option
+                              ? 'border-[var(--noc-purple)] bg-[rgba(178,90,217,0.15)] text-[var(--noc-purple)]'
+                              : 'border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t1)] hover:border-[var(--noc-purple)]'
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs font-bold text-[var(--noc-t4)]">Question {activeQuestionIndex + 1} of {questions.length} · {answeredCount} answered</p>
+                      <button
+                        onClick={generateCurrentStory}
+                        disabled={!projectId || !canGenerate || generateStory.isPending}
+                        className="rounded-xl bg-[var(--noc-blue)] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+                      >
+                        {generateStory.isPending ? 'Generating…' : 'Regenerate Story'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <aside className="space-y-3">
@@ -1790,6 +1842,7 @@ export default function StoryPlaygroundPage() {
             )}
           </>
         )}
+        </>)}
       </main>
 
       {editingScene && (
