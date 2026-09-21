@@ -232,6 +232,12 @@ pm2 status raivstream-web
 pm2 logs raivstream-web --lines 40 --nostream
 ```
 
+Canary daily snapshot (Gate E):
+
+- Cron `0 6 * * *` runs `/root/raivstream/scripts/canary-status.sh` → appends to `/root/raivstream/canary-status.log`.
+- Also run it manually any time: `bash /root/raivstream/scripts/canary-status.sh`.
+- See `docs/operations/gate-e-canary-observation.md` for go/no-go + rollback.
+
 Expected current health:
 
 ```json
