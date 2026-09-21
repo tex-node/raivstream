@@ -268,10 +268,12 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ### 2026-09-21: Atomic deploys + low-balance warning
 
-**Atomic deploys (kills the chunk-400 deploy window):**
+**Atomic deploys (kills the chunk-400 deploy window) — DEPLOYED:**
 - `apps/web/next.config.js`: `distDir` now honors `NEXT_BUILD_DIST_DIR` (default `.next`).
 - `.github/workflows/deploy.yml`: web builds into `.next-build` while the running server keeps serving the previous `.next`; web type-check/lint run against the fresh `.next-build` types AFTER the build; then an atomic-ish swap (`mv .next .next-old && mv .next-build .next`) precedes the PM2 restart. No more minutes-long window where in-flight clients 400 on old chunk hashes. `set -e` means a failed build/type-check aborts BEFORE the swap, leaving the old build serving.
 - `.gitignore`: `.next-build/`, `.next-old/`.
+- **Verified live on the first atomic deploy (commit `9ab7ca1`):** CI passed; post-deploy the VPS has only `apps/web/.next` (swap completed, `.next-old` removed), health green. The workflow push required a PAT with the `workflow` scope (repo token `cred/GAT.txt` updated to include it).
+- Note: a push to `.github/workflows/*` requires the `workflow` scope on the PAT; the repo push token is stored at `cred/GAT.txt`.
 
 **Low-balance warning (< 500 units):**
 - `packages/api/src/lib/credits.ts`: `LOW_BALANCE_THRESHOLD = 500`.
