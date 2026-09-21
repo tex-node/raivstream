@@ -12,6 +12,7 @@
  */
 
 import { uploadBufferToR2 } from '../r2';
+import type { GenerationJobError } from './jobModel';
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODEL    = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3.1-flash-image-preview';
@@ -28,7 +29,7 @@ export interface NanoBananaJob {
   jobId:      string;
   status:     'queued' | 'generating' | 'completed' | 'failed';
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 /**
@@ -103,7 +104,7 @@ export async function submitGeneration(input: NanoBananaInput): Promise<string> 
 
 // In-memory store for completed synchronous jobs (survives within one process lifetime)
 // The generation router calls pollStatus once after submit to get the outputUrl.
-const _pendingJobs = new Map<string, { status: string; outputUrl?: string; error?: string }>();
+const _pendingJobs = new Map<string, { status: string; outputUrl?: string; error?: GenerationJobError }>();
 
 /**
  * Poll job status — for Gemini (synchronous) this always returns completed

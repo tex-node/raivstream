@@ -8,6 +8,7 @@ import { router, adminProcedure, moderatorProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
+import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -1090,15 +1091,23 @@ export const adminRouter = router({
   listGenerationJobs: moderatorProcedure
     .input(z.object({
       status:   z.enum(['QUEUED', 'GENERATING', 'COMPLETED', 'FAILED', 'CANCELLED']).optional(),
-      model:    z.enum(['NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING', 'HIGGSFIELD', 'VEO3']).optional(),
+      model:    z.enum([
+        'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25', 'KLING',
+        'KLING_I2V', 'KLING_R2V', 'HIGGSFIELD', 'VEO3',
+        'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
+        'FLUX2', 'H3_MAX', 'VEED_FABRIC',
+      ]).optional(),
       page:     z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(25),
+      /** Dead-letter view: FAILED jobs that exhausted the retry budget (Phase 15). */
+      deadLetter: z.boolean().optional(),
     }))
     .query(async ({ ctx, input }) => {
       const skip  = (input.page - 1) * input.pageSize;
       const where = {
         ...(input.status && { status: input.status }),
         ...(input.model  && { model:  input.model  }),
+        ...(input.deadLetter ? { status: 'FAILED' as const, retryCount: { gte: MAX_JOB_RETRIES } } : {}),
       };
 
       const [jobs, total] = await Promise.all([
@@ -1123,6 +1132,23 @@ export const adminRouter = router({
         pageSize:   input.pageSize,
         totalPages: Math.ceil(total / input.pageSize),
       };
+    }),
+
+  /**
+   * Reset a dead-letter job's retry budget (Phase 15) so the owner can retry it
+   * again via `generation.retry`. Admin-only; changes no credits.
+   */
+  resetDeadLetterJob: adminProcedure
+    .input(z.object({ jobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await ctx.prisma.generationJob.findUnique({ where: { id: input.jobId } });
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found' });
+      if (job.status !== 'FAILED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only failed jobs can be reset' });
+      return ctx.prisma.generationJob.update({
+        where: { id: job.id },
+        data: { retryCount: 0, errorCode: null, errorMessage: null },
+        select: { id: true, status: true, retryCount: true },
+      });
     }),
 
   // ─── Content Moderation ────────────────────────────────────────────────────

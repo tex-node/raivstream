@@ -21,10 +21,12 @@ import {
   submitJob,
   getJobStatus,
   normaliseStatus,
+  normaliseRunpodError,
   extractOutputUrl,
   type NormalisedStatus,
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
+import { resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 export interface SeedanceInput {
   prompt:          string;
@@ -39,7 +41,7 @@ export interface SeedanceJobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -92,13 +94,13 @@ export async function getSeedanceStatus(jobId: string): Promise<SeedanceJobResul
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId, status, error: raw.error };
+    return { jobId, status, error: normaliseRunpodError(raw.status, raw.error) };
   }
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
     console.error('[seedance] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    return { jobId, status: 'failed', error: resultInvalid() };
   }
 
   const r2Key = `generated/seedance/${jobId}.mp4`;
@@ -107,6 +109,6 @@ export async function getSeedanceStatus(jobId: string): Promise<SeedanceJobResul
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[seedance] R2 mirror failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }

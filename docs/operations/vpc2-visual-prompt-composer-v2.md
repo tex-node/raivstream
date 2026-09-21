@@ -292,4 +292,5 @@ Review result recorded in `docs/operations/vpc2-human-review-2026-09-05.md`: **P
 - Feature flag default: OFF
 - This document covers local implementation + qualification only
 - No staging or production deployment authorized by the VPC-2 gate
+- Staging qualification completed 2026-09-12 on candidate `5acc153` — see [`vpc2-staging-qualification-2026-09-12.md`](vpc2-staging-qualification-2026-09-12.md). Verdict: staging qualification PASS WITH DOCUMENTED LIMITATIONS; visual quality benchmark NOT EXECUTED (safe visual provider unavailable).
 - Next required step before any production deployment: separate gate document + staging smoke + production authorization

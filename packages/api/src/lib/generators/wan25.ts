@@ -25,10 +25,12 @@ import {
   submitJob,
   getJobStatus,
   normaliseStatus,
+  normaliseRunpodError,
   extractOutputUrl,
   type NormalisedStatus,
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
+import { resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 export interface Wan25Input {
   prompt:          string;
@@ -43,7 +45,7 @@ export interface Wan25JobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -105,13 +107,13 @@ export async function getWan25Status(prefixedJobId: string): Promise<Wan25JobRes
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId: prefixedJobId, status, error: raw.error };
+    return { jobId: prefixedJobId, status, error: normaliseRunpodError(raw.status, raw.error) };
   }
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
     console.error('[wan26] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId: prefixedJobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    return { jobId: prefixedJobId, status: 'failed', error: resultInvalid() };
   }
 
   const r2Key = `generated/wan26/${runpodJobId}.mp4`;
@@ -120,6 +122,6 @@ export async function getWan25Status(prefixedJobId: string): Promise<Wan25JobRes
     return { jobId: prefixedJobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[wan26] R2 mirror failed:', (err as Error).message);
-    return { jobId: prefixedJobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId: prefixedJobId, status: 'failed', error: storageFailed() };
   }
 }

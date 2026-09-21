@@ -8,6 +8,7 @@ import { Shell } from '@/components/layout/Shell';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 import { ProjectOverviewScreen } from '@/components/mobile-handoff/ProjectOverviewScreen';
 import { StoryScreen as HandoffStoryScreen } from '@/components/mobile-handoff/StoryScreen';
 import { CastScreen as HandoffCastScreen } from '@/components/mobile-handoff/CastScreen';
@@ -283,9 +284,11 @@ export default function StoryWorkspacePage() {
   const [compareAssets, setCompareAssets] = useState<string[]>([]);
   const [draggedSequenceSceneId, setDraggedSequenceSceneId] = useState<string | null>(null);
   const [selectedSequenceSceneId, setSelectedSequenceSceneId] = useState<string | null>(null);
+  const [shotPreset, setShotPreset] = useState<'CINEMATIC' | 'DYNAMIC' | 'CALM' | 'DRAMATIC' | 'REVEAL'>('CINEMATIC');
   const [sequencePlaying, setSequencePlaying] = useState(false);
   const [previewShotIndex, setPreviewShotIndex] = useState(0);
   const [versionTitle, setVersionTitle] = useState('');
+  const [sceneImageModel, setSceneImageModel] = useState<SceneImageModel>(DEFAULT_SCENE_IMAGE_MODEL);
   const [characterForm, setCharacterForm] = useState({
     name: '',
     role: '',
@@ -364,6 +367,7 @@ export default function StoryWorkspacePage() {
   const deleteAsset = trpc.story.deleteSceneAsset.useMutation({ onSuccess: () => refresh(isR16 ? 'Picture removed.' : 'Asset removed from project.') });
   const updateSequenceScene = trpc.story.updateSequenceScene.useMutation({ onSuccess: () => refreshSequence('Sequence updated.') });
   const reorderSequence = trpc.story.reorderSequence.useMutation({ onSuccess: () => refreshSequence('Timeline reordered.') });
+  const applyShotPreset = trpc.story.applyShotPreset.useMutation({ onSuccess: () => refreshSequence('Shot preset applied.') });
   const duplicateSequenceScene = trpc.story.duplicateSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot duplicated.') });
   const removeSequenceScene = trpc.story.removeSequenceScene.useMutation({ onSuccess: () => refreshSequence('Shot removed from sequence.') });
   const restoreSourceScene = trpc.story.restoreSourceSceneToSequence.useMutation({ onSuccess: () => refreshSequence('Scene added to sequence.') });
@@ -371,6 +375,30 @@ export default function StoryWorkspacePage() {
   const updateAudioTrack = trpc.story.updateTrack.useMutation({ onSuccess: () => refreshAudio('Track updated.') });
   const addAudioCue = trpc.story.addCue.useMutation({ onSuccess: () => refreshAudio('Cue added.') });
   const updateAudioCue = trpc.story.updateCue.useMutation({ onSuccess: () => refreshAudio('Cue updated.') });
+  const generateCueSpeech = trpc.story.generateCueSpeech.useMutation({ onSuccess: () => refreshAudio('Narration generated.') });
+  const generateCueMusic = trpc.story.generateCueMusic.useMutation({ onSuccess: () => refreshAudio('Music generated.') });
+  const [musicPrompt, setMusicPrompt] = useState('');
+  const [showMixer, setShowMixer] = useState(false);
+  const setProjectCover = trpc.story.setProjectCover.useMutation({ onSuccess: () => refresh('Cover updated.') });
+
+  const downloadCaptions = async () => {
+    try {
+      const result = await utils.story.getSequenceCaptions.fetch({ projectId, sequenceId: (sequenceQuery.data as any)?.sequence?.id });
+      if (!result.cueCount) {
+        setMessage('No narration or dialogue lines to caption yet.');
+        return;
+      }
+      const blob = new Blob([result.vtt], { type: 'text/vtt' });
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = 'captions.vtt';
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error: any) {
+      setMessage(error?.message ?? 'Could not build captions.');
+    }
+  };
   const removeAudioCue = trpc.story.removeCue.useMutation({ onSuccess: () => refreshAudio('Cue removed.') });
   const duplicateAudioCue = trpc.story.duplicateCue.useMutation({ onSuccess: () => refreshAudio('Cue duplicated.') });
   const createVoiceProfile = trpc.story.createVoiceProfile.useMutation({ onSuccess: () => refreshAudio('Voice profile created.') });
@@ -746,6 +774,21 @@ export default function StoryWorkspacePage() {
         <p className="text-sm font-black uppercase text-[var(--noc-purple)]">{isR16 ? 'Picture Cards' : 'Scenes'}</p>
         <h2 className="text-3xl font-black">{isR16 ? 'Story Pictures' : 'Scene Director'}</h2>
       </div>
+      {!isR16 && scenes.length > 0 && (
+        <div className="mb-4 max-w-xs">
+          <select
+            value={sceneImageModel}
+            onChange={(e) => setSceneImageModel(e.target.value as SceneImageModel)}
+            className="w-full appearance-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-sm font-bold text-[var(--noc-t1)] focus:outline-none cursor-pointer"
+          >
+            {SCENE_IMAGE_MODEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-[var(--noc-page)] text-[var(--noc-t1)]">
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {scenes.length === 0 ? <div className="rounded-xl border border-dashed border-[rgba(233,233,237,0.10)] p-8 text-center font-bold text-[var(--noc-t4)]">No scene cards yet.</div> : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {scenes.map((scene) => {
@@ -768,8 +811,17 @@ export default function StoryWorkspacePage() {
                   )}
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     <button onClick={() => openScene(scene)} className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.10)] px-3 py-2 text-sm font-black text-[var(--noc-t1)]">{isR16 ? 'Change Scene' : 'Edit Scene'}</button>
+                    {!isR16 && (
+                      <button
+                        onClick={() => active?.id && setProjectCover.mutate({ projectId, assetId: active.id })}
+                        disabled={!active?.id || setProjectCover.isPending}
+                        className="rounded-xl bg-[rgba(233,233,237,0.04)] border border-[rgba(233,233,237,0.10)] px-3 py-2 text-sm font-black text-[var(--noc-t1)] disabled:opacity-40"
+                      >
+                        Use as cover
+                      </button>
+                    )}
                     <button
-                      onClick={() => (scene.imageUrl ? regenerateSceneImage : generateSceneImage).mutate({ projectId, sceneId: scene.id, model: 'FLUX' })}
+                      onClick={() => (scene.imageUrl ? regenerateSceneImage : generateSceneImage).mutate({ projectId, sceneId: scene.id, model: sceneImageModel })}
                       disabled={(generateSceneImage.isPending && (generateSceneImage.variables as any)?.sceneId === scene.id) || (regenerateSceneImage.isPending && (regenerateSceneImage.variables as any)?.sceneId === scene.id)}
                       className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-sm font-black text-[var(--noc-t1)] disabled:opacity-60"
                     >
@@ -804,7 +856,7 @@ export default function StoryWorkspacePage() {
                   <h3 className="text-xl font-black">{scene.title}</h3>
                   <p className="text-sm font-bold text-[var(--noc-t4)]">{assets.length ? `${assets.length} ${isR16 ? 'pictures' : 'image versions'}` : 'No pictures yet'}</p>
                 </div>
-                <button onClick={() => regenerateSceneImage.mutate({ projectId, sceneId: scene.id, model: 'FLUX' })} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-[var(--noc-t1)]">{isR16 ? 'Make Another Picture' : 'Regenerate from Current Settings'}</button>
+                <button onClick={() => regenerateSceneImage.mutate({ projectId, sceneId: scene.id, model: sceneImageModel })} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-[var(--noc-t1)]">{isR16 ? 'Make Another Picture' : 'Regenerate from Current Settings'}</button>
               </div>
               {assets.length === 0 ? <div className="rounded-xl border border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-6 text-center font-bold text-[var(--noc-t4)]">No pictures yet.</div> : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1047,6 +1099,20 @@ export default function StoryWorkspacePage() {
               <div className="rounded-2xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.04)] p-4">
                 <p className="text-xs font-black uppercase text-[var(--noc-t4)]">Shot Inspector</p>
                 <h3 className="mt-1 text-xl font-black">{selected.storyScene.title}</h3>
+                <div className="mt-4 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3">
+                  <p className="text-xs font-black uppercase text-[var(--noc-t4)]">Shot preset</p>
+                  <select value={shotPreset} onChange={(event) => setShotPreset(event.target.value as typeof shotPreset)} className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm normal-case text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]">
+                    <option value="CINEMATIC">Cinematic</option>
+                    <option value="DYNAMIC">Dynamic</option>
+                    <option value="CALM">Calm</option>
+                    <option value="DRAMATIC">Dramatic</option>
+                    <option value="REVEAL">Reveal</option>
+                  </select>
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => applyShotPreset.mutate({ projectId, sequenceId: sequence.id, preset: shotPreset, sequenceSceneId: selected.id })} disabled={applyShotPreset.isPending} className="flex-1 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-60">Apply to shot</button>
+                    <button onClick={() => applyShotPreset.mutate({ projectId, sequenceId: sequence.id, preset: shotPreset })} disabled={applyShotPreset.isPending} className="flex-1 rounded-xl bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[var(--noc-purple)] disabled:opacity-60">Apply to all shots</button>
+                  </div>
+                </div>
                 <div className="mt-4 space-y-3">
                   <label className="block text-xs font-black uppercase text-[var(--noc-t4)]">Picture<select value={selected.selectedAssetId ?? ''} onChange={(event) => updateSequenceEntry(selected, { selectedAssetId: event.target.value || null })} className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm normal-case text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]"><option value="">Auto / active image</option>{selectedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.creativeStatus === 'APPROVED' ? 'Approved' : selected.storyScene.activeImageAssetId === asset.id ? 'Active' : asset.isFavorite ? 'Favorite' : asset.isLatest ? 'Latest' : 'Legacy'} - {dateLabel(asset.createdAt)}</option>)}</select></label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1301,6 +1367,13 @@ export default function StoryWorkspacePage() {
           <aside className="space-y-4">
             <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t4)]">Cue Inspector</p>
+              <button
+                type="button"
+                onClick={() => setShowMixer((value) => !value)}
+                className="mt-2 rounded-lg border border-[rgba(233,233,237,0.12)] px-2 py-1 text-[10px] font-black text-[var(--noc-t3)]"
+              >
+                {showMixer ? 'Hide mixing console' : 'Show mixing console'}
+              </button>
               {!selectedCue ? (
                 <p className="mt-3 text-sm font-bold text-[var(--noc-t5)]">Select a cue on the timeline to edit it.</p>
               ) : (
@@ -1359,6 +1432,15 @@ export default function StoryWorkspacePage() {
                           {voiceProfiles.map((vp: any) => <option key={vp.id} value={vp.id}>{vp.name}</option>)}
                         </select>
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => generateCueSpeech.mutate({ projectId, cueId: selectedCue.id })}
+                        disabled={!selectedCue.text?.trim() || generateCueSpeech.isPending}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                      >
+                        {generateCueSpeech.isPending ? <Loader2 className="animate-spin" size={14} /> : <Mic size={14} />}
+                        {generateCueSpeech.isPending ? 'Generating…' : 'Generate narration'}
+                      </button>
                       {(() => {
                         const character = characters.find((c: any) => c.id === selectedCue.characterMemoryId);
                         const voice = voiceProfiles.find((vp: any) => vp.id === selectedCue.voiceProfileId);
@@ -1386,6 +1468,31 @@ export default function StoryWorkspacePage() {
                       </p>
                     </>
                   )}
+                  {(selectedCue.trackType === 'MUSIC' || selectedCue.trackType === 'AMBIENCE') && (
+                    <>
+                      <label className="block text-xs font-bold text-[var(--noc-t4)]">Music description
+                        <textarea
+                          value={musicPrompt}
+                          onChange={(e) => setMusicPrompt(e.target.value)}
+                          placeholder="e.g. warm cinematic strings, gentle build"
+                          rows={2}
+                          className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3 text-sm font-semibold text-[var(--noc-t1)]"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => generateCueMusic.mutate({ projectId, cueId: selectedCue.id, prompt: musicPrompt.trim() || undefined })}
+                        disabled={generateCueMusic.isPending}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                      >
+                        {generateCueMusic.isPending ? <Loader2 className="animate-spin" size={14} /> : <Music size={14} />}
+                        {generateCueMusic.isPending ? 'Generating…' : 'Generate music'}
+                      </button>
+                      <p className={`text-[10px] font-black uppercase tracking-wide ${selectedCue.audioAssetId ? 'text-[var(--noc-blue)]' : 'text-[var(--noc-t5)]'}`}>
+                        Audio source: {selectedCue.audioAssetId ? 'Attached' : 'Not generated'}
+                      </p>
+                    </>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <label className="text-xs font-bold text-[var(--noc-t4)]">Start (s)
                       <input type="number" min={0} step={0.1} value={selectedCue.startTimeSeconds ?? 0}
@@ -1397,21 +1504,25 @@ export default function StoryWorkspacePage() {
                         onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, durationSeconds: e.target.value === '' ? null : Number(e.target.value) })}
                         className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
                     </label>
-                    <label className="text-xs font-bold text-[var(--noc-t4)]">Volume
-                      <input type="number" min={0} max={4} step={0.1} value={selectedCue.volume ?? 1}
-                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
-                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
-                    </label>
-                    <label className="text-xs font-bold text-[var(--noc-t4)]">Fade In (s)
-                      <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeInSeconds ?? 0}
-                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeInSeconds: Number(e.target.value) })}
-                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
-                    </label>
-                    <label className="text-xs font-bold text-[var(--noc-t4)]">Fade Out (s)
-                      <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeOutSeconds ?? 0}
-                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeOutSeconds: Number(e.target.value) })}
-                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
-                    </label>
+                    {showMixer && (
+                      <>
+                        <label className="text-xs font-bold text-[var(--noc-t4)]">Volume
+                          <input type="number" min={0} max={4} step={0.1} value={selectedCue.volume ?? 1}
+                            onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
+                            className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
+                        </label>
+                        <label className="text-xs font-bold text-[var(--noc-t4)]">Fade In (s)
+                          <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeInSeconds ?? 0}
+                            onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeInSeconds: Number(e.target.value) })}
+                            className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
+                        </label>
+                        <label className="text-xs font-bold text-[var(--noc-t4)]">Fade Out (s)
+                          <input type="number" min={0} max={10} step={0.1} value={selectedCue.fadeOutSeconds ?? 0}
+                            onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, fadeOutSeconds: Number(e.target.value) })}
+                            className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
+                        </label>
+                      </>
+                    )}
                   </div>
                   <div className="space-y-3 rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.03)] p-3">
                     <label className="block text-xs font-bold text-[var(--noc-t4)]">Move on timeline
@@ -1429,17 +1540,19 @@ export default function StoryWorkspacePage() {
                         className="mt-2 w-full accent-[#b25ad9]"
                       />
                     </label>
-                    <label className="block text-xs font-bold text-[var(--noc-t4)]">Cue volume
-                      <input
-                        type="range"
-                        min={0}
-                        max={4}
-                        step={0.05}
-                        value={selectedCue.volume ?? 1}
-                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
-                        className="mt-2 w-full accent-[var(--noc-blue)]"
-                      />
-                    </label>
+                    {showMixer && (
+                      <label className="block text-xs font-bold text-[var(--noc-t4)]">Cue volume
+                        <input
+                          type="range"
+                          min={0}
+                          max={4}
+                          step={0.05}
+                          value={selectedCue.volume ?? 1}
+                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, volume: Number(e.target.value) })}
+                          className="mt-2 w-full accent-[var(--noc-blue)]"
+                        />
+                      </label>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -1471,7 +1584,7 @@ export default function StoryWorkspacePage() {
                       </button>
                     </div>
                   </div>
-                  {(selectedCue.trackType === 'AMBIENCE' || selectedCue.trackType === 'MUSIC') && (
+                  {showMixer && (selectedCue.trackType === 'AMBIENCE' || selectedCue.trackType === 'MUSIC') && (
                     <label className="flex items-center gap-2 text-xs font-bold text-[var(--noc-t4)]">
                       <input type="checkbox" checked={Boolean(selectedCue.duckingEnabled)}
                         onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, duckingEnabled: e.target.checked })} />
@@ -1550,6 +1663,12 @@ export default function StoryWorkspacePage() {
             >
               {createMovieRender.isPending || activeJob ? <Loader2 className="animate-spin" size={18} /> : <Clapperboard size={18} />}
               {activeJob ? 'Rendering...' : `Build Movie${data?.creditCost ? ` — ${data.creditCost} credits` : ''}`}
+            </button>
+            <button
+              onClick={downloadCaptions}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(233,233,237,0.14)] px-5 py-3 font-black text-[var(--noc-t1)]"
+            >
+              <Download size={18} /> Download captions (.vtt)
             </button>
           </div>
         </div>

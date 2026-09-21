@@ -1,0 +1,346 @@
+
+═══════════════════════════════════════════════════════
+  VISUAL PROMPT COMPOSER V2 — LOCAL BENCHMARK
+═══════════════════════════════════════════════════════
+
+
+📖 [b01] Max Goes to School (KIDS, STORYBOOK_ILLUSTRATION)
+  Scene [b01s1] "Arrival"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1318ch / 392ch neg | Conflicts: 1 | Latency: 8.39ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Max Goes to School", scene: "Arrival". Characters, preserve exact visual identity: Max, role: main character, species: Dog, age: young puppy, gender: male, same look every scene: Max is a golden labrador puppy with floppy ears, wearing a tiny red backpack., always wearing/carrying: backpack, fixed traits: species: Dog; gender: male; age: young puppy; accessories/wardrobe: backpack; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Max. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Max stands nervously at the school gate, clutching his backpack.. Setting: school gate, (outdoor), morning. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: curious. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Max. include: backpack
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+    ⚠ Conflicts: outdoor setting conflicts with indoor location "school gate"
+  Scene [b01s2] "Classroom"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1273ch / 392ch neg | Conflicts: 0 | Latency: 1.79ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Max Goes to School", scene: "Classroom". Characters, preserve exact visual identity: Max, role: main character, species: Dog, age: young puppy, gender: male, same look every scene: Max is a golden labrador puppy with floppy ears, wearing a tiny red backpack., always wearing/carrying: backpack, fixed traits: species: Dog; gender: male; age: young puppy; accessories/wardrobe: backpack; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Max. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Max takes his seat at a small desk next to a rabbit.. Setting: classroom, (indoor). Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: wide shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Max
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b01s3] "Recess"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1276ch / 392ch neg | Conflicts: 0 | Latency: 0.50ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Max Goes to School", scene: "Recess". Characters, preserve exact visual identity: Max, role: main character, species: Dog, age: young puppy, gender: male, same look every scene: Max is a golden labrador puppy with floppy ears, wearing a tiny red backpack., always wearing/carrying: backpack, fixed traits: species: Dog; gender: male; age: young puppy; accessories/wardrobe: backpack; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Max. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Max chases a ball on the playground with new friends.. Setting: playground, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: wide shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Max. include: ball
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+
+📖 [b02] Kofi Learns to Swim (KIDS, AFRICAN_FOLKTALE_ILLUSTRATION)
+  Scene [b02s1] "Poolside Fear"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1268ch / 392ch neg | Conflicts: 0 | Latency: 0.55ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Kofi Learns to Swim", scene: "Poolside Fear". Characters, preserve exact visual identity: Kofi, role: protagonist, species: Human, age: 7 years old, gender: male, same look every scene: Kofi is a boy with short natural hair, warm brown skin, wearing swim shorts and goggles around his neck., fixed traits: species: Human; gender: male; age: 7 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Kofi. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Kofi stands at the edge of the pool, staring at the water.. Setting: swimming pool, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: calm. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Kofi
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b02s2] "First Kick"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1269ch / 392ch neg | Conflicts: 0 | Latency: 0.54ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Kofi Learns to Swim", scene: "First Kick". Characters, preserve exact visual identity: Kofi, role: protagonist, species: Human, age: 7 years old, gender: male, same look every scene: Kofi is a boy with short natural hair, warm brown skin, wearing swim shorts and goggles around his neck., fixed traits: species: Human; gender: male; age: 7 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Kofi. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Coach holds Kofi in the water as Kofi kicks his legs for the first time.. Setting: swimming pool, (outdoor). Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: brave. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Kofi
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b02s3] "First Float"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1264ch / 392ch neg | Conflicts: 0 | Latency: 0.43ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Kofi Learns to Swim", scene: "First Float". Characters, preserve exact visual identity: Kofi, role: protagonist, species: Human, age: 7 years old, gender: male, same look every scene: Kofi is a boy with short natural hair, warm brown skin, wearing swim shorts and goggles around his neck., fixed traits: species: Human; gender: male; age: 7 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Kofi. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Kofi floats on his back, arms wide, smiling at the sky.. Setting: swimming pool, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Kofi
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+
+📖 [b03] Amara's Magic Drum (KIDS, AFRICAN_FOLKTALE_ILLUSTRATION)
+  Scene [b03s1] "Discovery"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1337ch / 392ch neg | Conflicts: 0 | Latency: 0.43ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Amara's Magic Drum", scene: "Discovery". Characters, preserve exact visual identity: Amara, role: protagonist, species: Human, age: 9 years old, gender: female, same look every scene: Amara is a girl with long braids tied with orange ribbons, dark skin, wearing a yellow and green wrapper., always wearing/carrying: ribbon, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: ribbon; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Amara. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Amara finds a small wooden drum buried under a mango tree.. Setting: backyard under mango tree, (outdoor), morning. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Amara. include: drum
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b03s2] "First Beat"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1343ch / 392ch neg | Conflicts: 0 | Latency: 0.56ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Amara's Magic Drum", scene: "First Beat". Characters, preserve exact visual identity: Amara, role: protagonist, species: Human, age: 9 years old, gender: female, same look every scene: Amara is a girl with long braids tied with orange ribbons, dark skin, wearing a yellow and green wrapper., always wearing/carrying: ribbon, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: ribbon; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Amara. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Amara beats the drum and the leaves around her begin to dance.. Setting: backyard, (outdoor). Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: surprised. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Amara. include: drum
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b03s3] "Village Celebration"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1382ch / 392ch neg | Conflicts: 0 | Latency: 0.73ms | Cost: $0
+    Positive prompt:
+      Visual style: warm African folktale illustration style, rich colors, patterned textiles, expressive characters, atmospheric lighting, handcrafted storybook feel. Scene illustration for "Amara's Magic Drum", scene: "Village Celebration". Characters, preserve exact visual identity: Amara, role: protagonist, species: Human, age: 9 years old, gender: female, same look every scene: Amara is a girl with long braids tied with orange ribbons, dark skin, wearing a yellow and green wrapper., always wearing/carrying: ribbon, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: ribbon; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Amara. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Amara plays the drum for her whole village as everyone dances.. Setting: village square, (outdoor), sunset. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: group composition with clear focal subject, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Amara. include: drum
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+
+📖 [b04] Reconciliation (GENERAL, PHOTOREALISTIC)
+  Scene [b04s1] "The Letter"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1560ch / 306ch neg | Conflicts: 0 | Latency: 1.41ms | Cost: $0
+    Positive prompt:
+      Visual style: photorealistic cinematic scene, natural lighting, realistic textures, believable environment, shallow depth of field where appropriate. Scene illustration for "Reconciliation", scene: "The Letter". Characters, preserve exact visual identity: Dayo, role: protagonist, species: Human, age: 16 years old, gender: male, same look every scene: Dayo is a tall teenage boy with short locs, wearing a green hoodie., fixed traits: species: Human; gender: male; age: 16 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Mr. Adeyemi, role: father, species: Human, age: 45 years old, gender: male, same look every scene: Mr. Adeyemi is a broad-shouldered man with greying temples and tired eyes, wearing a simple shirt., always wearing/carrying: shirt, fixed traits: species: Human; gender: male; age: 45 years old; accessories/wardrobe: shirt; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Dayo. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Dayo reads a letter from his father at his desk.. Setting: bedroom, (indoor), night. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: sad. Camera: close-up. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Dayo, Mr. Adeyemi. include: letter
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b04s2] "The Meeting"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1603ch / 306ch neg | Conflicts: 0 | Latency: 0.44ms | Cost: $0
+    Positive prompt:
+      Visual style: photorealistic cinematic scene, natural lighting, realistic textures, believable environment, shallow depth of field where appropriate. Scene illustration for "Reconciliation", scene: "The Meeting". Characters, preserve exact visual identity: Dayo, role: protagonist, species: Human, age: 16 years old, gender: male, same look every scene: Dayo is a tall teenage boy with short locs, wearing a green hoodie., fixed traits: species: Human; gender: male; age: 16 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Mr. Adeyemi, role: father, species: Human, age: 45 years old, gender: male, same look every scene: Mr. Adeyemi is a broad-shouldered man with greying temples and tired eyes, wearing a simple shirt., always wearing/carrying: shirt, fixed traits: species: Human; gender: male; age: 45 years old; accessories/wardrobe: shirt; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Dayo, Mr. Adeyemi. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Dayo and Mr. Adeyemi stand facing each other outside the train station.. Setting: train station exterior, (outdoor), afternoon. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: brave. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Dayo, Mr. Adeyemi
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b04s3] "Forgiveness"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1570ch / 306ch neg | Conflicts: 0 | Latency: 0.26ms | Cost: $0
+    Positive prompt:
+      Visual style: photorealistic cinematic scene, natural lighting, realistic textures, believable environment, shallow depth of field where appropriate. Scene illustration for "Reconciliation", scene: "Forgiveness". Characters, preserve exact visual identity: Dayo, role: protagonist, species: Human, age: 16 years old, gender: male, same look every scene: Dayo is a tall teenage boy with short locs, wearing a green hoodie., fixed traits: species: Human; gender: male; age: 16 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Mr. Adeyemi, role: father, species: Human, age: 45 years old, gender: male, same look every scene: Mr. Adeyemi is a broad-shouldered man with greying temples and tired eyes, wearing a simple shirt., always wearing/carrying: shirt, fixed traits: species: Human; gender: male; age: 45 years old; accessories/wardrobe: shirt; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Dayo. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Dayo accepts his father's outstretched hand. Both look relieved.. Setting: park bench, (outdoor), sunset. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Dayo, Mr. Adeyemi
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+
+📖 [b05] The Festival Sisters (GENERAL, THREE_D_ANIMATED)
+  Scene [b05s1] "Setting Up"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1521ch / 306ch neg | Conflicts: 0 | Latency: 0.50ms | Cost: $0
+    Positive prompt:
+      Visual style: high-quality 3D animated family-film style, expressive characters, soft cinematic lighting, detailed environment, charming proportions, polished render. Scene illustration for "The Festival Sisters", scene: "Setting Up". Characters, preserve exact visual identity: Chi, role: elder sister, species: Human, age: 19 years old, gender: female, same look every scene: Chi is a confident young woman with natural afro, wearing a colourful ankara apron., fixed traits: species: Human; gender: female; age: 19 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Nne, role: younger sister, species: Human, age: 14 years old, gender: female, same look every scene: Nne is a shy girl with cornrows, wearing a matching ankara top., fixed traits: species: Human; gender: female; age: 14 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Chi, Nne. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Chi and Nne arrange their food stall early in the morning before the festival opens.. Setting: outdoor market stall, (outdoor), morning. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Chi, Nne
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b05s2] "Rush Hour"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1519ch / 306ch neg | Conflicts: 0 | Latency: 0.46ms | Cost: $0
+    Positive prompt:
+      Visual style: high-quality 3D animated family-film style, expressive characters, soft cinematic lighting, detailed environment, charming proportions, polished render. Scene illustration for "The Festival Sisters", scene: "Rush Hour". Characters, preserve exact visual identity: Chi, role: elder sister, species: Human, age: 19 years old, gender: female, same look every scene: Chi is a confident young woman with natural afro, wearing a colourful ankara apron., fixed traits: species: Human; gender: female; age: 19 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Nne, role: younger sister, species: Human, age: 14 years old, gender: female, same look every scene: Nne is a shy girl with cornrows, wearing a matching ankara top., fixed traits: species: Human; gender: female; age: 14 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Chi, Nne. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Chi serves customers while Nne wraps jollof rice hurriedly.. Setting: busy market stall, (outdoor), afternoon. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: excited. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Chi, Nne
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b05s3] "Success"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1539ch / 306ch neg | Conflicts: 0 | Latency: 0.39ms | Cost: $0
+    Positive prompt:
+      Visual style: high-quality 3D animated family-film style, expressive characters, soft cinematic lighting, detailed environment, charming proportions, polished render. Scene illustration for "The Festival Sisters", scene: "Success". Characters, preserve exact visual identity: Chi, role: elder sister, species: Human, age: 19 years old, gender: female, same look every scene: Chi is a confident young woman with natural afro, wearing a colourful ankara apron., fixed traits: species: Human; gender: female; age: 19 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes; Nne, role: younger sister, species: Human, age: 14 years old, gender: female, same look every scene: Nne is a shy girl with cornrows, wearing a matching ankara top., fixed traits: species: Human; gender: female; age: 14 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Chi, Nne. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Chi and Nne count their earnings and hug each other at the empty stall at sunset.. Setting: market stall at sunset, (outdoor), sunset. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Chi, Nne
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+
+📖 [b06] The Ocean's Lesson (GENERAL, WATERCOLOR)
+  Scene [b06s1] "The Shore"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1008ch / 306ch neg | Conflicts: 0 | Latency: 0.33ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Ocean's Lesson", scene: "The Shore". Characters, preserve exact visual identity: The Ocean, role: guide figure, species: Spirit, age: ancient, same look every scene: A translucent figure made of water, flowing and calm, rising from the sea., fixed traits: species: Spirit; age: ancient; keep fur/hair, eye color, clothing, and species unchanged across scenes. Action: A young woman sits on the shore waiting for a boat that doesn't come.. Setting: ocean shore, (outdoor), morning. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: sad. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: The Ocean
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b06s2] "The Voice"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1153ch / 306ch neg | Conflicts: 0 | Latency: 0.37ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Ocean's Lesson", scene: "The Voice". Characters, preserve exact visual identity: The Ocean, role: guide figure, species: Spirit, age: ancient, same look every scene: A translucent figure made of water, flowing and calm, rising from the sea., fixed traits: species: Spirit; age: ancient; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: The Ocean. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: The Ocean rises gently before her, speaking without words.. Setting: shallow ocean waves, (outdoor). Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: calm. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: The Ocean
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b06s3] "The Return"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 991ch / 306ch neg | Conflicts: 0 | Latency: 0.20ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Ocean's Lesson", scene: "The Return". Characters, preserve exact visual identity: The Ocean, role: guide figure, species: Spirit, age: ancient, same look every scene: A translucent figure made of water, flowing and calm, rising from the sea., fixed traits: species: Spirit; age: ancient; keep fur/hair, eye color, clothing, and species unchanged across scenes. Action: The woman returns to the shore, at peace, watching the horizon.. Setting: ocean shore at sunset, (outdoor), sunset. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: The Ocean
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+
+📖 [b07] The Indoor Night Scene (KIDS, STORYBOOK_ILLUSTRATION)
+  Scene [b07s1] "Late Night"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1285ch / 392ch neg | Conflicts: 0 | Latency: 0.32ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "The Indoor Night Scene", scene: "Late Night". Characters, preserve exact visual identity: Ada, role: reader, species: Human, age: 8 years old, gender: female, same look every scene: Ada is a girl with neat plaits, wearing a white nightgown with small flowers, holding a large picture book., fixed traits: species: Human; gender: female; age: 8 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Ada. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Ada sits under her blanket with a flashlight, reading a large picture book.. Setting: bedroom, (indoor), night. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: curious. Camera: close-up. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Ada. include: book
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+
+📖 [b08] The Adventure (GENERAL, CINEMATIC_FANTASY)
+  Scene [b08s1] "Into the Forest"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1217ch / 306ch neg | Conflicts: 0 | Latency: 0.50ms | Cost: $0
+    Positive prompt:
+      Visual style: cinematic fantasy illustration, atmospheric lighting, rich environment detail, magical but child-safe wonder, clear emotional storytelling. Scene illustration for "The Adventure", scene: "Into the Forest". Characters, preserve exact visual identity: Leo, role: explorer, species: Human, age: 25 years old, gender: male, same look every scene: Leo is a young man in khaki with a worn map, a compass around his neck, and muddy boots., always wearing/carrying: boots, fixed traits: species: Human; gender: male; age: 25 years old; accessories/wardrobe: boots; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Leo. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Leo pushes through dense jungle foliage, compass in hand.. Setting: dense jungle, (outdoor), morning. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Leo
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b08s2] "The Waterfall"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1251ch / 306ch neg | Conflicts: 0 | Latency: 0.42ms | Cost: $0
+    Positive prompt:
+      Visual style: cinematic fantasy illustration, atmospheric lighting, rich environment detail, magical but child-safe wonder, clear emotional storytelling. Scene illustration for "The Adventure", scene: "The Waterfall". Characters, preserve exact visual identity: Leo, role: explorer, species: Human, age: 25 years old, gender: male, same look every scene: Leo is a young man in khaki with a worn map, a compass around his neck, and muddy boots., always wearing/carrying: boots, fixed traits: species: Human; gender: male; age: 25 years old; accessories/wardrobe: boots; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Leo. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Leo gasps as a towering waterfall appears through the trees, mist rising.. Setting: hidden waterfall, (outdoor). Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: surprised. Camera: wide shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Leo
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b08s3] "Victory"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1257ch / 306ch neg | Conflicts: 0 | Latency: 0.49ms | Cost: $0
+    Positive prompt:
+      Visual style: cinematic fantasy illustration, atmospheric lighting, rich environment detail, magical but child-safe wonder, clear emotional storytelling. Scene illustration for "The Adventure", scene: "Victory". Characters, preserve exact visual identity: Leo, role: explorer, species: Human, age: 25 years old, gender: male, same look every scene: Leo is a young man in khaki with a worn map, a compass around his neck, and muddy boots., always wearing/carrying: boots, fixed traits: species: Human; gender: male; age: 25 years old; accessories/wardrobe: boots; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Leo. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Leo stands at the edge of the waterfall pool, arms outstretched, victorious.. Setting: waterfall pool, (outdoor), afternoon. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: excited. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Leo
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+
+📖 [b09] The Friendship (KIDS, COMIC_BOOK)
+  Scene [b09s1] "Unlikely Pair"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1702ch / 392ch neg | Conflicts: 2 | Latency: 0.45ms | Cost: $0
+    Positive prompt:
+      Visual style: bright comic-book illustration, clean line art, expressive poses, vivid colors, panel-ready composition, no speech bubbles or text. Scene illustration for "The Friendship", scene: "Unlikely Pair". Characters, preserve exact visual identity: Zara, role: quiet artist, species: Human, age: 9 years old, gender: female, same look every scene: Zara is a quiet girl with thick glasses, natural hair, always carrying a sketchbook., always wearing/carrying: glasses, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: glasses; keep fur/hair, eye color, clothing, and species unchanged across scenes; Ben, role: loud athlete, species: Human, age: 9 years old, gender: male, same look every scene: Ben is a loud energetic boy with a big smile, always wearing a sports cap., always wearing/carrying: cap, fixed traits: species: Human; gender: male; age: 9 years old; accessories/wardrobe: cap; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Zara, Ben. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Zara sits alone drawing while Ben runs past and accidentally kicks a ball into her sketchbook.. Setting: school playground, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Zara, Ben. include: ball
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+    ⚠ Conflicts: outdoor setting conflicts with indoor location "school playground"; scene action implies a solo subject but 2 characters are present
+  Scene [b09s2] "Discovery"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1652ch / 392ch neg | Conflicts: 0 | Latency: 0.48ms | Cost: $0
+    Positive prompt:
+      Visual style: bright comic-book illustration, clean line art, expressive poses, vivid colors, panel-ready composition, no speech bubbles or text. Scene illustration for "The Friendship", scene: "Discovery". Characters, preserve exact visual identity: Zara, role: quiet artist, species: Human, age: 9 years old, gender: female, same look every scene: Zara is a quiet girl with thick glasses, natural hair, always carrying a sketchbook., always wearing/carrying: glasses, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: glasses; keep fur/hair, eye color, clothing, and species unchanged across scenes; Ben, role: loud athlete, species: Human, age: 9 years old, gender: male, same look every scene: Ben is a loud energetic boy with a big smile, always wearing a sports cap., always wearing/carrying: cap, fixed traits: species: Human; gender: male; age: 9 years old; accessories/wardrobe: cap; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Zara, Ben. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Ben looks at Zara's drawing of him in amazement.. Setting: bench in schoolyard, (outdoor). Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: surprised. Camera: close-up. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Zara, Ben
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b09s3] "New Friends"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1670ch / 392ch neg | Conflicts: 1 | Latency: 0.51ms | Cost: $0
+    Positive prompt:
+      Visual style: bright comic-book illustration, clean line art, expressive poses, vivid colors, panel-ready composition, no speech bubbles or text. Scene illustration for "The Friendship", scene: "New Friends". Characters, preserve exact visual identity: Zara, role: quiet artist, species: Human, age: 9 years old, gender: female, same look every scene: Zara is a quiet girl with thick glasses, natural hair, always carrying a sketchbook., always wearing/carrying: glasses, fixed traits: species: Human; gender: female; age: 9 years old; accessories/wardrobe: glasses; keep fur/hair, eye color, clothing, and species unchanged across scenes; Ben, role: loud athlete, species: Human, age: 9 years old, gender: male, same look every scene: Ben is a loud energetic boy with a big smile, always wearing a sports cap., always wearing/carrying: cap, fixed traits: species: Human; gender: male; age: 9 years old; accessories/wardrobe: cap; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Zara, Ben. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Zara and Ben walk home together, chatting and laughing.. Setting: school gate street, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Zara, Ben
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+    ⚠ Conflicts: outdoor setting conflicts with indoor location "school gate street"
+
+📖 [b10] The Mystery Map (GENERAL, WATERCOLOR)
+  Scene [b10s1] "The Attic"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1313ch / 306ch neg | Conflicts: 0 | Latency: 0.43ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Mystery Map", scene: "The Attic". Characters, preserve exact visual identity: Nadia, role: detective, species: Human, age: 12 years old, gender: female, same look every scene: Nadia has curly red-brown hair in a ponytail, wearing a yellow cardigan and carrying a leather satchel., always wearing/carrying: satchel, fixed traits: species: Human; gender: female; age: 12 years old; accessories/wardrobe: satchel; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Nadia. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Nadia opens a dusty wooden chest in her grandmother's attic and finds a rolled-up map.. Setting: dusty attic, (indoor), afternoon. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: curious. Camera: close-up. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Nadia. include: map
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b10s2] "Deciphering"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1302ch / 306ch neg | Conflicts: 0 | Latency: 0.32ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Mystery Map", scene: "Deciphering". Characters, preserve exact visual identity: Nadia, role: detective, species: Human, age: 12 years old, gender: female, same look every scene: Nadia has curly red-brown hair in a ponytail, wearing a yellow cardigan and carrying a leather satchel., always wearing/carrying: satchel, fixed traits: species: Human; gender: female; age: 12 years old; accessories/wardrobe: satchel; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Nadia. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Nadia spreads the map on a table, studying the symbols with a magnifying glass.. Setting: kitchen table, (indoor). Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: curious. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Nadia. include: map
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+  Scene [b10s3] "The Hidden Garden"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1310ch / 306ch neg | Conflicts: 0 | Latency: 0.27ms | Cost: $0
+    Positive prompt:
+      Visual style: gentle watercolor illustration, soft paper texture, flowing color washes, warm light, expressive friendly characters, delicate storybook detail. Scene illustration for "The Mystery Map", scene: "The Hidden Garden". Characters, preserve exact visual identity: Nadia, role: detective, species: Human, age: 12 years old, gender: female, same look every scene: Nadia has curly red-brown hair in a ponytail, wearing a yellow cardigan and carrying a leather satchel., always wearing/carrying: satchel, fixed traits: species: Human; gender: female; age: 12 years old; accessories/wardrobe: satchel; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Nadia. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Nadia finds the hidden garden from the map, overgrown with flowers.. Setting: secret garden, (outdoor), afternoon. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: surprised. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Nadia. include: map
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+
+📖 [b11] The Emotional Close-Up (GENERAL, PHOTOREALISTIC)
+  Scene [b11s1] "Goodbye Hug"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1591ch / 306ch neg | Conflicts: 1 | Latency: 0.68ms | Cost: $0
+    Positive prompt:
+      Visual style: photorealistic cinematic scene, natural lighting, realistic textures, believable environment, shallow depth of field where appropriate. Scene illustration for "The Emotional Close-Up", scene: "Goodbye Hug". Characters, preserve exact visual identity: Emeka, role: grandson, species: Human, age: 11 years old, gender: male, same look every scene: Emeka is a boy with a shaved head and big dark eyes, wearing a school uniform., always wearing/carrying: uniform, fixed traits: species: Human; gender: male; age: 11 years old; accessories/wardrobe: uniform; keep fur/hair, eye color, clothing, and species unchanged across scenes; Grandma, role: grandmother, species: Human, age: 70 years old, gender: female, same look every scene: Grandma has a warm wrinkled face, grey hair pinned up, wearing a patterned ankara wrapper., fixed traits: species: Human; gender: female; age: 70 years old; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Emeka, Grandma. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Emeka hugs Grandma tightly at the door. She pats his back.. Setting: front door of home, (outdoor), morning. Safety: safe, polished, emotionally clear. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: sad. Camera: close-up. Composition: two-shot composition, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Emeka, Grandma
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, graphic violence, sexual content, cropped subject
+    ⚠ Conflicts: outdoor setting conflicts with indoor location "front door of home"
+
+📖 [b12] Benny the Bunny Shares (KIDS, STORYBOOK_ILLUSTRATION)
+  Scene [b12s1] "The Party"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1342ch / 392ch neg | Conflicts: 0 | Latency: 0.40ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Benny the Bunny Shares", scene: "The Party". Characters, preserve exact visual identity: Benny, role: main character, species: Rabbit, age: young bunny, gender: male, same look every scene: Benny is a fluffy white bunny with long ears, blue eyes, wearing a small orange scarf., always wearing/carrying: scarf, fixed traits: species: Rabbit; gender: male; age: young bunny; accessories/wardrobe: scarf; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Benny. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Benny arrives at the meadow garden party, carrying a large carrot cake.. Setting: flower meadow, (outdoor), afternoon. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: wide shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Benny. include: cake
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b12s2] "Too Much Cake"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1327ch / 392ch neg | Conflicts: 0 | Latency: 0.32ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Benny the Bunny Shares", scene: "Too Much Cake". Characters, preserve exact visual identity: Benny, role: main character, species: Rabbit, age: young bunny, gender: male, same look every scene: Benny is a fluffy white bunny with long ears, blue eyes, wearing a small orange scarf., always wearing/carrying: scarf, fixed traits: species: Rabbit; gender: male; age: young bunny; accessories/wardrobe: scarf; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Benny. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Benny eats the entire cake alone while others watch hungrily.. Setting: flower meadow, (outdoor). Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Benny. include: cake
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+  Scene [b12s3] "Learning Sharing"
+    Char identity: ✓ | Action: ✓ | Env: ✓
+    Camera: ✓ | Composition: ✓ | Continuity: ✓
+    Style: ✓ | Overlay guard: ✓
+    Len: 1342ch / 392ch neg | Conflicts: 0 | Latency: 0.33ms | Cost: $0
+    Positive prompt:
+      Visual style: beautiful children's storybook illustration, soft colors, warm lighting, expressive friendly characters, clean composition, whimsical but clear. Scene illustration for "Benny the Bunny Shares", scene: "Learning Sharing". Characters, preserve exact visual identity: Benny, role: main character, species: Rabbit, age: young bunny, gender: male, same look every scene: Benny is a fluffy white bunny with long ears, blue eyes, wearing a small orange scarf., always wearing/carrying: scarf, fixed traits: species: Rabbit; gender: male; age: young bunny; accessories/wardrobe: scarf; keep fur/hair, eye color, clothing, and species unchanged across scenes. Depict in this scene: Benny. Use other listed character locks only as continuity reference; do not add offscreen characters unless named in the action. Action: Benny gives the last piece of cake to a small mouse who had none.. Setting: flower meadow, (outdoor), sunset. Safety: child-safe, gentle, friendly, no violence, no fear, no adult themes, warm and welcoming. No visible text, no UI overlays, no social-media interface, no phone screen, no gallery framing, no watermarks. Emotional tone: happy. Camera: medium shot. Composition: rule-of-thirds framing, 9:16 vertical mobile framing. Lighting: natural. Continuity: preserve exact visual identity for: Benny. include: cake
+    Negative prompt:
+      text overlays, watermark, logo, low resolution, blurry, distorted anatomy, extra limbs, phone UI, social media UI, gallery UI, shot labels, 9:16 labels, captions, speech bubbles, visible words, app interface, gallery controls, social overlay, subtitle bar, violence, blood, weapons, adult themes, dark horror, sexual content, unsafe behavior, scary faces, frightening imagery, cropped subject
+
+═══════════════════════════════════════════════════════
+  BENCHMARK SUMMARY
+═══════════════════════════════════════════════════════
+  Stories:  12
+  Scenes:   32
+
+  Metric                          Pass Rate
+  ─────────────────────────────── ─────────
+  Character identity in prompt    100.0%   (target ≥95%)
+  Required action present         100.0%   (target ≥95%)
+  Environment specific            100.0%   (target ≥90%)
+  Camera term present             100.0%   (target ≥80%)
+  Composition present             100.0%   (target ≥80%)
+  Continuity rules present        100.0%   (target ≥90%)
+  Style preserved                 100.0%   (target 100%)
+  Overlay protection in neg       100.0%   (target 100%)
+
+  Latency (median):               0.45ms
+  Latency (p95):                  1.79ms
+  Composer provider cost:         $0 (target $0)
+
+  Gate targets met:               ✓ ALL MET
+═══════════════════════════════════════════════════════
+

@@ -39,8 +39,13 @@
     "deploy:web": "cd apps/web && vercel --prod",
     "deploy:mobile": "cd apps/mobile && eas build --platform all",
     "runpod": "tsx scripts/runpod.ts",
+    "fal": "tsx scripts/fal.ts",
+    "fal:e2e": "pnpm --filter @raivstream/api exec tsx scripts/fal-generation-e2e.ts",
     "fal:refund:recover": "tsx scripts/fal-refund-recovery.ts",
-    "fal:refund:monitor": "tsx scripts/fal-refund-monitor.ts"
+    "fal:refund:monitor": "tsx scripts/fal-refund-monitor.ts",
+    "elevenlabs": "tsx scripts/elevenlabs-tts.ts",
+    "voice:e2e": "pnpm --filter @raivstream/api exec tsx scripts/phase9b3-voice-e2e.ts",
+    "voice:stitch:check": "tsx scripts/phase9b3-voice-stitch-checkpoint.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",

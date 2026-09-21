@@ -20,8 +20,10 @@ import { prisma } from '@raivstream/database';
 import type { PrismaClient } from '@raivstream/database';
 import {
   falProviderJobKey,
+  falKindForModel,
   fetchFalJwks,
   isAcceptableResultUrl,
+  persistFalOutput,
   processProviderWebhook,
   verifyFalWebhookSignature,
 } from '@raivstream/api';
@@ -38,6 +40,20 @@ function extractImageUrl(payload: unknown): string | null {
     if (isAcceptableResultUrl(url)) return url;
   }
   return null;
+}
+
+function extractVideoUrl(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const video = (payload as { video?: unknown }).video;
+  if (video && typeof video === 'object') {
+    const url = (video as { url?: unknown }).url;
+    if (isAcceptableResultUrl(url)) return url;
+  }
+  return null;
+}
+
+function extractOutputUrl(payload: unknown): string | null {
+  return extractImageUrl(payload) ?? extractVideoUrl(payload);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -82,11 +98,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const succeeded = event.status === 'OK';
   try {
+    // Resolve the output URL and, for successful fal completions, mirror it to
+    // R2 BEFORE persisting — provider CDN URLs are never stored as permanent
+    // assets. Mirror failure throws, leaving the job un-applied so fal retries.
+    const rawOutputUrl = succeeded ? extractOutputUrl(event.payload) : null;
+    let persistOutputUrl: ((url: string) => Promise<string>) | undefined;
+    if (succeeded && rawOutputUrl) {
+      const job = await prisma.generationJob.findFirst({
+        where: { providerJobId: falProviderJobKey(requestId) },
+        select: { model: true },
+      });
+      const kind = job ? falKindForModel(job.model) : undefined;
+      if (kind) {
+        persistOutputUrl = (url: string) => persistFalOutput(kind, requestId, url);
+      }
+    }
+
     await processProviderWebhook(prisma as unknown as PrismaClient, {
       providerJobId: falProviderJobKey(requestId),
       outcome: succeeded ? 'completed' : 'failed',
-      outputUrl: succeeded ? extractImageUrl(event.payload) : null,
+      outputUrl: rawOutputUrl,
       errorMessage: succeeded ? null : (event.error ?? 'Provider reported failure'),
+      ...(persistOutputUrl ? { persistOutputUrl } : {}),
     });
   } catch {
     // Do not leak internals; non-2xx lets fal retry within its bounded policy.

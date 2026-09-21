@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { executeMovieRenderJob } from '../movieRenderWorker';
 import type { MovieRenderPlan } from '../movieRenderPlanning';
 
@@ -144,5 +144,56 @@ describe('movieRenderWorker', () => {
     expect(prisma.__assets).toHaveLength(0);
     expect(prisma.__events.some((event: any) => event.eventName === 'movie_render_completed')).toBe(false);
     expect(prisma.__events.some((event: any) => event.eventName === 'movie_render_failed')).toBe(true);
+  });
+
+  it('resumes: reuses an already-rendered shot segment from the store', async () => {
+    const twoShotPlan: MovieRenderPlan = {
+      ...renderPlan,
+      runtimeSeconds: 8,
+      shots: [
+        renderPlan.shots[0],
+        { ...renderPlan.shots[0], order: 2, sequenceSceneId: 'entry_2', storySceneId: 'scene_2', assetId: 'asset_2' },
+      ],
+    };
+    const job: any = {
+      id: 'job_1',
+      projectId: 'project_1',
+      sequenceId: 'sequence_1',
+      userId: 'user_1',
+      status: 'QUEUED',
+      renderPlan: twoShotPlan,
+      renderPlanHash: 'hash_1',
+      creditsCharged: 0,
+      attemptCount: 0,
+    };
+    const prisma = prismaMock(job);
+    const commandRunner = async (command: string, args: string[]) => {
+      if (command === 'ffmpeg') {
+        await writeFile(args[args.length - 1], Buffer.from('fake mp4'));
+      }
+      if (command === 'ffprobe') {
+        return {
+          stdout: JSON.stringify({
+            streams: [{ codec_name: 'h264', width: 720, height: 1280, avg_frame_rate: '30/1', duration: '8.000000' }],
+            format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '8.000000', size: '8' },
+          }),
+        };
+      }
+    };
+    const segmentStore = {
+      has: vi.fn(async (key: string) => key.endsWith('shot-001.mp4')),
+      download: vi.fn(async (_key: string, path: string) => { await writeFile(path, Buffer.from('reused mp4')); }),
+      upload: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
+    };
+
+    const asset = await executeMovieRenderJob(prisma, 'job_1', { commandRunner, uploadMovie: async () => 'https://cdn.test/movie.mp4', segmentStore });
+
+    expect(asset).not.toBeNull();
+    expect(segmentStore.download).toHaveBeenCalledTimes(1); // shot-001 reused
+    expect(segmentStore.upload).toHaveBeenCalledTimes(1);   // shot-002 newly rendered
+    expect(segmentStore.remove).toHaveBeenCalledTimes(2);   // both segments cleaned after success
+    expect(prisma.__events.some((event: any) => event.eventName === 'movie_render_shot_reused')).toBe(true);
+    expect(job.status).toBe('READY');
   });
 });

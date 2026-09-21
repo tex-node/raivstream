@@ -10,7 +10,7 @@
 
 export const FAL_ENDPOINTS = {
   image: 'fal-ai/flux-2',
-  video: 'minimax/h3-max/image-to-video',
+  video: 'minimax/h3-max-turbo/image-to-video',
   ugc: 'veed/fabric-1.0',
 } as const;
 

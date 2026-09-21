@@ -47,12 +47,14 @@ import {
   submitJob,
   getJobStatus,
   normaliseStatus,
+  normaliseRunpodError,
   extractOutputUrl,
   aspectRatioToResolution,
   durationToFrames,
   type NormalisedStatus,
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
+import { resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 export interface HunyuanVideoInput {
   prompt:        string;
@@ -66,7 +68,7 @@ export interface HunyuanVideoJobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 // ─── Config helpers ───────────────────────────────────────────────────────────
@@ -239,13 +241,13 @@ export async function getHunyuanVideoStatus(jobId: string): Promise<HunyuanVideo
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId, status, outputUrl: undefined, error: raw.error };
+    return { jobId, status, outputUrl: undefined, error: normaliseRunpodError(raw.status, raw.error) };
   }
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
     console.error('[hunyuan] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    return { jobId, status: 'failed', error: resultInvalid() };
   }
 
   const r2Key = `generated/hunyuan/${jobId}.mp4`;
@@ -254,6 +256,6 @@ export async function getHunyuanVideoStatus(jobId: string): Promise<HunyuanVideo
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[hunyuan] R2 mirror failed — marking job failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }

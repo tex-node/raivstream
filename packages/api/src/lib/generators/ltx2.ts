@@ -47,12 +47,14 @@ import {
   submitJob,
   getJobStatus,
   normaliseStatus,
+  normaliseRunpodError,
   extractOutputUrl,
   aspectRatioToResolution,
   durationToFrames,
   type NormalisedStatus,
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
+import { resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 export interface LTX2Input {
   prompt:        string;
@@ -67,7 +69,7 @@ export interface LTX2JobResult {
   jobId:    string;
   status:   NormalisedStatus;
   outputUrl?: string;
-  error?:   string;
+  error?:   GenerationJobError;
 }
 
 // ─── Config helpers ───────────────────────────────────────────────────────────
@@ -267,14 +269,14 @@ export async function getLTX2Status(jobId: string): Promise<LTX2JobResult> {
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId, status, outputUrl: undefined, error: raw.error };
+    return { jobId, status, outputUrl: undefined, error: normaliseRunpodError(raw.status, raw.error) };
   }
 
   // Job completed — extract and mirror the output URL to R2
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
     console.error('[ltx2] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    return { jobId, status: 'failed', error: resultInvalid() };
   }
 
   const r2Key = `generated/ltx2/${jobId}.mp4`;
@@ -283,6 +285,6 @@ export async function getLTX2Status(jobId: string): Promise<LTX2JobResult> {
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[ltx2] R2 mirror failed — marking job failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }

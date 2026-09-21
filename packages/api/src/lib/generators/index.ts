@@ -25,6 +25,14 @@ import { submitFlux, getFluxStatus } from './flux';
 import { submitHunyuanVideo, getHunyuanVideoStatus } from './hunyuanVideo';
 import { submitCogVideoX, getCogVideoXStatus } from './cogVideoX';
 import { submitSeedance, getSeedanceStatus } from './seedance';
+import { submitFalFlux2, getFalFlux2Status, cancelFalFlux2 } from './falFlux2';
+import { submitFalH3Max, getFalH3MaxStatus, cancelFalH3Max } from './falH3Max';
+import { submitFalVeed, getFalVeedStatus, cancelFalVeed } from './falVeed';
+import type { GenerationJobError, GenerationJobState } from './jobModel';
+import { getDefaultProviderLimiter, providerIdForModel } from './providerRateLimit';
+import { MediaProviderError } from '../mediaProviders';
+
+export { MAX_JOB_RETRIES } from './jobModel';
 
 export type SupportedModel =
   | 'NANO_BANANA'
@@ -38,7 +46,10 @@ export type SupportedModel =
   | 'FLUX'
   | 'HUNYUAN_VIDEO'
   | 'COG_VIDEO_X'
-  | 'SEEDANCE';
+  | 'SEEDANCE'
+  | 'FLUX2'
+  | 'H3_MAX'
+  | 'VEED_FABRIC';
 
 export interface GenerateInput {
   model:          SupportedModel;
@@ -47,6 +58,7 @@ export interface GenerateInput {
   duration?:      number;
   aspectRatio?:   string;
   seedImageUrl?:  string;
+  audioUrl?:      string; // VEED Fabric lip-sync audio track
 }
 
 export interface GenerateResult {
@@ -59,6 +71,21 @@ export interface GenerateResult {
 
 /** Submit a new generation job to the appropriate provider */
 export async function submitGenerationJob(input: GenerateInput): Promise<GenerateResult> {
+  // Phase 15 — per-provider backpressure. Rejects (retryable) when a provider
+  // is at its concurrency cap or being hit too fast. Unlimited by default.
+  const provider = providerIdForModel(input.model);
+  const lease = getDefaultProviderLimiter().tryAcquire(provider);
+  if (!lease.ok) {
+    throw new MediaProviderError('RATE_LIMITED', `Provider ${provider} is busy: ${lease.reason}`, { retryable: true });
+  }
+  try {
+    return await dispatchSubmitGenerationJob(input);
+  } finally {
+    lease.release();
+  }
+}
+
+async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<GenerateResult> {
   switch (input.model) {
 
     case 'NANO_BANANA': {
@@ -124,13 +151,39 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
       const jobId = await submitSeedance(input);
       return { providerJobId: jobId };
     }
+
+    case 'FLUX2': {
+      const jobId = await submitFalFlux2({
+        prompt:       input.prompt,
+        aspectRatio:  input.aspectRatio,
+        seed:         undefined,
+      });
+      return { providerJobId: jobId };
+    }
+
+    case 'H3_MAX': {
+      const jobId = await submitFalH3Max({
+        prompt:        input.prompt,
+        seedImageUrl:  input.seedImageUrl,
+        duration:      input.duration,
+      });
+      return { providerJobId: jobId };
+    }
+
+    case 'VEED_FABRIC': {
+      const jobId = await submitFalVeed({
+        imageUrl: input.seedImageUrl!,
+        audioUrl: input.audioUrl!,
+      });
+      return { providerJobId: jobId };
+    }
   }
 }
 
 export interface JobStatusResult {
-  status:     'queued' | 'generating' | 'completed' | 'failed';
+  status:     GenerationJobState;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 /** Poll the status of a previously submitted job */
@@ -198,6 +251,41 @@ export async function pollJobStatus(
       const s = await getSeedanceStatus(providerJobId);
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
+
+    case 'FLUX2': {
+      const s = await getFalFlux2Status(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'H3_MAX': {
+      const s = await getFalH3MaxStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
+    case 'VEED_FABRIC': {
+      const s = await getFalVeedStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+  }
+}
+
+/**
+ * Best-effort provider-side cancellation for a running job. Returns true when a
+ * provider cancel was issued. Legacy providers (RunPod public endpoints, xAI,
+ * Kling, Gemini) return false — they either have no client-side cancel or are
+ * not wired here; the local GenerationJob is still marked CANCELLED by the
+ * caller regardless.
+ */
+export async function cancelProviderJob(model: SupportedModel, providerJobId: string): Promise<boolean> {
+  switch (model) {
+    case 'FLUX2':
+      return cancelFalFlux2(providerJobId);
+    case 'H3_MAX':
+      return cancelFalH3Max(providerJobId);
+    case 'VEED_FABRIC':
+      return cancelFalVeed(providerJobId);
+    default:
+      return false;
   }
 }
 
@@ -365,5 +453,43 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'RunPod Public · Seedance 1.5 Pro I2V',
     providerUrl:          'https://docs.runpod.io/public-endpoints/models/seedance-1-5-pro',
     mediaType:            'video',
+  },
+  FLUX2: {
+    label:                'Flux 2',
+    description:          'Black Forest Labs\' Flux.2 text-to-image on fal.ai — photorealistic, fast, serverless.',
+    badge:                'live',
+    icon:                 '🎨',
+    minDuration:          0,
+    maxDuration:          0,
+    supportsImageToVideo: false,
+    provider:             'fal.ai · FLUX.2',
+    providerUrl:          'https://fal.ai/models/fal-ai/flux-2',
+    mediaType:            'image',
+  },
+  H3_MAX: {
+    label:                'MiniMax H3-Max Turbo',
+    description:          'MiniMax H3-Max Turbo image-to-video on fal.ai — fast, cost-efficient animation from a seed image.',
+    badge:                'live',
+    icon:                 '🌀',
+    minDuration:          5,
+    maxDuration:          10,
+    supportsImageToVideo: true,
+    requiresSeedImage:    true,
+    provider:             'fal.ai · MiniMax H3-Max Turbo',
+    providerUrl:          'https://fal.ai/models/minimax/h3-max-turbo/image-to-video',
+    mediaType:            'video',
+  },
+  VEED_FABRIC: {
+    label:                'VEED Fabric',
+    description:          'VEED Fabric 1.0 talking-video on fal.ai — lip-sync a presenter image to an audio track.',
+    badge:                'live',
+    icon:                 '🗣️',
+    minDuration:          0,
+    maxDuration:          0,
+    supportsImageToVideo: false,
+    provider:             'fal.ai · VEED Fabric 1.0',
+    providerUrl:          'https://fal.ai/models/veed/fabric-1.0',
+    mediaType:            'video',
+    hidden:               true, // UGC consent/ownership/moderation controls not yet implemented
   },
 };

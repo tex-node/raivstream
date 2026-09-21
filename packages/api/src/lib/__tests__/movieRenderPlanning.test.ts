@@ -6,6 +6,7 @@ import {
   durationWithinTolerance,
   hashRenderPlan,
   isEligibleMovieRenderAsset,
+  isEligibleMovieRenderVideoAsset,
   renderReadiness,
   shouldReuseMovieRenderJob,
 } from '../movieRenderPlanning';
@@ -136,5 +137,44 @@ describe('movieRenderPlanning', () => {
   it('checks duration tolerance strictly', () => {
     expect(durationWithinTolerance({ expectedSeconds: 12, actualSeconds: 11.9 }).ok).toBe(true);
     expect(durationWithinTolerance({ expectedSeconds: 12, actualSeconds: 8.566667 }).ok).toBe(false);
+  });
+});
+
+describe('movieRenderPlanning — Phase 10 scene-video substitution', () => {
+  const sceneVideos = new Map([
+    ['scene_1', { id: 'vid_1', sceneId: 'scene_1', assetType: 'VIDEO', status: 'READY', assetUrl: 'https://cdn.test/a.mp4', creativeStatus: 'DRAFT' }],
+  ]);
+
+  it('prefers a READY scene video over the still image', () => {
+    const plan = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById, videoAssetsBySceneId: sceneVideos });
+    expect(plan.shots[0]).toMatchObject({ sourceType: 'VIDEO', assetId: 'vid_1', sourceUrl: 'https://cdn.test/a.mp4' });
+    // scene_2 has no video → still used
+    expect(plan.shots[1]).toMatchObject({ sourceType: 'IMAGE', assetId: 'asset_2', sourceUrl: 'https://cdn.test/b.png' });
+  });
+
+  it('falls back to the still when the video asset is ineligible', () => {
+    const ineligible = new Map([
+      ['scene_1', { id: 'vid_bad', sceneId: 'scene_1', assetType: 'VIDEO', status: 'GENERATING', assetUrl: 'https://cdn.test/a.mp4', creativeStatus: 'DRAFT' }],
+    ]);
+    const plan = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById, videoAssetsBySceneId: ineligible });
+    expect(plan.shots[0]).toMatchObject({ sourceType: 'IMAGE', assetId: 'asset_1' });
+  });
+
+  it('keeps the render plan deterministic with video substitution', () => {
+    const a = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById, videoAssetsBySceneId: sceneVideos });
+    const b = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById, videoAssetsBySceneId: sceneVideos });
+    expect(hashRenderPlan(a)).toBe(hashRenderPlan(b));
+  });
+
+  it('changes the render plan hash once a video replaces the still (re-render)', () => {
+    const imageOnly = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById });
+    const withVideo = buildMovieRenderPlan({ filmBlueprint: blueprint, assetsById, videoAssetsBySceneId: sceneVideos });
+    expect(hashRenderPlan(withVideo)).not.toBe(hashRenderPlan(imageOnly));
+  });
+
+  it('validates video asset eligibility', () => {
+    expect(isEligibleMovieRenderVideoAsset({ id: 'v', sceneId: 's', assetType: 'VIDEO', status: 'READY', assetUrl: 'x', creativeStatus: 'DRAFT' })).toBe(true);
+    expect(isEligibleMovieRenderVideoAsset({ id: 'v', sceneId: 's', assetType: 'VIDEO', status: 'READY', assetUrl: 'x', creativeStatus: 'REJECTED' })).toBe(false);
+    expect(isEligibleMovieRenderVideoAsset({ id: 'v', sceneId: 's', assetType: 'IMAGE', status: 'READY', assetUrl: 'x', creativeStatus: 'DRAFT' })).toBe(false);
   });
 });

@@ -196,6 +196,36 @@ describe('processProviderWebhook — atomic terminal transition + refund intent'
     expect(ctx.state.balances.user1).toBe(0);
   });
 
+  it('persists output through persistOutputUrl before the terminal transition', async () => {
+    const { prisma, ctx } = makeMockPrisma({ job: { ...baseJob } });
+    const persist = vi.fn(async (url: string) => url.replace('https://cdn/', 'https://media.raivstream.com/'));
+    const res = await processProviderWebhook(prisma, {
+      providerJobId: baseJob.providerJobId,
+      outcome: 'completed',
+      outputUrl: 'https://cdn/x.png',
+      persistOutputUrl: persist,
+    });
+    expect(res).toMatchObject({ handled: true, outcome: 'APPLIED' });
+    expect(persist).toHaveBeenCalledWith('https://cdn/x.png');
+    expect(ctx.state.jobs[0].status).toBe('COMPLETED');
+    expect(ctx.state.jobs[0].outputUrl).toBe('https://media.raivstream.com/x.png');
+  });
+
+  it('does not apply a completed webhook when output persistence fails (no raw URL persisted)', async () => {
+    const { prisma, ctx } = makeMockPrisma({ job: { ...baseJob } });
+    const persist = vi.fn(async () => { throw new Error('R2 mirror failed'); });
+    await expect(
+      processProviderWebhook(prisma, {
+        providerJobId: baseJob.providerJobId,
+        outcome: 'completed',
+        outputUrl: 'https://cdn/x.png',
+        persistOutputUrl: persist,
+      }),
+    ).rejects.toThrow('R2 mirror failed');
+    expect(ctx.state.jobs[0].status).toBe('GENERATING'); // unchanged — provider can retry
+    expect(ctx.state.jobs[0].outputUrl).toBeNull();
+  });
+
   it('returns JOB_NOT_FOUND for an unknown provider request id', async () => {
     const { prisma } = makeMockPrisma({ job: { ...baseJob } });
     const res = await processProviderWebhook(prisma, { providerJobId: 'fal:missing', outcome: 'completed' });

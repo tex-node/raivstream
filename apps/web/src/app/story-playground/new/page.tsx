@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Camera, ChevronRight, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
+import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 
 type PlaygroundStep = 'spark' | 'questions' | 'story';
 
@@ -53,6 +54,7 @@ type StoryScene = {
 
 type StorySceneAsset = {
   id: string;
+  assetType: 'IMAGE' | 'VIDEO';
   assetUrl: string | null;
   thumbnailUrl: string | null;
   status: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
@@ -511,6 +513,17 @@ export default function StoryPlaygroundPage() {
     onError: (error) => setMessage(error.message),
   });
 
+  const stylePresets = trpc.story.listStylePresets.useQuery();
+  const [selectedStylePreset, setSelectedStylePreset] = useState('WARM_STORYBOOK');
+  const applyStylePreset = trpc.story.applyStylePreset.useMutation({
+    onSuccess: async (result) => {
+      setSelectedVisualStyle(result.visualStyle);
+      setMessage(`Style preset applied (${result.scenesUpdated} scenes). Music prompt saved: ${result.musicPrompt}`);
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
   const generateScenes = trpc.story.generateScenes.useMutation({
     onSuccess: async () => {
       await utils.story.getProject.invalidate();
@@ -545,6 +558,22 @@ export default function StoryPlaygroundPage() {
   const regenerateSceneImage = trpc.story.regenerateSceneImage.useMutation({
     onSuccess: async () => {
       setMessage(isR16 ? 'New picture added to the card.' : 'Scene image regenerated and saved to history.');
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const generateSceneVideo = trpc.story.generateSceneVideo.useMutation({
+    onSuccess: async () => {
+      setMessage('Scene video generated.');
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const regenerateSceneVideo = trpc.story.regenerateSceneVideo.useMutation({
+    onSuccess: async () => {
+      setMessage('Scene video regenerated.');
       await utils.story.getProject.invalidate();
     },
     onError: (error) => setMessage(error.message),
@@ -843,10 +872,22 @@ export default function StoryPlaygroundPage() {
       || (regenerateSceneImage.isPending && regenerateSceneImage.variables?.sceneId === scene.id);
   };
 
+  const [sceneImageModel, setSceneImageModel] = useState<SceneImageModel>(DEFAULT_SCENE_IMAGE_MODEL);
+
   const makeSceneImage = (scene: StoryScene) => {
     if (!projectId) return;
     const action = scene.imageUrl ? regenerateSceneImage : generateSceneImage;
-    action.mutate({ projectId, sceneId: scene.id, model: 'FLUX' });
+    action.mutate({ projectId, sceneId: scene.id, model: sceneImageModel });
+  };
+
+  const latestVideoAsset = (scene: StoryScene) =>
+    (scene.assets ?? []).find((asset) => asset.assetType === 'VIDEO' && asset.status === 'READY');
+
+  const makeSceneVideo = (scene: StoryScene) => {
+    if (!projectId) return;
+    const hasVideo = Boolean(latestVideoAsset(scene));
+    const action = hasVideo ? regenerateSceneVideo : generateSceneVideo;
+    action.mutate({ projectId, sceneId: scene.id, model: 'H3_MAX' });
   };
 
   const toggleDirectorPanel = (sceneId: string) => {
@@ -1023,6 +1064,29 @@ export default function StoryPlaygroundPage() {
                 </p>
               )}
             </div>
+            {!isR16 && stylePresets.data && stylePresets.data.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3">
+                <span className="text-xs font-black uppercase text-[var(--noc-t4)]">Style preset</span>
+                <select
+                  value={selectedStylePreset}
+                  onChange={(event) => setSelectedStylePreset(event.target.value)}
+                  className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[var(--noc-page)] p-2 text-sm font-bold text-[var(--noc-t1)]"
+                >
+                  {stylePresets.data.map((preset: any) => (
+                    <option key={preset.name} value={preset.name}>{preset.label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => projectId && applyStylePreset.mutate({ projectId, preset: selectedStylePreset as any, applyToScenes: true })}
+                  disabled={!projectId || applyStylePreset.isPending}
+                  className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                >
+                  {applyStylePreset.isPending ? 'Applying…' : 'Apply preset'}
+                </button>
+                <span className="text-xs font-semibold text-[var(--noc-t4)]">Sets the visual style + scene lighting/mood + a music prompt.</span>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {visibleStyleOptions.map((option) => {
                 const selected = selectedVisualStyle === option.value;
@@ -1499,6 +1563,19 @@ export default function StoryPlaygroundPage() {
                           )}
                         </div>
                         <div className="mt-3 grid gap-2">
+                          {!isR16 && (
+                            <select
+                              value={sceneImageModel}
+                              onChange={(e) => setSceneImageModel(e.target.value as SceneImageModel)}
+                              className="w-full appearance-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-sm font-bold text-[var(--noc-t1)] focus:outline-none focus:border-[var(--noc-magenta)]/60 cursor-pointer"
+                            >
+                              {SCENE_IMAGE_MODEL_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value} className="bg-[var(--noc-page)] text-[var(--noc-t1)]">
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <button
                             type="button"
                             onClick={() => makeSceneImage(scene)}
@@ -1508,6 +1585,17 @@ export default function StoryPlaygroundPage() {
                             {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <ImagePlus size={16} />}
                             {isGenerating ? (isR16 ? 'Making...' : 'Generating...') : hasFailed ? (isR16 ? 'Try Again' : 'Try Again') : scene.imageUrl ? (isR16 ? 'Make New Picture' : 'Regenerate') : (isR16 ? 'Make Picture' : 'Generate Image')}
                           </button>
+                          {!isR16 && scene.imageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => makeSceneVideo(scene)}
+                              disabled={!projectId || generateSceneVideo.isPending || regenerateSceneVideo.isPending}
+                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(79,139,214,0.30)] bg-[rgba(79,139,214,0.10)] px-3 py-2 text-sm font-black text-[var(--noc-blue)] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {generateSceneVideo.isPending || regenerateSceneVideo.isPending ? <Loader2 className="animate-spin" size={16} /> : <Clapperboard size={16} />}
+                              {latestVideoAsset(scene) ? 'Regenerate Video' : 'Animate to Video'}
+                            </button>
+                          )}
                           {!isR16 && (scene.assets?.length ?? 0) > 0 && (
                             <button
                               type="button"

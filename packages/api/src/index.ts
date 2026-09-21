@@ -13,6 +13,7 @@ import { userRouter } from './routers/user';
 import { analyticsRouter } from './routers/analytics';
 import { generationRouter } from './routers/generation';
 import { runpodRouter } from './routers/runpod';
+import { providersRouter } from './routers/providers';
 import { adminRouter } from './routers/admin';
 import { notificationRouter } from './routers/notification';
 import { storyRouter } from './routers/story';
@@ -28,6 +29,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   generation: generationRouter,
   runpod: runpodRouter,
+  providers: providersRouter,
   admin: adminRouter,
   notification: notificationRouter,
   story: storyRouter,

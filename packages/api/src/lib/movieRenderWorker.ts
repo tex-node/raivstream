@@ -14,7 +14,7 @@ import {
   type MovieRenderPlan,
   type MovieRenderPlanShot,
 } from './movieRenderPlanning';
-import { getPublicUrlForKey, uploadBufferToR2 } from './r2';
+import { getPublicUrlForKey, objectExistsInR2, removeFromR2, uploadBufferToR2 } from './r2';
 import { assertAudioReadyGate, buildMixedAudioTrack, muxAudioWithVideo, normalizeAudioInput, probeAudioAsset, probeAudioStream, type ResolvedCueSource } from './audioMixing';
 import type { AudioBlueprint } from './audioPlanning';
 import { analytics } from './analytics';
@@ -24,10 +24,19 @@ const FINAL_STATUSES = new Set(['READY', 'FAILED', 'CANCELLED']);
 type CommandResult = void | { stdout?: string; stderr?: string };
 type CommandRunner = (command: string, args: string[]) => Promise<CommandResult>;
 
+export type MovieRenderSegmentStore = {
+  has(key: string): Promise<boolean>;
+  download(key: string, filePath: string): Promise<void>;
+  upload(filePath: string, key: string): Promise<void>;
+  remove(key: string): Promise<void>;
+};
+
 export type MovieRenderWorkerOptions = {
   commandRunner?: CommandRunner;
   uploadMovie?: (buffer: Buffer, key: string) => Promise<string | null>;
   keepTempFiles?: boolean;
+  /** Per-shot segment persistence for resume-after-failure (Phase 10). */
+  segmentStore?: MovieRenderSegmentStore | null;
 };
 
 function runCommand(command: string, args: string[]) {
@@ -96,6 +105,44 @@ async function downloadToFile(url: string, filePath: string) {
   await writeFile(filePath, Buffer.from(await response.arrayBuffer()));
 }
 
+/**
+ * Default R2-backed segment store. Disabled (returns null → every attempt
+ * re-renders from scratch) when `MOVIE_RENDER_SEGMENT_RESUME=false` or R2 is
+ * not configured, so tests/dev without storage keep the original behavior.
+ */
+function createR2SegmentStore(): MovieRenderSegmentStore | null {
+  if (process.env.MOVIE_RENDER_SEGMENT_RESUME === 'false') return null;
+  if (!process.env.R2_BUCKET_NAME || !process.env.R2_PUBLIC_URL) return null;
+  return {
+    has: (key) => objectExistsInR2(key),
+    download: async (key, filePath) => {
+      const url = getPublicUrlForKey(key);
+      if (!url) throw new Error('segment URL unavailable');
+      await downloadToFile(url, filePath);
+    },
+    upload: async (filePath, key) => {
+      const buffer = await readFile(filePath);
+      const stored = await uploadBufferToR2(buffer, key, 'video/mp4');
+      if (!stored) throw new Error('segment upload failed');
+    },
+    remove: (key) => removeFromR2(key),
+  };
+}
+
+async function renderShotWithRetry(inputPath: string, outputPath: string, shot: MovieRenderPlanShot, plan: MovieRenderPlan, run: CommandRunner, attempts: number) {
+  const maxAttempts = Number.isFinite(attempts) && attempts > 0 ? Math.floor(attempts) : 1;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await renderShot(inputPath, outputPath, shot, plan, run);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Shot render failed');
+}
+
 function cameraFilter(shot: MovieRenderPlanShot, frames: number, width: number, height: number) {
   const movement = (shot.cameraMovement || 'STATIC').toUpperCase();
   const wideWidth = Math.ceil((width * 1.12) / 2) * 2;
@@ -135,6 +182,11 @@ function transitionName(transition: string) {
 }
 
 async function renderShot(inputPath: string, outputPath: string, shot: MovieRenderPlanShot, plan: MovieRenderPlan, run: CommandRunner) {
+  // Legacy plans (pre-Phase 10) have no sourceType — treat as IMAGE.
+  if (shot.sourceType === 'VIDEO') {
+    await renderVideoShot(inputPath, outputPath, shot, plan, run);
+    return;
+  }
   const frames = Math.max(1, Math.round(shot.renderDurationSeconds * plan.output.fps));
   await run('ffmpeg', [
     '-y',
@@ -155,6 +207,44 @@ async function renderShot(inputPath: string, outputPath: string, shot: MovieRend
     'ultrafast',
     '-pix_fmt',
     plan.output.pixelFormat,
+    outputPath,
+  ]);
+}
+
+/**
+ * Render a scene-video shot (Phase 10): scale/crop the clip to the output,
+ * loop it if shorter than the shot duration, trim to the exact segment length
+ * (incl. transition handle), and strip audio (the movie's audio is mixed
+ * separately). Camera-movement filters are intentionally NOT applied — the clip
+ * already carries motion.
+ */
+async function renderVideoShot(inputPath: string, outputPath: string, shot: MovieRenderPlanShot, plan: MovieRenderPlan, run: CommandRunner) {
+  const duration = Math.max(0.5, shot.renderDurationSeconds);
+  const base = `scale=${plan.output.width}:${plan.output.height}:force_original_aspect_ratio=increase,crop=${plan.output.width}:${plan.output.height},setsar=1,fps=${plan.output.fps}`;
+  const dipped = shot.transitionDurationSeconds > 0
+    && (shot.transition === 'DIP_TO_BLACK' || shot.transition === 'DIP_TO_WHITE');
+  const filter = dipped
+    ? `${base},fade=t=out:st=${Math.max(0, duration - shot.transitionDurationSeconds)}:d=${shot.transitionDurationSeconds}:color=${shot.transition === 'DIP_TO_WHITE' ? 'white' : 'black'}`
+    : base;
+  await run('ffmpeg', [
+    '-y',
+    '-stream_loop',
+    '-1',
+    '-i',
+    inputPath,
+    '-t',
+    duration.toFixed(3),
+    '-vf',
+    filter,
+    '-an',
+    '-c:v',
+    plan.output.videoCodec,
+    '-preset',
+    'ultrafast',
+    '-pix_fmt',
+    plan.output.pixelFormat,
+    '-r',
+    String(plan.output.fps),
     outputPath,
   ]);
 }
@@ -315,6 +405,7 @@ export async function executeMovieRenderJob(
 ) {
   const run = options.commandRunner ?? runCommand;
   const uploadMovie = options.uploadMovie ?? ((buffer: Buffer, key: string) => uploadBufferToR2(buffer, key, 'video/mp4'));
+  const segmentStore = options.segmentStore === undefined ? createR2SegmentStore() : options.segmentStore;
   const job = await (prisma as any).movieRenderJob.findUnique({ where: { id: jobId } });
   if (!job || FINAL_STATUSES.has(job.status)) return null;
 
@@ -330,14 +421,37 @@ export async function executeMovieRenderJob(
     await addRenderEvent(prisma, job.id, { eventName: 'movie_render_started', stage: 'preparing', progressPercent: 5 });
 
     const segmentPaths: string[] = [];
+    const segmentKeys: string[] = [];
+    const shotAttempts = Number(process.env.MOVIE_RENDER_SHOT_ATTEMPTS ?? 2);
     for (let index = 0; index < plan.shots.length; index += 1) {
       const shot = plan.shots[index];
-      await updateStage(prisma, job.id, 'RENDERING_SHOTS', `rendering_shot_${index + 1}`, 10 + Math.floor((index / plan.shots.length) * 55));
-      const inputPath = path.join(tempDir, `shot-${String(index + 1).padStart(3, '0')}.source`);
-      const segmentPath = path.join(tempDir, `shot-${String(index + 1).padStart(3, '0')}.mp4`);
-      await downloadToFile(shot.sourceUrl, inputPath);
-      await renderShot(inputPath, segmentPath, shot, plan, run);
+      const name = `shot-${String(index + 1).padStart(3, '0')}`;
+      const inputPath = path.join(tempDir, `${name}.source`);
+      const segmentPath = path.join(tempDir, `${name}.mp4`);
+      const segmentKey = `story-projects/${job.projectId}/movies/${job.id}/segments/${name}.mp4`;
       segmentPaths.push(segmentPath);
+      segmentKeys.push(segmentKey);
+
+      // Resume: reuse a segment persisted by a prior (failed) attempt of this
+      // same job, so a retry only renders the shots that never completed.
+      if (segmentStore && await segmentStore.has(segmentKey).catch(() => false)) {
+        await segmentStore.download(segmentKey, segmentPath);
+        await addRenderEvent(prisma, job.id, {
+          eventName: 'movie_render_shot_reused',
+          stage: `shot_${index + 1}_reused`,
+          progressPercent: 10 + Math.floor(((index + 1) / plan.shots.length) * 55),
+          metadata: { order: shot.order, segmentKey },
+        });
+        continue;
+      }
+
+      await updateStage(prisma, job.id, 'RENDERING_SHOTS', `rendering_shot_${index + 1}`, 10 + Math.floor((index / plan.shots.length) * 55));
+      await downloadToFile(shot.sourceUrl, inputPath);
+      // Per-shot retry: transient ffmpeg failures retry before failing the job.
+      await renderShotWithRetry(inputPath, segmentPath, shot, plan, run, shotAttempts);
+      if (segmentStore) {
+        await segmentStore.upload(segmentPath, segmentKey).catch(() => undefined);
+      }
     }
 
     await updateStage(prisma, job.id, 'ASSEMBLING', 'assembling', 72);
@@ -610,6 +724,11 @@ export async function executeMovieRenderJob(
         projectId: job.projectId,
         properties: { renderJobId: job.id, movieAssetId: asset.id },
       });
+    }
+    // The final movie is durable now — the per-shot resume segments are no
+    // longer needed (best-effort cleanup; never fails the render).
+    if (segmentStore) {
+      await Promise.all(segmentKeys.map((key) => segmentStore.remove(key).catch(() => undefined)));
     }
     return asset;
   } catch (error) {

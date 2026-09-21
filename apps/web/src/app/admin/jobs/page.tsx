@@ -3,16 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { AdminSpinner, AdminError } from '../AdminShell';
-
-const MODEL_LABELS: Record<string, string> = {
-  GROK_IMAGINE: 'Grok Imagine',
-  NANO_BANANA:  'Nano Banana',
-  LTX2:         'LTX-2',
-  WAN_25:       'Wan 2.5',
-  KLING:        'Kling',
-  HIGGSFIELD:   'Higgsfield',
-  VEO3:         'Veo 3',
-};
+import { MODEL_LABELS, MODEL_OPTIONS, type ModelKey } from '@/lib/modelLabels';
 
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED:  '#22c55e',
@@ -23,11 +14,10 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 type JobStatus = 'QUEUED' | 'GENERATING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-type JobModel  = 'NANO_BANANA' | 'GROK_IMAGINE' | 'LTX2' | 'WAN_25' | 'KLING' | 'HIGGSFIELD' | 'VEO3';
 
 export default function AdminJobsPage() {
   const [status, setStatus] = useState<JobStatus | undefined>();
-  const [model,  setModel]  = useState<JobModel  | undefined>();
+  const [model,  setModel]  = useState<ModelKey | undefined>();
   const [page,   setPage]   = useState(1);
 
   const { data, isLoading, error } = trpc.admin.listGenerationJobs.useQuery({ status, model, page, pageSize: 25 });
@@ -56,16 +46,13 @@ export default function AdminJobsPage() {
 
         <select
           value={model ?? ''}
-          onChange={(e) => { setModel((e.target.value as JobModel) || undefined); setPage(1); }}
+          onChange={(e) => { setModel((e.target.value as ModelKey) || undefined); setPage(1); }}
           className="rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-3 py-2.5 text-sm text-[var(--noc-t1)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
         >
           <option value="">All models</option>
-          <option value="GROK_IMAGINE">Grok Imagine</option>
-          <option value="NANO_BANANA">Nano Banana</option>
-          <option value="LTX2">LTX-2</option>
-          <option value="WAN_25">Wan 2.5</option>
-          <option value="KLING">Kling</option>
-          <option value="HIGGSFIELD">Higgsfield</option>
+          {MODEL_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
         </select>
       </div>
 

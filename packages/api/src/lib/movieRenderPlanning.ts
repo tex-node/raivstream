@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { FilmBlueprint } from './sequencePlanning';
 
-export const MOVIE_RENDERER_VERSION = 'phase-9b1a-v2';
+export const MOVIE_RENDERER_VERSION = 'phase-10-v1';
 export const MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
 export const MOVIE_RENDER_DURATION_TOLERANCE_SECONDS = 0.25;
 export const MOVIE_RENDER_DEFAULTS = {
@@ -42,6 +42,9 @@ export type MovieRenderPlanShot = {
   sequenceSceneId: string;
   storySceneId: string;
   assetId: string;
+  /** IMAGE = still rendered for the shot duration; VIDEO = scene clip (Phase 10).
+   * Optional for backward compatibility with plans persisted before Phase 10. */
+  sourceType?: 'IMAGE' | 'VIDEO';
   sourceUrl: string;
   durationSeconds: number;
   renderDurationSeconds: number;
@@ -89,6 +92,18 @@ export function isEligibleMovieRenderAsset(asset: MovieRenderAsset | null | unde
   );
 }
 
+/** A READY scene video asset may stand in for the still image (Phase 10). */
+export function isEligibleMovieRenderVideoAsset(asset: MovieRenderAsset | null | undefined) {
+  return Boolean(
+    asset
+    && asset.assetType === 'VIDEO'
+    && asset.status === 'READY'
+    && asset.assetUrl
+    && !asset.deletedAt
+    && asset.creativeStatus !== 'REJECTED',
+  );
+}
+
 function numberOrFallback(value: unknown, fallback: number) {
   if (value === null || value === undefined || value === '') return fallback;
   const numeric = typeof value === 'number' ? value : Number(value);
@@ -129,6 +144,8 @@ export function durationWithinTolerance(input: { expectedSeconds: number; actual
 export function buildMovieRenderPlan(input: {
   filmBlueprint: FilmBlueprint;
   assetsById: Map<string, MovieRenderAsset>;
+  /** Optional per-scene READY video assets — preferred over stills when present. */
+  videoAssetsBySceneId?: Map<string, MovieRenderAsset>;
 }): MovieRenderPlan {
   const warnings: string[] = [];
   const enabledShots = input.filmBlueprint.shots
@@ -136,9 +153,18 @@ export function buildMovieRenderPlan(input: {
     .sort((a, b) => a.order - b.order);
 
   const shots = enabledShots.map((shot, index): MovieRenderPlanShot => {
-    if (!shot.assetId) throw new Error(`Shot ${shot.order} has no selected image asset.`);
-    const asset = input.assetsById.get(shot.assetId);
-    if (!isEligibleMovieRenderAsset(asset)) throw new Error(`Shot ${shot.order} uses an ineligible image asset.`);
+    const videoAsset = input.videoAssetsBySceneId?.get(shot.storySceneId);
+    const useVideo = isEligibleMovieRenderVideoAsset(videoAsset);
+    const imageAsset = shot.assetId ? input.assetsById.get(shot.assetId) : undefined;
+    if (!useVideo) {
+      if (!shot.assetId) throw new Error(`Shot ${shot.order} has no selected image asset.`);
+      if (!isEligibleMovieRenderAsset(imageAsset)) throw new Error(`Shot ${shot.order} uses an ineligible image asset.`);
+    }
+    const sourceType: 'IMAGE' | 'VIDEO' = useVideo ? 'VIDEO' : 'IMAGE';
+    const sourceUrl = useVideo
+      ? (videoAsset!.assetUrl || '')
+      : (imageAsset!.assetUrl || imageAsset!.thumbnailUrl || '');
+    const assetId = useVideo ? videoAsset!.id : imageAsset!.id;
     const transition = cleanTransition(shot.transition, index + 1);
     const transitionDurationSeconds = transition === 'CUT' || transition === 'NONE'
       ? 0
@@ -154,8 +180,9 @@ export function buildMovieRenderPlan(input: {
       order: shot.order,
       sequenceSceneId: shot.sequenceSceneId,
       storySceneId: shot.storySceneId,
-      assetId: shot.assetId,
-      sourceUrl: asset?.assetUrl || asset?.thumbnailUrl || '',
+      assetId,
+      sourceType,
+      sourceUrl,
       durationSeconds,
       renderDurationSeconds: calculateRenderedSegmentDuration({
         durationSeconds,

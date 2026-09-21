@@ -4,7 +4,7 @@ import { protectedProcedure, router } from '../trpc';
 import { moderatePrompt } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate } from '../lib/credits';
+import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -19,7 +19,7 @@ import {
   selectStorybookImageForScene,
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
-import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock } from '../lib/storyVisualStyles';
+import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -44,6 +44,8 @@ import {
   shouldReuseMovieRenderJob,
 } from '../lib/movieRenderPlanning';
 import { queueMovieRenderJob } from '../lib/movieRenderWorker';
+import { synthesizeSpeech, elevenLabsApiKey, isElevenLabsTtsEnabled, elevenLabsDefaultVoiceId, elevenLabsModelId } from '../lib/generators/elevenLabsTts';
+import { generateMusic as generateLyriaMusic, geminiApiKey, isLyriaMusicEnabled, lyriaModelId } from '../lib/generators/lyriaMusic';
 import { buildAudioBlueprint, combineRenderHash, hashAudioBlueprint, nextAudioVersionFromExisting, summarizeUnmaterializedSpeechCues } from '../lib/audioPlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
 import {
@@ -64,7 +66,7 @@ const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
 const storyTypeSchema = z.enum(['SHORT_STORY', 'PICTURE_BOOK', 'COMIC', 'VIDEO_STORY']);
 const promptOutputTypeSchema = z.enum(['IMAGE', 'SHORT_VIDEO', 'COMIC_PANEL']);
-const promptProviderSchema = z.enum(['FLUX', 'WAN_25', 'KLING_I2V', 'KLING_R2V']);
+const promptProviderSchema = z.enum(['FLUX', 'WAN_25', 'KLING_I2V', 'KLING_R2V', 'H3_MAX']);
 const storyVisualStyleSchema = z.enum([
   'STORYBOOK_ILLUSTRATION',
   'THREE_D_ANIMATED',
@@ -670,7 +672,30 @@ async function movieRenderContext(ctx: any, projectId: string, sequenceId?: stri
     })
     : [];
   const assetsById = new Map<string, any>(assets.map((asset: any) => [asset.id, asset]));
-  const plan = buildMovieRenderPlan({ filmBlueprint, assetsById });
+
+  // Phase 10 — prefer a READY scene video over the still, per shot scene.
+  const shotSceneIds = filmBlueprint.shots
+    .filter((shot) => shot.enabled && shot.storySceneId)
+    .map((shot) => shot.storySceneId as string);
+  const videoAssets = shotSceneIds.length
+    ? await (ctx.prisma as any).storySceneAsset.findMany({
+      where: {
+        sceneId: { in: shotSceneIds },
+        projectId,
+        userId: ctx.user.id,
+        assetType: 'VIDEO',
+        status: 'READY',
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    : [];
+  const videoAssetsBySceneId = new Map<string, any>();
+  for (const asset of videoAssets) {
+    if (!videoAssetsBySceneId.has(asset.sceneId)) videoAssetsBySceneId.set(asset.sceneId, asset);
+  }
+
+  const plan = buildMovieRenderPlan({ filmBlueprint, assetsById, videoAssetsBySceneId });
   const renderPlanHash = hashRenderPlan(plan);
   const creditCost = await getFeatureCreditCost(ctx.prisma, MOVIE_RENDER_FEATURE_KEY);
   const currentMovie = await (ctx.prisma as any).movieAsset.findFirst({
@@ -879,7 +904,8 @@ type ScenePromptContext = {
   };
 };
 
-type SceneImageModel = 'FLUX' | 'GROK_IMAGINE' | 'NANO_BANANA';
+type SceneImageModel = 'FLUX' | 'FLUX2' | 'GROK_IMAGINE' | 'NANO_BANANA';
+type SceneVideoModel = 'H3_MAX';
 
 const PROMPT_PROVIDER_META: Record<PromptProvider, {
   label: string;
@@ -915,9 +941,69 @@ const PROMPT_PROVIDER_META: Record<PromptProvider, {
     defaultAspectRatio: '9:16',
     defaultDuration: 5,
   },
+  H3_MAX: {
+    label: 'MiniMax H3-Max Turbo',
+    maxPromptLength: 1400,
+    maxNegativePromptLength: 900,
+    defaultAspectRatio: '9:16',
+    defaultDuration: 5,
+  },
 };
 
-const SCENE_IMAGE_MODELS = ['FLUX', 'GROK_IMAGINE', 'NANO_BANANA'] as const;
+const SCENE_IMAGE_MODELS = ['FLUX', 'FLUX2', 'GROK_IMAGINE', 'NANO_BANANA'] as const;
+const SCENE_VIDEO_MODELS = ['H3_MAX'] as const;
+
+/**
+ * Phase 11 — named shot presets (camera-motion + transition + pacing bundles)
+ * applied to Sequence scenes. Values must be valid SequenceCameraMovement /
+ * SequenceCameraSpeed / SequenceTransitionType enum members.
+ */
+const SHOT_PRESETS = {
+  CINEMATIC: { cameraMovement: 'PUSH_IN', cameraSpeed: 'SLOW', transition: 'CROSS_DISSOLVE', transitionDurationSeconds: 0.8, zoom: 1.08 },
+  DYNAMIC: { cameraMovement: 'TRACK_RIGHT', cameraSpeed: 'FAST', transition: 'CUT', transitionDurationSeconds: 0, zoom: 1 },
+  CALM: { cameraMovement: 'STATIC', cameraSpeed: 'SLOW', transition: 'FADE', transitionDurationSeconds: 1, zoom: 1 },
+  DRAMATIC: { cameraMovement: 'TILT_UP', cameraSpeed: 'NORMAL', transition: 'DIP_TO_BLACK', transitionDurationSeconds: 0.6, zoom: 1.15 },
+  REVEAL: { cameraMovement: 'PULL_OUT', cameraSpeed: 'NORMAL', transition: 'CROSS_DISSOLVE', transitionDurationSeconds: 0.6, zoom: 1 },
+} as const;
+const SHOT_PRESET_NAMES = ['CINEMATIC', 'DYNAMIC', 'CALM', 'DRAMATIC', 'REVEAL'] as const;
+
+/**
+ * Phase 11 — named style presets bundling a visual style, director defaults,
+ * and a background-music prompt (applied via `applyStylePreset`).
+ */
+const STYLE_PRESETS = {
+  WARM_STORYBOOK: {
+    label: 'Warm Storybook',
+    visualStyle: 'STORYBOOK_ILLUSTRATION' as StoryVisualStyleKey,
+    director: { lighting: 'WARM', environmentMood: 'COZY', scenePace: 'CALM', timeOfDay: 'AFTERNOON' },
+    musicPrompt: 'warm gentle acoustic strings, soft piano, cozy storybook atmosphere, no vocals',
+  },
+  EPIC_CINEMATIC: {
+    label: 'Epic Cinematic',
+    visualStyle: 'CINEMATIC_FANTASY' as StoryVisualStyleKey,
+    director: { lighting: 'DRAMATIC', environmentMood: 'ADVENTUROUS', scenePace: 'ENERGETIC', weather: 'WINDY' },
+    musicPrompt: 'epic cinematic orchestral score, sweeping strings, building climax, no vocals',
+  },
+  ANIME_ADVENTURE: {
+    label: 'Anime Adventure',
+    visualStyle: 'ANIME' as StoryVisualStyleKey,
+    director: { lighting: 'BRIGHT', environmentMood: 'MAGICAL', scenePace: 'ENERGETIC' },
+    musicPrompt: 'upbeat anime adventure theme, playful synths and strings, no vocals',
+  },
+  PHOTOREAL_CINEMATIC: {
+    label: 'Photoreal Cinematic',
+    visualStyle: 'PHOTOREALISTIC' as StoryVisualStyleKey,
+    director: { lighting: 'MOONLIGHT', environmentMood: 'PEACEFUL', scenePace: 'CALM', timeOfDay: 'NIGHT' },
+    musicPrompt: 'moody cinematic ambient, low strings, atmospheric pads, no vocals',
+  },
+  AFRICAN_FOLKTALE: {
+    label: 'African Folktale',
+    visualStyle: 'AFRICAN_FOLKTALE_ILLUSTRATION' as StoryVisualStyleKey,
+    director: { lighting: 'WARM', environmentMood: 'PEACEFUL', scenePace: 'NORMAL' },
+    musicPrompt: 'warm african percussion and kora, gentle rhythmic storytelling, no vocals',
+  },
+} as const;
+const STYLE_PRESET_NAMES = ['WARM_STORYBOOK', 'EPIC_CINEMATIC', 'ANIME_ADVENTURE', 'PHOTOREAL_CINEMATIC', 'AFRICAN_FOLKTALE'] as const;
 
 function titleCase(value: string) {
   return value
@@ -1448,11 +1534,68 @@ function sceneImageProviderInfo(requestedModel: SceneImageModel, providerJobId?:
     };
   }
 
+  if (requestedModel === 'FLUX2') {
+    return {
+      provider: 'fal',
+      model: 'fal-ai/flux-2',
+      requestedModel,
+    };
+  }
+
   return {
     provider: requestedModel,
     model: requestedModel,
     requestedModel,
   };
+}
+
+function sceneVideoProviderInfo(requestedModel: SceneVideoModel) {
+  if (requestedModel === 'H3_MAX') {
+    return {
+      provider: 'fal',
+      model: 'minimax/h3-max-turbo/image-to-video',
+      requestedModel,
+    };
+  }
+  return {
+    provider: requestedModel,
+    model: requestedModel,
+    requestedModel,
+  };
+}
+
+/** Default instrumental music prompt derived from the project's creative fields. */
+function defaultMusicPrompt(project: { genre?: string | null; tone?: string | null; theme?: string | null }): string {
+  return [
+    project.genre ? `genre: ${project.genre}` : null,
+    project.tone ? `tone: ${project.tone}` : null,
+    project.theme ? `theme: ${project.theme}` : null,
+    'instrumental cinematic background score for a short vertical film',
+    'no vocals, loopable, gentle build, seamless',
+  ].filter(Boolean).join(', ');
+}
+
+function formatVttTimestamp(seconds: number): string {
+  const value = Math.max(0, seconds);
+  const hh = Math.floor(value / 3600);
+  const mm = Math.floor((value % 3600) / 60);
+  const ss = Math.floor(value % 60);
+  const ms = Math.round((value - Math.floor(value)) * 1000);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+}
+
+/** Build a WebVTT caption track from timed speech cues (Phase 11 — sidecar captions). */
+export function buildWebVtt(entries: Array<{ start: number; duration?: number | null; text: string }>): string {
+  const lines = ['WEBVTT', ''];
+  entries.forEach((entry, index) => {
+    const start = Math.max(0, entry.start ?? 0);
+    const end = start + Math.max(0.5, entry.duration ?? 2.5);
+    lines.push(String(index + 1));
+    lines.push(`${formatVttTimestamp(start)} --> ${formatVttTimestamp(end)}`);
+    lines.push(entry.text.trim());
+    lines.push('');
+  });
+  return lines.join('\n');
 }
 
 async function waitForGenerationOutput(model: SupportedModel, providerJobId: string, immediateUrl?: string) {
@@ -1462,7 +1605,8 @@ async function waitForGenerationOutput(model: SupportedModel, providerJobId: str
   while (Date.now() - started < timeoutMs) {
     const status = await pollJobStatus(model, providerJobId);
     if (status.status === 'completed' && status.outputUrl) return status.outputUrl;
-    if (status.status === 'failed') throw new Error(status.error ?? 'Image generation failed');
+    if (status.status === 'failed') throw new Error(status.error?.message ?? 'Generation failed');
+    if (status.status === 'cancelled') throw new Error(status.error?.message ?? 'Generation was cancelled');
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
   throw new Error('Image generation is taking longer than expected. Please try again.');
@@ -1675,7 +1819,7 @@ function runCreativeCriticInBackground(ctx: any, input: {
 
 async function generateSceneImageAsset(
   ctx: any,
-  input: { projectId: string; sceneId: string; model: SceneImageModel; isRegeneration?: boolean; creativeCriticRunId?: string | null },
+  input: { projectId: string; sceneId: string; model: SceneImageModel; isRegeneration?: boolean; creativeCriticRunId?: string | null; instruction?: string },
 ) {
   const project = await ctx.prisma.storyProject.findFirst({
     where: { id: input.projectId, userId: ctx.user.id },
@@ -1741,6 +1885,23 @@ async function generateSceneImageAsset(
     }
   }
 
+  // Phase 11 — creator regeneration instruction (natural-language edit).
+  if (input.instruction?.trim()) {
+    const instruction = input.instruction.trim();
+    const instructionMod = await moderatePrompt(instruction);
+    if (!instructionMod.allowed) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: instructionMod.reason ?? 'Your change request violates our content guidelines.' });
+    }
+    composed = {
+      ...composed,
+      prompt: limitText(`${composed.prompt}. Change requested by the creator: ${instruction}`, GENERATION_PROMPT_MAX_LENGTH),
+      deterministicPrompt: composed.deterministicPrompt
+        ? `${composed.deterministicPrompt}. Creator change: ${instruction}`
+        : composed.deterministicPrompt,
+      providerHints: { ...composed.providerHints, creatorInstruction: instruction } as any,
+    };
+  }
+
   const moderation = await moderatePrompt(composed.prompt);
   if (!moderation.allowed) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Please try a safer picture idea.' });
@@ -1752,7 +1913,7 @@ async function generateSceneImageAsset(
       projectId: project.id,
       userId: ctx.user.id,
       assetType: 'IMAGE',
-      provider: input.model === 'FLUX' ? 'RunPod' : input.model,
+      provider: input.model === 'FLUX' ? 'RunPod' : input.model === 'FLUX2' ? 'fal' : input.model,
       model: input.model,
       promptVersionId: null,
       composedPrompt: composed.prompt,
@@ -2008,6 +2169,254 @@ async function generateSceneImageAsset(
     await (ctx.prisma as any).storySceneSeed.update({ where: { id: scene.id }, data: { imageStatus: 'FAILED' } }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
       await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene image failed').catch(() => {});
+    }
+    return {
+      scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
+      asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
+    };
+  }
+}
+
+async function generateSceneVideoAsset(
+  ctx: any,
+  input: { projectId: string; sceneId: string; model: SceneVideoModel; duration?: number; isRegeneration?: boolean; instruction?: string },
+) {
+  const project = await ctx.prisma.storyProject.findFirst({
+    where: { id: input.projectId, userId: ctx.user.id },
+  });
+  if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+
+  const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+    where: { id: input.sceneId, projectId: input.projectId },
+    include: {
+      project: {
+        select: {
+          title: true,
+          originalIdea: true,
+          audienceMode: true,
+          visualStyle: true,
+          theme: true,
+          tone: true,
+          synopsis: true,
+          storyDna: true,
+          characterMemory: { orderBy: { createdAt: 'asc' } },
+        },
+      },
+      chapter: { select: { blueprint: true } },
+      assets: { where: { assetType: 'IMAGE', status: 'READY' }, orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+  });
+  if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+
+  // H3-Max is image-to-video — the scene's latest ready image is the opening frame.
+  const seedImage = scene.assets?.[0];
+  if (!seedImage?.assetUrl) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Generate a scene image first, then animate it into video.' });
+  }
+
+  const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
+  const duration = Math.min(10, Math.max(5, input.duration ?? 5));
+
+  await trackStoryAnalytics(ctx, {
+    event: 'scene_generation_started',
+    projectId: project.id,
+    audienceMode,
+    properties: { sceneId: scene.id, model: input.model, generationType: 'VIDEO', isRegeneration: Boolean(input.isRegeneration) },
+  });
+
+  let composed = await composeEnhancedScenePrompt(ctx, {
+    scene,
+    outputType: 'SHORT_VIDEO',
+    provider: input.model as PromptProvider,
+    audienceMode,
+    projectId: project.id,
+    analyticsSource: 'generation',
+  });
+
+  // Phase 11 — creator regeneration instruction (natural-language edit).
+  if (input.instruction?.trim()) {
+    const instruction = input.instruction.trim();
+    const instructionMod = await moderatePrompt(instruction);
+    if (!instructionMod.allowed) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: instructionMod.reason ?? 'Your change request violates our content guidelines.' });
+    }
+    composed = {
+      ...composed,
+      prompt: limitText(`${composed.prompt}. Change requested by the creator: ${instruction}`, GENERATION_PROMPT_MAX_LENGTH),
+      providerHints: { ...composed.providerHints, creatorInstruction: instruction } as any,
+    };
+  }
+
+  const moderation = await moderatePrompt(composed.prompt);
+  if (!moderation.allowed) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Please try a safer animation idea.' });
+  }
+
+  const providerInfo = sceneVideoProviderInfo(input.model);
+  const asset = await (ctx.prisma as any).storySceneAsset.create({
+    data: {
+      sceneId: scene.id,
+      projectId: project.id,
+      userId: ctx.user.id,
+      assetType: 'VIDEO',
+      provider: providerInfo.provider,
+      model: providerInfo.model,
+      promptVersionId: null,
+      composedPrompt: composed.prompt,
+      negativePrompt: composed.negativePrompt,
+      durationSeconds: duration,
+      status: 'GENERATING',
+      creativeStatus: 'DRAFT',
+      isLatest: false,
+    },
+  });
+
+  const featureKey = MODEL_FEATURE_KEY[input.model as SupportedModel];
+  let creditsUsed = 0;
+  const generationRef = `story-scene-video-${asset.id}`;
+
+  try {
+    if (featureKey) {
+      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`);
+    }
+
+    await trackStoryAnalytics(ctx, {
+      event: 'generation_started_with_enhanced_prompt',
+      projectId: project.id,
+      audienceMode,
+      properties: {
+        sceneId: scene.id,
+        assetId: asset.id,
+        style: composed.styleUsed,
+        provider: input.model,
+        generationType: 'VIDEO',
+        enhancerProvider: composed.enhancerProvider,
+      },
+    });
+
+    const generationJob = await ctx.prisma.generationJob.create({
+      data: {
+        userId: ctx.user.id,
+        model: input.model,
+        prompt: composed.prompt,
+        negativePrompt: composed.negativePrompt,
+        duration,
+        aspectRatio: composed.aspectRatio ?? '9:16',
+        seedImageUrl: seedImage.assetUrl,
+        status: 'QUEUED',
+        creditsUsed: creditsUsed || 0,
+        metadata: {
+          storyProjectId: project.id,
+          storySceneId: scene.id,
+          storySceneAssetId: asset.id,
+          deterministicPrompt: composed.deterministicPrompt,
+          visualStyle: normaliseStoryVisualStyle(project.visualStyle),
+          visualStyleLabel: composed.styleUsed,
+          director: composed.director,
+          providerHints: composed.providerHints,
+          promptComposerVersion: (composed as any).isV2 ? 'visual_prompt_v2' : 'v1',
+        },
+      },
+    });
+
+    const submitted = await submitGenerationJob({
+      model: input.model as SupportedModel,
+      prompt: composed.prompt,
+      negativePrompt: composed.negativePrompt,
+      duration,
+      aspectRatio: composed.aspectRatio,
+      seedImageUrl: seedImage.assetUrl,
+    });
+    const providerJobId = submitted.providerJobId;
+
+    await ctx.prisma.generationJob.update({
+      where: { id: generationJob.id },
+      data: {
+        providerJobId,
+        status: submitted.outputUrl ? 'COMPLETED' : 'GENERATING',
+        outputUrl: submitted.outputUrl,
+        thumbnailUrl: submitted.thumbnailUrl,
+        metadata: {
+          ...(generationJob.metadata as Record<string, unknown>),
+          requestedModel: providerInfo.requestedModel,
+          actualProvider: providerInfo.provider,
+          actualProviderModel: providerInfo.model,
+        },
+      },
+    });
+
+    const providerOutputUrl = await waitForGenerationOutput(input.model as SupportedModel, providerJobId, submitted.outputUrl);
+
+    const r2Key = `story-projects/${project.id}/scenes/${scene.id}/videos/${asset.id}.mp4`;
+    const assetUrl = providerOutputUrl.startsWith('data:')
+      ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'video/mp4')) ?? providerOutputUrl
+      : await mirrorUrlToR2(providerOutputUrl, r2Key, 'video/mp4');
+    const dimensions = imageDimensions(composed.aspectRatio ?? '9:16');
+
+    await ctx.prisma.$transaction(async (tx: any) => {
+      await tx.storySceneAsset.updateMany({ where: { sceneId: scene.id, assetType: 'VIDEO' }, data: { isLatest: false } });
+      await tx.storySceneAsset.update({
+        where: { id: asset.id },
+        data: {
+          status: 'READY',
+          assetUrl,
+          thumbnailUrl: seedImage.assetUrl,
+          r2Key,
+          provider: providerInfo.provider,
+          model: providerInfo.model,
+          width: dimensions.width,
+          height: dimensions.height,
+          generationJobId: generationJob.id,
+          isLatest: true,
+        },
+      });
+      await tx.generationJob.update({
+        where: { id: generationJob.id },
+        data: {
+          outputUrl: assetUrl,
+          thumbnailUrl: seedImage.assetUrl,
+          status: 'COMPLETED',
+        },
+      });
+    });
+
+    await trackStoryAnalytics(ctx, {
+      event: 'scene_generation_completed',
+      projectId: project.id,
+      audienceMode,
+      properties: {
+        sceneId: scene.id,
+        assetId: asset.id,
+        requestedModel: input.model,
+        model: providerInfo.model,
+        provider: providerInfo.provider,
+        r2Key,
+        generationType: 'VIDEO',
+        isRegeneration: Boolean(input.isRegeneration),
+      },
+    });
+
+    return {
+      scene: await (ctx.prisma as any).storySceneSeed.findFirst({
+        where: { id: scene.id },
+        include: { assets: { orderBy: { createdAt: 'desc' }, take: 12 } },
+      }),
+      asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Video generation failed. Please try again.';
+    await trackStoryAnalytics(ctx, {
+      event: 'scene_generation_failed',
+      projectId: project.id,
+      audienceMode,
+      properties: { sceneId: scene.id, assetId: asset.id, model: input.model, generationType: 'VIDEO', message },
+    });
+    await (ctx.prisma as any).storySceneAsset.update({
+      where: { id: asset.id },
+      data: { status: 'FAILED', errorMessage: message, isLatest: false },
+    }).catch(() => {});
+    if (creditsUsed > 0 && featureKey) {
+      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed').catch(() => {});
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
@@ -3228,6 +3637,7 @@ export const storyRouter = router({
       projectId: z.string(),
       sceneId: z.string(),
       model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+      instruction: z.string().max(300).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, input)),
 
@@ -3236,8 +3646,29 @@ export const storyRouter = router({
       projectId: z.string(),
       sceneId: z.string(),
       model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+      instruction: z.string().max(300).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
+
+  generateSceneVideo: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      model: z.enum(SCENE_VIDEO_MODELS).default('H3_MAX'),
+      duration: z.number().int().min(5).max(10).optional(),
+      instruction: z.string().max(300).optional(),
+    }))
+    .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, input)),
+
+  regenerateSceneVideo: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      model: z.enum(SCENE_VIDEO_MODELS).default('H3_MAX'),
+      duration: z.number().int().min(5).max(10).optional(),
+      instruction: z.string().max(300).optional(),
+    }))
+    .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, { ...input, isRegeneration: true })),
 
   runCreativeCritic: protectedProcedure
     .input(z.object({
@@ -3758,6 +4189,84 @@ export const storyRouter = router({
       return sequenceResponse(ctx, input.projectId, input.sequenceId);
     }),
 
+  /** Phase 11 — apply a named camera/transition/pacing preset to a Sequence. */
+  applyShotPreset: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sequenceId: z.string(),
+      preset: z.enum(SHOT_PRESET_NAMES),
+      sequenceSceneId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { project, sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const targets = sequence.scenes.filter((scene: any) =>
+        input.sequenceSceneId ? scene.id === input.sequenceSceneId : scene.enabled,
+      );
+      if (!targets.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'No matching sequence scenes.' });
+      const preset = SHOT_PRESETS[input.preset];
+      for (const scene of targets) {
+        await (ctx.prisma as any).storySequenceScene.update({
+          where: { id: scene.id },
+          data: {
+            cameraMovement: preset.cameraMovement,
+            cameraSpeed: preset.cameraSpeed,
+            transition: preset.transition,
+            transitionDurationSeconds: clampTransitionDuration(preset.transitionDurationSeconds),
+            zoom: preset.zoom,
+          },
+        });
+      }
+      const runtime = await recalculateSequenceRuntime(ctx.prisma, input.sequenceId);
+      await trackStoryAnalytics(ctx, {
+        event: 'director_setting_changed',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { sequenceId: input.sequenceId, preset: input.preset, sceneCount: targets.length, runtimeSeconds: runtime.totalRuntimeSeconds },
+      });
+      return { applied: targets.length, preset: input.preset, runtimeSeconds: runtime.totalRuntimeSeconds };
+    }),
+
+  /** Phase 11 — named style presets (visual style + director + music prompt). */
+  listStylePresets: protectedProcedure.query(() =>
+    STYLE_PRESET_NAMES.map((name) => ({
+      name,
+      label: STYLE_PRESETS[name].label,
+      visualStyle: STYLE_PRESETS[name].visualStyle,
+      musicPrompt: STYLE_PRESETS[name].musicPrompt,
+    })),
+  ),
+
+  /** Phase 11 — apply a style preset to the project (and optionally all scenes). */
+  applyStylePreset: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      preset: z.enum(STYLE_PRESET_NAMES),
+      applyToScenes: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const preset = STYLE_PRESETS[input.preset];
+      await (ctx.prisma as any).storyProject.update({
+        where: { id: input.projectId },
+        data: { visualStyle: preset.visualStyle },
+      });
+      let scenesUpdated = 0;
+      if (input.applyToScenes) {
+        const result = await (ctx.prisma as any).storySceneSeed.updateMany({
+          where: { projectId: input.projectId },
+          data: preset.director,
+        });
+        scenesUpdated = result.count;
+      }
+      await trackStoryAnalytics(ctx, {
+        event: 'visual_style_selected',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { preset: input.preset, visualStyle: preset.visualStyle, scenesUpdated },
+      });
+      return { preset: input.preset, visualStyle: preset.visualStyle, musicPrompt: preset.musicPrompt, scenesUpdated };
+    }),
+
   duplicateSequenceScene: protectedProcedure
     .input(z.object({ projectId: z.string(), sequenceId: z.string(), sequenceSceneId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -4241,6 +4750,71 @@ export const storyRouter = router({
         (ctx.prisma as any).movieAsset.update({ where: { id: asset.id }, data: { isCurrent: true } }),
       ]);
       return { ok: true };
+    }),
+
+  /** Export/version history — READY movie renders for a project (Phase 10). */
+  listMovieAssets: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      return (ctx.prisma as any).movieAsset.findMany({
+        where: { projectId: input.projectId, status: 'READY' },
+        orderBy: { versionNumber: 'desc' },
+        take: 50,
+        select: {
+          id: true,
+          versionNumber: true,
+          status: true,
+          publicUrl: true,
+          storageKey: true,
+          width: true,
+          height: true,
+          durationSeconds: true,
+          fps: true,
+          fileSizeBytes: true,
+          isCurrent: true,
+          createdAt: true,
+        },
+      });
+    }),
+
+  /** Phase 11 — set or clear the project cover (a ready scene image asset). */
+  setProjectCover: protectedProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      if (input.assetId) {
+        const asset = await (ctx.prisma as any).storySceneAsset.findFirst({
+          where: { id: input.assetId, projectId: input.projectId, assetType: 'IMAGE', status: 'READY', deletedAt: null },
+        });
+        if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cover image not found' });
+      }
+      await (ctx.prisma as any).storyProject.update({
+        where: { id: input.projectId },
+        data: { coverAssetId: input.assetId },
+      });
+      return { coverAssetId: input.assetId };
+    }),
+
+  /** Phase 11 — sidecar WebVTT captions derived from timed NARRATION/DIALOGUE cues. */
+  getSequenceCaptions: protectedProcedure
+    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .query(async ({ ctx, input }) => {
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId, input.sequenceId);
+      const plan = await (ctx.prisma as any).audioPerformancePlan.findFirst({
+        where: { sequenceId: sequence.id },
+        include: {
+          tracks: {
+            where: { type: { in: ['NARRATION', 'DIALOGUE'] }, enabled: true },
+            include: { cues: { where: { enabled: true }, orderBy: { startTimeSeconds: 'asc' } } },
+          },
+        },
+      });
+      const cues = (plan?.tracks ?? [])
+        .flatMap((track: any) => track.cues)
+        .filter((cue: any) => typeof cue.text === 'string' && cue.text.trim().length > 0);
+      const vtt = buildWebVtt(cues.map((cue: any) => ({ start: cue.startTimeSeconds, duration: cue.durationSeconds, text: cue.text })));
+      return { vtt, cueCount: cues.length };
     }),
 
   getWorkspace: protectedProcedure
@@ -5158,6 +5732,167 @@ export const storyRouter = router({
       const { id, createdAt, updatedAt, ...rest } = cue;
       const duplicate = await ctx.prisma.audioCue.create({ data: rest as any });
       return duplicate;
+    }),
+
+  /** Phase 9B.3 — generate narration/dialogue audio for a cue via ElevenLabs. */
+  generateCueSpeech: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      cueId: z.string(),
+      voiceId: z.string().max(80).optional(),
+      modelId: z.string().max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx);
+      await ensureProject(ctx, input.projectId);
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+      }
+      const cue = await ctx.prisma.audioCue.findFirst({
+        where: { id: input.cueId, track: { plan: { projectId: input.projectId } } },
+        include: { voiceProfile: true },
+      });
+      if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+      if (!cue.text?.trim()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Add narration text to this cue first.' });
+      }
+
+      const moderation = await moderatePrompt(cue.text);
+      if (!moderation.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Narration text violates our content guidelines.' });
+      }
+
+      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
+      if (!rate.configured) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Narration generation pricing is not configured yet. Set the `story:speech_generation` credit rate in Admin → Credits.',
+          cause: { errorCode: rate.errorCode },
+        });
+      }
+
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, cue.id, 'Narration generation');
+
+      try {
+        const voiceId = input.voiceId || cue.voiceProfile?.voiceRef || elevenLabsDefaultVoiceId();
+        const audio = await synthesizeSpeech({ text: cue.text, voiceId, modelId: input.modelId });
+        const storageKey = `story-projects/${input.projectId}/audio/${cue.id}-${Date.now()}.mp3`;
+        const publicUrl = await uploadBufferToR2(audio, storageKey, 'audio/mpeg');
+        if (!publicUrl) throw new Error('R2 storage is not configured for narration.');
+
+        const asset = await ctx.prisma.audioAsset.create({
+          data: {
+            projectId: input.projectId,
+            userId: ctx.user.id,
+            storageProvider: 'R2',
+            storageKey,
+            publicUrl,
+            mimeType: 'audio/mpeg',
+            fileSizeBytes: audio.length,
+            sourceKind: 'GENERATED_SPEECH',
+          },
+        });
+        const updatedCue = await ctx.prisma.audioCue.update({
+          where: { id: cue.id },
+          data: { audioAssetId: asset.id },
+          include: { audioAsset: true },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'audio_cue_updated',
+          projectId: input.projectId,
+          properties: { cueId: cue.id, generation: 'speech', model: elevenLabsModelId(), assetId: asset.id },
+        });
+        return { cue: updatedCue, asset };
+      } catch (error) {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, cue.id, 'Refund: narration generation failed').catch(() => {});
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Narration generation failed',
+        });
+      }
+    }),
+
+  /** Background music / ambience generation for a MUSIC or AMBIENCE cue (Lyria). */
+  generateCueMusic: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      cueId: z.string(),
+      prompt: z.string().max(500).optional(),
+      modelId: z.string().max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx);
+      const project = await ctx.prisma.storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        select: { genre: true, tone: true, theme: true },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      if (!isLyriaMusicEnabled() || !geminiApiKey()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Music generation is not enabled.' });
+      }
+      const cue = await ctx.prisma.audioCue.findFirst({
+        where: { id: input.cueId, track: { plan: { projectId: input.projectId } } },
+        include: { track: { select: { type: true } } },
+      });
+      if (!cue) throw new TRPCError({ code: 'NOT_FOUND', message: 'Audio cue not found' });
+      if (cue.track.type !== 'MUSIC' && cue.track.type !== 'AMBIENCE') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Music generation applies to MUSIC or AMBIENCE cues.' });
+      }
+
+      const prompt = (input.prompt?.trim() || cue.text?.trim() || defaultMusicPrompt(project)).slice(0, 500);
+      const moderation = await moderatePrompt(prompt);
+      if (!moderation.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Music prompt violates our content guidelines.' });
+      }
+
+      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_AUDIO_GENERATION_FEATURE_KEY);
+      if (!rate.configured) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Music generation pricing is not configured yet. Set the `story:audio_generation` credit rate in Admin → Credits.',
+          cause: { errorCode: rate.errorCode },
+        });
+      }
+
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Music generation');
+
+      try {
+        const { audio, mimeType } = await generateLyriaMusic({ prompt, modelId: input.modelId });
+        const ext = mimeType.includes('wav') ? 'wav' : 'mp3';
+        const storageKey = `story-projects/${input.projectId}/audio/${cue.id}-${Date.now()}.${ext}`;
+        const publicUrl = await uploadBufferToR2(audio, storageKey, mimeType);
+        if (!publicUrl) throw new Error('R2 storage is not configured for music.');
+
+        const asset = await ctx.prisma.audioAsset.create({
+          data: {
+            projectId: input.projectId,
+            userId: ctx.user.id,
+            storageProvider: 'R2',
+            storageKey,
+            publicUrl,
+            mimeType,
+            fileSizeBytes: audio.length,
+            sourceKind: 'GENERATED_MUSIC',
+          },
+        });
+        const updatedCue = await ctx.prisma.audioCue.update({
+          where: { id: cue.id },
+          data: { audioAssetId: asset.id },
+          include: { audioAsset: true },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'audio_cue_updated',
+          projectId: input.projectId,
+          properties: { cueId: cue.id, generation: 'music', model: lyriaModelId(), assetId: asset.id },
+        });
+        return { cue: updatedCue, asset };
+      } catch (error) {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Refund: music generation failed').catch(() => {});
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Music generation failed',
+        });
+      }
     }),
 
   listVoiceProfiles: protectedProcedure

@@ -62,6 +62,9 @@ enum GenerationModel {
   HUNYUAN_VIDEO
   COG_VIDEO_X
   SEEDANCE
+  FLUX2        // fal.ai FLUX.2 text-to-image (fal-ai/flux-2)
+  H3_MAX       // fal.ai MiniMax H3-Max image-to-video (minimax/h3-max/image-to-video)
+  VEED_FABRIC  // fal.ai VEED Fabric 1.0 talking-video lip-sync (veed/fabric-1.0)
 }
 
 enum GenerationStatus {
@@ -335,7 +338,8 @@ model User {
   email             String        @unique
   username          String        @unique
   displayName       String
-  passwordHash      String
+  passwordHash      String?   // null for Google-only accounts (no password set)
+  googleId          String?   @unique // Google OAuth subject — set on first Google sign-in
   avatarUrl         String?
   bio               String?
   role              UserRole      @default(VIEWER)
@@ -376,6 +380,7 @@ model User {
   creditBalance       CreditBalance?
   creditTransactions  CreditTransaction[]
   creditOperations    CreditOperation[]
+  creditReservations  CreditReservation[]
   passwordResetTokens PasswordResetToken[]
   notifications       Notification[] @relation("ReceivedNotifications")
   sentNotifications   Notification[] @relation("SentNotifications")
@@ -772,6 +777,39 @@ model CreditOperation {
   @@map("credit_operations")
 }
 
+// Credit reservation lifecycle for the reserve → settle → release pattern
+// (Phase §7.5). Flag-guarded: only used when CREDIT_RESERVE_SETTLE_ENABLED=true.
+// `idempotencyKey` is unique so a reservation is created exactly once and can
+// survive process crashes between reserve and settle/release.
+enum CreditReservationStatus {
+  HELD
+  SETTLED
+  RELEASED
+}
+
+model CreditReservation {
+  id             String                  @id @default(cuid())
+  idempotencyKey String                  @unique
+  status         CreditReservationStatus @default(HELD)
+
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationJobId String?
+  featureKey      String?
+  amount          Int     // estimated credits held
+  settledAmount   Int?    // actual credits charged (set on SETTLED)
+  referenceId     String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  settledAt  DateTime?
+  releasedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("credit_reservations")
+}
+
 // Admin-configurable credit cost per feature key
 // e.g. featureKey="generate:kling" creditsPerUnit=500
 //      featureKey="generate:nano_banana" creditsPerUnit=100
@@ -808,6 +846,7 @@ model GenerationJob {
   aspectRatio     String           @default("9:16")
   style           String?
   seedImageUrl    String?          // optional image for image-to-video models
+  audioUrl        String?          // optional audio for talking-video models (VEED Fabric)
 
   // Job lifecycle
   status          GenerationStatus @default(QUEUED)
@@ -815,6 +854,8 @@ model GenerationJob {
   outputUrl       String?          // final generated video URL
   thumbnailUrl    String?          // extracted thumbnail from generated video
   errorMessage    String?
+  errorCode       String?          // normalized error code (Phase §7.2)
+  retryCount      Int              @default(0) // provider retries (Phase 15)
 
   // If the user publishes the generated video, link it here
   videoId         String?          @unique
@@ -833,6 +874,9 @@ model GenerationJob {
   @@index([status])
   @@index([model])
   @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([status, retryCount])
+  @@index([errorCode])
   @@map("generation_jobs")
 }
 
@@ -859,6 +903,9 @@ model StoryProject {
   creativeCriticThreshold Int?
   creativeCriticMaxRetries Int?
   lastWorkspaceTab String?
+  // Phase 11 — project cover (share/OG image); a ready scene image asset.
+  coverAssetId   String?
+  coverAsset     StorySceneAsset? @relation("ProjectCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
 
   characters     StoryCharacter[]
   environments   StoryEnvironment[]
@@ -1275,6 +1322,7 @@ model StorySceneAsset {
   deletedAt       DateTime?
   selectedInSequenceScenes StorySequenceScene[] @relation("SequenceSelectedAsset")
   futureVideoSequenceScenes StorySequenceScene[] @relation("SequenceFutureVideoAsset")
+  projectCovers      StoryProject[]      @relation("ProjectCover")
 
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt

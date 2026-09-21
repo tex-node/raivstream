@@ -7,8 +7,14 @@
  *   https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/flux-2
  * IMPORTANT: `fal-ai/flux-2` is TEXT-TO-IMAGE. Image editing/reference is a
  * separate endpoint (e.g. `fal-ai/flux-2/edit`) and is intentionally NOT
- * mapped here. H3-Max and VEED Fabric remain preliminary and must be
- * reconciled before those capabilities are enabled.
+ * mapped here.
+ *
+ * H3-Max Turbo (`minimax/h3-max-turbo/image-to-video`) and VEED Fabric (`veed/fabric-1.0`)
+ * reconciled 2026-09-12 against the live model pages:
+ *   https://fal.ai/models/minimax/h3/image-to-video/api  (H3 family input/output)
+ *   https://fal.ai/models/veed/fabric-1.0/api             (Fabric input/output)
+ * Both are image-to-video; VEED Fabric additionally requires an audio track for
+ * lip-sync. Output is `{ video: { url, content_type, file_name, file_size } }`.
  */
 
 import {
@@ -60,22 +66,24 @@ export const FLUX_2_CONTRACT: ModelContract = {
     'Text-to-image only (no image_url/image_urls on this endpoint). Output: { images:[{url,content_type,file_name,file_size,width,height}], timings, seed, has_nsfw_concepts, prompt }.',
 };
 
-// ─── Preliminary (reconcile before enabling) ──────────────────────────────────
+// ─── Reconciled: minimax/h3-max-turbo/image-to-video (story image-to-video) ───
 
 export const H3_MAX_I2V_CONTRACT: ModelContract = {
-  endpoint: 'minimax/h3-max/image-to-video',
+  endpoint: 'minimax/h3-max-turbo/image-to-video',
   kind: 'video',
-  displayName: 'MiniMax H3-Max Image-to-Video',
+  displayName: 'MiniMax H3-Max Turbo Image-to-Video',
   fields: [
-    { name: 'prompt', required: true, description: 'Motion/scene prompt.' },
-    { name: 'image_url', required: true, description: 'Opening frame image.' },
-    { name: 'end_image_url', required: false, description: 'Optional ending frame.' },
-    { name: 'duration', required: false, description: 'Duration in seconds.' },
-    { name: 'resolution', required: false, description: 'Output resolution preset.' },
+    { name: 'prompt', required: true, description: 'Motion/scene prompt (required).' },
+    { name: 'image_url', required: true, description: 'Opening frame image; output aspect ratio follows it.' },
+    { name: 'end_image_url', required: false, description: 'Optional last frame for first-to-last keyframe generation.' },
+    { name: 'duration', required: false, description: 'Integer seconds (default 5).' },
+    { name: 'resolution', required: false, description: 'Output resolution preset (provider enum).' },
+    { name: 'mode', required: false, description: 'fast | balanced | quality (default balanced).' },
     { name: 'seed', required: false, description: 'Deterministic seed.' },
     { name: 'prompt_expansion', required: false, description: 'Provider-side prompt expansion toggle.' },
   ],
-  notes: 'PRELIMINARY — not reconciled against live schema. Verify before FAL_VIDEO_ENABLED=true.',
+  notes:
+    'Image-to-video. Output: { video:{url,content_type,file_name,file_size}, expanded_prompt }. Billed per second.',
 };
 
 export const VEED_FABRIC_CONTRACT: ModelContract = {
@@ -83,11 +91,12 @@ export const VEED_FABRIC_CONTRACT: ModelContract = {
   kind: 'ugc_video',
   displayName: 'VEED Fabric 1.0',
   fields: [
-    { name: 'image_url', required: true, description: 'Presenter image (photo or generated).' },
-    { name: 'audio_url', required: true, description: 'Speech/audio track to lip-sync against.' },
-    { name: 'resolution', required: false, description: 'Output resolution preset.' },
+    { name: 'image_url', required: true, description: 'Presenter image (photo or generated) with a clear front-facing face.' },
+    { name: 'audio_url', required: true, description: 'Speech/audio track to lip-sync against (mp3/ogg/wav/m4a/aac).' },
+    { name: 'resolution', required: true, description: 'Enum 720p | 480p (default 720p).' },
   ],
-  notes: 'PRELIMINARY — not reconciled. UGC gating/consent handled above the adapter.',
+  notes:
+    'Talking-person lip-sync. Output: { video:{url,content_type,...} }. Billed per second (480p $0.08/s, 720p $0.15/s). UGC gating/consent handled above the adapter.',
 };
 
 export const FAL_CONTRACTS = {
@@ -169,7 +178,8 @@ export function toH3MaxInput(input: VideoGenerationInput): Record<string, unknow
 
 export function toVeedFabricInput(input: UGCVideoInput): Record<string, unknown> {
   const payload: Record<string, unknown> = { image_url: input.imageUrl, audio_url: input.audioUrl };
-  if (input.resolution) payload.resolution = input.resolution;
+  // resolution is REQUIRED by the endpoint (enum 720p | 480p) — default rather than omit.
+  payload.resolution = input.resolution === '480p' || input.resolution === '720p' ? input.resolution : '720p';
   return payload;
 }
 

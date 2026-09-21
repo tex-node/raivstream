@@ -25,6 +25,9 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   HUNYUAN_VIDEO:  'generate:hunyuan_video',  // 300 credits (A100 GPU)
   COG_VIDEO_X:    'generate:cog_video_x',    // 250 credits
   SEEDANCE:       'generate:seedance',       // 200 credits
+  FLUX2:          'generate:flux2',          // fal.ai FLUX.2 image
+  H3_MAX:         'generate:h3_max',         // fal.ai MiniMax H3-Max I2V
+  VEED_FABRIC:    'generate:veed_fabric',    // fal.ai VEED Fabric talking-video
 };
 
 export const STORY_MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
@@ -208,4 +211,230 @@ export async function refundCredits(
       },
     });
   });
+}
+
+// ─── Reserve → Settle → Release (Phase §7.5 — flag-guarded) ──────────────────
+//
+// Three-phase credit lifecycle: reserve an estimate at submit, settle to the
+// actual amount on completion, release the hold on failure/cancel. Default OFF
+// (CREDIT_RESERVE_SETTLE_ENABLED=false) — the existing deduct-before-submit +
+// refund-on-failure path stays active until the financial policy is decided.
+
+export function isReserveSettleEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CREDIT_RESERVE_SETTLE_ENABLED === 'true';
+}
+
+export interface ReserveCreditsInput {
+  userId: string;
+  featureKey: string;
+  amount: number;
+  idempotencyKey: string;
+  referenceId: string;
+  generationJobId?: string;
+  description?: string;
+}
+
+/**
+ * Reserve an estimated amount of credits. Atomic + idempotent: the first call
+ * decrements the balance and creates a HELD reservation; later calls with the
+ * same idempotencyKey return the existing reservation without double-charging.
+ * Throws PAYMENT_REQUIRED if the balance is insufficient.
+ */
+export async function reserveCredits(
+  prisma: PrismaClient,
+  input: ReserveCreditsInput,
+): Promise<number> {
+  const existing = await prisma.creditReservation.findUnique({
+    where: { idempotencyKey: input.idempotencyKey },
+  });
+  if (existing) return existing.amount;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const duplicate = await tx.creditReservation.findUnique({
+        where: { idempotencyKey: input.idempotencyKey },
+      });
+      if (duplicate) return duplicate.amount;
+
+      const result = await tx.creditBalance.updateMany({
+        where: { userId: input.userId, balance: { gte: input.amount } },
+        data:  { balance: { decrement: input.amount } },
+      });
+      if (result.count === 0) {
+        const bal = await tx.creditBalance.findUnique({
+          where:  { userId: input.userId },
+          select: { balance: true },
+        });
+        throw new TRPCError({
+          code:    'PAYMENT_REQUIRED',
+          message: `Insufficient credits — you need ${input.amount} but have ${bal?.balance ?? 0}. Top up at /credits.`,
+        });
+      }
+
+      const updated = await tx.creditBalance.findUnique({
+        where:  { userId: input.userId },
+        select: { balance: true },
+      });
+      const balanceAfter  = updated!.balance;
+      const balanceBefore = balanceAfter + input.amount;
+
+      await tx.creditTransaction.create({
+        data: {
+          userId: input.userId,
+          amount:       -input.amount,
+          type:         'USAGE',
+          featureKey:   input.featureKey,
+          description:  input.description ?? 'Credit reservation',
+          referenceId:  input.referenceId,
+          balanceBefore,
+          balanceAfter,
+        },
+      });
+
+      await tx.creditReservation.create({
+        data: {
+          idempotencyKey: input.idempotencyKey,
+          status:         'HELD',
+          userId:         input.userId,
+          generationJobId: input.generationJobId,
+          featureKey:     input.featureKey,
+          amount:         input.amount,
+          referenceId:    input.referenceId,
+        },
+      });
+
+      return input.amount;
+    });
+  } catch (error) {
+    // Concurrent duplicate → unique constraint race; treat as idempotent success.
+    const code = (error as { code?: string } | null)?.code;
+    if (code === 'P2002') {
+      const existing = await prisma.creditReservation.findUnique({
+        where: { idempotencyKey: input.idempotencyKey },
+      });
+      if (existing) return existing.amount;
+    }
+    throw error;
+  }
+}
+
+export interface SettleResult { settled: boolean; delta: number }
+
+/**
+ * Settle a HELD reservation to the actual amount. Atomic + idempotent: the
+ * overage is refunded (delta > 0) or the underage is charged (delta < 0);
+ * equal amounts are a no-op. A non-HELD reservation is a harmless no-op.
+ */
+export async function settleCredits(
+  prisma: PrismaClient,
+  idempotencyKey: string,
+  actualAmount: number,
+): Promise<SettleResult> {
+  return prisma.$transaction(async (tx) => {
+    const reservation = await tx.creditReservation.findUnique({ where: { idempotencyKey } });
+    if (!reservation || reservation.status !== 'HELD') return { settled: false, delta: 0 };
+
+    const actual = Math.max(0, actualAmount);
+    const delta = reservation.amount - actual; // >0 refund, <0 charge
+
+    if (delta !== 0) {
+      await tx.creditBalance.upsert({
+        where:  { userId: reservation.userId },
+        create: { userId: reservation.userId, balance: Math.max(0, delta) },
+        update: { balance: { increment: delta } },
+      });
+      const updated = await tx.creditBalance.findUnique({
+        where:  { userId: reservation.userId },
+        select: { balance: true },
+      });
+      await tx.creditTransaction.create({
+        data: {
+          userId:       reservation.userId,
+          amount:       delta,
+          type:         delta > 0 ? 'REFUND' : 'USAGE',
+          featureKey:   reservation.featureKey ?? undefined,
+          description:  delta > 0 ? 'Credit settlement overage refund' : 'Credit settlement underage charge',
+          referenceId:  reservation.referenceId ?? idempotencyKey,
+          balanceBefore: (updated!.balance) - delta,
+          balanceAfter:  updated!.balance,
+        },
+      });
+    }
+
+    await tx.creditReservation.update({
+      where: { idempotencyKey },
+      data:  { status: 'SETTLED', settledAmount: actual, settledAt: new Date() },
+    });
+
+    return { settled: true, delta };
+  });
+}
+
+/**
+ * Release a HELD reservation (failure/cancel) — refunds the full estimate.
+ * Atomic + idempotent; a non-HELD reservation is a harmless no-op.
+ */
+export async function releaseCredits(
+  prisma: PrismaClient,
+  idempotencyKey: string,
+): Promise<{ released: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    const reservation = await tx.creditReservation.findUnique({ where: { idempotencyKey } });
+    if (!reservation || reservation.status !== 'HELD') return { released: false };
+
+    const updated = await tx.creditBalance.upsert({
+      where:  { userId: reservation.userId },
+      create: { userId: reservation.userId, balance: reservation.amount },
+      update: { balance: { increment: reservation.amount } },
+    });
+    const balanceAfter  = updated.balance;
+    const balanceBefore = balanceAfter - reservation.amount;
+
+    await tx.creditTransaction.create({
+      data: {
+        userId:       reservation.userId,
+        amount:       reservation.amount,
+        type:         'REFUND',
+        featureKey:   reservation.featureKey ?? undefined,
+        description:  'Credit reservation released',
+        referenceId:  reservation.referenceId ?? idempotencyKey,
+        balanceBefore,
+        balanceAfter,
+      },
+    });
+
+    await tx.creditReservation.update({
+      where: { idempotencyKey },
+      data:  { status: 'RELEASED', releasedAt: new Date() },
+    });
+
+    return { released: true };
+  });
+}
+
+/**
+ * Release HELD reservations that never settled or released (e.g. a process
+ * crashed between reserve and settlement). Returns counts only — idempotent and
+ * financially neutral for already-terminal reservations. Invoke from a
+ * periodic scheduler (Phase 15 background cleanup).
+ */
+export async function releaseStuckReservations(
+  prisma: PrismaClient,
+  olderThanMs = 24 * 60 * 60 * 1000,
+  limit = 100,
+): Promise<{ scanned: number; released: number }> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const stuck = await prisma.creditReservation.findMany({
+    where: { status: 'HELD', createdAt: { lt: cutoff } },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+    select: { idempotencyKey: true },
+  });
+
+  let released = 0;
+  for (const reservation of stuck) {
+    const result = await releaseCredits(prisma, reservation.idempotencyKey);
+    if (result.released) released += 1;
+  }
+  return { scanned: stuck.length, released };
 }

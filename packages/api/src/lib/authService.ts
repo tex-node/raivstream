@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID, randomBytes } from 'crypto';
 import type { PrismaClient } from '@raivstream/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwt';
+import { verifyGoogleIdToken } from './googleAuth';
 
 export const BCRYPT_ROUNDS = 12;
 
@@ -170,6 +171,89 @@ export async function loginUser(prisma: PrismaClient, input: LoginInput): Promis
   });
 
   const { passwordHash: _ph, failedLoginAttempts: _fa, lockedUntil: _lu, ...safeUser } = user;
+  const tokens = await issueTokenPair(prisma, safeUser);
+  return { ...tokens, user: safeUser };
+}
+
+// ─── Google OAuth ─────────────────────────────────────────────────────────────
+
+/** Derive a unique username from an email local-part. */
+async function uniqueUsernameFromEmail(prisma: PrismaClient, email: string): Promise<string> {
+  let base = email
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 20);
+  if (base.length < 3) base = `user_${base}`;
+  for (let attempt = 0; ; attempt += 1) {
+    const candidate = attempt === 0 ? base : `${base.slice(0, 24)}_${attempt}`;
+    const taken = await prisma.user.findUnique({ where: { username: candidate }, select: { id: true } });
+    if (!taken) return candidate;
+  }
+}
+
+/**
+ * Sign in (or sign up) with a verified Google ID token.
+ *
+ * Matching order: googleId first (stable identity even if the Google email
+ * changes), then the verified email (links pre-existing password accounts).
+ * New accounts are created with no password (passwordHash NULL — password
+ * login is impossible for them) and verified=true (Google verified the email).
+ */
+export async function googleAuthUser(
+  prisma: PrismaClient,
+  idToken: string,
+  deps: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv } = {},
+): Promise<AuthResult> {
+  const identity = await verifyGoogleIdToken(idToken, { fetchImpl: deps.fetchImpl, env: deps.env });
+
+  let user = await prisma.user.findUnique({
+    where:  { googleId: identity.googleId },
+    select: { ...SAFE_USER_SELECT, googleId: true },
+  });
+
+  if (!user) {
+    const byEmail = await prisma.user.findUnique({
+      where:  { email: identity.email },
+      select: { ...SAFE_USER_SELECT, googleId: true },
+    });
+
+    if (byEmail) {
+      // Link a pre-existing account (password or otherwise) to this Google identity
+      user = await prisma.user.update({
+        where:  { id: byEmail.id },
+        data: {
+          googleId: identity.googleId,
+          verified: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          ...(byEmail.avatarUrl || !identity.picture ? {} : { avatarUrl: identity.picture }),
+        },
+        select: { ...SAFE_USER_SELECT, googleId: true },
+      });
+    } else {
+      const username = await uniqueUsernameFromEmail(prisma, identity.email);
+      user = await prisma.user.create({
+        data: {
+          email:        identity.email,
+          username,
+          displayName:  (identity.name ?? identity.email.split('@')[0]).trim().slice(0, 50),
+          passwordHash: null,
+          googleId:     identity.googleId,
+          avatarUrl:    identity.picture ?? null,
+          verified:     true,
+        },
+        select: { ...SAFE_USER_SELECT, googleId: true },
+      });
+    }
+  } else {
+    await prisma.user.update({
+      where: { id: user.id },
+      data:  { failedLoginAttempts: 0, lockedUntil: null },
+    });
+  }
+
+  const { googleId: _gid, ...safeUser } = user;
   const tokens = await issueTokenPair(prisma, safeUser);
   return { ...tokens, user: safeUser };
 }

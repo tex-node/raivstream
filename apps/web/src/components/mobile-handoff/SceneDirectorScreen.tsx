@@ -9,6 +9,7 @@ import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { useTrackTab } from './useTrackTab';
+import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 
 /**
  * Scene Director — design_handoff_raivstream_mobile, screen 7 of 8. Canonical:
@@ -62,6 +63,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
   useTrackTab(projectId, 'scenes');
   const [reviewAssetUrl, setReviewAssetUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sceneImageModel, setSceneImageModel] = useState<SceneImageModel>(DEFAULT_SCENE_IMAGE_MODEL);
+  const [instruction, setInstruction] = useState('');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },
@@ -110,7 +113,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
     progress.start();
     try {
       const mutate = hasReadyImage ? regenerateImage.mutateAsync : generateImage.mutateAsync;
-      const result: any = await mutate({ projectId, sceneId });
+      const result: any = await mutate({ projectId, sceneId, model: sceneImageModel, instruction: instruction.trim() || undefined });
       progress.finish();
       setReviewAssetUrl(result?.assetUrl ?? result?.asset?.assetUrl ?? null);
     } catch (e: any) {
@@ -191,6 +194,31 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
 
           {!isR16 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <span className="noc-label">Image model</span>
+                <select
+                  value={sceneImageModel}
+                  onChange={(e) => setSceneImageModel(e.target.value as SceneImageModel)}
+                  style={{ marginTop: 6, width: '100%', borderRadius: 12, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.05)', color: 'var(--noc-t1)', fontSize: 13.5, fontWeight: 600, padding: '10px 12px', outline: 'none', cursor: 'pointer' }}
+                >
+                  {SCENE_IMAGE_MODEL_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="noc-label">Change request (optional)</span>
+                <textarea
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  maxLength={300}
+                  rows={2}
+                  placeholder="e.g. make it nighttime, add falling snow"
+                  style={{ marginTop: 6, width: '100%', borderRadius: 12, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.05)', color: 'var(--noc-t1)', fontSize: 13.5, padding: '10px 12px', outline: 'none', resize: 'vertical' }}
+                />
+              </div>
               {DIRECTOR_GROUPS.map((group) => (
                 <div key={group.label}>
                   <span className="noc-label">{group.label}</span>

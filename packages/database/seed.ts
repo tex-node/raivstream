@@ -163,6 +163,25 @@ async function main() {
       unitLabel:      'request',
       description:    'Kling R2V — reference-guided text-to-video (₦450/gen)',
     },
+    // ── fal.ai models (placeholder rates — reconcile after provider cost measurement) ──
+    {
+      featureKey:     'generate:flux2',
+      creditsPerUnit: 80,
+      unitLabel:      'request',
+      description:    'Flux 2 (fal.ai) — high-quality text-to-image (₦80/gen)',
+    },
+    {
+      featureKey:     'generate:h3_max',
+      creditsPerUnit: 200,
+      unitLabel:      'request',
+      description:    'MiniMax H3-Max (fal.ai) — image-to-video (₦200/gen)',
+    },
+    {
+      featureKey:     'generate:veed_fabric',
+      creditsPerUnit: 300,
+      unitLabel:      'request',
+      description:    'VEED Fabric (fal.ai) — talking-video lip-sync (₦300/gen)',
+    },
     // ── Other AI features ───────────────────────────────────────────────────
     {
       featureKey:     'thumbnail:ai',

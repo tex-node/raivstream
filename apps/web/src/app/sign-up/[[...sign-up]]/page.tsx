@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, type AuthUser } from '@/lib/auth';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 function EyeIcon() {
   return (
@@ -135,6 +136,14 @@ export default function SignUpPage() {
             <p className="text-sm" style={{ color: 'var(--noc-t6)' }}>Free forever — no credit card needed</p>
           </div>
 
+          <GoogleSignInButton
+            mode="signup"
+            onError={setError}
+            onSuccess={(user) => {
+              setUser(user);
+              router.push('/');
+            }}
+          />
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {error && (
               <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>

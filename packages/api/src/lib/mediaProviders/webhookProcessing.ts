@@ -57,6 +57,13 @@ export interface ProviderWebhookInput {
   outputUrl?: string | null;
   errorMessage?: string | null;
   featureKey?: string;
+  /**
+   * Optional output-persistence hook (e.g. mirror a provider CDN URL to R2).
+   * Invoked for successful completions BEFORE the terminal transition; if it
+   * throws, the webhook is left un-applied so the provider can retry, and the
+   * raw provider URL is never persisted as a permanent asset.
+   */
+  persistOutputUrl?: (url: string) => Promise<string>;
 }
 
 export interface RefundExecutionResult {
@@ -83,9 +90,14 @@ export async function processProviderWebhook(
     return { handled: false, outcome: 'JOB_NOT_FOUND', refundIntentCreated: false, refundExecuted: false };
   }
 
+  let resolvedOutputUrl = input.outputUrl ?? job.outputUrl;
+  if (input.outcome === 'completed' && input.persistOutputUrl && resolvedOutputUrl) {
+    resolvedOutputUrl = await input.persistOutputUrl(resolvedOutputUrl);
+  }
+
   const jobData =
     input.outcome === 'completed'
-      ? { status: 'COMPLETED' as const, outputUrl: input.outputUrl ?? job.outputUrl, errorMessage: null }
+      ? { status: 'COMPLETED' as const, outputUrl: resolvedOutputUrl, errorMessage: null }
       : { status: 'FAILED' as const, errorMessage: input.errorMessage ?? 'Provider reported failure' };
 
   const outcome = await prisma.$transaction(async (tx) => {

@@ -2,15 +2,7 @@
 
 import { trpc } from '@/lib/trpc';
 import { AdminSpinner, AdminError, AdminStatCard } from './AdminShell';
-
-const MODEL_LABELS: Record<string, string> = {
-  GROK_IMAGINE: 'Grok Imagine',
-  NANO_BANANA:  'Nano Banana',
-  LTX2:         'LTX-2',
-  WAN_25:       'Wan 2.5',
-  KLING:        'Kling',
-  HIGGSFIELD:   'Higgsfield',
-};
+import { MODEL_LABELS } from '@/lib/modelLabels';
 
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED:  '#22c55e',

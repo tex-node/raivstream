@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-08-27 (Phase 9B.2 entry only — earlier sections below predate several shipped phases, e.g. Nocturne UI, Sequence Workspace, Creative Critic, Movie Builder, and were not fully reconciled in this pass; treat this file as partially stale outside the Recent Changes section)
-Current GitHub commit deployed to VPS: `05e3327403d5efb04f79971b995188c890feb43f` (Movie Builder fail-closed patch — production HEAD as of Phase 9B.2 staging qualification)
+Last updated: 2026-09-20 (staged fal generation flow proven live 21/21 — see Recent Changes; earlier sections below predate several shipped phases and remain partially stale outside Recent Changes)
+Current GitHub commit deployed to VPS: `05e3327403d5efb04f79971b995188c890feb43f` (Movie Builder fail-closed patch — production HEAD; the fal/Phase 6 work below is local-only, not yet committed/deployed)
 
 ## Maintenance Rule
 
@@ -39,6 +39,9 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - `db.raivstream.com` routes through Caddy to Supabase Kong on host port `8000` and is protected by Basic Auth.
 - Supavisor/pooler is stopped because it was occupying host `5432` and returning `FATAL: Tenant or user not found`.
 - Raivstream uses direct Postgres for Prisma and app runtime, matching the project note that Supavisor is broken for this app.
+- **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, blocked on live validation.** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). A live smoke test reached fal but returned `403` (valid key, account lacks model access) — resolution is on the fal.ai side (billing/key scope/model access), not code.
+- **Google OAuth sign-in (web + mobile): implemented locally, not deployed/enabled.** Needs `GOOGLE_CLIENT_ID[S]` (+ `NEXT_PUBLIC_…` / `EXPO_PUBLIC_…` variants) set, Google Cloud authorized origins/redirects configured, and migration `20260920120000_google_oauth` deployed.
+- **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. Production deploy of the router + `audioUrl` migration still pending (see Recent Changes).
 
 ## Monorepo Layout
 
@@ -97,6 +100,7 @@ scripts/
 - Generation prompts allow up to 2000 characters in API, web AI Studio, and mobile AI Studio.
 - Negative prompts allow up to 500 characters.
 - Credit deduction is atomic and refunded on provider submission failure.
+- `generation.create` supports `FLUX2`, `H3_MAX`, and `VEED_FABRIC` (VEED needs `seedImageUrl` + `audioUrl`; prompt optional with a canned default, otherwise prompt required; H3_MAX/Kling-I2V/Seedance enforce `seedImageUrl`). VEED stays hidden from `listModels`/UI (UGC consent controls still pending) but is callable via API for staging.
 - Supported visible models include Flux, Grok Imagine, Wan 2.6, Seedance, HunyuanVideo when configured, Kling I2V, and Kling R2V.
 - Hidden/coming soon models are filtered server-side and additionally guarded client-side.
 - Generated output can be published to the feed and then scanned by automated moderation.
@@ -135,6 +139,13 @@ Added in commit `4bd7eff`.
 ## Database State
 
 Prisma schema lives at `packages/database/schema.prisma`.
+
+Pending (not yet applied to production) schema changes from the fal migration:
+
+- `GenerationModel` enum extended with `FLUX2`, `H3_MAX`, `VEED_FABRIC` (migration `20260912140000_fal_models`, additive `ALTER TYPE ... ADD VALUE`).
+- `GenerationJob.audioUrl String?` for the VEED lip-sync track (migration `20260920130000_generation_job_audio_url`, additive `ADD COLUMN`).
+- `CreditOperation` outbox already present (migration `20260912130000_fal_credit_operations`).
+- New `FeatureCreditRate` seed keys: `generate:flux2`, `generate:h3_max`, `generate:veed_fabric`.
 
 Important models include:
 
@@ -247,6 +258,202 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-20: Staged fal generation flow proven live — 21/21 (credits → submit → poll → publish)
+
+The next step after contract validation is done: the full production tRPC path now works live against all three proven fal contracts, via new script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`, modeled on the Phase 9B.3 voice E2E safety pattern — isolated scratch staging DB `raivstream_fal_gen_e2e` in a throwaway container, SSH tunnel, `db push`, identity+empty gates, zero-residue cleanup):
+
+- **Leg 1 FLUX2** (`generation.create` → poll → R2 mirror → `publish`): submitted (`fal:01a0c051-…`), COMPLETED, mirrored to `generated/fal/flux2/….png`, published to an unlisted Video row. 80cr.
+- **Leg 2 H3_MAX** (seed = leg-1 R2 still): submitted (`fal:01a0c052-…`), COMPLETED, mirrored to `generated/fal/h3max/….mp4`, published. 200cr.
+- **Leg 3 VEED_FABRIC** (seed = leg-1 still + staging audio fixture `generated/staging-audio/veed-smoke-*.mp3`): submitted (`fal:01a0c053-…`), COMPLETED, mirrored to `generated/fal/veed/….mp4`, published. 300cr. 30s courtesy pauses between legs (fal rate-limits back-to-back calls).
+- **Ledger exact:** 5000 → 4420 (80+200+300 across 3 USAGE txns). All outputUrls on the staging R2 public base (never fal.media CDN). 3 R2 objects verified deleted, fixture rows removed, **21/21 PASS**. Scratch container + tunnel torn down.
+
+**Code changes (local, not deployed):**
+- `packages/api/src/routers/generation.ts` — `SUPPORTED_MODELS` += `VEED_FABRIC`; `create` accepts `audioUrl`, prompt optional only for VEED (canned default; otherwise required); per-model enforcement (VEED: seed+audio; H3_MAX/I2V: seed); `audioUrl` threaded through `createWithReserveSettle`, deduct-first `create`, and `retry`. Moderation skipped only for VEED's canned default. VEED remains `hidden` in `MODEL_META`, so `listModels`/UI are unchanged.
+- `packages/database/schema.prisma` + migration `20260920130000_generation_job_audio_url` — `GenerationJob.audioUrl String?` (additive; retry resubmits without caller state).
+- `scripts/fal.ts` — provider-error exit path now sets `process.exitCode` instead of `process.exit()` (fixes the Windows libuv `UV_HANDLE_CLOSING` exit assertion; cosmetic, exit-path only).
+- `package.json` — new `pnpm fal:e2e` script.
+- Full suite **409/409 pass**; api type-check and lint clean; `prisma validate` clean.
+
+**Still pending:** production deploy of the router change + `audioUrl` migration (`prisma migrate deploy`); VEED audio-input UI and UGC consent/ownership/moderation controls (VEED stays API-only/hidden until then); visual-quality evaluation + staging rollout + prod approval per `docs/product_roadmap.md` Gates D–F.
+
+### 2026-09-20: fal 403 root-caused — account balance exhausted, not code/auth
+
+User reported the fal account funded, but `pnpm fal test flux2` still fails `Forbidden`. Raw queue API probe (`POST https://queue.fal.run/fal-ai/flux-2`) returns HTTP 403 with body `{"detail":"User is locked. Reason: Exhausted balance. Top up your balance at fal.ai/dashboard/billing."}` — for both `fal-ai/flux-2` and `fal-ai/flux-2/edit`. Conclusion: **403 = the key is valid (a bad key yields 401) but the owning account has $0 balance and is locked.** Funding must land as prepaid credit balance on the *same account/workspace that owns this FAL_KEY* (a card on file alone does not unlock it; also check it wasn't topped up on a different account). No code changes needed; re-run `pnpm fal test flux2 "…"` after the balance shows positive.
+
+### 2026-09-20: Replacement fal key rejected as unknown (401) — awaiting correct secret
+
+User generated a new fal key (now in `cred/fal_env.txt`), but `pnpm fal test flux2` fails `Unauthorized`. Raw probe returns HTTP 401 `{"detail":"Cannot access application \"fal-ai/flux-2-dev\". Authentication is required to access this application."}` — fal does not recognize the key at all (and notably resolves the slug fine, so the endpoint is correct and auth is the sole failure). Likely causes, in order: pasted the dashboard **key ID instead of the one-time secret**, truncated value, or key not yet active/propagated. Remediation: copy the full secret (shown once at creation) after `FAL_KEY=` with no quotes/spaces, confirm the key shows active on the funded account, then re-run the smoke test.
+
+### 2026-09-20: fal live validation UNBLOCKED — first real generation succeeds
+
+User pasted the correct full secret. `pnpm fal test flux2` now passes end to end: submitted (`fal:01a0c01c-…`), `generating → completed` (~11s), output mirrored to staging R2 (`generated/fal/flux2/….png`, publicly retrievable). This proves the funded account, the key, the `fal-ai/flux-2` contract, the queue transport, and the R2 mirror path all at once. Next: same smoke for `h3max` (video) and `veed` (talking-video), then the staged generation flow.
+
+### 2026-09-20: h3max + veed verified live; VEED contract bug fixed
+
+- `h3max` (MiniMax H3-Max Turbo image-to-video, seeded with the flux2 lighthouse still) completed in ~11s, mirrored to `generated/fal/h3max/….mp4`.
+- First `veed` attempt failed at submit; a second attempt submitted but returned 422. Raw queue API showed `{"detail":[{"type":"missing","loc":["body","resolution"],"msg":"Field required"}]}` — **our contract wrongly treated `resolution` as optional; fal requires it (enum `720p|480p`)**. Fixed `toVeedFabricInput` to default/sanitize to `720p`, updated the contract field + tests (84/84 mediaProviders pass). Re-ran: `veed` completed in ~40s, mirrored to `generated/fal/veed/….mp4`.
+- Incidental findings: fal returns bare `Forbidden` on rate limiting (a 20–45s pause clears it); the smoke CLI crashes on Windows *after* printing a provider error (`UV_HANDLE_CLOSING` assertion in Node/libuv on exit — cosmetic, exit-path only, needs a fix).
+- All three provider contracts (flux2 image, h3-max-turbo video, veed talking-video) are now proven against the live API.
+
+### 2026-09-20: Phase 9B.3 voice E2E — ElevenLabs generation + stitching verified live
+
+Staging `11_LABS` key confirmed live (`cred/fal_env.txt`). Full voice path proven end to end:
+
+- **Live TTS** (`pnpm elevenlabs test`, new `scripts/elevenlabs-tts.ts`): real 65-char synthesis → 64KB valid MP3 (ID3v2 + MPEG frames), ~1.7s. Initial smoke-script MP3 check was too strict (rejected ID3 headers); fixed to accept ID3 + frame-sync scan.
+- **Stitching proof** (`pnpm voice:stitch:check`, new `scripts/phase9b3-voice-stitch-checkpoint.ts`): the REAL ElevenLabs MP3 through `probeAudioAsset` → `normalizeAudioInput` → `buildMixedAudioTrack` (narration @1s + tone bed @4s, 12s canonical) → silent H.264 test video → `muxAudioWithVideo` → independent ffprobe — **8/8 PASS** (mix exactly 12s, final h264 720x1280 30fps + aac audio). Portable ffmpeg 9.0.2 used locally (no local binaries existed).
+- **Procedure E2E** (`pnpm voice:e2e`, new `packages/api/scripts/phase9b3-voice-e2e.ts`): isolated scratch staging DB (`raivstream_phase9b3_voice` in throwaway container, SSH tunnel, `db push`, identity+empty gates) + real `story.generateCueSpeech` via tRPC caller — **11/11 PASS** (cue→asset link, GENERATED_SPEECH/mp3 asset row, R2 object present, R2 bytes pass worker input gate, 50cr ledger, zero residue after cleanup). Re-ran on the pure staging path after the R2 fix — **11/11 PASS** with the object in the `raivstaging` bucket (verified present, then verified removed). Scratch DB/container/tunnel torn down after each run.
+- **Staging infra findings (resolved):** (1) `cred/fal_env.txt` `R2_ENDPOINT` was missing the `https://` scheme → fixed in file; (2) staging R2 creds were dead (S3 Put/Head/List 403, `cfat_` Cloudflare token invalid) → user provisioned a fresh token + endpoint, verified working (PUT/HEAD/GET/DELETE round-trip, zero residue). `r2.ts getClient()` now tolerates scheme-less endpoints (also fixes a latent prod-config hazard).
+- Full suite **409/409 pass**; api + web type-check and lint clean.
+
+### 2026-09-20: Google OAuth sign-in restored (web + mobile, local — not deployed)
+
+Google sign-in never existed in this repo (sign-in was email + password only; no OAuth code, deps, env keys, or history) — so this adds it fresh on the existing custom-JWT session system rather than fixing a regression:
+
+- **Server:** `packages/api/src/lib/googleAuth.ts` verifies the Google ID token against `oauth2.googleapis.com/tokeninfo` (issuer, `aud` ∈ `GOOGLE_CLIENT_IDS`, `email_verified`, expiry). `googleAuthUser()` in `authService.ts` signs in by `googleId`, links a pre-existing email account (keeps its password, marks verified), or creates a passwordless verified user with a derived unique username — then issues the standard access + refresh pair.
+- **Schema:** `User.googleId String? @unique`, `passwordHash` now nullable (migration `20260920120000_google_oauth`; apply on VPS via `prisma migrate deploy`).
+- **Mobile (tRPC):** `auth.google` procedure; Expo sign-in screen has a "Continue with Google" button using `expo-auth-session` ID-token flow (`expo-auth-session@~5.4.0` + `expo-web-browser@~12.8.2` added). Requires a dev build (no Expo Go proxy in SDK 50+) and iOS/Android OAuth client IDs.
+- **Web:** `POST /api/auth/google` sets the same httpOnly cookies as password login (rate-limited); GIS button on sign-in + sign-up pages (renders only when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set); CSP allows `https://accounts.google.com` (script + frame + connect).
+- **Env:** `GOOGLE_CLIENT_ID[S]`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` documented in `.env.example` (not set anywhere yet).
+- **Tests:** `lib/__tests__/googleAuth.test.ts` (7 tests). Full suite **409/409 pass**; api + web type-check and lint clean.
+- **Known pre-existing issue (untouched):** `pnpm --filter @raivstream/mobile type-check` fails on `falMediaProvider.ts` dynamic import vs the Expo base tsconfig — predates this change (file untouched); Metro/bundling unaffected.
+
+### 2026-09-13: fal.ai migration + Phase 6 provider abstraction (local, not deployed)
+
+**fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric):**
+
+- Added fal generator adapters: `falFlux2.ts` (image, `fal-ai/flux-2`), `falH3Max.ts` (image-to-video, `minimax/h3-max/image-to-video`), `falVeed.ts` (talking-video lip-sync, `veed/fabric-1.0`) — all via the existing `mediaProviders` fal adapter, fail-closed, output mirrored to R2.
+- Reconciled `H3_MAX` + `VEED_FABRIC` contracts in `fal/contracts.ts` against live fal schemas.
+- Schema: added `FLUX2`/`H3_MAX`/`VEED_FABRIC` to `GenerationModel` enum (migration `20260912140000_fal_models`).
+- Wired into the dispatcher (`generators/index.ts`: `SupportedModel`, submit/poll, `MODEL_META`), `generation.ts` `SUPPORTED_MODELS` (FLUX2 + H3_MAX; VEED stays hidden), `credits.ts` feature keys + `seed.ts` placeholder rates.
+- Extended the fal webhook route to extract video output (not just images).
+- Wired FLUX2 into the Story Workspace scene-image path (`story.ts` + UI model selectors in `new/page.tsx`, `SceneDirectorScreen.tsx`, legacy `[projectId]/page.tsx`).
+- Added `pnpm fal` staging smoke-test CLI (`scripts/fal.ts`) loading `cred/fal_env.txt`.
+- Env example updated with `FAL_*` flags.
+
+**Phase 6 — provider abstraction (completed this increment):**
+
+- Added provider **capability registry + health snapshot** (`mediaProviders/registry.ts`): fal.ai, RunPod, xAI, Kling, Gemini — env-presence only, no secrets.
+- Added admin-only `providers.health` tRPC router (`routers/providers.ts`, registered in `index.ts`).
+- Registry consumed by the generation flow: `generation.listModels` annotates each model with `available`/`unavailableReason` via `resolveModelAvailability()`.
+- Added `docs/architecture/provider-integration-guide.md` (provider onboarding + capability taxonomy).
+- Docs: created `docs/product_roadmap.md` (canonical roadmap, Phase 6 marked IN PROGRESS) and `docs/architecture.md`.
+
+**Webhook R2-mirror + cancellation hardening:**
+
+- Added `mediaProviders/fal/falStorage.ts` (`persistFalOutput`, `falKindForModel`, `falOutputStorageKey`) — canonical R2 key shared by polling adapters and the webhook path; refactored `falFlux2`/`falH3Max`/`falVeed` to use it.
+- `processProviderWebhook` now accepts a `persistOutputUrl` hook; the fal webhook route mirrors output to R2 before persisting (provider CDN URLs are never stored). Mirror failure leaves the job un-applied so fal retries.
+- Added provider-side cancellation: `cancelProviderJob()` in the dispatcher + `cancelFalFlux2`/`cancelFalH3Max`/`cancelFalVeed`; `generation.cancel` issues it fire-and-forget.
+
+**Tests:** registry + availability + webhook-persist added (**364/364 tests pass**), `api` + `web` type-check and lint clean.
+
+**Observability + admin (Phase 13 increment):**
+
+- Added `/admin/providers` provider-health dashboard UI (backed by `providers.health`) + admin sidebar link; `providers.health` moved to `moderatorProcedure`.
+- Added shared `apps/web/src/lib/modelLabels.ts` (`MODEL_LABELS`/`MODEL_OPTIONS`); updated admin Overview + AI Jobs pages and the `admin.listGenerationJobs` model enum to cover all 16 models (incl. FLUX2/H3_MAX/VEED_FABRIC).
+
+**Phase 8 — H3-Max story scene-video pipeline:**
+
+- Added `H3_MAX` to `promptProviderSchema` + `PROMPT_PROVIDER_META` in `story.ts`.
+- Added `generateSceneVideoAsset()` + `sceneVideoProviderInfo()`; new tRPC endpoints `story.generateSceneVideo` / `story.regenerateSceneVideo` (H3-Max image-to-video using the scene's latest ready image as opening frame; VIDEO `StorySceneAsset`, R2-mirrored `…/videos/{assetId}.mp4`, `isLatest` per assetType).
+- UI: "Animate to Video" / "Regenerate Video" button on scene cards (`new/page.tsx`).
+
+**§7.2 — Unified job state machine:**
+
+- Added `generators/jobModel.ts` (canonical `GenerationJobState` incl. `cancelled` + `GenerationJobError`); `normaliseRunpodError` in `runpod.ts`.
+- Migrated all adapters (flux, seedance, wan25, ltx2, hunyuan, cogVideoX, kling, veo3, nanoBanana, falFlux2/falH3Max/falVeed) to return the unified status/error shape; `cancelled` is now first-class (no longer silently mapped to "generating").
+- Wired `cancelled` through `generation.pollStatus` (`→ CANCELLED`) and `story.waitForGenerationOutput`.
+- Tests: `generators/__tests__/jobModel.test.ts` (**367/367 pass**).
+
+**§7.5 — Reserve/settle/release (flag-guarded, default OFF):**
+
+- Added `CreditReservation` model + `CreditReservationStatus` enum (migration `20260912150000_credit_reservations`); `User.creditReservations` relation.
+- Added `reserveCredits` / `settleCredits` / `releaseCredits` + `isReserveSettleEnabled()` to `lib/credits.ts` (atomic, idempotent, crash-safe).
+- Wired flag-gated into `generation.create` (reserve → release on failure / settle on sync completion) and `generation.pollStatus` (settle on completion). Flag OFF keeps the existing deduct+refund path.
+- Env: `CREDIT_RESERVE_SETTLE_ENABLED` added to `.env.example`. Tests: `lib/__tests__/creditReserveSettle.test.ts` (**377/377 pass**).
+
+**Phase 15 — retry foundation (increment):**
+
+- Added `GenerationJob.retryCount` + `errorCode` (migration `20260912160000_generation_job_retry`); `errorCode` populated from the normalized error in `generation.pollStatus`.
+- Added `generation.retry` procedure (failed jobs, max `MAX_JOB_RETRIES=3`, re-charges credits with refund-on-failure).
+- Remaining Phase 15: queue/worker architecture, concurrency/backpressure, per-provider rate limiting, dead-letter queue, DR.
+
+**Phase 10 — Movie Builder scene-video substitution:**
+
+- `buildMovieRenderPlan` now prefers a READY scene `VIDEO` asset per shot (via `videoAssetsBySceneId`), falling back to the still; `MovieRenderPlanShot.sourceType` added (optional for legacy plans).
+- `movieRenderWorker.renderVideoShot` loops/trims/scales the clip to the shot duration (audio stripped, mixed separately).
+- `movieRenderContext` (story.ts) loads per-scene VIDEO assets; `MOVIE_RENDERER_VERSION` → `phase-10-v1`.
+- Tests: 5 new in `movieRenderPlanning.test.ts` (**382/382 pass**).
+
+**Phase 10 — tail (per-scene retry/resume + export history):**
+
+- Per-shot retry (`MOVIE_RENDER_SHOT_ATTEMPTS`, default 2) via `renderShotWithRetry`.
+- Resume-after-failure: rendered shot segments persisted to R2 (`…/movies/{jobId}/segments/shot-NNN.mp4`) via an injectable `segmentStore`, reused on retry (disabled when `MOVIE_RENDER_SEGMENT_RESUME=false` or R2 unconfigured); cleaned after success.
+- Added `story.listMovieAssets` (READY movie versions / export history).
+- Tests: resume test (**383/383 pass**).
+- Deferred: narration generation (needs a TTS provider — Phase 9B.3, decision-gated).
+
+**Phase 15 — backpressure + cleanup + indexing:**
+
+- Added `lib/generators/providerRateLimit.ts`: per-provider in-process concurrency (`PROVIDER_MAX_CONCURRENCY`) + min interval (`PROVIDER_MIN_INTERVAL_MS`), wired into `submitGenerationJob` (retryable `RATE_LIMITED` over cap; unlimited by default).
+- Added `releaseStuckReservations()` (credits.ts) for HELD reservations left by a crash between reserve/settle.
+- Added `admin.listGenerationJobs({ deadLetter: true })` (FAILED jobs past the retry budget); moved `MAX_JOB_RETRIES` to `generators/jobModel.ts`.
+- DB indexes on `generation_jobs`: `[status, createdAt]`, `[status, retryCount]`, `[errorCode]` (migration `20260912170000`).
+- Env: `PROVIDER_MAX_CONCURRENCY`, `PROVIDER_MIN_INTERVAL_MS`, `MOVIE_RENDER_SHOT_ATTEMPTS`, `MOVIE_RENDER_SEGMENT_RESUME`.
+- Tests: `providerRateLimit.test.ts` (5) + stuck-reservation test (**389/389 pass**).
+
+**Phase 11 — creative controls (increment):**
+
+- **Regenerate by instruction**: `story.generateSceneImage` / `regenerateSceneImage` / `generateSceneVideo` / `regenerateSceneVideo` accept an optional `instruction` (≤300 chars), moderated and appended to the composed prompt; UI textarea in `mobile-handoff/SceneDirectorScreen.tsx`.
+- **Shot presets**: `story.applyShotPreset` (`CINEMATIC`/`DYNAMIC`/`CALM`/`DRAMATIC`/`REVEAL`) applies camera-movement + speed + transition + zoom to a Sequence scene or all enabled scenes.
+- Remaining: UI for shot presets (sequence tab), narration voice, music, captions, cover/thumbnail selection — decision-gated.
+
+**Phase 11 — shot-preset UI (tail):**
+
+- Added the preset picker to the Sequence **Shot Inspector** in `story-playground/[projectId]/page.tsx` (apply to the selected shot or all shots).
+
+**Phase 15 — ops (increment 3):**
+
+- Added `GET /api/ready` readiness probe (DB + R2 reachability + redacted provider summary; 200/503).
+- Added `admin.resetDeadLetterJob({ jobId })` — resets a dead-letter job's retry budget.
+- Added `docs/operations/phase-15-operations.md` (rate-limit config, DLQ, reserve/settle reconciliation, probes, backup/DR, load/capacity, storage lifecycle).
+
+**Phase 9B.3 — narration via ElevenLabs:**
+
+- Added `lib/generators/elevenLabsTts.ts` (`synthesizeSpeech`; key from `ELEVENLABS_API_KEY` or legacy `11_LABS`).
+- Added `story.generateCueSpeech` (moderate → `story:speech_generation` credit gate (fail-closed) → ElevenLabs → R2 `AudioAsset(sourceKind:'GENERATED_SPEECH')` → link `AudioCue.audioAssetId`; refund-on-failure).
+- UI: "Generate narration" button in the Audio cue inspector.
+- Env: `ELEVENLABS_API_KEY`, `ELEVENLABS_TTS_ENABLED` (default false), `ELEVENLABS_TTS_MODEL`, `ELEVENLABS_DEFAULT_VOICE_ID`. **Credit rate unset** (set `story:speech_generation` in Admin → Credits to enable).
+- Tests: `elevenLabsTts.test.ts` (6) → **395/395 pass**.
+
+**Phase 11 — background music via Lyria:**
+
+- Added `lib/generators/lyriaMusic.ts` (`generateMusic`; reuses `GEMINI_API_KEY`; `lyria-3-clip-preview` / `lyria-3-pro-preview`).
+- Added `story.generateCueMusic` for MUSIC/AMBIENCE cues (moderate → `story:audio_generation` credit gate (fail-closed) → Lyria → R2 `AudioAsset(sourceKind:'GENERATED_MUSIC')` → link cue; refund-on-failure).
+- UI: "Generate music" + description field in the Audio cue inspector.
+- Env: `LYRIA_MUSIC_ENABLED` (default false), `LYRIA_MUSIC_MODEL`. **Rate unset** (set `story:audio_generation` in Admin → Credits).
+- Tests: `lyriaMusic.test.ts` (5) → **400/400 pass**.
+
+**Phase 11 — captions, cover, mixing console (decisions applied):**
+
+- **Captions (sidecar WebVTT):** `story.getSequenceCaptions` builds a `.vtt` from timed NARRATION/DIALOGUE cues (`buildWebVtt`); "Download captions (.vtt)" in the Film tab.
+- **Cover:** `StoryProject.coverAssetId` + relation (migration `20260912180000_story_project_cover`); `story.setProjectCover`; "Use as cover" button on scene cards.
+- **Mixing console:** cue volume/fade/ducking hidden by default behind a "Show mixing console" toggle.
+- Aspect ratio: 9:16 remains the feed default; 16:9/1:1 available via `aspectRatio`.
+- Tests: `routers/__tests__/captions.test.ts` (2) → **402/402 pass**.
+- Deferred: style presets (bundled), intro/outro title cards, generate-cover, progressive-disclosure tiers.
+
+**Phase 11 — style presets:**
+
+- Added `story.listStylePresets` + `story.applyStylePreset` (5 named bundles setting `visualStyle` + director defaults across scenes + a music prompt).
+- UI: style-preset picker in the New Story style step.
+- Deferred: intro/outro title cards (needs a title-font decision for ffmpeg drawtext).
+
+**MiniMax video endpoint → H3-Max Turbo:**
+
+- Switched the fal video endpoint from `minimax/h3-max/image-to-video` to **`minimax/h3-max-turbo/image-to-video`** (model key stays `H3_MAX`) — ~$0.00625/s vs ~$0.0125/s. Updated `mediaProviders/config.ts`, `generators/falH3Max.ts`, `mediaProviders/fal/contracts.ts`, `generators/index.ts` (MODEL_META label/url), `routers/story.ts` (`sceneVideoProviderInfo` + prompt-provider label).
+
+**Blocker:** live fal calls return `403` (valid key, account lacks model access). Outstanding non-fal items tracked in `docs/product_roadmap.md` §9.
 
 ### 2026-08-27: Phase 9B.2B — Pure-rendering + persistence checkpoints
 

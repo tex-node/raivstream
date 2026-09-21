@@ -1,8 +1,18 @@
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { submitGenerationJob, pollJobStatus, MODEL_META, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../lib/credits';
+import { submitGenerationJob, pollJobStatus, cancelProviderJob, MODEL_META, MAX_JOB_RETRIES, type SupportedModel } from '../lib/generators';
+import {
+  deductCredits,
+  refundCredits,
+  reserveCredits,
+  releaseCredits,
+  settleCredits,
+  resolveFeatureCreditRate,
+  isReserveSettleEnabled,
+  MODEL_FEATURE_KEY,
+} from '../lib/credits';
+import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
 import { moderatePrompt } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 
@@ -11,10 +21,96 @@ const SUPPORTED_MODELS = [
   'KLING_I2V', 'KLING_R2V',
   'HIGGSFIELD', 'VEO3',
   'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
+  'FLUX2', 'H3_MAX', 'VEED_FABRIC',
 ] as const;
 
 export const GENERATION_PROMPT_MAX_LENGTH = 2000;
 export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
+
+/**
+ * Reserve → submit → settle/release generation path (Phase §7.5). Flag-guarded
+ * behind CREDIT_RESERVE_SETTLE_ENABLED; mirrors `create` but keys the credit
+ * reservation by the job id, settles synchronously-completed jobs immediately,
+ * and releases the reservation on submission failure.
+ */
+async function createWithReserveSettle(
+  ctx: any,
+  input: { model: string; prompt: string; negativePrompt?: string; duration?: number; aspectRatio?: string; style?: string; seedImageUrl?: string; audioUrl?: string },
+  meta: (typeof MODEL_META)[SupportedModel],
+  featureKey: string,
+) {
+  const rate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
+  if (!rate.configured) {
+    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `No active credit rate configured for feature: ${featureKey}` });
+  }
+
+  const job = await ctx.prisma.generationJob.create({
+    data: {
+      userId:         ctx.user.id,
+      model:          input.model,
+      prompt:         input.prompt,
+      negativePrompt: input.negativePrompt,
+      duration:       input.duration ?? 5,
+      aspectRatio:    input.aspectRatio ?? '9:16',
+      style:          input.style,
+      seedImageUrl:   input.seedImageUrl,
+      audioUrl:       input.audioUrl,
+      status:         'QUEUED',
+    },
+  });
+
+  const reservationKey = `reserve:${job.id}`;
+  const creditsUsed = await reserveCredits(ctx.prisma, {
+    userId:         ctx.user.id,
+    featureKey,
+    amount:         rate.cost,
+    idempotencyKey: reservationKey,
+    referenceId:    job.id,
+    generationJobId: job.id,
+    description:    `${meta.label} generation`,
+  });
+  await ctx.prisma.generationJob.update({ where: { id: job.id }, data: { creditsUsed } });
+
+  try {
+    const result = await submitGenerationJob({
+      model:          input.model as SupportedModel,
+      prompt:         input.prompt,
+      negativePrompt: input.negativePrompt,
+      duration:       input.duration,
+      aspectRatio:    input.aspectRatio,
+      seedImageUrl:   input.seedImageUrl,
+      audioUrl:       input.audioUrl,
+    });
+
+    const updated = await ctx.prisma.generationJob.update({
+      where: { id: job.id },
+      data: {
+        providerJobId: result.providerJobId,
+        thumbnailUrl:  result.thumbnailUrl,
+        outputUrl:     result.outputUrl,
+        status:        result.outputUrl ? 'COMPLETED' : 'GENERATING',
+      },
+    });
+
+    // Synchronous providers (e.g. Grok Imagine) complete immediately — settle now.
+    if (result.outputUrl) {
+      await settleCredits(ctx.prisma, reservationKey, creditsUsed).catch(() => {});
+    }
+
+    return updated;
+  } catch (err) {
+    await ctx.prisma.generationJob.update({
+      where: { id: job.id },
+      data: { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Generation failed' },
+    });
+    await releaseCredits(ctx.prisma, reservationKey).catch(() => {});
+
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: err instanceof Error ? err.message : 'Generation failed',
+    });
+  }
+}
 
 export const generationRouter = router({
 
@@ -26,26 +122,34 @@ export const generationRouter = router({
       select: { featureKey: true, creditsPerUnit: true },
     });
     const rateMap = Object.fromEntries(rates.map((r) => [r.featureKey, r.creditsPerUnit]));
+    const providers = getProviderRegistry();
 
     return Object.entries(MODEL_META)
       .filter(([, meta]) => !meta.hidden)
-      .map(([id, meta]) => ({
-        id,
-        ...meta,
-        creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
-      }));
+      .map(([id, meta]) => {
+        const availability = resolveModelAvailability(providers, id);
+        return {
+          id,
+          ...meta,
+          creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
+          ...(availability ? { available: availability.available, unavailableReason: availability.reason ?? null } : {}),
+        };
+      });
   }),
 
   /** Submit a new AI generation job */
   create: protectedProcedure
     .input(z.object({
       model:          z.enum(SUPPORTED_MODELS),
-      prompt:         z.string().min(3).max(GENERATION_PROMPT_MAX_LENGTH),
+      // Optional only for VEED_FABRIC (image + audio driven); every other
+      // model is prompt-driven and enforces it below.
+      prompt:         z.string().min(3).max(GENERATION_PROMPT_MAX_LENGTH).optional(),
       negativePrompt: z.string().max(NEGATIVE_PROMPT_MAX_LENGTH).optional(),
       duration:       z.number().min(1).max(10).optional(),
       aspectRatio:    z.enum(['9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
       style:          z.string().max(100).optional(),
       seedImageUrl:   z.string().url().optional(),
+      audioUrl:       z.string().url().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // Check model availability
@@ -57,14 +161,38 @@ export const generationRouter = router({
         });
       }
 
+      // ── Per-model input requirements ──────────────────────────────────────
+      // VEED Fabric is image + audio driven (talking-video lip-sync); it needs
+      // a presenter image and an audio track, not a text prompt. H3_MAX and the
+      // Kling I2V/SEEDANCE I2V models need a seed image. Everything else needs
+      // a prompt.
+      const prompt = input.prompt ?? (input.model === 'VEED_FABRIC' ? 'Talking presenter video' : undefined);
+      if (!prompt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A prompt is required for this model.' });
+      }
+      if (input.model === 'VEED_FABRIC') {
+        if (!input.seedImageUrl) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'VEED Fabric requires a presenter image (seedImageUrl).' });
+        }
+        if (!input.audioUrl) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'VEED Fabric requires an audio track (audioUrl) to lip-sync against.' });
+        }
+      }
+      if ((meta.requiresSeedImage || input.model === 'H3_MAX') && !input.seedImageUrl) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `${meta.label} requires a seed image (seedImageUrl).` });
+      }
+
       // ── Prompt moderation ─────────────────────────────────────────────────────
       // Runs BEFORE credit deduction — rejected prompts cost the user nothing.
-      const moderation = await moderatePrompt(input.prompt);
-      if (!moderation.allowed) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: moderation.reason ?? 'Your prompt violates our content guidelines.',
-        });
+      // VEED's canned default prompt is safe; only moderate caller-supplied text.
+      if (input.prompt) {
+        const moderation = await moderatePrompt(prompt);
+        if (!moderation.allowed) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: moderation.reason ?? 'Your prompt violates our content guidelines.',
+          });
+        }
       }
       // Also check negative prompt if provided
       if (input.negativePrompt) {
@@ -77,6 +205,13 @@ export const generationRouter = router({
         }
       }
       // ─────────────────────────────────────────────────────────────────────────
+
+      // ── Reserve/settle path (flag-guarded, default OFF) ─────────────────────
+      // Requires the financial policy decision; until then the deduct-first path
+      // below remains the default.
+      if (isReserveSettleEnabled()) {
+        return createWithReserveSettle(ctx, { ...input, prompt }, meta, MODEL_FEATURE_KEY[input.model as SupportedModel]);
+      }
 
       // ── Credit gate ──────────────────────────────────────────────────────────
       // Deduct credits BEFORE creating the job so the user sees the balance
@@ -98,12 +233,13 @@ export const generationRouter = router({
         data: {
           userId:         ctx.user.id,
           model:          input.model,
-          prompt:         input.prompt,
+          prompt,
           negativePrompt: input.negativePrompt,
           duration:       input.duration ?? 5,
           aspectRatio:    input.aspectRatio ?? '9:16',
           style:          input.style,
           seedImageUrl:   input.seedImageUrl,
+          audioUrl:       input.audioUrl,
           status:         'QUEUED',
         },
       });
@@ -112,11 +248,12 @@ export const generationRouter = router({
         // Submit to the provider
         const result = await submitGenerationJob({
           model:          input.model as SupportedModel,
-          prompt:         input.prompt,
+          prompt,
           negativePrompt: input.negativePrompt,
           duration:       input.duration,
           aspectRatio:    input.aspectRatio,
           seedImageUrl:   input.seedImageUrl,
+          audioUrl:       input.audioUrl,
         });
 
         // Update the job with provider details
@@ -186,6 +323,7 @@ export const generationRouter = router({
           generating: 'GENERATING',
           completed:  'COMPLETED',
           failed:     'FAILED',
+          cancelled:  'CANCELLED',
         } as const;
 
         const updated = await ctx.prisma.generationJob.update({
@@ -193,9 +331,18 @@ export const generationRouter = router({
           data: {
             status:       statusMap[remote.status],
             outputUrl:    remote.outputUrl ?? job.outputUrl,
-            errorMessage: remote.error ?? job.errorMessage,
+            errorMessage: remote.error?.message ?? job.errorMessage,
+            errorCode:    remote.status === 'failed' || remote.status === 'cancelled'
+              ? (remote.error?.code ?? job.errorCode)
+              : null,
           },
         });
+
+        // Settle the credit reservation on completion (no-op unless reserve/settle
+        // is enabled; idempotent). Actual-cost settlement awaits provider cost data.
+        if (isReserveSettleEnabled() && remote.status === 'completed') {
+          await settleCredits(ctx.prisma, `reserve:${job.id}`, job.creditsUsed).catch(() => {});
+        }
 
         return updated;
       } catch {
@@ -255,11 +402,84 @@ export const generationRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot cancel a finished job' });
       }
 
-      return ctx.prisma.generationJob.update({
+      const updated = await ctx.prisma.generationJob.update({
         where: { id: job.id },
         data: { status: 'CANCELLED' },
         select: { id: true, status: true },
       });
+
+      // Best-effort provider-side cancel (fire-and-forget); the local status is
+      // already CANCELLED regardless of whether the provider honours it.
+      if (job.providerJobId) {
+        cancelProviderJob(job.model as SupportedModel, job.providerJobId).catch(() => {});
+      }
+
+      return updated;
+    }),
+
+  /** Retry a failed generation job (Phase 15 — bounded provider retries) */
+  retry: protectedProcedure
+    .input(z.object({ jobId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const job = await ctx.prisma.generationJob.findFirst({
+        where: { id: input.jobId, userId: ctx.user.id },
+      });
+      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found' });
+      if (job.status !== 'FAILED') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only failed jobs can be retried' });
+      }
+      if (job.retryCount >= MAX_JOB_RETRIES) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Retry limit reached (${MAX_JOB_RETRIES})` });
+      }
+
+      const meta = MODEL_META[job.model as SupportedModel];
+      const featureKey = MODEL_FEATURE_KEY[job.model as SupportedModel];
+
+      // Re-charge for the retry (the prior attempt was refunded/released).
+      const creditsUsed = await deductCredits(
+        ctx.prisma,
+        ctx.user.id,
+        featureKey,
+        `retry-${job.id}-${Date.now()}`,
+        `${meta.label} retry`,
+      );
+
+      await ctx.prisma.generationJob.update({
+        where: { id: job.id },
+        data: { status: 'QUEUED', errorMessage: null, errorCode: null, retryCount: { increment: 1 } },
+      });
+
+      try {
+        const result = await submitGenerationJob({
+          model:          job.model as SupportedModel,
+          prompt:         job.prompt,
+          negativePrompt: job.negativePrompt ?? undefined,
+          duration:       job.duration,
+          aspectRatio:    job.aspectRatio,
+          seedImageUrl:   job.seedImageUrl ?? undefined,
+          audioUrl:       job.audioUrl ?? undefined,
+        });
+
+        return ctx.prisma.generationJob.update({
+          where: { id: job.id },
+          data: {
+            providerJobId: result.providerJobId,
+            thumbnailUrl:  result.thumbnailUrl,
+            outputUrl:     result.outputUrl,
+            status:        result.outputUrl ? 'COMPLETED' : 'GENERATING',
+          },
+        });
+      } catch (err) {
+        await ctx.prisma.generationJob.update({
+          where: { id: job.id },
+          data: { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Retry failed' },
+        });
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, job.id, `Refund: ${meta.label} retry failed`).catch(() => {});
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: err instanceof Error ? err.message : 'Retry failed',
+        });
+      }
     }),
 
   /** Publish a completed generated video to the feed */

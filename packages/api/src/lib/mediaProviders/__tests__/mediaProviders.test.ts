@@ -279,6 +279,16 @@ describe('fal model contract mapping', () => {
       audio_url: 'https://in/a.mp3',
       resolution: '720p',
     });
+    // resolution is required by the endpoint — defaulted and sanitized, never omitted
+    expect(toVeedFabricInput({ imageUrl: 'https://in/a.png', audioUrl: 'https://in/a.mp3' })).toMatchObject({
+      resolution: '720p',
+    });
+    expect(toVeedFabricInput({ imageUrl: 'https://in/a.png', audioUrl: 'https://in/a.mp3', resolution: '1080p' })).toMatchObject({
+      resolution: '720p',
+    });
+    expect(toVeedFabricInput({ imageUrl: 'https://in/a.png', audioUrl: 'https://in/a.mp3', resolution: '480p' })).toMatchObject({
+      resolution: '480p',
+    });
     expect(parseVeedFabricOutput({ video: { url: 'https://fal/ugc.mp4' } }).urls).toEqual(['https://fal/ugc.mp4']);
   });
 

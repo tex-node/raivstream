@@ -15,6 +15,7 @@ import { z } from 'zod';
 import {
   registerUser,
   loginUser,
+  googleAuthUser,
   refreshTokens,
   logoutUser,
   logoutAllDevices,
@@ -62,6 +63,18 @@ export const authRouter = router({
     .mutation(async ({ ctx, input }) => {
       try {
         return await loginUser(ctx.prisma, input);
+      } catch (err) {
+        toTRPCError(err);
+      }
+    }),
+
+  google: publicProcedure
+    .input(z.object({
+      idToken: z.string().min(1).max(8192),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await googleAuthUser(ctx.prisma, input.idToken);
       } catch (err) {
         toTRPCError(err);
       }

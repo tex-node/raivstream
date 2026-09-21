@@ -16,6 +16,8 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+import type { MediaErrorCode } from '../mediaProviders';
+
 export type RunpodJobStatus =
   | 'IN_QUEUE'
   | 'IN_PROGRESS'
@@ -179,17 +181,38 @@ export async function getEndpointHealth(endpointId: string): Promise<RunpodHealt
 
 // ─── Job status normalisation ─────────────────────────────────────────────────
 
-export type NormalisedStatus = 'queued' | 'generating' | 'completed' | 'failed';
+export type NormalisedStatus = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
 
 export function normaliseStatus(raw: RunpodJobStatus): NormalisedStatus {
   switch (raw) {
     case 'IN_QUEUE':    return 'queued';
     case 'IN_PROGRESS': return 'generating';
     case 'COMPLETED':   return 'completed';
+    case 'CANCELLED':   return 'cancelled';
     case 'FAILED':
-    case 'CANCELLED':
     case 'TIMED_OUT':   return 'failed';
   }
+}
+
+/**
+ * Normalize a RunPod job error/status into a canonical GenerationJobError.
+ * `TIMED_OUT` and `CANCELLED` are classified distinctly; everything else is a
+ * generic provider error. Returns undefined when there is no error.
+ */
+export function normaliseRunpodError(
+  rawStatus?: RunpodJobStatus,
+  error?: string,
+): { code: MediaErrorCode; message: string; retryable: boolean } | undefined {
+  if (rawStatus === 'TIMED_OUT') {
+    return { code: 'TIMEOUT', message: error ?? 'Generation timed out', retryable: true };
+  }
+  if (rawStatus === 'CANCELLED') {
+    return { code: 'CANCELLED', message: error ?? 'Generation was cancelled', retryable: false };
+  }
+  if (rawStatus === 'FAILED' || error) {
+    return { code: 'PROVIDER_ERROR', message: error ?? 'Provider reported failure', retryable: false };
+  }
+  return undefined;
 }
 
 /**

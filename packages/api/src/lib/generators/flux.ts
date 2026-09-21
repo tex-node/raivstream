@@ -20,10 +20,12 @@ import {
   submitJob,
   getJobStatus,
   normaliseStatus,
+  normaliseRunpodError,
   extractOutputUrl,
   type NormalisedStatus,
 } from './runpod';
 import { mirrorUrlToR2 } from '../r2';
+import { resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 export interface FluxInput {
   prompt:       string;
@@ -36,7 +38,7 @@ export interface FluxJobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -105,13 +107,13 @@ export async function getFluxStatus(jobId: string): Promise<FluxJobResult> {
   const status = normaliseStatus(raw.status);
 
   if (status !== 'completed') {
-    return { jobId, status, error: raw.error };
+    return { jobId, status, error: normaliseRunpodError(raw.status, raw.error) };
   }
 
   const rawUrl = extractOutputUrl(raw.output);
   if (!rawUrl) {
     console.error('[flux] COMPLETED job has no extractable output URL. Raw output:', JSON.stringify(raw.output));
-    return { jobId, status: 'failed', error: 'Generation completed but produced no output URL' };
+    return { jobId, status: 'failed', error: resultInvalid() };
   }
 
   const safeJobId = jobId.replace(/[^a-zA-Z0-9._-]/g, '-');
@@ -121,6 +123,6 @@ export async function getFluxStatus(jobId: string): Promise<FluxJobResult> {
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[flux] R2 mirror failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save image to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }

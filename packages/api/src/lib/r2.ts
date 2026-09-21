@@ -4,12 +4,16 @@
  * so short-lived provider URLs don't expire before the client loads them.
  */
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 function getClient() {
+  const rawEndpoint = process.env.R2_ENDPOINT!;
+  // Tolerate a scheme-less endpoint (e.g. "<id>.r2.cloudflarestorage.com") —
+  // the SDK requires an absolute URL and otherwise throws ERR_INVALID_URL.
+  const endpoint = /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
   return new S3Client({
     region:   'auto',
-    endpoint: process.env.R2_ENDPOINT!,
+    endpoint,
     credentials: {
       accessKeyId:     process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
@@ -103,4 +107,30 @@ export async function mirrorUrlToR2(
     }),
   );
   return `${publicUrl}/${key}`;
+}
+
+/**
+ * Best-effort existence check for an object, via the public CDN URL (HEAD).
+ * Returns false when R2 is not configured or the object is missing.
+ */
+export async function objectExistsInR2(key: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const url = getPublicUrlForKey(key);
+  if (!url) return false;
+  try {
+    const res = await fetchImpl(url, { method: 'HEAD' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove an object from R2. Best-effort; never throws. */
+export async function removeFromR2(key: string): Promise<void> {
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!bucket) return;
+  try {
+    await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* best-effort */
+  }
 }

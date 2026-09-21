@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, type AuthUser } from '@/lib/auth';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 function EyeIcon() {
   return (
@@ -71,6 +72,17 @@ function SignInForm() {
   };
 
   return (
+    <div className="flex flex-col gap-4">
+      <GoogleSignInButton
+        mode="signin"
+        onError={setError}
+        onSuccess={(user) => {
+          setUser(user);
+          // Hard redirect so the middleware sees the new raiv_at cookie
+          // on the very next request — router.push() (soft nav) can miss it
+          window.location.href = redirectUrl;
+        }}
+      />
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {error && (
         <div className="text-sm px-4 py-3 rounded-xl" style={{ background: 'rgba(227,93,93,0.10)', border: '1px solid rgba(227,93,93,0.3)', color: '#e35d5d' }}>
@@ -152,6 +164,7 @@ function SignInForm() {
         ) : 'Sign in'}
       </button>
     </form>
+    </div>
   );
 }
 

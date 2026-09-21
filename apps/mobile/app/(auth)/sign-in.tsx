@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,20 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/lib/auth';
+
+// Completes the in-app-browser redirect back into the app (required on native).
+WebBrowser.maybeCompleteAuthSession();
+
+// Google OAuth client IDs — the server accepts all of these as token audience.
+// NOTE: requires a development build (`eas build --profile development`);
+// Expo Go cannot complete this flow (auth proxy removed in SDK 50+).
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -44,7 +56,36 @@ export default function SignInScreen() {
     onError: (err) => Alert.alert('Registration failed', err.message),
   });
 
-  const loading = login.isPending || register.isPending;
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID,
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+  });
+
+  const googleLogin = trpc.auth.google.useMutation({
+    onSuccess: async ({ user, accessToken, refreshToken }) => {
+      await setSession(user, accessToken, refreshToken);
+      router.replace('/(tabs)');
+    },
+    onError: (err) => Alert.alert('Google sign-in failed', err.message),
+  });
+
+  useEffect(() => {
+    if (googleResponse?.type === 'success') {
+      const idToken = googleResponse.params.id_token as string | undefined;
+      if (idToken) {
+        googleLogin.mutate({ idToken });
+      } else {
+        Alert.alert('Google sign-in failed', 'No credential was returned');
+      }
+    } else if (googleResponse?.type === 'error') {
+      Alert.alert('Google sign-in failed', googleResponse.error?.message ?? 'Unknown error');
+    }
+    // 'dismiss' (user cancelled) is intentionally silent
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
+
+  const loading = login.isPending || register.isPending || googleLogin.isPending;
 
   const handleSubmit = () => {
     if (mode === 'sign-in') {
@@ -138,6 +179,30 @@ export default function SignInScreen() {
           )}
         </TouchableOpacity>
 
+        {GOOGLE_WEB_CLIENT_ID ? (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <TouchableOpacity
+              style={[styles.googleBtn, (!googleRequest || googleLogin.isPending) && styles.googleBtnDisabled]}
+              onPress={() => void googlePromptAsync()}
+              disabled={!googleRequest || googleLogin.isPending}
+            >
+              {googleLogin.isPending ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.googleBtnText}>
+                  <Text style={styles.googleG}>G</Text>
+                  {'  '}Continue with Google
+                </Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : null}
+
         <TouchableOpacity
           style={styles.skipBtn}
           onPress={() => router.replace('/(tabs)')}
@@ -209,6 +274,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
+  dividerText: { color: '#6b7280', fontSize: 13 },
+
+  googleBtn: {
+    backgroundColor: '#1f2937',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  googleBtnDisabled: { opacity: 0.5 },
+  googleBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  googleG: { color: '#4285F4', fontWeight: '900' },
 
   skipBtn: { marginTop: 20, alignItems: 'center' },
   skipBtnText: { color: '#6b7280', fontSize: 13 },

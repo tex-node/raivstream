@@ -28,6 +28,7 @@
 import { createHmac } from 'crypto';
 import { mirrorUrlToR2 } from '../r2';
 import type { NormalisedStatus } from './runpod';
+import { providerFailure, resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -152,7 +153,7 @@ export interface KlingJobResult {
   jobId:      string;
   status:     NormalisedStatus;
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 // ─── I2V — Image to Video ─────────────────────────────────────────────────────
@@ -191,7 +192,7 @@ export async function getKlingI2VStatus(jobId: string): Promise<KlingJobResult> 
   const resp   = await klingGet<KlingStatusResp>(`/v1/videos/image2video/${taskId}`);
 
   if (resp.code !== 0) {
-    return { jobId, status: 'failed', error: `Kling API error ${resp.code}: ${resp.message}` };
+    return { jobId, status: 'failed', error: providerFailure(`Kling API error ${resp.code}: ${resp.message}`) };
   }
 
   const status = mapStatus(resp.data.task_status);
@@ -199,7 +200,7 @@ export async function getKlingI2VStatus(jobId: string): Promise<KlingJobResult> 
 
   const rawUrl = resp.data.task_result?.videos?.[0]?.url;
   if (!rawUrl) {
-    return { jobId, status: 'failed', error: 'Kling I2V completed but returned no video URL' };
+    return { jobId, status: 'failed', error: resultInvalid('Kling I2V completed but returned no video URL') };
   }
 
   try {
@@ -207,7 +208,7 @@ export async function getKlingI2VStatus(jobId: string): Promise<KlingJobResult> 
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[kling-i2v] R2 mirror failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }
 
@@ -254,7 +255,7 @@ export async function getKlingR2VStatus(jobId: string): Promise<KlingJobResult> 
   const resp   = await klingGet<KlingStatusResp>(`/v1/videos/text2video/${taskId}`);
 
   if (resp.code !== 0) {
-    return { jobId, status: 'failed', error: `Kling API error ${resp.code}: ${resp.message}` };
+    return { jobId, status: 'failed', error: providerFailure(`Kling API error ${resp.code}: ${resp.message}`) };
   }
 
   const status = mapStatus(resp.data.task_status);
@@ -262,7 +263,7 @@ export async function getKlingR2VStatus(jobId: string): Promise<KlingJobResult> 
 
   const rawUrl = resp.data.task_result?.videos?.[0]?.url;
   if (!rawUrl) {
-    return { jobId, status: 'failed', error: 'Kling R2V completed but returned no video URL' };
+    return { jobId, status: 'failed', error: resultInvalid('Kling R2V completed but returned no video URL') };
   }
 
   try {
@@ -270,6 +271,6 @@ export async function getKlingR2VStatus(jobId: string): Promise<KlingJobResult> 
     return { jobId, status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[kling-r2v] R2 mirror failed:', (err as Error).message);
-    return { jobId, status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { jobId, status: 'failed', error: storageFailed() };
   }
 }

@@ -15,6 +15,7 @@
  */
 
 import { mirrorUrlToR2 } from '../r2';
+import { providerFailure, resultInvalid, storageFailed, type GenerationJobError } from './jobModel';
 
 const BASE_URL  = 'https://generativelanguage.googleapis.com/v1beta';
 const VEO_MODEL = process.env.VEO_MODEL ?? 'veo-3.1-generate-preview';
@@ -41,7 +42,7 @@ export interface Veo3Input {
 export interface Veo3Status {
   status:     'queued' | 'generating' | 'completed' | 'failed';
   outputUrl?: string;
-  error?:     string;
+  error?:     GenerationJobError;
 }
 
 /**
@@ -114,7 +115,7 @@ export async function getVeo3Status(operationName: string): Promise<Veo3Status> 
   }
 
   if (data.error) {
-    return { status: 'failed', error: data.error.message };
+    return { status: 'failed', error: providerFailure(data.error.message) };
   }
 
   // Extract video URI — handle both known response shapes
@@ -127,7 +128,7 @@ export async function getVeo3Status(operationName: string): Promise<Veo3Status> 
 
   if (!videoUri) {
     console.error('[veo3] Unexpected response shape:', JSON.stringify(data));
-    return { status: 'failed', error: 'No video URI in Veo 3 response' };
+    return { status: 'failed', error: resultInvalid('No video URI in Veo 3 response') };
   }
 
   // Download from Google Files API and mirror to R2
@@ -143,6 +144,6 @@ export async function getVeo3Status(operationName: string): Promise<Veo3Status> 
     return { status: 'completed', outputUrl: permanentUrl };
   } catch (err) {
     console.error('[veo3] R2 mirror failed — marking job failed:', (err as Error).message);
-    return { status: 'failed', error: 'Failed to save video to storage — please retry' };
+    return { status: 'failed', error: storageFailed() };
   }
 }
