@@ -43,6 +43,8 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - **Google OAuth sign-in (web): configured + deployed.** Web client ID `506778685431-lh740120na3ct1n82jh9al9ph9rgv2m2.apps.googleusercontent.com` set as `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in local `apps/web/.env.local` and the VPS prod `apps/web/.env.local` (gitignored); production rebuilt + PM2 restarted 2026-09-21, client id confirmed inlined in the bundle. Server-side token verification (`verifyGoogleIdToken`, aud allowlist) is active. `GOOGLE_CLIENT_SECRET` is stored in `cred/fal_env.txt` but is **not used** by the GIS ID-token flow (no server flow). **Verify in Google Cloud Console that Authorized JavaScript origins include `http://localhost:3000` (dev) and `https://app.raivstream.com` (prod).** Mobile (`EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + dev build) remains not configured; migration `20260920120000_google_oauth` is deployed.
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
+- **Phase 16 planned — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16) to carry the incoming story-composition/prompt-generation upgrades: Stage 1 Narrative Engine (Claude 3.5 Sonnet) → Stage 2 Production Structurer (GPT-4o strict JSON `ProductionManifest`) → Stage 3A ElevenLabs narration + Stage 3B MiniMax H3 native-audio video (4–15s, up to 1080P @ 24fps, `first_frame_image` i2v) → Stage 4 final stitching via the existing Movie Builder. **Implementation not started.** New credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API` (Anthropic), `GPT40_API` (OpenAI GPT-4o) — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`. Flag-gated (`STORY_NARRATIVE_ENGINE_ENABLED`, `STORY_MANIFEST_STRUCTURER_ENABLED`, default off).
+
 ## Monorepo Layout
 
 ```text
@@ -265,6 +267,26 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-21: Phase 16 PLANNED — AI Narrative & Production Pipeline (MiniMax H3 + ElevenLabs)
+
+Accepted the PRD for upgrading story composition and prompt generation into a staged LLM
+pipeline; **documentation updated only, no implementation yet**.
+
+- **Docs:** `docs/architecture.md` §12 (pipeline diagram, `ProductionManifest` schema,
+  MiniMax H3 prompt formula, integration map) and `docs/product_roadmap.md` (Phase 16,
+  sub-phases 16.1–16.5, exit criteria, delivery-sequence + immediate-next-action updates).
+- **Pipeline:** Stage 1 Narrative Engine (Claude 3.5 Sonnet) → Stage 2 Production
+  Structurer (GPT-4o `json_object` → strict `ProductionManifest` with `elevenlabs_narration`,
+  `minimax_video_prompt`, `camera_motion`, `duration_sec` 5–15, `resolution` `768P|1080P`,
+  `first_frame_image_url`) → Stage 3A ElevenLabs narration + Stage 3B MiniMax H3 video with
+  native synchronized audio/SFX → Stage 4 final stitching (existing Movie Builder).
+- **Reuses existing infra:** `H3_MAX` fal adapter (extend for duration/resolution/first-frame/
+  native audio), ElevenLabs `generateCueSpeech` + `AudioCue`/mixer, OpenAI enhancer/VPC
+  composer fallbacks, credit gates + fail-closed switches.
+- **Credentials staged in `cred/fal_env.txt`:** `CLAUDE_API`, `GPT40_API` (server-only;
+  never `NEXT_PUBLIC_*`). ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`.
+- **Next step:** implement 16.1 (Claude narrative engine) behind `STORY_NARRATIVE_ENGINE_ENABLED`.
 
 ### 2026-09-21: Atomic deploys + low-balance warning
 

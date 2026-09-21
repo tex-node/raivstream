@@ -1288,6 +1288,60 @@ Prepare the platform for increasing users, larger projects, and more expensive m
 
 ---
 
+## Phase 16 — AI Narrative & Production Pipeline (MiniMax H3 + ElevenLabs)
+
+### Objective
+
+Upgrade story composition and prompt generation into a staged LLM pipeline that ends in
+**MiniMax H3** scene video (native synchronized audio/SFX, 4–15s, up to 1080P @ 24 FPS,
+optional `first_frame_image` i2v) with **ElevenLabs** scene narration, and stitches the
+result into a final production render. See `docs/architecture.md` §12 for the pipeline,
+manifest schema, MiniMax H3 prompt formula, and integration map.
+
+### Sub-phases
+
+- **16.1 · Narrative Engine (Claude 3.5 Sonnet).** New story-composition service
+  (`CLAUDE_API`, key staged in `cred/fal_env.txt`): expands a raw concept into a 3–5 scene
+  cinematic story with sensory anchors (lighting, atmosphere, physical action, ambient
+  sound cues) and internal conflict. Augments the existing `storyTextService` (OpenAI /
+  deterministic fallback); flag-guarded (`STORY_NARRATIVE_ENGINE_ENABLED`, default off).
+- **16.2 · Production Script Structurer (GPT-4o JSON).** New structurer (`GPT40_API`):
+  converts the Stage 1 prose into a strict `ProductionManifest` (title, logline, scenes[]
+  with `elevenlabs_narration`, `minimax_video_prompt`, `camera_motion`, `duration_sec` 5–15,
+  `resolution` `768P|1080P`, `first_frame_image_url`), using
+  `response_format: { type: 'json_object' }`. Becomes the canonical creative specification
+  for scene video; flag-guarded (`STORY_MANIFEST_STRUCTURER_ENABLED`, default off).
+- **16.3 · MiniMax H3 native-audio video generation.** Extend the existing `H3_MAX` fal
+  adapter/contracts for `duration_sec` 4–15, `resolution` `768P|1080P` @ 24fps, and
+  `first_frame_image` (i2v); MiniMax H3 embeds synchronized sound/SFX during inference.
+  Host decision (fal queue vs direct `api.minimax.io/v1/video_generation`) recorded as an
+  ADR. `story.generateSceneVideo` consumes `minimax_video_prompt`/`camera_motion`/etc.
+- **16.4 · ElevenLabs scene narration wiring.** Route each scene's `elevenlabs_narration`
+  through the existing `story.generateCueSpeech` → R2 `AudioAsset(GENERATED_SPEECH)` →
+  `AudioCue` path so the Movie Builder mixer consumes it like any other cue.
+- **16.5 · ProductionManifest + final stitching.** Persist the resolved manifest (scene
+  metadata + generated video/audio URLs) per project; extend the Movie Builder to combine
+  MiniMax native SFX + ElevenLabs VO + scene video into the final render; export history
+  via the existing `story.listMovieAssets`.
+
+### Exit criteria
+
+- Raw concept → cinematic story → strict JSON manifest → per-scene MiniMax H3 video (native
+  SFX) + ElevenLabs narration → stitched final render, end to end.
+- Durations 5–15s, `768P`/`1080P` @ 24 FPS, first-frame i2v honored; MiniMax native audio
+  correctly isolated vs ElevenLabs VO during stitching.
+- Fail-closed switches, R16-safe deterministic fallback preserved, credits/ledger exact,
+  manifest persisted + resumable.
+- Provider host decision documented; production enablement requires the standard Gate
+  C/D/E/F discipline.
+
+**Priority:** High
+**Status:** [PLANNED]
+**Credentials:** `CLAUDE_API`, `GPT40_API` (staged in `cred/fal_env.txt`); ElevenLabs uses
+existing `ELEVENLABS_API_KEY` / `11_LABS`.
+
+---
+
 # 10. Recommended Delivery Sequence
 
 The recommended sequence is:
@@ -1305,8 +1359,15 @@ The recommended sequence is:
 11. **Finalize commercialization and billing**
 12. **Run production canary**
 13. **Scale and expand provider routing**
+14. **Phase 16.1 — Narrative Engine (Claude 3.5 Sonnet)**
+15. **Phase 16.2 — Production Structurer (GPT-4o manifest)**
+16. **Phase 16.3 — MiniMax H3 native-audio video (extend H3_MAX)**
+17. **Phase 16.4 — ElevenLabs scene narration wiring**
+18. **Phase 16.5 — ProductionManifest + final stitching**
 
-This order prevents the project from accumulating three disconnected provider implementations that each handle jobs, errors, billing, and assets differently.
+Phases 16.3–16.5 build on the MiniMax infrastructure shipped in Phases 6–8 and the
+narration/mixer layer from 9B.2–9B.3; 16.1–16.2 replace the composition/structuring
+upstream without touching the existing provider abstraction.
 
 ---
 
@@ -1648,6 +1709,11 @@ The recommended immediate work is:
 11. Establish a provider integration test harness.
 12. Create a staged roadmap issue or milestone for each provider.
 13. Assign an owner and acceptance criteria to every milestone.
+14. **Kick off Phase 16**: implement the Narrative Engine (Claude 3.5 Sonnet) then the
+    Production Structurer (GPT-4o manifest), extend the MiniMax H3 contract (duration /
+    resolution / first-frame / native audio), wire ElevenLabs scene narration, and persist
+    the ProductionManifest — each behind fail-closed switches (`STORY_NARRATIVE_ENGINE_ENABLED`,
+    `STORY_MANIFEST_STRUCTURER_ENABLED`).
 
 > Items 1–5 and 11 are now substantially underway via Phase 6 (see §7.1/§9 Phase 6 progress log).
 

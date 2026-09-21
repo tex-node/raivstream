@@ -147,3 +147,88 @@ Models: `lyria-3-clip-preview` (30s) / `lyria-3-pro-preview`; gate `LYRIA_MUSIC_
 ## 11. Webhook / refund safety
 - fal webhook signature: ED25519 over `${requestId}\n${userId}\n${timestamp}\n${sha256(body)}`, verified against JWKS (`https://rest.fal.ai/.well-known/jwks.json`), ±300s replay window.
 - Refund outbox: `CreditOperation` (unique `idempotencyKey = fal-refund:<jobId>`), `PENDING → PROCESSING → COMPLETED | FAILED`. Monitoring, recommendation, and execution are separate authorities — no automatic credit mutation on provider connect.
+
+## 12. AI Narrative & Production Pipeline (Phase 16) — Claude → GPT-4o → ElevenLabs + MiniMax H3
+
+> **PLANNED.** Story composition and prompt generation move to a staged LLM pipeline whose
+> final stage targets **MiniMax H3** (native synchronized audio/SFX, durations 4–15s,
+> resolutions up to 1080P @ 24 FPS, `first_frame_image` i2v) with **ElevenLabs** scene
+> narration. All destination media infrastructure already exists in this codebase (H3_MAX
+> fal adapter, ElevenLabs `generateCueSpeech` + `AudioCue`/mixer, OpenAI enhancer, Movie
+> Builder mixer); Phase 16 adds the two upstream composition stages and the manifest that
+> binds them.
+
+### 12.1 Pipeline
+
+```
+                [ RAW USER PROMPT ]
+                          │
+                          ▼
+        ┌──────────────────────────────────┐
+        │  Stage 1 · Narrative Engine      │  Claude 3.5 Sonnet  (CLAUDE_API)
+        │  story → cinematic 3–5 scene     │
+        │  prose (sensory anchors, sound   │
+        │  cues, lighting, conflict)       │
+        └──────────────────────────────────┘
+                          │
+                          ▼
+        ┌──────────────────────────────────┐
+        │  Stage 2 · Production Structurer │  GPT-4o (response_format json_object)
+        │  prose → strict ProductionManifest│ (GPT40_API)
+        │  (MiniMax H3 prompt + ElevenLabs │
+        │   narration + camera/duration/   │
+        │   resolution/first-frame)        │
+        └──────────────────────────────────┘
+                 │                  │
+                 ▼                  ▼
+        ┌────────────────┐  ┌─────────────────────┐
+        │  Stage 3A      │  │  Stage 3B           │
+        │  ElevenLabs    │  │  MiniMax H3         │
+        │  narration     │  │  video + native SFX │
+        │  .mp3/.wav     │  │  .mp4 per scene     │
+        └───────┬────────┘  └─────────┬───────────┘
+                └───────────┬─────────┘
+                            ▼
+                [ ProductionManifest (resolved) → Movie Builder ]
+```
+
+| Stage | Model / API | Role | Key outputs |
+|---|---|---|---|
+| 1 · Narrative Engine | `claude-3-5-sonnet-20241022` (Anthropic) | Expand a raw concept into a rich 3–5 scene cinematic story: character motives, lighting, atmosphere, physical action, ambient sound cues, internal conflict. | Unstructured prose, `SCENE n` headings |
+| 2 · Production Structurer | `gpt-4o` (OpenAI, `response_format: { type: 'json_object' }`) | Translate prose into a strict JSON manifest configured for MiniMax H3 syntax and ElevenLabs. | `ProductionManifest` (below) |
+| 3A · Voiceover | ElevenLabs | Synthesize per-scene narration. | `.mp3`/`.wav` per scene |
+| 3B · Video + SFX | MiniMax H3 | Render per-scene clip with camera motion, lighting, and native embedded ambient SFX. | `.mp4` per scene |
+| 4 · Consolidation | app (Movie Builder) | Merge scene metadata + generated video/audio URLs into the final production render. | resolved `ProductionManifest` |
+
+### 12.2 ProductionManifest schema (Stage 2 output)
+
+```jsonc
+{
+  "title": "String",
+  "logline": "String",
+  "scenes": [
+    {
+      "scene_id": "Number",
+      "elevenlabs_narration": "String",        // VO script incl. emotion/pacing hints
+      "minimax_video_prompt": "String",         // MiniMax H3 cinematic prompt
+      "camera_motion": "String",                // e.g. "Slow push-in", "Orbit", "Low-angle tracking shot"
+      "duration_sec": "Number",                 // accepted 5–15
+      "resolution": "String",                   // accepted "768P" | "1080P"
+      "first_frame_image_url": "String | Null"  // optional i2v framing image
+    }
+  ]
+}
+```
+
+**`minimax_video_prompt` formula (required by Stage 2 system prompt):**
+`[Shot Type & Camera Motion] + [Subject & Physical Action] + [Lighting & Atmosphere] + [Lens & Style] + [Native Audio/SFX cues]`.
+Because MiniMax H3 generates audio natively, SFX are explicit prompt terms (e.g. *"Ambient sound of heavy rainfall, distant sirens, and wet footsteps"*). Generic buzzwords (`4K`, `HD`, `hyperrealistic`) are forbidden; use technical cinematography terminology.
+
+### 12.3 Integration with the existing system
+
+- **MiniMax transport:** the existing `H3_MAX` fal adapter (`lib/generators/falH3Max.ts`, `minimax/h3-max-turbo/image-to-video`) is the default MiniMax path. Phase 16 extends the contract (`mediaProviders/fal/contracts.ts`) for `duration_sec` (4–15), `resolution` (`768P`/`1080P` @ 24fps), and `first_frame_image` (already i2v via `seedImageUrl`). A host decision (fal queue vs direct `https://api.minimax.io/v1/video_generation`) is recorded as an ADR before Stage 3B lands.
+- **ElevenLabs:** Stage 3A wires `elevenlabs_narration` into the existing `story.generateCueSpeech` path (`elevenLabsTts.ts` → R2 `AudioAsset(GENERATED_SPEECH)` → `AudioCue.audioAssetId`), which the Movie Builder audio mixer already consumes.
+- **Composition:** Stage 1 augments/replaces `storyTextService` (OpenAI-compatible / deterministic) and Stage 2 augments `promptEnhancerService` + the VPC prompt composer. The manifest becomes the canonical creative specification for scene video (`story.generateSceneVideo` reads prompt/camera/duration/resolution); the VPC keeps per-shot fallbacks and the R16-safe deterministic path.
+- **Credits & gating:** fail-closed convention preserved. New switches default **OFF**: `STORY_NARRATIVE_ENGINE_ENABLED` (Stage 1) and `STORY_MANIFEST_STRUCTURER_ENABLED` (Stage 2); local/deterministic fallbacks remain. New credit-rate keys where applicable (e.g. story composition/manifest staging) via `/admin/credits`; existing `story:speech_generation` / `generate:h3_max` gates are reused for the media stages.
+- **Credentials:** `CLAUDE_API` (Anthropic) and `GPT40_API` (OpenAI GPT-4o) are staged in `cred/fal_env.txt` (gitignored) and must map to server-only env in production — never `NEXT_PUBLIC_*`. ElevenLabs uses the existing `ELEVENLABS_API_KEY` / legacy `11_LABS`.
+- **Manifest persistence:** the resolved `ProductionManifest` (with generated video/audio URLs) is persisted per project so renders are reproducible and resumable; it feeds `story.listMovieAssets` / export history.
