@@ -274,6 +274,12 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Scene Director video + AI Studio nav removed
+
+- **Scene Director (`/story-playground/[projectId]/scenes/[sceneId]`)** now has an **"Animate to Video"** control (MiniMax H3) that calls `story.generateSceneVideo` (uses the scene's latest ready picture as the opening frame; disabled + hint until a picture exists) and renders a `<video>` preview of the generated clip. Non-R16 only.
+- **AI Studio tab hidden:** removed the `/generate` "AI Studio" entries from the desktop + mobile navbar (Story Playground replaces it). The `/generate` route + the Story Playground "Send to AI Studio" handoffs remain functional.
+- Verified: web type-check + strict lint clean.
+
 ### 2026-09-21: Narration unblocked + voice options/previews + movie stills warning
 
 - **Narration was failing closed** because `story:speech_generation` credit rate was unset in prod — now set to **50cr** (active). `story:movie_render`=100 and `generate:h3_max`=200 confirmed active. `story:audio_generation` (Lyria music) remains unset → music generation still fails closed (safe; set a rate in Admin → Credits to enable).

@@ -77,6 +77,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
   });
   const generateImage = trpc.story.generateSceneImage.useMutation();
   const regenerateImage = trpc.story.regenerateSceneImage.useMutation();
+  const generateVideo = trpc.story.generateSceneVideo.useMutation();
+  const [reviewVideoUrl, setReviewVideoUrl] = useState<string | null>(null);
 
   const scene = ((workspaceQuery.data as any)?.project?.sceneSeeds ?? []).find((s: any) => s.id === sceneId);
 
@@ -136,6 +138,21 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
     } catch (e: any) {
       progress.finish();
       setErrorMessage(e?.message ?? 'Generation failed. Try again.');
+    }
+  }
+
+  async function runGenerateVideo() {
+    setErrorMessage(null);
+    setReviewVideoUrl(null);
+    if (!hasReadyImage) {
+      setErrorMessage('Generate a scene picture first, then animate it to video.');
+      return;
+    }
+    try {
+      const result: any = await generateVideo.mutateAsync({ projectId, sceneId, model: 'H3_MAX' });
+      setReviewVideoUrl(result?.assetUrl ?? result?.asset?.assetUrl ?? null);
+    } catch (e: any) {
+      setErrorMessage(e?.message ?? 'Video generation failed. Try again.');
     }
   }
 
@@ -254,6 +271,20 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
                   </div>
                 </div>
               ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid rgba(233,233,237,0.10)', paddingTop: 14 }}>
+                <span className="noc-label">Scene video (MiniMax H3)</span>
+                <button
+                  type="button"
+                  onClick={runGenerateVideo}
+                  disabled={generateVideo.isPending || !hasReadyImage}
+                  style={{ borderRadius: 12, padding: '12px 14px', fontWeight: 700, background: 'linear-gradient(90deg,#4f8bd6,#b25ad9)', color: '#0B0D14', border: 'none', cursor: generateVideo.isPending || !hasReadyImage ? 'default' : 'pointer', opacity: generateVideo.isPending || !hasReadyImage ? 0.5 : 1 }}
+                >
+                  {generateVideo.isPending ? 'Generating video…' : hasReadyImage ? 'Animate to Video' : 'Generate a picture first'}
+                </button>
+                {reviewVideoUrl && (
+                  <video controls src={reviewVideoUrl} style={{ width: '100%', borderRadius: 12 }} />
+                )}
+              </div>
             </div>
           ) : (
             <p style={{ fontSize: 12.5, color: 'var(--noc-t6)' }}>Advanced scene controls aren&apos;t shown here.</p>
