@@ -19,6 +19,7 @@ export interface FalH3MaxInput {
   prompt:        string;
   seedImageUrl?: string;
   duration?:     number;
+  resolution?:   string; // '480p' | '720p' | '768p' | '1080p' (provider preset)
   seed?:         number;
 }
 
@@ -43,6 +44,7 @@ export async function submitFalH3Max(input: FalH3MaxInput): Promise<string> {
       prompt:    input.prompt,
       imageUrl:  input.seedImageUrl,
       ...(typeof input.duration === 'number' ? { durationSeconds: input.duration } : {}),
+      ...(input.resolution ? { resolution: input.resolution } : {}),
       ...(typeof input.seed === 'number' ? { seed: input.seed } : {}),
     },
     { idempotencyKey: `h3max:${randomUUID()}` },

@@ -43,7 +43,7 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - **Google OAuth sign-in (web): configured + deployed.** Web client ID `506778685431-lh740120na3ct1n82jh9al9ph9rgv2m2.apps.googleusercontent.com` set as `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in local `apps/web/.env.local` and the VPS prod `apps/web/.env.local` (gitignored); production rebuilt + PM2 restarted 2026-09-21, client id confirmed inlined in the bundle. Server-side token verification (`verifyGoogleIdToken`, aud allowlist) is active. `GOOGLE_CLIENT_SECRET` is stored in `cred/fal_env.txt` but is **not used** by the GIS ID-token flow (no server flow). **Verify in Google Cloud Console that Authorized JavaScript origins include `http://localhost:3000` (dev) and `https://app.raivstream.com` (prod).** Mobile (`EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + dev build) remains not configured; migration `20260920120000_google_oauth` is deployed.
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
-- **Phase 16 — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16). **16.1 IMPLEMENTED** (`lib/narrativeEngine.ts`, Claude Sonnet story composition, local-dev enabled, live-verified). **16.2 IMPLEMENTED** (`lib/productionStructurer.ts` GPT-4o `ProductionManifest` + `story.structureProductionManifest`, local-dev enabled, live-verified). 16.3–16.5 not started. Credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API`, `GPT40_API` — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`.
+- **Phase 16 — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16). **16.1 IMPLEMENTED** (Claude narrative engine, local-dev enabled, live-verified). **16.2 IMPLEMENTED** (GPT-4o `ProductionManifest` structurer + `story.structureProductionManifest`, live-verified). **16.3 IMPLEMENTED** (MiniMax H3 transport extended: duration ≤15s, resolution `480P|768P|1080P`, native audio verified at 1080×1920@24fps aac; ADR-002 = fal queue; `GenerationJob.resolution`). 16.4–16.5 not started. Credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API`, `GPT40_API` — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`.
 
 ## Monorepo Layout
 
@@ -267,6 +267,17 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-21: Phase 16.3 IMPLEMENTED — MiniMax H3 native-audio video generation
+
+- Extended the `H3_MAX` fal transport for the Phase-16 target:
+  - `falH3Max.ts` passes `resolution`; `toH3MaxInput` normalizes to the endpoint enum **`480P|768P|1080P`** (uppercase; invalid values dropped) and supports `duration` up to **15s**.
+  - Dispatcher `GenerateInput.resolution` → `submitFalH3Max`; `generation.create` input accepts `resolution` + `duration ≤ 15`; `story.generateSceneVideo`/`regenerateSceneVideo` accept `resolution` + `duration 4–15` and forward it; `GenerationJob.resolution String?` persisted (migration `20260921090000_generation_job_resolution`) so retry resubmits with the same preset.
+  - `MODEL_META.H3_MAX` → `minDuration 4`, `maxDuration 15`, notes native synchronized audio.
+- **Host decision recorded:** `docs/adr/ADR-002-MiniMax-H3-Transport.md` — fal queue (`minimax/h3-max-turbo/image-to-video`) accepted as the MiniMax transport.
+- **Live-verified on the Turbo endpoint:** `duration:15 + resolution:1080P` → **15.1s, h264 1080×1920 @ 24fps, aac** (R2-mirrored). `1080p` lowercase → 422 ("Input should be '480P', '768P' or '1080P'"), fixed via normalization. Full 16.3 target (15s / 1080P / native audio / first-frame i2v) met on the fal transport — no non-turbo/direct fallback required.
+- Tests: `toH3MaxInput` resolution normalization (+1) → **429/429 pass**; api type-check + lint clean; prisma validate clean.
+- Manifest consumption (minimax_video_prompt / camera / duration / resolution / first-frame) in `story.generateSceneVideo` is deferred to 16.5 (with persistence).
 
 ### 2026-09-21: Phase 16.2 IMPLEMENTED — Production Script Structurer (GPT-4o manifest)
 

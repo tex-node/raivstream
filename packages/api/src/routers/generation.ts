@@ -35,7 +35,7 @@ export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
  */
 async function createWithReserveSettle(
   ctx: any,
-  input: { model: string; prompt: string; negativePrompt?: string; duration?: number; aspectRatio?: string; style?: string; seedImageUrl?: string; audioUrl?: string },
+  input: { model: string; prompt: string; negativePrompt?: string; duration?: number; aspectRatio?: string; style?: string; seedImageUrl?: string; audioUrl?: string; resolution?: string },
   meta: (typeof MODEL_META)[SupportedModel],
   featureKey: string,
 ) {
@@ -55,6 +55,7 @@ async function createWithReserveSettle(
       style:          input.style,
       seedImageUrl:   input.seedImageUrl,
       audioUrl:       input.audioUrl,
+      resolution:     input.resolution,
       status:         'QUEUED',
     },
   });
@@ -80,6 +81,7 @@ async function createWithReserveSettle(
       aspectRatio:    input.aspectRatio,
       seedImageUrl:   input.seedImageUrl,
       audioUrl:       input.audioUrl,
+      resolution:     input.resolution,
     });
 
     const updated = await ctx.prisma.generationJob.update({
@@ -145,11 +147,12 @@ export const generationRouter = router({
       // model is prompt-driven and enforces it below.
       prompt:         z.string().min(3).max(GENERATION_PROMPT_MAX_LENGTH).optional(),
       negativePrompt: z.string().max(NEGATIVE_PROMPT_MAX_LENGTH).optional(),
-      duration:       z.number().min(1).max(10).optional(),
+      duration:       z.number().min(1).max(15).optional(),
       aspectRatio:    z.enum(['9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
       style:          z.string().max(100).optional(),
       seedImageUrl:   z.string().url().optional(),
       audioUrl:       z.string().url().optional(),
+      resolution:     z.string().max(20).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // Check model availability
@@ -240,6 +243,7 @@ export const generationRouter = router({
           style:          input.style,
           seedImageUrl:   input.seedImageUrl,
           audioUrl:       input.audioUrl,
+          resolution:     input.resolution,
           status:         'QUEUED',
         },
       });
@@ -254,6 +258,7 @@ export const generationRouter = router({
           aspectRatio:    input.aspectRatio,
           seedImageUrl:   input.seedImageUrl,
           audioUrl:       input.audioUrl,
+          resolution:     input.resolution,
         });
 
         // Update the job with provider details
@@ -458,6 +463,7 @@ export const generationRouter = router({
           aspectRatio:    job.aspectRatio,
           seedImageUrl:   job.seedImageUrl ?? undefined,
           audioUrl:       job.audioUrl ?? undefined,
+          resolution:     job.resolution ?? undefined,
         });
 
         return ctx.prisma.generationJob.update({

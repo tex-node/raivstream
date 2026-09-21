@@ -59,6 +59,7 @@ export interface GenerateInput {
   aspectRatio?:   string;
   seedImageUrl?:  string;
   audioUrl?:      string; // VEED Fabric lip-sync audio track
+  resolution?:    string; // MiniMax H3 output resolution preset ('480p'|'720p'|'768p'|'1080p')
 }
 
 export interface GenerateResult {
@@ -166,6 +167,7 @@ async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<Genera
         prompt:        input.prompt,
         seedImageUrl:  input.seedImageUrl,
         duration:      input.duration,
+        resolution:    input.resolution,
       });
       return { providerJobId: jobId };
     }
@@ -468,11 +470,11 @@ export const MODEL_META: Record<SupportedModel, {
   },
   H3_MAX: {
     label:                'MiniMax H3-Max Turbo',
-    description:          'MiniMax H3-Max Turbo image-to-video on fal.ai — fast, cost-efficient animation from a seed image.',
+    description:          'MiniMax H3-Max Turbo image-to-video on fal.ai — fast, cost-efficient animation from a seed image. Native synchronized audio/SFX during inference.',
     badge:                'live',
     icon:                 '🌀',
-    minDuration:          5,
-    maxDuration:          10,
+    minDuration:          4,
+    maxDuration:          15,
     supportsImageToVideo: true,
     requiresSeedImage:    true,
     provider:             'fal.ai · MiniMax H3-Max Turbo',

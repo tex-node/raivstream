@@ -273,6 +273,12 @@ describe('fal model contract mapping', () => {
     expect(parseH3MaxOutput({ video: { url: 'https://fal/v.mp4' } }).urls).toEqual(['https://fal/v.mp4']);
   });
 
+  it('normalises H3-Max resolution to the provider enum and drops invalid values', () => {
+    expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '1080p' }).resolution).toBe('1080P');
+    expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '768P' }).resolution).toBe('768P');
+    expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '720p' }).resolution).toBeUndefined();
+  });
+
   it('maps VEED Fabric input and parses video output', () => {
     expect(toVeedFabricInput({ imageUrl: 'https://in/a.png', audioUrl: 'https://in/a.mp3', resolution: '720p' })).toMatchObject({
       image_url: 'https://in/a.png',

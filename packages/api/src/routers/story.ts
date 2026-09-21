@@ -2180,7 +2180,7 @@ async function generateSceneImageAsset(
 
 async function generateSceneVideoAsset(
   ctx: any,
-  input: { projectId: string; sceneId: string; model: SceneVideoModel; duration?: number; isRegeneration?: boolean; instruction?: string },
+  input: { projectId: string; sceneId: string; model: SceneVideoModel; duration?: number; isRegeneration?: boolean; instruction?: string; resolution?: string },
 ) {
   const project = await ctx.prisma.storyProject.findFirst({
     where: { id: input.projectId, userId: ctx.user.id },
@@ -2327,6 +2327,7 @@ async function generateSceneVideoAsset(
       duration,
       aspectRatio: composed.aspectRatio,
       seedImageUrl: seedImage.assetUrl,
+      resolution: input.resolution,
     });
     const providerJobId = submitted.providerJobId;
 
@@ -3687,8 +3688,9 @@ export const storyRouter = router({
       projectId: z.string(),
       sceneId: z.string(),
       model: z.enum(SCENE_VIDEO_MODELS).default('H3_MAX'),
-      duration: z.number().int().min(5).max(10).optional(),
+      duration: z.number().int().min(4).max(15).optional(),
       instruction: z.string().max(300).optional(),
+      resolution: z.string().max(20).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, input)),
 
@@ -3697,8 +3699,9 @@ export const storyRouter = router({
       projectId: z.string(),
       sceneId: z.string(),
       model: z.enum(SCENE_VIDEO_MODELS).default('H3_MAX'),
-      duration: z.number().int().min(5).max(10).optional(),
+      duration: z.number().int().min(4).max(15).optional(),
       instruction: z.string().max(300).optional(),
+      resolution: z.string().max(20).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, { ...input, isRegeneration: true })),
 

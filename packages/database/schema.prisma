@@ -847,6 +847,7 @@ model GenerationJob {
   style           String?
   seedImageUrl    String?          // optional image for image-to-video models
   audioUrl        String?          // optional audio for talking-video models (VEED Fabric)
+  resolution      String?          // output resolution preset (MiniMax H3: 480p/720p/768p/1080p)
 
   // Job lifecycle
   status          GenerationStatus @default(QUEUED)

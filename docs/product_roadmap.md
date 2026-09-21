@@ -1313,10 +1313,13 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
   `response_format: { type: 'json_object' }`. Becomes the canonical creative specification
   for scene video; flag-guarded (`STORY_MANIFEST_STRUCTURER_ENABLED`, default off).
 - **16.3 · MiniMax H3 native-audio video generation.** Extend the existing `H3_MAX` fal
-  adapter/contracts for `duration_sec` 4–15, `resolution` `768P|1080P` @ 24fps, and
-  `first_frame_image` (i2v); MiniMax H3 embeds synchronized sound/SFX during inference.
-  Host decision (fal queue vs direct `api.minimax.io/v1/video_generation`) recorded as an
-  ADR. `story.generateSceneVideo` consumes `minimax_video_prompt`/`camera_motion`/etc.
+  adapter/contracts for `duration_sec` (verified **15s**), `resolution` **`480P|768P|1080P`**
+  (verified **1080×1920 @ 24fps**), and `first_frame_image` (i2v); MiniMax H3 embeds
+  synchronized sound/SFX during inference (verified aac track). Host decision recorded in
+  `docs/adr/ADR-002-MiniMax-H3-Transport.md` (fal queue accepted; no fallback needed).
+  `generation.create` + `story.generateSceneVideo` forward `resolution`/`duration`;
+  `GenerationJob.resolution` persists for retry. Manifest consumption (minimax prompt /
+  camera / duration / resolution / first-frame) is wired in 16.5.
 - **16.4 · ElevenLabs scene narration wiring.** Route each scene's `elevenlabs_narration`
   through the existing `story.generateCueSpeech` → R2 `AudioAsset(GENERATED_SPEECH)` →
   `AudioCue` path so the Movie Builder mixer consumes it like any other cue.

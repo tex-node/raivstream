@@ -76,14 +76,14 @@ export const H3_MAX_I2V_CONTRACT: ModelContract = {
     { name: 'prompt', required: true, description: 'Motion/scene prompt (required).' },
     { name: 'image_url', required: true, description: 'Opening frame image; output aspect ratio follows it.' },
     { name: 'end_image_url', required: false, description: 'Optional last frame for first-to-last keyframe generation.' },
-    { name: 'duration', required: false, description: 'Integer seconds (default 5).' },
-    { name: 'resolution', required: false, description: 'Output resolution preset (provider enum).' },
+    { name: 'duration', required: false, description: 'Integer seconds (default 5). Verified live up to 15s (2026-09-21).' },
+    { name: 'resolution', required: false, description: 'Enum 480P | 768P | 1080P (uppercase; 1080P verified live at 1080x1920/24fps).' },
     { name: 'mode', required: false, description: 'fast | balanced | quality (default balanced).' },
     { name: 'seed', required: false, description: 'Deterministic seed.' },
     { name: 'prompt_expansion', required: false, description: 'Provider-side prompt expansion toggle.' },
   ],
   notes:
-    'Image-to-video. Output: { video:{url,content_type,file_name,file_size}, expanded_prompt }. Billed per second.',
+    'Image-to-video. Output: { video:{url,content_type,file_name,file_size}, expanded_prompt }. Billed per second. Native synchronized audio/SFX: the output carries an aac track and is driven by SFX cues in the prompt. Verified live: duration 15s + resolution 1080P -> 15.1s, h264 1080x1920 @ 24fps, aac (2026-09-21).',
 };
 
 export const VEED_FABRIC_CONTRACT: ModelContract = {
@@ -170,7 +170,10 @@ export function toH3MaxInput(input: VideoGenerationInput): Record<string, unknow
   const payload: Record<string, unknown> = { prompt: input.prompt, image_url: input.imageUrl };
   if (input.endImageUrl) payload.end_image_url = input.endImageUrl;
   if (typeof input.durationSeconds === 'number') payload.duration = input.durationSeconds;
-  if (input.resolution) payload.resolution = input.resolution;
+  // Endpoint requires the literal enum '480P' | '768P' | '1080P' — normalize and
+  // drop invalid values so the provider default applies instead of a 422.
+  const resolution = input.resolution?.toUpperCase();
+  if (resolution === '480P' || resolution === '768P' || resolution === '1080P') payload.resolution = resolution;
   if (typeof input.seed === 'number') payload.seed = input.seed;
   if (typeof input.promptExpansion === 'boolean') payload.prompt_expansion = input.promptExpansion;
   return payload;
