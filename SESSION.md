@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-20 (staged fal generation flow proven live 21/21 — see Recent Changes; earlier sections below predate several shipped phases and remain partially stale outside Recent Changes)
-Current GitHub commit deployed to VPS: `05e3327403d5efb04f79971b995188c890feb43f` (Movie Builder fail-closed patch — production HEAD; the fal/Phase 6 work below is local-only, not yet committed/deployed)
+Last updated: 2026-09-21 (fal generation stack DEPLOYED to production — see Recent Changes; earlier sections below predate several shipped phases and remain partially stale outside Recent Changes)
+Current GitHub commit deployed to VPS: `7a3c674` (feat(fal): production release of fal.ai generation stack + staged flow — deployed 2026-09-21)
 
 ## Maintenance Rule
 
@@ -39,9 +39,9 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - `db.raivstream.com` routes through Caddy to Supabase Kong on host port `8000` and is protected by Basic Auth.
 - Supavisor/pooler is stopped because it was occupying host `5432` and returning `FATAL: Tenant or user not found`.
 - Raivstream uses direct Postgres for Prisma and app runtime, matching the project note that Supavisor is broken for this app.
-- **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, blocked on live validation.** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). A live smoke test reached fal but returned `403` (valid key, account lacks model access) — resolution is on the fal.ai side (billing/key scope/model access), not code.
+- **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, deployed, gates default-OFF in production.** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). Live smoke test reached fal and all three contracts (flux2, h3-max-turbo, veed talking-video) are proven live; the staged flow (credits → submit → poll → publish) passed 21/21 on an isolated scratch DB. **In production the `FAL_*` switches remain OFF** (no `FAL_KEY` in the prod env), so fal models are unavailable to users until an explicit enablement decision (roadmap Gates D–F). Credit rates `generate:flux2`/`generate:h3_max`/`generate:veed_fabric` are set active in prod (80/200/300).
 - **Google OAuth sign-in (web + mobile): implemented locally, not deployed/enabled.** Needs `GOOGLE_CLIENT_ID[S]` (+ `NEXT_PUBLIC_…` / `EXPO_PUBLIC_…` variants) set, Google Cloud authorized origins/redirects configured, and migration `20260920120000_google_oauth` deployed.
-- **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. Production deploy of the router + `audioUrl` migration still pending (see Recent Changes).
+- **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
 ## Monorepo Layout
 
@@ -140,12 +140,19 @@ Added in commit `4bd7eff`.
 
 Prisma schema lives at `packages/database/schema.prisma`.
 
-Pending (not yet applied to production) schema changes from the fal migration:
+Applied to production on 2026-09-21 (deploy `7a3c674`):
 
 - `GenerationModel` enum extended with `FLUX2`, `H3_MAX`, `VEED_FABRIC` (migration `20260912140000_fal_models`, additive `ALTER TYPE ... ADD VALUE`).
-- `GenerationJob.audioUrl String?` for the VEED lip-sync track (migration `20260920130000_generation_job_audio_url`, additive `ADD COLUMN`).
-- `CreditOperation` outbox already present (migration `20260912130000_fal_credit_operations`).
-- New `FeatureCreditRate` seed keys: `generate:flux2`, `generate:h3_max`, `generate:veed_fabric`.
+- `CreditOperation` outbox (migration `20260912130000_fal_credit_operations`).
+- `CreditReservation` + status enum (migration `20260912150000_credit_reservations`).
+- `GenerationJob.retryCount` + `errorCode` (migration `20260912160000_generation_job_retry`).
+- `generation_jobs` indexes (migration `20260912170000_generation_job_indexes`).
+- `StoryProject.coverAssetId` (migration `20260912180000_story_project_cover`).
+- `User.googleId` unique + `passwordHash` nullable (migration `20260920120000_google_oauth`).
+- `GenerationJob.audioUrl` (migration `20260920130000_generation_job_audio_url`).
+- `story_scene_videos_and_movies` (migration `20260622100000`, idempotent guards; applied for the first time this deploy).
+
+New `FeatureCreditRate` rows active in prod: `generate:flux2` (80), `generate:h3_max` (200), `generate:veed_fabric` (300).
 
 Important models include:
 
@@ -259,6 +266,17 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: fal generation stack DEPLOYED to production (`7a3c674`)
+
+Production release of the fal.ai generation stack + the staged generation flow, plus the accumulated Phase 6/13/15/9B.3/11/Google-OAuth work that had been sitting uncommitted on branch `feat/visual-prompt-composer-v2`.
+
+- Branch fast-forwarded onto `main` and pushed; GitHub Actions `Deploy to VPS` ran the full gate (migrate deploy, prisma validate/generate, api + web type-check, strict web lint, clean build, PM2 restart, app + R16 health) — **PASSED in 2m59s**.
+- Pre-migration backup: `/root/raivstream/backups/pre_fal_gen_flow_deploy_20260921-020331.dump` (SHA256 `bafca167161bb38cf892b23533eb2b6c4c762108839fab778f5f5b61fee25112`).
+- Migrations applied (all additive): `20260622100000_story_scene_videos_and_movies` (first apply, idempotent), `20260912130000_fal_credit_operations`, `20260912140000_fal_models`, `20260912150000_credit_reservations`, `20260912160000_generation_job_retry`, `20260912170000_generation_job_indexes`, `20260912180000_story_project_cover`, `20260920120000_google_oauth`, `20260920130000_generation_job_audio_url`.
+- Post-deploy: upserted `generate:flux2` (80), `generate:h3_max` (200), `generate:veed_fabric` (300) credit rates active in prod (verified via psql).
+- Health verified after deploy: app + R16 healthy; `/api/ready` shows storage reachable + provider registry (5 providers, 3 configured, 8 capabilities).
+- **fal remains disabled in production**: the `FAL_*` switches and `FAL_KEY` are NOT in the prod env, so FLUX2/H3_MAX/VEED show as unavailable to users. Enablement is a separate decision (roadmap Gates D–F: visual-quality evaluation, staging rollout, prod canary).
+
 ### 2026-09-20: Staged fal generation flow proven live — 21/21 (credits → submit → poll → publish)
 
 The next step after contract validation is done: the full production tRPC path now works live against all three proven fal contracts, via new script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`, modeled on the Phase 9B.3 voice E2E safety pattern — isolated scratch staging DB `raivstream_fal_gen_e2e` in a throwaway container, SSH tunnel, `db push`, identity+empty gates, zero-residue cleanup):
@@ -275,7 +293,7 @@ The next step after contract validation is done: the full production tRPC path n
 - `package.json` — new `pnpm fal:e2e` script.
 - Full suite **409/409 pass**; api type-check and lint clean; `prisma validate` clean.
 
-**Still pending:** production deploy of the router change + `audioUrl` migration (`prisma migrate deploy`); VEED audio-input UI and UGC consent/ownership/moderation controls (VEED stays API-only/hidden until then); visual-quality evaluation + staging rollout + prod approval per `docs/product_roadmap.md` Gates D–F.
+**Still pending:** VEED audio-input UI and UGC consent/ownership/moderation controls (VEED stays API-only/hidden until then); visual-quality evaluation + staging rollout + prod canary + fal enablement per `docs/product_roadmap.md` Gates D–F (code + migrations + rates are now deployed and ready).
 
 ### 2026-09-20: fal 403 root-caused — account balance exhausted, not code/auth
 

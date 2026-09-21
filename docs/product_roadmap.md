@@ -913,7 +913,7 @@ Integrate Flux.2 into the image-generation and image-editing pipeline.
 **Priority:** Critical
 **Status:** [IN PROGRESS — adapter + staged generation flow proven live 21/21]
 
-> Adapter (`falFlux2.ts`), contract reconciliation, AI Studio wiring, Story Workspace scene-image wiring, output R2-mirroring (polling + webhook), provider-side cancellation, and the full staged flow (`generation.create` → poll → `publish` with credit gate + ledger, chained in `packages/api/scripts/fal-generation-e2e.ts`) are done and proven live. Reference-image/editing is out of scope (separate `fal-ai/flux-2/edit` endpoint). Remaining: visual-quality evaluation, staging rollout, production approval + deploy (incl. `audioUrl` migration).
+> Adapter (`falFlux2.ts`), contract reconciliation, AI Studio wiring, Story Workspace scene-image wiring, output R2-mirroring (polling + webhook), provider-side cancellation, and the full staged flow (`generation.create` → poll → `publish` with credit gate + ledger, chained in `packages/api/scripts/fal-generation-e2e.ts`) are done, proven live, and **deployed to production** (commit `7a3c674`, 2026-09-21). Reference-image/editing is out of scope (separate `fal-ai/flux-2/edit` endpoint). Remaining: visual-quality evaluation, staging rollout, production canary + explicit fal enablement (prod `FAL_*` switches currently OFF).
 
 ---
 
@@ -951,7 +951,7 @@ Add reliable video-generation capability for animating scene images and producin
 **Priority:** High
 **Status:** [IN PROGRESS — adapter + story scene-video + staged flow proven live]
 
-> H3-Max **Turbo** (`falH3Max.ts`, `minimax/h3-max-turbo/image-to-video`), polling, job-ID mapping, output validation, output R2-mirroring, provider-side cancellation, and the **Story Workspace scene-video pipeline** (`story.generateSceneVideo` / `regenerateSceneVideo`, VIDEO assets, "Animate to Video" UI) are done. Remaining: live smoke test, cost reconciliation (reserve/settle), visual-quality/motion evaluation, film-sequence integration.
+> H3-Max **Turbo** (`falH3Max.ts`, `minimax/h3-max-turbo/image-to-video`), polling, job-ID mapping, output validation, output R2-mirroring, provider-side cancellation, and the **Story Workspace scene-video pipeline** (`story.generateSceneVideo` / `regenerateSceneVideo`, VIDEO assets, "Animate to Video" UI) are done and **deployed** (commit `7a3c674`). Remaining: live smoke, cost reconciliation (reserve/settle), visual-quality/motion evaluation, film-sequence integration, fal enablement.
 
 ---
 
@@ -989,7 +989,7 @@ Evaluate and integrate VEED Fabric for video creation, editing, assembly, or fin
 **Priority:** High
 **Status:** [IN PROGRESS — adapter + router + staged flow proven live; UI/consent pending]
 
-> Backend adapter (`falVeed.ts`), `generation.create` support (`seedImageUrl` + `audioUrl`, prompt optional), `GenerationJob.audioUrl` persistence, and the staged flow (lip-sync of a generated still + staging audio fixture → R2 mirror → publish → exact ledger) are done and proven live 21/21. Still no audio-input UI, and UGC consent/ownership/moderation controls not yet implemented — VEED stays hidden/API-only until then.
+> Backend adapter (`falVeed.ts`), `generation.create` support (`seedImageUrl` + `audioUrl`, prompt optional), `GenerationJob.audioUrl` persistence, and the staged flow (lip-sync of a generated still + staging audio fixture → R2 mirror → publish → exact ledger) are done, proven live 21/21, and **deployed** (commit `7a3c674`). Still no audio-input UI, and UGC consent/ownership/moderation controls not yet implemented — VEED stays hidden/API-only until then.
 
 ---
 
