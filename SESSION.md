@@ -268,6 +268,15 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: PROD CANARY ACTIVE (Gate E) — fal/MiniMax + Claude 10% + GPT-4o + ElevenLabs
+
+- **fal/MiniMax (FLUX2 + H3-Max Turbo): already live in prod** — `FAL_KEY` + all switches set, `/api/ready` shows 4 providers configured / 10 capabilities enabled. This was enabled during the fal-only scene-image work; Gate-E canary monitoring now applies.
+- **Claude narrative engine: enabled at a 10% canary.** Added `shouldUseNarrativeEngine(userId)` (Gate-E scoping): global flag AND per-user `STORY_NARRATIVE_ENGINE_ROLLOUT` percent (stable id hash) OR `STORY_NARRATIVE_ENGINE_ALLOWLIST` (escape hatch = `texdevices@gmail.com`). `storyTextService.generateStory/continueStory` accept `opts.userId` (router passes email-first); users outside the rollout keep the OpenAI/local chain. Prod env: `CLAUDE_API`, `STORY_NARRATIVE_ENGINE_ENABLED=true`, `ROLLOUT=10`, `ALLOWLIST=texdevices@gmail.com`.
+- **GPT-4o ProductionManifest structurer: enabled in prod** (`GPT40_API`, `STORY_MANIFEST_STRUCTURER_ENABLED=true`) — inert until a UI/manifest path calls it; ready.
+- **ElevenLabs TTS: enabled** (`ELEVENLABS_API_KEY` from `11_LABS`, `ELEVENLABS_TTS_ENABLED=true`) — `story:speech_generation` credit rate still UNSET in prod → any call fails closed (safe until the rate is decided).
+- **Rollback = env flag off + redeploy** (atomic deploy preserves env; set `STORY_NARRATIVE_ENGINE_ROLLOUT=0` or `STORY_NARRATIVE_ENGINE_ENABLED=false`, or drop `FAL_*`).
+- Verified: prod HEAD `103538f`, health green; tests **436/436**, type-check + lint clean. The interim manual build (before the gate shipped) briefly ran Claude for everyone — window closed when `103538f` deployed.
+
 ### 2026-09-21: Phase 16 full-stitch E2E — 15/15 PASS (scene video + native SFX + VO + music through the mixer)
 
 - **Worker enhancement:** `movieRenderWorker.ts` now preserves each scene clip's NATIVE audio (MiniMax H3 synchronized SFX) as an AMBIENCE bed in the final mix (`extractNativeAudio`, placed at the shot's canonical start), alongside the plan's NARRATION/MUSIC cues. Gate `MOVIE_RENDER_KEEP_NATIVE_AUDIO` (default true). `MOVIE_RENDERER_VERSION` → `phase-16-v1` (render hashes changed; `-an` only when the clip has no audio stream or the flag is off).
