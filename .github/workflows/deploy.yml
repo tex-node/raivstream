@@ -82,20 +82,27 @@ jobs:
           pnpm --filter @raivstream/database exec prisma validate
           pnpm --filter @raivstream/database db:generate
 
-          echo "==> Cleaning previous Next.js build output..."
-          # Must run before type-check, not just before build: tsc reads
-          # .next/types/*, and a deploy that removes/renames an app-router
-          # route leaves stale generated .d.ts files pointing at files that
-          # no longer exist, failing type-check before this cleanup ever ran.
-          rm -rf apps/web/.next
+          echo "==> Building web app into staging dir (.next-build)..."
+          # Atomic deploy: build into .next-build while the running server keeps
+          # serving the previous .next. tsc reads .next*/types, so web type-check
+          # and lint must run against the SAME staging dir AFTER the build
+          # regenerates those types (previously .next was rm -rf'd first, which
+          # is what caused the chunk-400 window during every deploy).
+          rm -rf apps/web/.next-build
+          NEXT_BUILD_DIST_DIR=.next-build pnpm --filter @raivstream/web build
 
-          echo "==> Running API and web validation..."
+          echo "==> Running API and web validation against the fresh build..."
           pnpm --filter @raivstream/api type-check
-          pnpm --filter @raivstream/web type-check
-          pnpm --filter @raivstream/web lint --max-warnings=0
+          NEXT_BUILD_DIST_DIR=.next-build pnpm --filter @raivstream/web type-check
+          NEXT_BUILD_DIST_DIR=.next-build pnpm --filter @raivstream/web lint --max-warnings=0
 
-          echo "==> Building web app..."
-          pnpm --filter @raivstream/web build
+          echo "==> Atomic swap .next-build -> .next..."
+          if [ -d apps/web/.next ]; then
+            rm -rf apps/web/.next-old
+            mv apps/web/.next apps/web/.next-old
+          fi
+          mv apps/web/.next-build apps/web/.next
+          rm -rf apps/web/.next-old
 
           echo "==> Restarting PM2..."
           pm2 restart raivstream-web --update-env
