@@ -194,7 +194,7 @@ Models: `lyria-3-clip-preview` (30s) / `lyria-3-pro-preview`; gate `LYRIA_MUSIC_
 
 | Stage | Model / API | Role | Key outputs |
 |---|---|---|---|
-| 1 · Narrative Engine | `claude-3-5-sonnet-20241022` (Anthropic) | Expand a raw concept into a rich 3–5 scene cinematic story: character motives, lighting, atmosphere, physical action, ambient sound cues, internal conflict. | Unstructured prose, `SCENE n` headings |
+| 1 · Narrative Engine | Claude Sonnet (`claude-sonnet-4-5`, default; override `CLAUDE_STORY_MODEL`) | Expand a raw concept into a rich 3–5 scene cinematic story: character motives, lighting, atmosphere, physical action, ambient sound cues, internal conflict. | Unstructured prose, `SCENE n` headings |
 | 2 · Production Structurer | `gpt-4o` (OpenAI, `response_format: { type: 'json_object' }`) | Translate prose into a strict JSON manifest configured for MiniMax H3 syntax and ElevenLabs. | `ProductionManifest` (below) |
 | 3A · Voiceover | ElevenLabs | Synthesize per-scene narration. | `.mp3`/`.wav` per scene |
 | 3B · Video + SFX | MiniMax H3 | Render per-scene clip with camera motion, lighting, and native embedded ambient SFX. | `.mp4` per scene |

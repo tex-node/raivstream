@@ -56,7 +56,7 @@ const guidedQuestionSchema = z.object({
   answerOptions: z.array(z.string().min(1).max(80)).min(3).max(5),
 });
 
-const generatedStorySchema = z.object({
+export const generatedStorySchema = z.object({
   title: z.string().min(1).max(120),
   summary: z.string().min(1).max(500),
   body: z.string().min(20).max(6000),
@@ -244,7 +244,7 @@ function normaliseCharacterMemory(value: unknown, mainCharacterName: string): Ge
   return single ? [single] : [];
 }
 
-function normaliseGeneratedStoryPayload(raw: unknown, sourceIdea: string): z.input<typeof generatedStorySchema> {
+export function normaliseGeneratedStoryPayload(raw: unknown, sourceIdea: string): z.input<typeof generatedStorySchema> {
   const record = asRecord(raw);
   if (!record) throw new Error('Story provider response was not a JSON object');
 
@@ -387,7 +387,7 @@ function fallbackStory(idea: string, answers: StoryAnswer[], audienceMode: Story
   };
 }
 
-function parseJsonObject(raw: string): unknown {
+export function parseJsonObject(raw: string): unknown {
   const trimmed = raw.trim();
   try {
     return JSON.parse(trimmed);
@@ -535,4 +535,29 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
   }
 }
 
-export const storyTextService: StoryTextProvider = new OpenAICompatibleStoryTextProvider();
+/**
+ * Story text entry point. Phase 16.1 wires the Claude Narrative Engine in front
+ * of the OpenAI-compatible provider: when `STORY_NARRATIVE_ENGINE_ENABLED` is set
+ * and a `CLAUDE_API`/`ANTHROPIC_API_KEY` is present, `generateStory`/`continueStory`
+ * run through Claude 3.5 Sonnet and fall back to the OpenAI-compatible + local chain
+ * on any failure or when disabled.
+ *
+ * Built lazily through a Proxy so the require of `narrativeEngine` (which imports
+ * parsers from THIS module) is deferred until first use — this keeps the CJS module
+ * cycle load-order safe regardless of which module is imported first.
+ */
+let cachedStoryTextService: StoryTextProvider | undefined;
+
+function buildStoryTextService(): StoryTextProvider {
+  // Lazy require breaks the load-time cycle with narrativeEngine.
+  const { ClaudeNarrativeEngineProvider } = require('./narrativeEngine') as typeof import('./narrativeEngine');
+  return new ClaudeNarrativeEngineProvider(new OpenAICompatibleStoryTextProvider());
+}
+
+export const storyTextService: StoryTextProvider = new Proxy({} as StoryTextProvider, {
+  get(_target, prop, receiver) {
+    if (!cachedStoryTextService) cachedStoryTextService = buildStoryTextService();
+    const value = Reflect.get(cachedStoryTextService, prop, cachedStoryTextService);
+    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(cachedStoryTextService) : value;
+  },
+});

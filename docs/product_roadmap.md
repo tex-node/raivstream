@@ -1300,8 +1300,9 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
 
 ### Sub-phases
 
-- **16.1 · Narrative Engine (Claude 3.5 Sonnet).** New story-composition service
-  (`CLAUDE_API`, key staged in `cred/fal_env.txt`): expands a raw concept into a 3–5 scene
+- **16.1 · Narrative Engine (Claude Sonnet).** New story-composition service
+  (`CLAUDE_API`, key staged in `cred/fal_env.txt`; default model `claude-sonnet-4-5`,
+  override `CLAUDE_STORY_MODEL`): expands a raw concept into a 3–5 scene
   cinematic story with sensory anchors (lighting, atmosphere, physical action, ambient
   sound cues) and internal conflict. Augments the existing `storyTextService` (OpenAI /
   deterministic fallback); flag-guarded (`STORY_NARRATIVE_ENGINE_ENABLED`, default off).

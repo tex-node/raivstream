@@ -43,7 +43,7 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - **Google OAuth sign-in (web): configured + deployed.** Web client ID `506778685431-lh740120na3ct1n82jh9al9ph9rgv2m2.apps.googleusercontent.com` set as `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in local `apps/web/.env.local` and the VPS prod `apps/web/.env.local` (gitignored); production rebuilt + PM2 restarted 2026-09-21, client id confirmed inlined in the bundle. Server-side token verification (`verifyGoogleIdToken`, aud allowlist) is active. `GOOGLE_CLIENT_SECRET` is stored in `cred/fal_env.txt` but is **not used** by the GIS ID-token flow (no server flow). **Verify in Google Cloud Console that Authorized JavaScript origins include `http://localhost:3000` (dev) and `https://app.raivstream.com` (prod).** Mobile (`EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + dev build) remains not configured; migration `20260920120000_google_oauth` is deployed.
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
-- **Phase 16 planned — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16) to carry the incoming story-composition/prompt-generation upgrades: Stage 1 Narrative Engine (Claude 3.5 Sonnet) → Stage 2 Production Structurer (GPT-4o strict JSON `ProductionManifest`) → Stage 3A ElevenLabs narration + Stage 3B MiniMax H3 native-audio video (4–15s, up to 1080P @ 24fps, `first_frame_image` i2v) → Stage 4 final stitching via the existing Movie Builder. **Implementation not started.** New credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API` (Anthropic), `GPT40_API` (OpenAI GPT-4o) — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`. Flag-gated (`STORY_NARRATIVE_ENGINE_ENABLED`, `STORY_MANIFEST_STRUCTURER_ENABLED`, default off).
+- **Phase 16 — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16). **16.1 IMPLEMENTED (local, enabled in dev only):** `lib/narrativeEngine.ts` Claude Sonnet story composition (`STORY_NARRATIVE_ENGINE_ENABLED` + `CLAUDE_API`; default model `claude-sonnet-4-5`, live-verified). 16.2–16.5 not started. Credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API`, `GPT40_API` — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`.
 
 ## Monorepo Layout
 
@@ -267,6 +267,17 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-21: Phase 16.1 IMPLEMENTED — Claude Narrative Engine (story composition)
+
+- New `packages/api/src/lib/narrativeEngine.ts`: `ClaudeNarrativeEngineProvider` implements the existing `StoryTextProvider` interface. When `STORY_NARRATIVE_ENGINE_ENABLED=true` **and** `CLAUDE_API`/`ANTHROPIC_API_KEY` present, `generateStory`/`continueStory` run through **Claude Sonnet** (default `claude-sonnet-4-5`, override `CLAUDE_STORY_MODEL`); guided questions stay on the existing provider. Inactive or on failure → falls back to the OpenAI-compatible + deterministic chain (exact previous behaviour).
+- **Model note:** the PRD's `claude-3-5-sonnet-20241022` returns 404 on this account; live probe confirmed `claude-sonnet-4-5` + `claude-opus-5` are available. Default = `claude-sonnet-4-5`.
+- **Robustness:** strips markdown fences, `max_tokens` 6000, one bounded corrective retry (strict-JSON instruction) before fallback.
+- System prompt = PRD Stage 1 directives (sensory anchors, sound cues, conflict, `SCENE n` headings) + audience safety rules (KIDS/GENERAL) + the existing `GeneratedStory` JSON shape so downstream scene cards/character bible are unchanged.
+- Wired via `storyTextService` (lazy Proxy build breaks the CJS cycle with `narrativeEngine`).
+- `.env.example` documents `STORY_NARRATIVE_ENGINE_ENABLED`/`CLAUDE_API`/`CLAUDE_STORY_MODEL` (+ 16.2 placeholders). **Enabled in local dev only** (`apps/web/.env.local`, gitignored); prod env has no flag/key → prod still uses the existing OpenAI/local path (fail-closed).
+- New smoke: `pnpm narrative:smoke`. **Live verified** (`claude-sonnet-4-5`): 5 cinematic scenes, sensory-rich prose, `provider: claude-narrative`.
+- Tests: `narrativeEngine.test.ts` (10) → **419/419 pass**; api type-check + lint clean.
 
 ### 2026-09-21: Phase 16 PLANNED — AI Narrative & Production Pipeline (MiniMax H3 + ElevenLabs)
 
