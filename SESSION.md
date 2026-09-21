@@ -266,6 +266,14 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Gate D fal quality evaluation — technical pass, human sign-off pending
+
+Ran the first real visual-quality batch on the funded fal account via new `pnpm fal:quality` (`scripts/fal-quality-batch.ts`): **9/9 succeeded** (6× FLUX2 images, 2× H3_MAX I2V, 1× VEED talking-video), all mirrored to the staging R2 bucket, all aspect ratios exactly as requested, latencies consistent (11–28s / 13–18s / 40s), no 403s, no retries/refunds.
+
+Objective checks (resolution, aspect, codec, duration, embedded audio) all PASS. VEED output carries the lip-sync aac track correctly (first output under the fixed `resolution: 720p` contract). H3_MAX outputs include a provider aac track — flagged as a product decision (movie renderer already strips clip audio for separate mixing).
+
+**Blocked on human visual sign-off:** the model running this session cannot view images, so prompt-fidelity/artifact scoring (rubric in `docs/operations/gate-d-fal-quality-evaluation.md`) is left to the operator. Outputs are downloaded at `tmp/fal-quality/downloads/` (gitignored) + direct R2 URLs in the doc. Do not flip production `FAL_*` switches until sign-off + cost approval + staging rollout + prod canary (Gates C/E/F).
+
 ### 2026-09-21: fal generation stack DEPLOYED to production (`7a3c674`)
 
 Production release of the fal.ai generation stack + the staged generation flow, plus the accumulated Phase 6/13/15/9B.3/11/Google-OAuth work that had been sitting uncommitted on branch `feat/visual-prompt-composer-v2`.
