@@ -950,7 +950,7 @@ const PROMPT_PROVIDER_META: Record<PromptProvider, {
   },
 };
 
-const SCENE_IMAGE_MODELS = ['FLUX', 'FLUX2', 'GROK_IMAGINE', 'NANO_BANANA'] as const;
+const SCENE_IMAGE_MODELS = ['FLUX2'] as const;
 const SCENE_VIDEO_MODELS = ['H3_MAX'] as const;
 
 /**
@@ -3636,7 +3636,7 @@ export const storyRouter = router({
     .input(z.object({
       projectId: z.string(),
       sceneId: z.string(),
-      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX2'),
       instruction: z.string().max(300).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, input)),
@@ -3645,7 +3645,7 @@ export const storyRouter = router({
     .input(z.object({
       projectId: z.string(),
       sceneId: z.string(),
-      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX2'),
       instruction: z.string().max(300).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneImageAsset(ctx, { ...input, isRegeneration: true })),
@@ -3800,7 +3800,7 @@ export const storyRouter = router({
     .input(z.object({
       projectId: z.string(),
       criticRunId: z.string(),
-      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX'),
+      model: z.enum(SCENE_IMAGE_MODELS).default('FLUX2'),
     }))
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);

@@ -39,7 +39,7 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - `db.raivstream.com` routes through Caddy to Supabase Kong on host port `8000` and is protected by Basic Auth.
 - Supavisor/pooler is stopped because it was occupying host `5432` and returning `FATAL: Tenant or user not found`.
 - Raivstream uses direct Postgres for Prisma and app runtime, matching the project note that Supavisor is broken for this app.
-- **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, deployed, gates default-OFF in production.** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). Live smoke test reached fal and all three contracts (flux2, h3-max-turbo, veed talking-video) are proven live; the staged flow (credits → submit → poll → publish) passed 21/21 on an isolated scratch DB. **In production the `FAL_*` switches remain OFF** (no `FAL_KEY` in the prod env), so fal models are unavailable to users until an explicit enablement decision (roadmap Gates D–F). Credit rates `generate:flux2`/`generate:h3_max`/`generate:veed_fabric` are set active in prod (80/200/300).
+- **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, deployed, ENABLED in production (image + video).** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). **2026-09-21: fal switched ON in prod env** (`FAL_MEDIA_PROVIDER_ENABLED=true`, real calls, image+video; VEED/UGC stays off pending consent controls). All three contracts are proven live; the staged flow passed 21/21 on an isolated scratch DB; Gate D quality batch passed 9/9 technically (human visual sign-off still open). Story scene-image generation is now **fal-only (FLUX2)** — the RunPod "Flux.1 Dev" option was removed from the scene image selector and the story router only accepts `FLUX2`. Credit rates active: `generate:flux2` 80, `generate:h3_max` 200, `generate:veed_fabric` 300 (placeholder — reconcile after cost measurement).
 - **Google OAuth sign-in (web): configured + deployed.** Web client ID `506778685431-lh740120na3ct1n82jh9al9ph9rgv2m2.apps.googleusercontent.com` set as `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in local `apps/web/.env.local` and the VPS prod `apps/web/.env.local` (gitignored); production rebuilt + PM2 restarted 2026-09-21, client id confirmed inlined in the bundle. Server-side token verification (`verifyGoogleIdToken`, aud allowlist) is active. `GOOGLE_CLIENT_SECRET` is stored in `cred/fal_env.txt` but is **not used** by the GIS ID-token flow (no server flow). **Verify in Google Cloud Console that Authorized JavaScript origins include `http://localhost:3000` (dev) and `https://app.raivstream.com` (prod).** Mobile (`EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + dev build) remains not configured; migration `20260920120000_google_oauth` is deployed.
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
@@ -265,6 +265,20 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-21: Story scene-image generation switched to fal-only (FLUX2); fal ENABLED in prod
+
+User reported Story Playground scene generation (a) still offered RunPod and (b) failed.
+
+- **Failure root cause:** `Insufficient credits — you need 80 but have 60` — the user's balance was 60 against the 80/request FLUX2 rate. Not a provider bug; the deduction is atomic so no credits were lost. (Verified via `story_scene_assets.errorMessage`; no `generation_jobs` rows because the failure precedes job creation.)
+- **fal was not actually enabled in prod:** the VPS env had no `FAL_*` flags (only RunPod/xAI/Gemini/OpenAI keys), so even FLUX2 submits would have thrown `PROVIDER_DISABLED` after the credit gate.
+- **Changes:**
+  - `apps/web/src/lib/sceneImageModels.ts`: scene image options + default are now **FLUX2 only** (removed "Flux.1 Dev (RunPod)").
+  - `packages/api/src/routers/story.ts`: `SCENE_IMAGE_MODELS` narrowed to `['FLUX2']`; `generateSceneImage`/`regenerateSceneImage`/`regenerateFromCritic` default `model` → `'FLUX2'`.
+  - `apps/web/src/app/story-playground/[projectId]/page.tsx`: "Improve and Regenerate" passes `model: 'FLUX2'`.
+  - **Prod env:** appended `FAL_KEY` + `FAL_MEDIA_PROVIDER_ENABLED`/`REAL_PROVIDER_CALLS`/`IMAGE`/`VIDEO` (`=true`), `FAL_UGC_ENABLED=false` (VEED stays off), `FAL_MAX_REQUESTS=200` to VPS `apps/web/.env.local`. Local `apps/web/.env.local` updated the same way.
+- **Verified:** web + api type-check, strict web lint, api lint, 409/409 tests.
+- **Remaining:** the user must top up to ≥80 credits to generate (balance was 60), or the FLUX2 rate should be reviewed (placeholder 80cr). Human Gate-D visual sign-off still open.
 
 ### 2026-09-21: Google OAuth web button restored (env configured + prod deployed)
 
