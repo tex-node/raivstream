@@ -202,6 +202,15 @@ export function buildMovieRenderPlan(input: {
 
   if (shots.length === 0) throw new Error('Enable at least one shot before rendering a movie.');
 
+  // Phase 16 — surface when shots will render as stills (no scene video yet),
+  // so the user knows to generate scene videos for motion.
+  const stillCount = shots.filter((shot) => shot.sourceType !== 'VIDEO').length;
+  if (stillCount > 0) {
+    warnings.push(
+      `${stillCount} shot${stillCount === 1 ? '' : 's'} ha${stillCount === 1 ? 's' : 've'} no scene video yet and will render as still image${stillCount === 1 ? '' : 's'}. Use Animate to Video (MiniMax H3) for motion.`,
+    );
+  }
+
   return {
     rendererVersion: MOVIE_RENDERER_VERSION,
     output: MOVIE_RENDER_DEFAULTS,

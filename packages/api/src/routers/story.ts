@@ -45,7 +45,7 @@ import {
   shouldReuseMovieRenderJob,
 } from '../lib/movieRenderPlanning';
 import { queueMovieRenderJob } from '../lib/movieRenderWorker';
-import { synthesizeSpeech, elevenLabsApiKey, isElevenLabsTtsEnabled, elevenLabsDefaultVoiceId, elevenLabsModelId } from '../lib/generators/elevenLabsTts';
+import { synthesizeSpeech, elevenLabsApiKey, isElevenLabsTtsEnabled, elevenLabsDefaultVoiceId, elevenLabsModelId, listElevenLabsVoices, ELEVENLABS_CURATED_VOICES } from '../lib/generators/elevenLabsTts';
 import { generateMusic as generateLyriaMusic, geminiApiKey, isLyriaMusicEnabled, lyriaModelId } from '../lib/generators/lyriaMusic';
 import { buildAudioBlueprint, combineRenderHash, hashAudioBlueprint, nextAudioVersionFromExisting, summarizeUnmaterializedSpeechCues } from '../lib/audioPlanning';
 import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './generation';
@@ -6181,6 +6181,16 @@ export const storyRouter = router({
         where: { projectId: input.projectId },
         orderBy: { createdAt: 'asc' },
       });
+    }),
+
+  /** Available ElevenLabs narration voices (account voices, curated fallback). */
+  listNarrationVoices: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) return [];
+      const voices = await listElevenLabsVoices();
+      return voices.length > 0 ? voices : ELEVENLABS_CURATED_VOICES;
     }),
 
   createVoiceProfile: protectedProcedure

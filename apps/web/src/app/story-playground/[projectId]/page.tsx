@@ -390,6 +390,12 @@ export default function StoryWorkspacePage() {
   const updateAudioCue = trpc.story.updateCue.useMutation({ onSuccess: () => refreshAudio('Cue updated.') });
   const generateCueSpeech = trpc.story.generateCueSpeech.useMutation({ onSuccess: () => refreshAudio('Narration generated.') });
   const generateCueMusic = trpc.story.generateCueMusic.useMutation({ onSuccess: () => refreshAudio('Music generated.') });
+  const narrationVoicesQuery = trpc.story.listNarrationVoices.useQuery(
+    { projectId },
+    { enabled: Boolean(isLoaded && isSignedIn) },
+  );
+  const narrationVoices = (narrationVoicesQuery.data ?? []) as Array<{ voiceId: string; name: string }>;
+  const [narrationVoiceId, setNarrationVoiceId] = useState('');
   const [musicPrompt, setMusicPrompt] = useState('');
   const [showMixer, setShowMixer] = useState(false);
   const setProjectCover = trpc.story.setProjectCover.useMutation({ onSuccess: () => refresh('Cover updated.') });
@@ -1471,17 +1477,17 @@ export default function StoryWorkspacePage() {
                       />
                       <label className="block text-xs font-bold text-[var(--noc-t4)]">Voice
                         <select
-                          value={selectedCue.voiceProfileId ?? ''}
-                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, voiceProfileId: e.target.value || null })}
+                          value={narrationVoiceId}
+                          onChange={(e) => setNarrationVoiceId(e.target.value)}
                           className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-bold text-[var(--noc-t1)]"
                         >
-                          <option value="">No voice profile</option>
-                          {voiceProfiles.map((vp: any) => <option key={vp.id} value={vp.id}>{vp.name}</option>)}
+                          <option value="">Default (Rachel)</option>
+                          {narrationVoices.map((voice) => <option key={voice.voiceId} value={voice.voiceId}>{voice.name}</option>)}
                         </select>
                       </label>
                       <button
                         type="button"
-                        onClick={() => generateCueSpeech.mutate({ projectId, cueId: selectedCue.id })}
+                        onClick={() => generateCueSpeech.mutate({ projectId, cueId: selectedCue.id, voiceId: narrationVoiceId || undefined })}
                         disabled={!selectedCue.text?.trim() || generateCueSpeech.isPending}
                         className="inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
                       >
@@ -1513,6 +1519,9 @@ export default function StoryWorkspacePage() {
                       <p className={`text-[10px] font-black uppercase tracking-wide ${selectedCue.audioAssetId ? 'text-[var(--noc-blue)]' : 'text-[var(--noc-t5)]'}`}>
                         Audio source: {selectedCue.audioAssetId ? 'Attached' : 'Not generated'}
                       </p>
+                      {(selectedCue as any)?.audioAsset?.publicUrl && (
+                        <audio controls src={(selectedCue as any).audioAsset.publicUrl} className="mt-2 w-full" preload="metadata" />
+                      )}
                     </>
                   )}
                   {(selectedCue.trackType === 'MUSIC' || selectedCue.trackType === 'AMBIENCE') && (
@@ -1701,7 +1710,7 @@ export default function StoryWorkspacePage() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t2)]">Movie Builder</p>
               <h2 className="mt-1 text-3xl font-black text-[var(--noc-t1)]">Render Story Movie</h2>
-              <p className="mt-2 max-w-3xl text-sm font-semibold text-[var(--noc-t4)]">Build a deterministic MP4 from the saved Film Blueprint and selected scene pictures. No AI video, narration, music, publishing, or provider rendering is used here.</p>
+              <p className="mt-2 max-w-3xl text-sm font-semibold text-[var(--noc-t4)]">Build a deterministic MP4 from the saved Film Blueprint. Shots use scene videos (MiniMax H3) when available, otherwise the selected stills, mixed with narration and music.</p>
             </div>
             <button
               onClick={() => createMovieRender.mutate({ projectId, sequenceId: data?.sequenceId ?? undefined })}

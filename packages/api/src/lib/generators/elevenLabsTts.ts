@@ -48,6 +48,42 @@ export function elevenLabsDefaultVoiceId(env: NodeJS.ProcessEnv = process.env): 
   return env.ELEVENLABS_DEFAULT_VOICE_ID ?? ELEVENLABS_DEFAULT_VOICE_ID;
 }
 
+export interface ElevenLabsVoice {
+  voiceId: string;
+  name: string;
+}
+
+/** Well-known public ElevenLabs voices — fallback when the account voices API
+ * is unreachable, so the narration UI always has options. */
+export const ELEVENLABS_CURATED_VOICES: ElevenLabsVoice[] = [
+  { voiceId: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (default)' },
+  { voiceId: 'ErXwobaYiN019PkySvjV', name: 'Antoni' },
+  { voiceId: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella' },
+  { voiceId: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli' },
+  { voiceId: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh' },
+  { voiceId: 'pNInz6obpgDQGcFmaJgB', name: 'Adam' },
+  { voiceId: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam' },
+  { voiceId: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi' },
+];
+
+/** List the account's ElevenLabs voices (voiceId + name). Empty on any error —
+ * callers fall back to ELEVENLABS_CURATED_VOICES. Server-only. */
+export async function listElevenLabsVoices(deps: ElevenLabsSpeechDeps = {}): Promise<ElevenLabsVoice[]> {
+  const env = deps.env ?? process.env;
+  const apiKey = elevenLabsApiKey(env);
+  if (!apiKey) return [];
+  try {
+    const res = await (deps.fetchImpl ?? fetch)(`${ELEVENLABS_BASE_URL}/voices`, {
+      headers: { 'xi-api-key': apiKey },
+    });
+    if (!res.ok) return [];
+    const payload = (await res.json()) as { voices?: Array<{ voice_id: string; name: string }> };
+    return (payload.voices ?? []).map((voice) => ({ voiceId: voice.voice_id, name: voice.name }));
+  } catch {
+    return [];
+  }
+}
+
 /** Synthesize speech, returning MP3 bytes. Throws on any provider error. */
 export async function synthesizeSpeech(
   input: ElevenLabsSpeechInput,

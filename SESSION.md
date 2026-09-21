@@ -274,6 +274,14 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Narration unblocked + voice options/previews + movie stills warning
+
+- **Narration was failing closed** because `story:speech_generation` credit rate was unset in prod — now set to **50cr** (active). `story:movie_render`=100 and `generate:h3_max`=200 confirmed active. `story:audio_generation` (Lyria music) remains unset → music generation still fails closed (safe; set a rate in Admin → Credits to enable).
+- **Voice options:** new `story.listNarrationVoices` proc returns the account's real ElevenLabs voices (`listElevenLabsVoices` → `GET /v1/voices`), with a curated fallback (`ELEVENLABS_CURATED_VOICES`: Rachel/Antoni/Bella/Elli/Josh/Adam/Sam/Domi) when the API is unreachable. The Audio cue inspector's voice selector now lists these and passes the chosen `voiceId` to `generateCueSpeech`.
+- **Previews:** the cue inspector now renders an `<audio controls>` player for the generated narration asset (`audioAsset.publicUrl`), so you can hear before regenerating.
+- **Movie = stills explanation:** `buildRenderPlan` now warns in the Film-tab readiness list when shots have no scene video (`N shot(s) have no scene video yet and will render as still images. Use Animate to Video (MiniMax H3) for motion.`); Film-tab copy updated to say shots use scene videos when available.
+- Verified: web + api type-check, strict web lint, **436/436 tests**.
+
 ### 2026-09-21: Story flow fixes — no advance without a story + playground tabs
 
 - **Workspace gating:** a project with no generated story (`chapters.length === 0`) now shows ONLY the Overview tab, with a "Generate Story" button (calls `story.generateStory`) + a link back to the Story Wizard. This fixes the dead-end where a story-less project reached the Characters/Scenes tabs (and produced confusing errors there, e.g. "Unexpected end of JSON input" from operating on missing story data). `chooseTab`, the tab bar, and the requested-tab effect are all gated; the tab resets to Overview until a story exists.
