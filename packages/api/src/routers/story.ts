@@ -3536,6 +3536,71 @@ export const storyRouter = router({
       return updated;
     }),
 
+  /** Rewrite ONE paragraph per a directive (e.g. "Develop this idea"). Splits the
+   * chapter body on blank lines (matching the client splitter), rewrites the
+   * selected paragraph through the story-text provider chain, and saves the
+   * chapter (clearing stale enhancedBody). */
+  rewriteParagraph: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      chapterId: z.string(),
+      paragraphIndex: z.number().int().min(0),
+      directive: z.string().min(1).max(120),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const chapter = await ctx.prisma.storyChapter.findFirst({
+        where: { id: input.chapterId, projectId: input.projectId },
+      });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      const paragraphs = chapter.body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      if (input.paragraphIndex >= paragraphs.length) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Paragraph not found.' });
+      }
+      const original = paragraphs[input.paragraphIndex];
+
+      const directiveMod = await moderatePrompt(input.directive);
+      if (!directiveMod.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: directiveMod.reason ?? 'Your request violates our content guidelines.' });
+      }
+      const paraMod = await moderatePrompt(original);
+      if (!paraMod.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: paraMod.reason ?? 'This paragraph cannot be edited.' });
+      }
+
+      const audienceMode = (project.audienceMode as StoryAudienceMode) ?? 'GENERAL';
+      const rewritten = await storyTextService.rewriteParagraph(
+        {
+          projectTitle: project.title,
+          chapterNumber: chapter.chapterNumber,
+          paragraph: original,
+          directive: input.directive,
+          audienceMode,
+        },
+        { userId: ctx.user.email ?? ctx.user.id },
+      );
+
+      const resultMod = await moderatePrompt(rewritten);
+      if (!resultMod.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: resultMod.reason ?? 'The rewritten paragraph violates our content guidelines.' });
+      }
+
+      paragraphs[input.paragraphIndex] = rewritten.trim();
+      const body = paragraphs.join('\n\n');
+      const updated = await ctx.prisma.storyChapter.update({
+        where: { id: chapter.id },
+        data: { body, enhancedBody: null },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'story_paragraph_rewritten',
+        projectId: input.projectId,
+        audienceMode,
+        properties: { chapterId: chapter.id, chapterNumber: chapter.chapterNumber, paragraphIndex: input.paragraphIndex, directive: input.directive },
+      });
+      return updated;
+    }),
+
   updateSceneDirector: protectedProcedure
     .input(z.object({
       projectId: z.string(),

@@ -39,6 +39,13 @@ export function StoryScreen({ projectId }: { projectId: string }) {
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && projectId) },
   );
+  const utils = trpc.useUtils();
+  const rewriteParagraph = trpc.story.rewriteParagraph.useMutation({
+    onSuccess: () => {
+      utils.story.getWorkspace.invalidate({ projectId });
+      setSelected(null);
+    },
+  });
 
   if (workspaceQuery.isLoading) {
     return (
@@ -104,9 +111,11 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                     {isSelected && !isR16 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 12px 0' }}>
                         {STORY_ACTIONS.map((action) => (
-                          <span
+                          <button
                             key={action}
-                            title="Coming soon — not yet wired to a rewrite endpoint"
+                            type="button"
+                            disabled={rewriteParagraph.isPending}
+                            onClick={() => rewriteParagraph.mutate({ projectId, chapterId: latestChapter.id, paragraphIndex: i, directive: action })}
                             style={{
                               fontSize: 12.5,
                               padding: '9px 13px',
@@ -114,13 +123,19 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                               background: 'rgba(178,90,217,0.14)',
                               border: '1px solid rgba(178,90,217,0.32)',
                               color: 'var(--noc-lavender-tint)',
-                              opacity: 0.6,
-                              cursor: 'default',
+                              cursor: rewriteParagraph.isPending ? 'default' : 'pointer',
+                              opacity: rewriteParagraph.isPending ? 0.5 : 1,
                             }}
                           >
                             {action}
-                          </span>
+                          </button>
                         ))}
+                        {rewriteParagraph.isPending && (
+                          <span style={{ fontSize: 12.5, color: 'var(--noc-t6)', alignSelf: 'center' }}>Rewriting…</span>
+                        )}
+                        {rewriteParagraph.error && (
+                          <span style={{ fontSize: 12.5, color: '#e35d5d', alignSelf: 'center' }}>{rewriteParagraph.error.message}</span>
+                        )}
                       </div>
                     )}
                   </div>

@@ -101,6 +101,7 @@ export const STORY_ANALYTICS_EVENTS = [
   'production_manifest_persisted',
   // Story editing
   'story_edited',
+  'story_paragraph_rewritten',
   'voice_profile_updated',
   'audio_version_saved',
   'audio_version_restored',

@@ -49,6 +49,15 @@ export interface StoryTextProvider {
     previousChapters: Array<{ chapterNumber: number; title: string; summary: string; body: string }>;
     audienceMode: StoryAudienceMode;
   }, opts?: { userId?: string | null }): Promise<GeneratedStory>;
+  /** Rewrite ONE paragraph per a directive (e.g. "Develop this idea"). Returns
+   * the rewritten paragraph text (not the whole chapter). */
+  rewriteParagraph(params: {
+    projectTitle: string;
+    chapterNumber: number;
+    paragraph: string;
+    directive: string;
+    audienceMode: StoryAudienceMode;
+  }, opts?: { userId?: string | null }): Promise<string>;
 }
 
 const guidedQuestionSchema = z.object({
@@ -415,6 +424,18 @@ class LocalStoryTextProvider implements StoryTextProvider {
   }, _opts?: { userId?: string | null }) {
     return fallbackStory(params.originalIdea || params.projectTitle, [], params.audienceMode, params.previousChapters.length + 1);
   }
+
+  async rewriteParagraph(params: {
+    projectTitle: string;
+    chapterNumber: number;
+    paragraph: string;
+    directive: string;
+    audienceMode: StoryAudienceMode;
+  }, _opts?: { userId?: string | null }) {
+    // Deterministic fallback cannot meaningfully rewrite prose — return the
+    // paragraph unchanged (a graceful no-op so the button never fails).
+    return params.paragraph;
+  }
 }
 
 class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
@@ -531,6 +552,39 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
     } catch (error) {
       console.warn('[storyTextService] continuation fallback:', error);
       return this.fallback.continueStory(params);
+    }
+  }
+
+  async rewriteParagraph(params: {
+    projectTitle: string;
+    chapterNumber: number;
+    paragraph: string;
+    directive: string;
+    audienceMode: StoryAudienceMode;
+  }, _opts?: { userId?: string | null }) {
+    if (!this.enabled) return this.fallback.rewriteParagraph(params);
+    try {
+      const content = await this.complete(
+        [
+          'You are a skilled fiction editor for Raivstream Story Playground.',
+          'Rewrite ONLY the given paragraph according to the directive.',
+          'Keep the same character voices, setting, tone, and style as the surrounding story.',
+          'Preserve the meaning unless the directive asks to change it.',
+          'Return ONLY the rewritten paragraph text — no commentary, no quotes, no markdown.',
+        ].join('\n'),
+        [
+          `Chapter: ${params.chapterNumber} — ${params.projectTitle}`,
+          `Audience mode: ${params.audienceMode}`,
+          `Directive: ${params.directive}`,
+          `Paragraph to rewrite:\n${params.paragraph}`,
+        ].join('\n'),
+      );
+      const rewritten = clampText(content.replace(/^["'\s]+|["'\s]+$/g, ''), 5000);
+      if (!rewritten) throw new Error('Story text provider returned an empty rewrite');
+      return rewritten;
+    } catch (error) {
+      console.warn('[storyTextService] rewrite fallback:', error);
+      return this.fallback.rewriteParagraph(params);
     }
   }
 }

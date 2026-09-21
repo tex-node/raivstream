@@ -247,4 +247,40 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
       return this.fallback.continueStory(params);
     }
   }
+
+  async rewriteParagraph(params: {
+    projectTitle: string;
+    chapterNumber: number;
+    paragraph: string;
+    directive: string;
+    audienceMode: StoryAudienceMode;
+  }, opts?: { userId?: string | null }): Promise<string> {
+    if (!this.enabled || !shouldUseNarrativeEngine(opts?.userId, this.env)) {
+      return this.fallback.rewriteParagraph(params);
+    }
+    try {
+      const content = await this.complete(
+        [
+          'You are a skilled fiction editor for Raivstream Story Playground.',
+          'Rewrite ONLY the given paragraph according to the directive.',
+          'Keep the same character voices, setting, tone, and style as the surrounding story.',
+          'Preserve the meaning unless the directive asks to change it.',
+          SAFETY_RULES[params.audienceMode],
+          'Return ONLY the rewritten paragraph text — no commentary, no quotes, no markdown.',
+        ].join('\n'),
+        [
+          `Chapter: ${params.chapterNumber} — ${params.projectTitle}`,
+          `Audience mode: ${params.audienceMode}`,
+          `Directive: ${params.directive}`,
+          `Paragraph to rewrite:\n${params.paragraph}`,
+        ].join('\n'),
+      );
+      const rewritten = content.replace(/^```[a-zA-Z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '').replace(/^["'\s]+|["'\s]+$/g, '').trim();
+      if (!rewritten) throw new Error('Claude returned an empty rewrite');
+      return rewritten;
+    } catch (error) {
+      console.warn('[narrativeEngine] rewrite fallback:', error);
+      return this.fallback.rewriteParagraph(params);
+    }
+  }
 }

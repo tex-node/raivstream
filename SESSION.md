@@ -274,6 +274,13 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Story enhance actions wired — paragraph rewrite is clickable
+
+- `StoryScreen` (`/story-playground/[projectId]/story`) action chips (Develop this idea / Strengthen conflict / Explore another ending / Make this funnier / Increase tension) were inert `<span>`s; now real buttons calling the new `story.rewriteParagraph` proc (Rewriting… state + error surface, `getWorkspace` invalidated, selection cleared).
+- Server: `story.rewriteParagraph({ projectId, chapterId, paragraphIndex, directive })` — splits the chapter body on blank lines (matches the client splitter), moderates directive + paragraph + result, rewrites the ONE paragraph through the story-text chain (Claude if in canary rollout, else OpenAI-compatible, else deterministic no-op), splices it back, clears `enhancedBody`. `storyTextService.rewriteParagraph` added to the provider interface (Claude + OpenAI + local).
+- **Live-verified:** Claude rewrite produced a rich expanded paragraph for "Develop this idea".
+- Verified: web + api type-check, strict web lint, **436/436 tests**.
+
 ### 2026-09-21: Edit Story — story step chapter editing
 
 - New `story.updateChapter({ projectId, chapterId, title?, summary?, body? })` (moderate body; body edit clears `enhancedBody` so stale AI narrative is never shown; `story_edited` analytics).
