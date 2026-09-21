@@ -1332,6 +1332,13 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
   metadata + generated video/audio URLs) per project; extend the Movie Builder to combine
   MiniMax native SFX + ElevenLabs VO + scene video into the final render; export history
   via the existing `story.listMovieAssets`.
+  **Implemented:** `StoryProject.productionManifest` (JSON) + `productionManifestUpdatedAt`
+  (migration `20260921100000_production_manifest`); `story.structureProductionManifest`
+  persists the manifest as the canonical creative specification; `story.getProductionManifest`
+  reads it; `story.generateSceneVideo`/`regenerateSceneVideo` consume the matching scene's
+  `minimax_video_prompt` (prompt), `camera_motion` (metadata hint), `duration_sec`, `resolution`,
+  and `first_frame_image_url` (i2v seed) with VPC fallback. Final render/stitching continues via
+  the Movie Builder (video clips from 16.3 + NARRATION cues from 16.4 already feed it).
 
 ### Exit criteria
 

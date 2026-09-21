@@ -623,7 +623,7 @@ async function getOrCreateSequence(ctx: { prisma: any; user: { id: string }; isR
       })));
       await tx.storySequence.update({ where: { id: created.id }, data: { runtimeSeconds: runtime.totalRuntimeSeconds } });
       return tx.storySequence.findUnique({ where: { id: created.id }, include: sequenceInclude });
-    });
+    }, { timeout: 30_000, maxWait: 15_000 });
     await trackStoryAnalytics(ctx, {
       event: 'sequence_created',
       projectId,
@@ -2200,6 +2200,7 @@ async function generateSceneVideoAsset(
           tone: true,
           synopsis: true,
           storyDna: true,
+          productionManifest: true,
           characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
@@ -2216,7 +2217,10 @@ async function generateSceneVideoAsset(
   }
 
   const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
-  const duration = Math.min(10, Math.max(5, input.duration ?? 5));
+  // Phase 16.5 — consume the persisted ProductionManifest for this scene.
+  const manifest = project.productionManifest as unknown as ProductionManifest | null;
+  const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
+  const duration = Math.min(15, Math.max(4, manifestScene?.duration_sec ?? input.duration ?? 5));
 
   await trackStoryAnalytics(ctx, {
     event: 'scene_generation_started',
@@ -2233,6 +2237,20 @@ async function generateSceneVideoAsset(
     projectId: project.id,
     analyticsSource: 'generation',
   });
+
+  // Phase 16.5 — prefer the persisted manifest's `minimax_video_prompt` (the
+  // cinematographer-authored spec) over VPC composition for this scene.
+  if (manifestScene) {
+    composed = {
+      ...composed,
+      prompt: manifestScene.minimax_video_prompt,
+      providerHints: {
+        ...composed.providerHints,
+        productionManifestSceneId: manifestScene.scene_id,
+        cameraMotion: manifestScene.camera_motion,
+      } as any,
+    };
+  }
 
   // Phase 11 — creator regeneration instruction (natural-language edit).
   if (input.instruction?.trim()) {
@@ -2303,7 +2321,8 @@ async function generateSceneVideoAsset(
         negativePrompt: composed.negativePrompt,
         duration,
         aspectRatio: composed.aspectRatio ?? '9:16',
-        seedImageUrl: seedImage.assetUrl,
+        seedImageUrl: manifestScene?.first_frame_image_url ?? seedImage.assetUrl,
+        resolution: manifestScene?.resolution,
         status: 'QUEUED',
         creditsUsed: creditsUsed || 0,
         metadata: {
@@ -2326,8 +2345,8 @@ async function generateSceneVideoAsset(
       negativePrompt: composed.negativePrompt,
       duration,
       aspectRatio: composed.aspectRatio,
-      seedImageUrl: seedImage.assetUrl,
-      resolution: input.resolution,
+      seedImageUrl: manifestScene?.first_frame_image_url ?? seedImage.assetUrl,
+      resolution: input.resolution ?? manifestScene?.resolution,
     });
     const providerJobId = submitted.providerJobId;
 
@@ -3727,7 +3746,29 @@ export const storyRouter = router({
         prose,
         audienceMode: (project.audienceMode as StoryAudienceMode | undefined) ?? undefined,
       });
+      // Phase 16.5 — persist as the canonical creative specification.
+      await ctx.prisma.storyProject.update({
+        where: { id: project.id },
+        data: { productionManifest: manifest as unknown as any, productionManifestUpdatedAt: new Date() },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'production_manifest_persisted',
+        projectId: project.id,
+        audienceMode: project.audienceMode,
+        properties: { sceneCount: manifest.scenes.length },
+      });
       return { enabled: true as const, manifest };
+    }),
+
+  /** Phase 16.5 — return the persisted ProductionManifest for a project. */
+  getProductionManifest: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      return {
+        manifest: (project.productionManifest as unknown as ProductionManifest | null) ?? null,
+        updatedAt: project.productionManifestUpdatedAt ?? null,
+      };
     }),
 
   generateSceneImage: protectedProcedure

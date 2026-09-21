@@ -97,6 +97,8 @@ export const STORY_ANALYTICS_EVENTS = [
   'voice_profile_created',
   // Phase 16.4 — scene narration
   'scene_narration_generated',
+  // Phase 16.5 — production manifest
+  'production_manifest_persisted',
   'voice_profile_updated',
   'audio_version_saved',
   'audio_version_restored',

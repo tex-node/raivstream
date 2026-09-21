@@ -904,6 +904,9 @@ model StoryProject {
   creativeCriticThreshold Int?
   creativeCriticMaxRetries Int?
   lastWorkspaceTab String?
+  // Phase 16.5 — persisted ProductionManifest (MiniMax H3 + ElevenLabs spec).
+  productionManifest Json?
+  productionManifestUpdatedAt DateTime?
   // Phase 11 — project cover (share/OG image); a ready scene image asset.
   coverAssetId   String?
   coverAsset     StorySceneAsset? @relation("ProjectCover", fields: [coverAssetId], references: [id], onDelete: SetNull)

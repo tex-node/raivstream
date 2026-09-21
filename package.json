@@ -48,7 +48,8 @@
     "voice:e2e": "pnpm --filter @raivstream/api exec tsx scripts/phase9b3-voice-e2e.ts",
     "voice:stitch:check": "tsx scripts/phase9b3-voice-stitch-checkpoint.ts",
     "narrative:smoke": "pnpm --filter @raivstream/api exec tsx scripts/narrative-smoke.ts",
-    "manifest:smoke": "pnpm --filter @raivstream/api exec tsx scripts/production-manifest-smoke.ts"
+    "manifest:smoke": "pnpm --filter @raivstream/api exec tsx scripts/production-manifest-smoke.ts",
+    "phase16:narration:e2e": "pnpm --filter @raivstream/api exec tsx scripts/phase164-narration-e2e.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
