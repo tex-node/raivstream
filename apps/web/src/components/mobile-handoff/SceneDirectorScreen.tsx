@@ -104,7 +104,23 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
   const previewImage = reviewAssetUrl ?? scene.imageUrl ?? null;
 
   function pick(key: keyof typeof DIRECTOR_OPTIONS, value: string) {
-    updateDirector.mutate({ projectId, sceneId, settings: { [key]: value } as any });
+    // The server REPLACES the whole director settings object (missing keys become
+    // null), so we must send every attribute alongside the one being toggled —
+    // otherwise picking one attribute silently clears the others.
+    updateDirector.mutate({
+      projectId,
+      sceneId,
+      settings: {
+        emotion: scene.emotion,
+        cameraStyle: scene.cameraStyle,
+        timeOfDay: scene.timeOfDay,
+        weather: scene.weather,
+        environmentMood: scene.environmentMood,
+        lighting: scene.lighting,
+        scenePace: scene.scenePace,
+        [key]: scene[key] === value ? null : value,
+      } as any,
+    });
   }
 
   async function runGenerate() {
