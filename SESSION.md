@@ -40,7 +40,7 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - Supavisor/pooler is stopped because it was occupying host `5432` and returning `FATAL: Tenant or user not found`.
 - Raivstream uses direct Postgres for Prisma and app runtime, matching the project note that Supavisor is broken for this app.
 - **fal.ai migration (Flux.2 / MiniMax H3-Max / VEED Fabric): code-complete, deployed, gates default-OFF in production.** Staging `FAL_KEY` + isolated R2 creds are in `cred/fal_env.txt` (gitignored). Live smoke test reached fal and all three contracts (flux2, h3-max-turbo, veed talking-video) are proven live; the staged flow (credits → submit → poll → publish) passed 21/21 on an isolated scratch DB. **In production the `FAL_*` switches remain OFF** (no `FAL_KEY` in the prod env), so fal models are unavailable to users until an explicit enablement decision (roadmap Gates D–F). Credit rates `generate:flux2`/`generate:h3_max`/`generate:veed_fabric` are set active in prod (80/200/300).
-- **Google OAuth sign-in (web + mobile): implemented locally, not deployed/enabled.** Needs `GOOGLE_CLIENT_ID[S]` (+ `NEXT_PUBLIC_…` / `EXPO_PUBLIC_…` variants) set, Google Cloud authorized origins/redirects configured, and migration `20260920120000_google_oauth` deployed.
+- **Google OAuth sign-in (web): configured + deployed.** Web client ID `506778685431-06u5eua3nmsu44f0j69vjb1e07v1ic3o.apps.googleusercontent.com` set as `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in local `apps/web/.env.local` and the VPS prod `apps/web/.env.local` (gitignored); production rebuilt + PM2 restarted 2026-09-21, client id confirmed inlined in the bundle. Server-side token verification (`verifyGoogleIdToken`, aud allowlist) is active. **Verify in Google Cloud Console that Authorized JavaScript origins include `http://localhost:3000` (dev) and `https://app.raivstream.com` (prod).** Mobile (`EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + dev build) remains not configured; migration `20260920120000_google_oauth` is deployed.
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
 ## Monorepo Layout
@@ -265,6 +265,16 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-21: Google OAuth web button restored (env configured + prod deployed)
+
+The "Continue with Google" button on `/sign-in` (and `/sign-up`) had been rendering nothing because `NEXT_PUBLIC_GOOGLE_CLIENT_ID` was unset everywhere — the component returns `null` until it is (by design). No code regression: the button + `/api/auth/google` + server-side verification were already wired and deployed.
+
+- Client ID (`506778685431-06u5eua3nmsu44f0j69vjb1e07v1ic3o.apps.googleusercontent.com`) sourced from `cred/fal_env.txt` (`GOOGLE_CLIENT_ID`).
+- Local dev: `GOOGLE_CLIENT_IDS` + `NEXT_PUBLIC_GOOGLE_CLIENT_ID` added to `apps/web/.env.local`.
+- Production: same two vars appended to VPS `/root/raivstream/apps/web/.env.local` (gitignored, preserved by the deploy workflow); web rebuilt, PM2 restarted, health green, client id confirmed inlined in the built bundle.
+- `GOOGLE_CLIENT_IDS` (aud allowlist) is read at runtime by `packages/api/src/lib/googleAuth.ts` (`allowedGoogleClientIds`), which Next loads from `.env.local` at boot.
+- **Outstanding:** confirm Authorized JavaScript origins in Google Cloud Console (`http://localhost:3000`, `https://app.raivstream.com`). Mobile OAuth still requires `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` + a dev build.
 
 ### 2026-09-21: Gate D fal quality evaluation — technical pass, human sign-off pending
 
