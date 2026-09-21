@@ -3423,6 +3423,32 @@ export const storyRouter = router({
       }
     }),
 
+  /** Append a blank scene card to the project (Scenes tab "Add Scene"). */
+  addScene: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const chapter = await ctx.prisma.storyChapter.findFirst({
+        where: { projectId: project.id },
+        orderBy: { chapterNumber: 'asc' },
+        select: { id: true },
+      });
+      const maxOrder = await ctx.prisma.storySceneSeed.aggregate({
+        where: { projectId: project.id },
+        _max: { orderIndex: true },
+      });
+      const orderIndex = (maxOrder._max.orderIndex ?? 0) + 1;
+      return ctx.prisma.storySceneSeed.create({
+        data: {
+          projectId: project.id,
+          chapterId: chapter?.id ?? null,
+          orderIndex,
+          title: 'New Scene',
+          description: '',
+        },
+      });
+    }),
+
   enhanceNarrative: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -6065,15 +6091,25 @@ export const storyRouter = router({
         : [];
       const startTimeSeconds = prior.reduce((sum, shot) => sum + (shot.durationSeconds ?? 4) + (shot.holdDurationSeconds ?? 0), 0);
 
-      const cue = await ctx.prisma.audioCue.create({
-        data: {
-          trackId: track.id,
-          sequenceSceneId: sequenceScene?.id ?? null,
-          startTimeSeconds,
-          text: narration,
-          metadata: { source: 'scene_narration', sceneId: scene.id, sceneTitle: scene.title },
+      // Idempotent: reuse an existing scene-narration cue for this scene so
+      // one-click "Generate narration" (all scenes) never duplicates cues.
+      const existingCue = await ctx.prisma.audioCue.findFirst({
+        where: {
+          track: { plan: { projectId: input.projectId } },
+          metadata: { path: ['sceneId'], equals: scene.id },
         },
       });
+      const cue = existingCue
+        ? await ctx.prisma.audioCue.update({ where: { id: existingCue.id }, data: { text: narration } })
+        : await ctx.prisma.audioCue.create({
+            data: {
+              trackId: track.id,
+              sequenceSceneId: sequenceScene?.id ?? null,
+              startTimeSeconds,
+              text: narration,
+              metadata: { source: 'scene_narration', sceneId: scene.id, sceneTitle: scene.title },
+            },
+          });
 
       const result = await generateSpeechForCue(ctx, {
         projectId: input.projectId,

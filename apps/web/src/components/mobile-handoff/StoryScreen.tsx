@@ -46,6 +46,9 @@ export function StoryScreen({ projectId }: { projectId: string }) {
       setSelected(null);
     },
   });
+  const continueStory = trpc.story.continueStory.useMutation({
+    onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
+  });
 
   if (workspaceQuery.isLoading) {
     return (
@@ -74,13 +77,24 @@ export function StoryScreen({ projectId }: { projectId: string }) {
           <EmptyState title="No chapters yet" hint="Start writing from the project overview." />
         ) : (
           <>
-            <div>
-              <span className="noc-label">
-                Chapter {latestChapter.chapterNumber} · {latestChapter.title}
-              </span>
-              {!isR16 && (
-                <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 6 }}>Tap any paragraph to direct it.</p>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div>
+                <span className="noc-label">
+                  Chapter {latestChapter.chapterNumber} · {latestChapter.title}
+                </span>
+                {!isR16 && (
+                  <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 6 }}>Tap any paragraph to direct it.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => continueStory.mutate({ projectId })}
+                disabled={continueStory.isPending}
+                className="noc-btn-outline"
+                style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
+              >
+                {continueStory.isPending ? 'Adding…' : '+ Add Chapter'}
+              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

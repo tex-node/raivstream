@@ -7,6 +7,7 @@ import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { useTrackTab } from './useTrackTab';
+import { useState } from 'react';
 
 /**
  * Scenes list — design_handoff_raivstream_mobile, screen 6 of 8.
@@ -53,10 +54,42 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   );
 
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
+  const utils = trpc.useUtils();
+  const addScene = trpc.story.addScene.useMutation({ onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }) });
+  const generateSceneNarration = trpc.story.generateSceneNarration.useMutation();
+  const [narrationBusy, setNarrationBusy] = useState(false);
+
+  const runNarration = async () => {
+    setNarrationBusy(true);
+    try {
+      for (const scene of scenes) {
+        await generateSceneNarration.mutateAsync({ projectId, sceneId: scene.id });
+      }
+      utils.story.getWorkspace.invalidate({ projectId });
+    } finally {
+      setNarrationBusy(false);
+    }
+  };
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Scenes" activeTab="scenes" projectId={projectId}>
       <div className="flex flex-col gap-3 px-[18px] pt-3.5 pb-8 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-5 lg:px-10 lg:py-10 lg:max-w-[1280px] lg:mx-auto">
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div>
+            <span className="noc-label">Scenes</span>
+            <h1 style={{ fontSize: 21, fontWeight: 500, textTransform: 'uppercase', color: 'var(--noc-t1)', margin: 0 }}>
+              {scenes.length} scene{scenes.length === 1 ? '' : 's'}
+            </h1>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={runNarration} disabled={narrationBusy || scenes.length === 0} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '10px 14px' }}>
+              {narrationBusy ? 'Generating narration…' : 'Generate narration'}
+            </button>
+            <button type="button" onClick={() => addScene.mutate({ projectId })} disabled={addScene.isPending} className="noc-btn-primary" style={{ fontSize: 12.5, padding: '10px 14px' }}>
+              {addScene.isPending ? 'Adding…' : '+ Add Scene'}
+            </button>
+          </div>
+        </div>
         {workspaceQuery.isLoading ? (
           <>
             <Skeleton height={200} radius={18} />

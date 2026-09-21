@@ -274,6 +274,13 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Add chapters + scenes, and one-click narration
+
+- **Story tab → Add Chapter:** the workspace Story screen now has a **"+ Add Chapter"** button (`story.continueStory`) next to the chapter header.
+- **Scenes tab → Add Scene:** new `story.addScene` proc appends a blank scene card; **"+ Add Scene"** button on the Scenes screen.
+- **One-click narration:** the Scenes screen now has **"Generate narration"** that runs `story.generateSceneNarration` for every scene (scene-derived text). `generateSceneNarration` is now **idempotent** — it reuses an existing scene-narration cue (metadata `sceneId`) instead of duplicating on repeat clicks. Combined with the `story:speech_generation` rate (50cr, active) + `ELEVENLABS_TTS_ENABLED`/key set in prod, narration now works without the manual Audio-tab cue dance. (Voice options + audio previews in the Audio tab from the prior change.)
+- Verified: web + api type-check, strict web lint, **436/436 tests**.
+
 ### 2026-09-21: Scene Director video + AI Studio nav removed
 
 - **Scene Director (`/story-playground/[projectId]/scenes/[sceneId]`)** now has an **"Animate to Video"** control (MiniMax H3) that calls `story.generateSceneVideo` (uses the scene's latest ready picture as the opening frame; disabled + hint until a picture exists) and renders a `<video>` preview of the generated clip. Non-R16 only.
