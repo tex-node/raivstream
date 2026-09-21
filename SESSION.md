@@ -266,6 +266,20 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Atomic deploys + low-balance warning
+
+**Atomic deploys (kills the chunk-400 deploy window):**
+- `apps/web/next.config.js`: `distDir` now honors `NEXT_BUILD_DIST_DIR` (default `.next`).
+- `.github/workflows/deploy.yml`: web builds into `.next-build` while the running server keeps serving the previous `.next`; web type-check/lint run against the fresh `.next-build` types AFTER the build; then an atomic-ish swap (`mv .next .next-old && mv .next-build .next`) precedes the PM2 restart. No more minutes-long window where in-flight clients 400 on old chunk hashes. `set -e` means a failed build/type-check aborts BEFORE the swap, leaving the old build serving.
+- `.gitignore`: `.next-build/`, `.next-old/`.
+
+**Low-balance warning (< 500 units):**
+- `packages/api/src/lib/credits.ts`: `LOW_BALANCE_THRESHOLD = 500`.
+- `user.creditBalance` proc now returns `{ balance, updatedAt, lowBalance, threshold }`.
+- New `apps/web/src/components/credits/LowBalanceWarning.tsx` — amber banner showing the balance + "Low balance warning" + Top up link; renders only when `lowBalance`.
+- Placed on generation surfaces: `/generate` (above Generate), Story Playground scene cards (`new/page.tsx`), Story Workspace scenes (`[projectId]/page.tsx`), and `SceneDirectorScreen.tsx`. Visible before the next image is generated.
+- Verified: web + api type-check, strict web lint, api lint, 409/409 tests.
+
 ### 2026-09-21: Story scene-image generation switched to fal-only (FLUX2); fal ENABLED in prod
 
 User reported Story Playground scene generation (a) still offered RunPod and (b) failed.

@@ -32,6 +32,9 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
 
 export const STORY_MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
 
+/** Balance below this is surfaced as a "low balance warning" before generation. */
+export const LOW_BALANCE_THRESHOLD = 500;
+
 export type MovieRenderCreditRateResult =
   | { configured: true;  cost: number; errorCode: null }
   | { configured: false; cost: 0;      errorCode: 'MOVIE_RENDER_RATE_MISSING' | 'MOVIE_RENDER_RATE_INVALID' };

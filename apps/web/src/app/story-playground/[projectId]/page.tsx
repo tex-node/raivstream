@@ -9,6 +9,7 @@ import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
+import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 import { ProjectOverviewScreen } from '@/components/mobile-handoff/ProjectOverviewScreen';
 import { StoryScreen as HandoffStoryScreen } from '@/components/mobile-handoff/StoryScreen';
 import { CastScreen as HandoffCastScreen } from '@/components/mobile-handoff/CastScreen';
@@ -774,6 +775,7 @@ export default function StoryWorkspacePage() {
         <p className="text-sm font-black uppercase text-[var(--noc-purple)]">{isR16 ? 'Picture Cards' : 'Scenes'}</p>
         <h2 className="text-3xl font-black">{isR16 ? 'Story Pictures' : 'Scene Director'}</h2>
       </div>
+      <div className="mb-4"><LowBalanceWarning /></div>
       {!isR16 && scenes.length > 0 && (
         <div className="mb-4 max-w-xs">
           <select

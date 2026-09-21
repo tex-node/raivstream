@@ -10,6 +10,7 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { useTrackTab } from './useTrackTab';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
+import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 
 /**
  * Scene Director — design_handoff_raivstream_mobile, screen 7 of 8. Canonical:
@@ -210,6 +211,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
 
           {!isR16 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <LowBalanceWarning />
               <div>
                 <span className="noc-label">Image model</span>
                 <select

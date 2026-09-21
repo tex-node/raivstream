@@ -1,6 +1,7 @@
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { LOW_BALANCE_THRESHOLD } from '../lib/credits';
 
 export const userRouter = router({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -187,7 +188,13 @@ export const userRouter = router({
       where: { userId: ctx.user.id },
       select: { balance: true, updatedAt: true },
     });
-    return { balance: balance?.balance ?? 0, updatedAt: balance?.updatedAt ?? null };
+    const value = balance?.balance ?? 0;
+    return {
+      balance: value,
+      updatedAt: balance?.updatedAt ?? null,
+      lowBalance: value < LOW_BALANCE_THRESHOLD,
+      threshold: LOW_BALANCE_THRESHOLD,
+    };
   }),
 
   // Recent credit transactions (last 20)

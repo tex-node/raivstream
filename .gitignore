@@ -9,6 +9,8 @@ coverage
 
 # Next.js
 .next/
+.next-build/
+.next-old/
 out/
 build
 dist/

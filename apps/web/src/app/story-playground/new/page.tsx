@@ -9,6 +9,7 @@ import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
+import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 
 type PlaygroundStep = 'spark' | 'questions' | 'story';
 
@@ -1468,6 +1469,8 @@ export default function StoryPlaygroundPage() {
                   Make Pictures
                 </button>
               </div>
+
+              <div className="mb-4 max-w-2xl"><LowBalanceWarning /></div>
 
               {scenes.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">

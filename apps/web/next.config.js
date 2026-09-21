@@ -3,6 +3,12 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@raivstream/api'],
 
+  // Atomic deploys: CI builds into a staging dir (NEXT_BUILD_DIST_DIR=.next-build)
+  // while the running server keeps serving the previous .next, then swaps at the
+  // end — no chunk-400 window for in-flight clients. Runtime (next start, no env)
+  // defaults to '.next'.
+  distDir: process.env.NEXT_BUILD_DIST_DIR ?? '.next',
+
   // Keep database + Prisma as server-only externals so webpack never bundles them.
   // This ensures a single PrismaClient singleton and allows the native engine
   // binary to be loaded correctly at runtime.

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
+import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 
 type GenerationMode = 'image' | 'video';
 type AspectRatio    = '9:16' | '16:9' | '1:1';
@@ -407,6 +408,8 @@ export default function GeneratePage() {
               )}
 
               {/* Generate */}
+              <LowBalanceWarning />
+
               <button
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || isGenerating || !!needsSeedImage}
