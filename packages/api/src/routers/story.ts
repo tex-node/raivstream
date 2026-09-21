@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
 import { moderatePrompt } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
+import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
@@ -3630,6 +3631,37 @@ export const storyRouter = router({
         }));
       }
       return created;
+    }),
+
+  /**
+   * Phase 16.2 — Production Script Structurer. Builds the strict MiniMax H3 /
+   * ElevenLabs ProductionManifest from the project's story text (chapters,
+   * ordered). Returns `{ enabled: false }` when the fail-closed flag is off.
+   */
+  structureProductionManifest: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      if (!isManifestStructurerEnabled()) {
+        return { enabled: false as const, manifest: null as ProductionManifest | null };
+      }
+      const chapters = await ctx.prisma.storyChapter.findMany({
+        where: { projectId: project.id },
+        orderBy: { chapterNumber: 'asc' },
+        select: { chapterNumber: true, title: true, body: true, enhancedBody: true },
+      });
+      const prose = chapters
+        .map((c) => `${c.title ? `# ${c.title}\n` : ''}${c.enhancedBody ?? c.body}`)
+        .join('\n\n')
+        .trim();
+      if (!prose) return { enabled: true as const, manifest: null as ProductionManifest | null };
+      const manifest = await structureProductionManifest({
+        title: project.title,
+        logline: project.logline ?? project.originalIdea ?? undefined,
+        prose,
+        audienceMode: (project.audienceMode as StoryAudienceMode | undefined) ?? undefined,
+      });
+      return { enabled: true as const, manifest };
     }),
 
   generateSceneImage: protectedProcedure
