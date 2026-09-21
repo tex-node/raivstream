@@ -95,6 +95,8 @@ export const STORY_ANALYTICS_EVENTS = [
   'audio_cue_removed',
   'audio_track_toggled',
   'voice_profile_created',
+  // Phase 16.4 — scene narration
+  'scene_narration_generated',
   'voice_profile_updated',
   'audio_version_saved',
   'audio_version_restored',

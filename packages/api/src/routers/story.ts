@@ -2630,6 +2630,71 @@ function buildStoryBookResponse(project: any) {
   };
 }
 
+/**
+ * Shared speech-generation core used by `generateCueSpeech` and
+ * `generateSceneNarration` (Phase 16.4). Moderate → credit gate → ElevenLabs →
+ * R2 `AudioAsset(GENERATED_SPEECH)` → link `AudioCue.audioAssetId`; refund on
+ * failure. The caller owns cue lookup/creation and the ELEVENLABS gate.
+ */
+async function generateSpeechForCue(
+  ctx: any,
+  input: { projectId: string; cueId: string; cueText: string; voiceRef?: string | null; voiceId?: string; modelId?: string },
+) {
+  const moderation = await moderatePrompt(input.cueText);
+  if (!moderation.allowed) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Narration text violates our content guidelines.' });
+  }
+
+  const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
+  if (!rate.configured) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Narration generation pricing is not configured yet. Set the `story:speech_generation` credit rate in Admin → Credits.',
+      cause: { errorCode: rate.errorCode },
+    });
+  }
+
+  const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Narration generation');
+
+  try {
+    const voiceId = input.voiceId || input.voiceRef || elevenLabsDefaultVoiceId();
+    const audio = await synthesizeSpeech({ text: input.cueText, voiceId, modelId: input.modelId });
+    const storageKey = `story-projects/${input.projectId}/audio/${input.cueId}-${Date.now()}.mp3`;
+    const publicUrl = await uploadBufferToR2(audio, storageKey, 'audio/mpeg');
+    if (!publicUrl) throw new Error('R2 storage is not configured for narration.');
+
+    const asset = await ctx.prisma.audioAsset.create({
+      data: {
+        projectId: input.projectId,
+        userId: ctx.user.id,
+        storageProvider: 'R2',
+        storageKey,
+        publicUrl,
+        mimeType: 'audio/mpeg',
+        fileSizeBytes: audio.length,
+        sourceKind: 'GENERATED_SPEECH',
+      },
+    });
+    const updatedCue = await ctx.prisma.audioCue.update({
+      where: { id: input.cueId },
+      data: { audioAssetId: asset.id },
+      include: { audioAsset: true },
+    });
+    await trackStoryAnalytics(ctx, {
+      event: 'audio_cue_updated',
+      projectId: input.projectId,
+      properties: { cueId: input.cueId, generation: 'speech', model: elevenLabsModelId(), assetId: asset.id },
+    });
+    return { cue: updatedCue, asset };
+  } catch (error) {
+    await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Refund: narration generation failed').catch(() => {});
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: error instanceof Error ? error.message : 'Narration generation failed',
+    });
+  }
+}
+
 export const storyRouter = router({
   createSpark: protectedProcedure
     .input(z.object({
@@ -5769,7 +5834,7 @@ export const storyRouter = router({
       return duplicate;
     }),
 
-  /** Phase 9B.3 — generate narration/dialogue audio for a cue via ElevenLabs. */
+/** Phase 9B.3 — generate narration/dialogue audio for a cue via ElevenLabs. */
   generateCueSpeech: protectedProcedure
     .input(z.object({
       projectId: z.string(),
@@ -5791,60 +5856,91 @@ export const storyRouter = router({
       if (!cue.text?.trim()) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Add narration text to this cue first.' });
       }
+      return generateSpeechForCue(ctx, {
+        projectId: input.projectId,
+        cueId: cue.id,
+        cueText: cue.text,
+        voiceRef: cue.voiceProfile?.voiceRef ?? null,
+        voiceId: input.voiceId,
+        modelId: input.modelId,
+      });
+    }),
 
-      const moderation = await moderatePrompt(cue.text);
-      if (!moderation.allowed) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Narration text violates our content guidelines.' });
+  /**
+   * Phase 16.4 — scene narration. Creates an NARRATION cue on the project's
+   * audio plan (anchored to the sequence timeline), then generates the speech
+   * through the shared `generateSpeechForCue` path (ElevenLabs → R2
+   * AudioAsset(GENERATED_SPEECH) → cue link), so the Movie Builder mixer
+   * consumes it like any other cue. `text` defaults to a scene-derived line;
+   * the ProductionManifest's `elevenlabs_narration` (16.5) can be passed here.
+   */
+  generateSceneNarration: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      text: z.string().min(1).max(5000).optional(),
+      voiceId: z.string().max(80).optional(),
+      modelId: z.string().max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      assertSequenceAllowed(ctx);
+      await ensureProject(ctx, input.projectId);
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+      }
+      const scene = await ctx.prisma.storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+
+      const narration = input.text?.trim() || `${scene.title}. ${scene.description ?? ''}`.trim();
+      if (!narration) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No narration text for this scene.' });
+
+      const { sequence } = await getOrCreateSequence(ctx, input.projectId);
+      const plan = await getOrCreateAudioPlan(ctx, input.projectId, sequence.id);
+      let track = plan.tracks.find((t: any) => t.type === 'NARRATION');
+      if (!track) {
+        track = await ctx.prisma.audioTrack.create({
+          data: { planId: plan.id, type: 'NARRATION', name: 'Narration', order: 0 },
+        });
       }
 
-      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
-      if (!rate.configured) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: 'Narration generation pricing is not configured yet. Set the `story:speech_generation` credit rate in Admin → Credits.',
-          cause: { errorCode: rate.errorCode },
-        });
-      }
+      const sequenceScene = await ctx.prisma.storySequenceScene.findFirst({
+        where: { storySceneId: scene.id, sequenceId: sequence.id },
+      });
+      // Anchor to the canonical timeline: sum enabled prior shots (duration + hold).
+      const prior = sequenceScene
+        ? await ctx.prisma.storySequenceScene.findMany({
+            where: { sequenceId: sequence.id, enabled: true, orderIndex: { lt: sequenceScene.orderIndex } },
+            orderBy: { orderIndex: 'asc' },
+            select: { durationSeconds: true, holdDurationSeconds: true },
+          })
+        : [];
+      const startTimeSeconds = prior.reduce((sum, shot) => sum + (shot.durationSeconds ?? 4) + (shot.holdDurationSeconds ?? 0), 0);
 
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, cue.id, 'Narration generation');
+      const cue = await ctx.prisma.audioCue.create({
+        data: {
+          trackId: track.id,
+          sequenceSceneId: sequenceScene?.id ?? null,
+          startTimeSeconds,
+          text: narration,
+          metadata: { source: 'scene_narration', sceneId: scene.id, sceneTitle: scene.title },
+        },
+      });
 
-      try {
-        const voiceId = input.voiceId || cue.voiceProfile?.voiceRef || elevenLabsDefaultVoiceId();
-        const audio = await synthesizeSpeech({ text: cue.text, voiceId, modelId: input.modelId });
-        const storageKey = `story-projects/${input.projectId}/audio/${cue.id}-${Date.now()}.mp3`;
-        const publicUrl = await uploadBufferToR2(audio, storageKey, 'audio/mpeg');
-        if (!publicUrl) throw new Error('R2 storage is not configured for narration.');
-
-        const asset = await ctx.prisma.audioAsset.create({
-          data: {
-            projectId: input.projectId,
-            userId: ctx.user.id,
-            storageProvider: 'R2',
-            storageKey,
-            publicUrl,
-            mimeType: 'audio/mpeg',
-            fileSizeBytes: audio.length,
-            sourceKind: 'GENERATED_SPEECH',
-          },
-        });
-        const updatedCue = await ctx.prisma.audioCue.update({
-          where: { id: cue.id },
-          data: { audioAssetId: asset.id },
-          include: { audioAsset: true },
-        });
-        await trackStoryAnalytics(ctx, {
-          event: 'audio_cue_updated',
-          projectId: input.projectId,
-          properties: { cueId: cue.id, generation: 'speech', model: elevenLabsModelId(), assetId: asset.id },
-        });
-        return { cue: updatedCue, asset };
-      } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, cue.id, 'Refund: narration generation failed').catch(() => {});
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: error instanceof Error ? error.message : 'Narration generation failed',
-        });
-      }
+      const result = await generateSpeechForCue(ctx, {
+        projectId: input.projectId,
+        cueId: cue.id,
+        cueText: narration,
+        voiceId: input.voiceId,
+        modelId: input.modelId,
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'scene_narration_generated',
+        projectId: input.projectId,
+        properties: { sceneId: scene.id, cueId: cue.id, assetId: result.asset.id, voiceModel: elevenLabsModelId() },
+      });
+      return { cue: result.cue, asset: result.asset, narration };
     }),
 
   /** Background music / ambience generation for a MUSIC or AMBIENCE cue (Lyria). */

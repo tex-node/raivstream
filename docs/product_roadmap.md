@@ -1323,6 +1323,11 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
 - **16.4 · ElevenLabs scene narration wiring.** Route each scene's `elevenlabs_narration`
   through the existing `story.generateCueSpeech` → R2 `AudioAsset(GENERATED_SPEECH)` →
   `AudioCue` path so the Movie Builder mixer consumes it like any other cue.
+  **Implemented:** shared `generateSpeechForCue()` core (moderate → credit gate →
+  ElevenLabs → R2 → cue link, refund-on-failure); new `story.generateSceneNarration`
+  creates a NARRATION cue on the project's audio plan (anchored to the canonical
+  sequence timeline) then generates it. `text` defaults to a scene-derived line; the
+  ProductionManifest's `elevenlabs_narration` can be passed once persisted (16.5).
 - **16.5 · ProductionManifest + final stitching.** Persist the resolved manifest (scene
   metadata + generated video/audio URLs) per project; extend the Movie Builder to combine
   MiniMax native SFX + ElevenLabs VO + scene video into the final render; export history
