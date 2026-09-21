@@ -2883,7 +2883,7 @@ export const storyRouter = router({
         }
       }
 
-      const story = await storyTextService.generateStory(idea, answers, audienceMode);
+      const story = await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id });
       const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         await tx.storyChapter.deleteMany({ where: { projectId: project.id } });
@@ -3236,7 +3236,7 @@ export const storyRouter = router({
           body: chapter.body,
         })),
         audienceMode,
-      });
+      }, { userId: ctx.user.email ?? ctx.user.id });
       const nextNumber = project.chapters.length + 1;
 
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {

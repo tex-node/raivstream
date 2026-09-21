@@ -42,13 +42,13 @@ export type GeneratedStory = {
 
 export interface StoryTextProvider {
   generateGuidedQuestions(input: string, audienceMode: StoryAudienceMode): Promise<GuidedQuestion[]>;
-  generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode): Promise<GeneratedStory>;
+  generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null }): Promise<GeneratedStory>;
   continueStory(params: {
     projectTitle: string;
     originalIdea: string;
     previousChapters: Array<{ chapterNumber: number; title: string; summary: string; body: string }>;
     audienceMode: StoryAudienceMode;
-  }): Promise<GeneratedStory>;
+  }, opts?: { userId?: string | null }): Promise<GeneratedStory>;
 }
 
 const guidedQuestionSchema = z.object({
@@ -403,7 +403,7 @@ class LocalStoryTextProvider implements StoryTextProvider {
     return fallbackQuestions(input, audienceMode);
   }
 
-  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode) {
+  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, _opts?: { userId?: string | null }) {
     return fallbackStory(input, answers, audienceMode, 1);
   }
 
@@ -412,7 +412,7 @@ class LocalStoryTextProvider implements StoryTextProvider {
     originalIdea: string;
     previousChapters: Array<{ chapterNumber: number; title: string; summary: string; body: string }>;
     audienceMode: StoryAudienceMode;
-  }) {
+  }, _opts?: { userId?: string | null }) {
     return fallbackStory(params.originalIdea || params.projectTitle, [], params.audienceMode, params.previousChapters.length + 1);
   }
 }
@@ -477,7 +477,7 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
     }
   }
 
-  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode) {
+  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, _opts?: { userId?: string | null }) {
     if (!this.enabled) return this.fallback.generateStory(input, answers, audienceMode);
     try {
       const content = await this.complete(
@@ -507,7 +507,7 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
     originalIdea: string;
     previousChapters: Array<{ chapterNumber: number; title: string; summary: string; body: string }>;
     audienceMode: StoryAudienceMode;
-  }) {
+  }, _opts?: { userId?: string | null }) {
     if (!this.enabled) return this.fallback.continueStory(params);
     try {
       const content = await this.complete(

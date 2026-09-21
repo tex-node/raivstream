@@ -47,6 +47,41 @@ export function claudeStoryModel(env: NodeJS.ProcessEnv = process.env): string {
   return env.CLAUDE_STORY_MODEL ?? CLAUDE_DEFAULT_MODEL;
 }
 
+/** Rollout percent (0–100) for the canary. Empty/unset = 100 (flag governs). */
+export function narrativeEngineRolloutPercent(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.STORY_NARRATIVE_ENGINE_ROLLOUT;
+  if (raw === undefined || raw.trim() === '') return 100;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100;
+}
+
+/** Explicit operator allowlist (emails/usernames/userIds), canary escape hatch. */
+export function narrativeEngineAllowlist(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.STORY_NARRATIVE_ENGINE_ALLOWLIST ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Per-user canary decision: the engine runs for a user when it is globally
+ * enabled AND (the user is allowlisted OR their stable id-hash falls inside
+ * `STORY_NARRATIVE_ENGINE_ROLLOUT` percent). No user context → default on
+ * (the global flag governs), which keeps tests/background paths simple.
+ */
+export function shouldUseNarrativeEngine(userId: string | null | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!isNarrativeEngineEnabled(env)) return false;
+  if (!userId) return true;
+  const allowlist = narrativeEngineAllowlist(env);
+  if (allowlist.includes(userId.toLowerCase())) return true;
+  const percent = narrativeEngineRolloutPercent(env);
+  if (percent >= 100) return true;
+  if (percent <= 0) return false;
+  let hash = 0;
+  for (let i = 0; i < userId.length; i += 1) hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+  return hash % 100 < percent;
+}
+
 export interface ClaudeNarrativeDeps {
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
@@ -156,8 +191,12 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
     return this.fallback.generateGuidedQuestions(input, audienceMode);
   }
 
-  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode): Promise<GeneratedStory> {
-    if (!this.enabled) return this.fallback.generateStory(input, answers, audienceMode);
+  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null }): Promise<GeneratedStory> {
+    // Canary: users outside the rollout (or when the engine is off) keep the
+    // existing OpenAI/local chain — per-user, not global.
+    if (!this.enabled || !shouldUseNarrativeEngine(opts?.userId, this.env)) {
+      return this.fallback.generateStory(input, answers, audienceMode);
+    }
     try {
       const baseUser = [
         `Idea: ${input}`,
@@ -184,8 +223,10 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
     originalIdea: string;
     previousChapters: Array<{ chapterNumber: number; title: string; summary: string; body: string }>;
     audienceMode: StoryAudienceMode;
-  }): Promise<GeneratedStory> {
-    if (!this.enabled) return this.fallback.continueStory(params);
+  }, opts?: { userId?: string | null }): Promise<GeneratedStory> {
+    if (!this.enabled || !shouldUseNarrativeEngine(opts?.userId, this.env)) {
+      return this.fallback.continueStory(params);
+    }
     try {
       const baseUser = [
         `Project title: ${params.projectTitle}`,

@@ -3,6 +3,7 @@ import {
   ClaudeNarrativeEngineProvider,
   isNarrativeEngineEnabled,
   buildNarrativeSystem,
+  shouldUseNarrativeEngine,
   CLAUDE_DEFAULT_MODEL,
 } from '../narrativeEngine';
 import type { StoryAnswer, StoryAudienceMode, StoryTextProvider, GeneratedStory } from '../storyTextService';
@@ -92,6 +93,35 @@ describe('narrativeEngine', () => {
     });
   });
 
+  describe('shouldUseNarrativeEngine (canary rollout)', () => {
+    const env = (extra: Record<string, string>) => ({ STORY_NARRATIVE_ENGINE_ENABLED: 'true', CLAUDE_API: 'key', ...extra });
+
+    it('is false when the engine is globally off', () => {
+      expect(shouldUseNarrativeEngine('user1', { STORY_NARRATIVE_ENGINE_ENABLED: 'false', CLAUDE_API: 'key' })).toBe(false);
+    });
+
+    it('defaults on without a user context (flag governs)', () => {
+      expect(shouldUseNarrativeEngine(undefined, env({}))).toBe(true);
+    });
+
+    it('honours the allowlist even at 0% rollout', () => {
+      const e = env({ STORY_NARRATIVE_ENGINE_ROLLOUT: '0', STORY_NARRATIVE_ENGINE_ALLOWLIST: 'boss@raivstream.com' });
+      expect(shouldUseNarrativeEngine('boss@raivstream.com', e)).toBe(true);
+      expect(shouldUseNarrativeEngine('other@raivstream.com', e)).toBe(false);
+    });
+
+    it('excludes everyone at 0%, includes everyone at 100%', () => {
+      expect(shouldUseNarrativeEngine('user1', env({ STORY_NARRATIVE_ENGINE_ROLLOUT: '0' }))).toBe(false);
+      expect(shouldUseNarrativeEngine('user1', env({ STORY_NARRATIVE_ENGINE_ROLLOUT: '100' }))).toBe(true);
+    });
+
+    it('is a stable per-user decision at a partial rollout', () => {
+      const e = env({ STORY_NARRATIVE_ENGINE_ROLLOUT: '50' });
+      const first = shouldUseNarrativeEngine('user-abc', e);
+      expect(shouldUseNarrativeEngine('user-abc', e)).toBe(first); // deterministic
+    });
+  });
+
   describe('ClaudeNarrativeEngineProvider', () => {
     it('delegates guided questions to the fallback provider', async () => {
       const fallback = makeFallback();
@@ -109,6 +139,32 @@ describe('narrativeEngine', () => {
       const story = await provider.generateStory('idea', ANSWERS, 'GENERAL');
       expect(fallback.generateStory).toHaveBeenCalledTimes(1);
       expect(story.providerMetadata?.provider).toBe('local-fallback');
+    });
+
+    it('falls back for a user outside the canary rollout', async () => {
+      const fallback = makeFallback();
+      const provider = new ClaudeNarrativeEngineProvider(fallback, {
+        env: { STORY_NARRATIVE_ENGINE_ENABLED: 'true', CLAUDE_API: 'key', STORY_NARRATIVE_ENGINE_ROLLOUT: '0' },
+        fetchImpl: vi.fn(),
+      });
+      const story = await provider.generateStory('idea', ANSWERS, 'GENERAL', { userId: 'other@raivstream.com' });
+      expect(fallback.generateStory).toHaveBeenCalledTimes(1);
+      expect(story.providerMetadata?.provider).toBe('local-fallback');
+    });
+
+    it('uses Claude for an allowlisted user at 0% rollout', async () => {
+      const fetchMock = vi.fn<typeof fetch>(async () => claudeJsonResponse(SAMPLE_STORY_JSON));
+      const fallback = makeFallback();
+      const provider = new ClaudeNarrativeEngineProvider(fallback, {
+        env: {
+          STORY_NARRATIVE_ENGINE_ENABLED: 'true', CLAUDE_API: 'key',
+          STORY_NARRATIVE_ENGINE_ROLLOUT: '0', STORY_NARRATIVE_ENGINE_ALLOWLIST: 'boss@raivstream.com',
+        },
+        fetchImpl: fetchMock,
+      });
+      const story = await provider.generateStory('idea', ANSWERS, 'GENERAL', { userId: 'boss@raivstream.com' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(story.providerMetadata?.provider).toBe('claude-narrative');
     });
 
     it('generates a story through Claude and parses the manifest shape', async () => {
