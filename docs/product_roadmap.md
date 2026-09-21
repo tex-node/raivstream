@@ -1337,8 +1337,12 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
   persists the manifest as the canonical creative specification; `story.getProductionManifest`
   reads it; `story.generateSceneVideo`/`regenerateSceneVideo` consume the matching scene's
   `minimax_video_prompt` (prompt), `camera_motion` (metadata hint), `duration_sec`, `resolution`,
-  and `first_frame_image_url` (i2v seed) with VPC fallback. Final render/stitching continues via
-  the Movie Builder (video clips from 16.3 + NARRATION cues from 16.4 already feed it).
+  and `first_frame_image_url` (i2v seed) with VPC fallback. **Native SFX preservation:** the
+  Movie Builder worker now keeps each scene clip's native audio as an ambience bed in the mix
+  (`MOVIE_RENDER_KEEP_NATIVE_AUDIO`, default true; `MOVIE_RENDERER_VERSION` → `phase-16-v1`).
+  **Full-stitch E2E proven live (`pnpm phase16:stitch:e2e`, 15/15):** two real MiniMax H3
+  clips (native aac SFX) + real ElevenLabs VO + music mixed by the real worker → final h264
+  720×1280/30fps 10s movie with a non-silent audio track, zero residue.
 
 ### Exit criteria
 

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { FilmBlueprint } from './sequencePlanning';
 
-export const MOVIE_RENDERER_VERSION = 'phase-10-v1';
+export const MOVIE_RENDERER_VERSION = 'phase-16-v1';
 export const MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
 export const MOVIE_RENDER_DURATION_TOLERANCE_SECONDS = 0.25;
 export const MOVIE_RENDER_DEFAULTS = {

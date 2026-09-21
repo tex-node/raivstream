@@ -104,6 +104,13 @@ back to the still when none exists:
   is unconfigured. Segments are cleaned up after a successful render.
 - Export/version history: `story.listMovieAssets` lists READY `MovieAsset`
   versions (with download URL); `story.setCurrentMovie` selects the current one.
+- **Native SFX bed (Phase 16.5 tail):** when a shot's source is a VIDEO clip that
+  carries an audio track (e.g. MiniMax H3 native synchronized SFX), the worker extracts
+  that audio into a canonical PCM bed and mixes it (as an AMBIENCE source at the shot's
+  canonical start) alongside the plan's NARRATION/MUSIC cues — so the final render keeps
+  the scene video's native sound plus ElevenLabs VO. Gate `MOVIE_RENDER_KEEP_NATIVE_AUDIO`
+  (default true; `false` restores the strip-only behaviour). `MOVIE_RENDERER_VERSION` →
+  `phase-16-v1` (render hashes changed). Proven live by the Phase 16 full-stitch E2E.
 
 ## 9. Reliability & backpressure (Phase 15)
 

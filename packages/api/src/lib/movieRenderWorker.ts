@@ -16,7 +16,7 @@ import {
 } from './movieRenderPlanning';
 import { getPublicUrlForKey, objectExistsInR2, removeFromR2, uploadBufferToR2 } from './r2';
 import { assertAudioReadyGate, buildMixedAudioTrack, muxAudioWithVideo, normalizeAudioInput, probeAudioAsset, probeAudioStream, type ResolvedCueSource } from './audioMixing';
-import type { AudioBlueprint } from './audioPlanning';
+import type { AudioBlueprint, AudioBlueprintCue } from './audioPlanning';
 import { analytics } from './analytics';
 
 const FINAL_STATUSES = new Set(['READY', 'FAILED', 'CANCELLED']);
@@ -249,6 +249,26 @@ async function renderVideoShot(inputPath: string, outputPath: string, shot: Movi
   ]);
 }
 
+/**
+ * Phase 16.5 — extract a scene clip's NATIVE audio (MiniMax H3 synchronized
+ * SFX) into a canonical PCM bed so the final mix can keep it alongside the
+ * narration/music cues. Loops the clip's audio to the shot's render duration
+ * (matching renderVideoShot) and writes stereo 44.1kHz PCM.
+ */
+async function extractNativeAudio(inputPath: string, outputPath: string, durationSeconds: number, run: CommandRunner) {
+  await run('ffmpeg', [
+    '-y',
+    '-stream_loop', '-1',
+    '-i', inputPath,
+    '-t', Math.max(0.5, durationSeconds).toFixed(3),
+    '-vn',
+    '-acodec', 'pcm_s16le',
+    '-ar', '44100',
+    '-ac', '2',
+    outputPath,
+  ]);
+}
+
 async function assembleMovie(segmentPaths: string[], outputPath: string, plan: MovieRenderPlan, run: CommandRunner) {
   if (segmentPaths.length === 1) {
     await run('ffmpeg', ['-y', '-i', segmentPaths[0], '-an', '-c:v', plan.output.videoCodec, '-preset', 'ultrafast', '-pix_fmt', plan.output.pixelFormat, '-movflags', '+faststart', outputPath]);
@@ -422,7 +442,10 @@ export async function executeMovieRenderJob(
 
     const segmentPaths: string[] = [];
     const segmentKeys: string[] = [];
+    const nativeAudioSources: Array<{ order: number; startTimeSeconds: number; durationSeconds: number; filePath: string }> = [];
+    const keepNativeAudio = (process.env.MOVIE_RENDER_KEEP_NATIVE_AUDIO ?? 'true') !== 'false';
     const shotAttempts = Number(process.env.MOVIE_RENDER_SHOT_ATTEMPTS ?? 2);
+    let canonicalTimeSeconds = 0;
     for (let index = 0; index < plan.shots.length; index += 1) {
       const shot = plan.shots[index];
       const name = `shot-${String(index + 1).padStart(3, '0')}`;
@@ -431,6 +454,10 @@ export async function executeMovieRenderJob(
       const segmentKey = `story-projects/${job.projectId}/movies/${job.id}/segments/${name}.mp4`;
       segmentPaths.push(segmentPath);
       segmentKeys.push(segmentKey);
+
+      // Download the source FIRST so native audio can be extracted on both the
+      // render and resume paths (Phase 16.5 native-SFX bed).
+      await downloadToFile(shot.sourceUrl, inputPath);
 
       // Resume: reuse a segment persisted by a prior (failed) attempt of this
       // same job, so a retry only renders the shots that never completed.
@@ -442,16 +469,26 @@ export async function executeMovieRenderJob(
           progressPercent: 10 + Math.floor(((index + 1) / plan.shots.length) * 55),
           metadata: { order: shot.order, segmentKey },
         });
-        continue;
+      } else {
+        await updateStage(prisma, job.id, 'RENDERING_SHOTS', `rendering_shot_${index + 1}`, 10 + Math.floor((index / plan.shots.length) * 55));
+        await renderShotWithRetry(inputPath, segmentPath, shot, plan, run, shotAttempts);
+        if (segmentStore) {
+          await segmentStore.upload(segmentPath, segmentKey).catch(() => undefined);
+        }
       }
 
-      await updateStage(prisma, job.id, 'RENDERING_SHOTS', `rendering_shot_${index + 1}`, 10 + Math.floor((index / plan.shots.length) * 55));
-      await downloadToFile(shot.sourceUrl, inputPath);
-      // Per-shot retry: transient ffmpeg failures retry before failing the job.
-      await renderShotWithRetry(inputPath, segmentPath, shot, plan, run, shotAttempts);
-      if (segmentStore) {
-        await segmentStore.upload(segmentPath, segmentKey).catch(() => undefined);
+      // Phase 16.5 — preserve the scene clip's native audio (MiniMax SFX) as an
+      // ambience bed in the final mix. Stills have no audio; clips without an
+      // audio stream are skipped (they stay silent, as before).
+      if (keepNativeAudio && shot.sourceType === 'VIDEO') {
+        const sourceProbe = await probeAudioAsset(inputPath, run);
+        if (sourceProbe.hasAudioStream) {
+          const nativePath = path.join(tempDir, `${name}.audio.wav`);
+          await extractNativeAudio(inputPath, nativePath, shot.renderDurationSeconds, run);
+          nativeAudioSources.push({ order: shot.order, startTimeSeconds: canonicalTimeSeconds, durationSeconds: shot.durationSeconds, filePath: nativePath });
+        }
       }
+      canonicalTimeSeconds += shot.durationSeconds;
     }
 
     await updateStage(prisma, job.id, 'ASSEMBLING', 'assembling', 72);
@@ -497,7 +534,8 @@ export async function executeMovieRenderJob(
             .map((cue) => ({ cue, trackType: track.type, trackVolume: track.volume })))
       : [];
 
-    if (audioBlueprint?.hasAudio && cuesWithSource.length > 0) {
+    const hasNativeAudio = nativeAudioSources.length > 0;
+    if ((audioBlueprint?.hasAudio && cuesWithSource.length > 0) || hasNativeAudio) {
       await updateStage(prisma, job.id, 'VERIFYING', 'mixing_audio', 89);
 
       // Every materialized cue (one that claims an audioAssetId) is resolved
@@ -617,16 +655,47 @@ export async function executeMovieRenderJob(
 
       if (sources.length > 0) {
         const mixedAudioPath = path.join(tempDir, 'mixed-audio.m4a');
+        // Phase 16.5 — include each scene clip's native audio (MiniMax SFX) as an
+        // AMBIENCE bed at its canonical start time, alongside the plan cues.
+        for (const native of nativeAudioSources) {
+          sources.push({
+            cue: {
+              cueId: `native-sfx-${native.order}`,
+              startTimeSeconds: native.startTimeSeconds,
+              endTimeSeconds: native.startTimeSeconds + native.durationSeconds,
+              trimStartSeconds: 0,
+              trimEndSeconds: null,
+              volume: 1,
+              fadeInSeconds: 0,
+              fadeOutSeconds: 0,
+              text: null,
+              performancePreset: null,
+              performanceDirection: null,
+              sequenceSceneId: null,
+              characterMemoryId: null,
+              voiceProfileId: null,
+              audioAssetId: null,
+              storageKey: null,
+              duckingEnabled: false,
+              duckingAmountDb: null,
+            } as AudioBlueprintCue,
+            trackType: 'AMBIENCE',
+            trackVolume: 1,
+            filePath: native.filePath,
+          });
+        }
         // canonicalRuntimeSeconds is the Audio Blueprint's own runtimeSeconds,
         // which is always copied directly from the Film Blueprint — never an
         // independently-derived value. Forcing the mix to this exact length
         // (pad/trim, see buildMixFilterGraph) is what keeps "Film Blueprint
         // runtime = Audio Blueprint runtime = final movie runtime" true
-        // regardless of individual cue timing.
+        // regardless of individual cue timing. Falls back to the render plan's
+        // expected duration when a shot carries native audio but the project
+        // has no audio blueprint (Phase 16.5).
         await buildMixedAudioTrack({
           sources,
-          duckingWindows: audioBlueprint.duckingWindows,
-          canonicalRuntimeSeconds: audioBlueprint.runtimeSeconds,
+          duckingWindows: audioBlueprint?.duckingWindows ?? [],
+          canonicalRuntimeSeconds: audioBlueprint?.runtimeSeconds ?? expectedDurationSeconds,
           outputPath: mixedAudioPath,
           run,
         });
