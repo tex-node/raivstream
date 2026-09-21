@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
+import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Pencil, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
@@ -379,6 +379,8 @@ export default function StoryPlaygroundPage() {
   const [previewPrompt, setPreviewPrompt] = useState<StoryScenePrompt | null>(null);
   const [historyScene, setHistoryScene] = useState<StoryScene | null>(null);
   const [openDirectorSceneIds, setOpenDirectorSceneIds] = useState<string[]>([]);
+  const [editingStory, setEditingStory] = useState(false);
+  const [editDrafts, setEditDrafts] = useState<Record<string, { title: string; summary: string; body: string }>>({});
   const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({});
   const [feedbackRatings, setFeedbackRatings] = useState<Record<string, 'UP' | 'DOWN'>>({});
   const [sceneForm, setSceneForm] = useState({
@@ -612,6 +614,34 @@ export default function StoryPlaygroundPage() {
     },
     onError: (error) => setMessage(error.message),
   });
+
+  const updateChapter = trpc.story.updateChapter.useMutation({
+    onSuccess: async () => {
+      setMessage(isR16 ? 'Story saved.' : 'Story updated.');
+      await utils.story.getProject.invalidate();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
+  const startEditingStory = () => {
+    const drafts: Record<string, { title: string; summary: string; body: string }> = {};
+    for (const chapter of chapters) {
+      drafts[chapter.id] = { title: chapter.title, summary: chapter.summary ?? '', body: chapter.body };
+    }
+    setEditDrafts(drafts);
+    setEditingStory(true);
+  };
+
+  const saveChapterEdit = (chapterId: string) => {
+    const draft = editDrafts[chapterId];
+    if (!draft || !projectId) return;
+    updateChapter.mutate({ projectId, chapterId, title: draft.title, summary: draft.summary, body: draft.body });
+  };
+
+  const cancelEditingStory = () => {
+    setEditingStory(false);
+    setEditDrafts({});
+  };
 
   const updateCharacterMemory = trpc.story.updateCharacterMemory.useMutation({
     onSuccess: async (_character, variables) => {
@@ -1328,14 +1358,53 @@ export default function StoryPlaygroundPage() {
                 </div>
 
                 <div className="space-y-8">
-                  {chapters.map((chapter) => (
-                    <article key={chapter.id} className="border-t border-[rgba(233,233,237,0.10)] pt-6 first:border-t-0 first:pt-0">
-                      <p className="mb-2 text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">Chapter {chapter.chapterNumber}</p>
-                      <h3 className="mb-3 text-2xl font-black">{chapter.title}</h3>
-                      <p className="mb-5 rounded-xl bg-[rgba(233,233,237,0.06)] px-4 py-3 font-semibold text-[var(--noc-t4)]">{chapter.summary}</p>
-                      <div className="whitespace-pre-line text-lg leading-8 text-[#243044]">{chapter.body}</div>
-                    </article>
-                  ))}
+                  {editingStory && (
+                    <p className="rounded-xl bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-bold text-[var(--noc-purple)]">
+                      {isR16 ? 'Editing mode: change the words, then save each part.' : 'Editing mode: change the title, summary, or story text, then Save each chapter. Regenerate scenes/pictures after editing.'}
+                    </p>
+                  )}
+                  {chapters.map((chapter) => {
+                    const draft = editDrafts[chapter.id];
+                    return (
+                      <article key={chapter.id} className="border-t border-[rgba(233,233,237,0.10)] pt-6 first:border-t-0 first:pt-0">
+                        <p className="mb-2 text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">Chapter {chapter.chapterNumber}</p>
+                        {editingStory && draft ? (
+                          <div className="space-y-3">
+                            <input
+                              value={draft.title}
+                              onChange={(e) => setEditDrafts({ ...editDrafts, [chapter.id]: { ...draft, title: e.target.value } })}
+                              className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-2xl font-black text-[var(--noc-t1)] outline-none"
+                            />
+                            <textarea
+                              value={draft.summary}
+                              onChange={(e) => setEditDrafts({ ...editDrafts, [chapter.id]: { ...draft, summary: e.target.value } })}
+                              rows={2}
+                              className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-2 text-sm font-semibold text-[var(--noc-t4)] outline-none"
+                            />
+                            <textarea
+                              value={draft.body}
+                              onChange={(e) => setEditDrafts({ ...editDrafts, [chapter.id]: { ...draft, body: e.target.value } })}
+                              rows={10}
+                              className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-3 py-3 text-lg leading-8 text-[#243044] outline-none"
+                            />
+                            <button
+                              onClick={() => saveChapterEdit(chapter.id)}
+                              disabled={updateChapter.isPending}
+                              className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-[var(--noc-t1)] disabled:opacity-50"
+                            >
+                              {updateChapter.isPending ? 'Saving...' : 'Save Chapter'}
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="mb-3 text-2xl font-black">{chapter.title}</h3>
+                            <p className="mb-5 rounded-xl bg-[rgba(233,233,237,0.06)] px-4 py-3 font-semibold text-[var(--noc-t4)]">{chapter.summary}</p>
+                            <div className="whitespace-pre-line text-lg leading-8 text-[#243044]">{chapter.body}</div>
+                          </>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1347,6 +1416,13 @@ export default function StoryPlaygroundPage() {
                 >
                   {continueStory.isPending ? 'Adding chapter...' : generateScenes.isPending ? 'Making scenes...' : 'Continue Story'}
                   <ChevronRight size={20} />
+                </button>
+                <button
+                  onClick={editingStory ? cancelEditingStory : startEditingStory}
+                  className="flex w-full items-center justify-between rounded-xl border border-[rgba(233,233,237,0.10)] bg-[var(--noc-page)] px-5 py-4 text-left font-black text-[var(--noc-t1)]"
+                >
+                  {editingStory ? 'Done Editing' : 'Edit Story'}
+                  <Pencil size={18} />
                 </button>
                 <button className="w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-4 text-left font-black text-[var(--noc-t1)]" onClick={() => setMessage('A funnier version tool will be added next.')}>
                   Make It Funnier

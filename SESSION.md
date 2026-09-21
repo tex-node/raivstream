@@ -274,6 +274,12 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Edit Story — story step chapter editing
+
+- New `story.updateChapter({ projectId, chapterId, title?, summary?, body? })` (moderate body; body edit clears `enhancedBody` so stale AI narrative is never shown; `story_edited` analytics).
+- Story Playground story step now has an **Edit Story** button (aside) that switches each chapter into editable title/summary/body fields with per-chapter **Save Chapter** + **Done Editing**; hint text notes that scenes/pictures should be regenerated after edits. Works on R16 too (simple copy).
+- Verified: web type-check + strict lint, api type-check, **436/436 tests**.
+
 ### 2026-09-21: PROD CANARY ACTIVE (Gate E) — fal/MiniMax + Claude 10% + GPT-4o + ElevenLabs
 
 - **fal/MiniMax (FLUX2 + H3-Max Turbo): already live in prod** — `FAL_KEY` + all switches set, `/api/ready` shows 4 providers configured / 10 capabilities enabled. This was enabled during the fal-only scene-image work; Gate-E canary monitoring now applies.

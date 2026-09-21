@@ -3495,6 +3495,47 @@ export const storyRouter = router({
       });
     }),
 
+  /** Edit a story chapter's title/summary/body (Edit Story). Body edits clear
+   * the AI-enhanced narrative so stale enhanced text is never shown. */
+  updateChapter: protectedProcedure
+    .input(z.object({
+      projectId: z.string(),
+      chapterId: z.string(),
+      title: z.string().min(1).max(160).optional(),
+      summary: z.string().max(500).optional(),
+      body: z.string().min(20).max(6000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const chapter = await ctx.prisma.storyChapter.findFirst({
+        where: { id: input.chapterId, projectId: input.projectId },
+      });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      if (input.body?.trim()) {
+        const moderation = await moderatePrompt(input.body);
+        if (!moderation.allowed) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Your edit violates our content guidelines.' });
+        }
+      }
+
+      const updated = await ctx.prisma.storyChapter.update({
+        where: { id: chapter.id },
+        data: {
+          ...(input.title !== undefined ? { title: input.title.trim() || chapter.title } : {}),
+          ...(input.summary !== undefined ? { summary: input.summary.trim() } : {}),
+          ...(input.body !== undefined ? { body: input.body.trim(), enhancedBody: null } : {}),
+        },
+      });
+      await trackStoryAnalytics(ctx, {
+        event: 'story_edited',
+        projectId: input.projectId,
+        audienceMode: project.audienceMode,
+        properties: { chapterId: chapter.id, chapterNumber: chapter.chapterNumber },
+      });
+      return updated;
+    }),
+
   updateSceneDirector: protectedProcedure
     .input(z.object({
       projectId: z.string(),
