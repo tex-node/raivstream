@@ -13,7 +13,7 @@ import {
   MODEL_FEATURE_KEY,
 } from '../lib/credits';
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
-import { moderatePrompt } from '../lib/promptModeration';
+import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 
 const SUPPORTED_MODELS = [
@@ -193,7 +193,7 @@ export const generationRouter = router({
         if (!moderation.allowed) {
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: moderation.reason ?? 'Your prompt violates our content guidelines.',
+            message: moderationRejectMessage(moderation, 'Your prompt violates our content guidelines.'),
           });
         }
       }

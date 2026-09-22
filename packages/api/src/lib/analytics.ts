@@ -36,6 +36,7 @@ export const STORY_ANALYTICS_EVENTS = [
   'asset_manager_opened',
   'asset_set_active',
   'asset_reused',
+  'story_completed_unfinished',
   'asset_favorited',
   'asset_compared',
   'asset_removed',

@@ -274,6 +274,11 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Complete-unfinished-story + flagged-phrase localization
+
+- **`story.completeUnfinishedStory`**: detects scenes without a READY image and generates them (FLUX2/fal, sequentially, per-scene failure isolation). Story tab shows a **"Complete story (N pictures missing)"** button + result banner. Verified the user's project `cmucb8c6w…` had exactly this gap: 1 chapter (5997 chars body, complete), 5 scenes, scene 4 "The Tangled Otter" with no image.
+- **Moderation flagged-phrase localization** (`promptModeration.ts`): `ModerationResult.flaggedPhrase` — the blocklist path returns the exact matched substring; the OpenAI path re-checks each clause (bounded 12) to isolate the offending phrase. New `moderationRejectMessage()` builds "… Flagged phrase: “<phrase>”. Edit or replace that phrase to continue." Applied at all 8 moderation throw sites (image, video, narration, story, edit, music, generation.create). Tests 5 (promptModeration), suite **457/457**.
+
 ### 2026-09-22: Studio is fal-only — FLUX2 + MiniMax H3 Turbo (no RunPod)
 
 - Verified prod: all story images today are `fal | fal-ai/flux-2`, all videos `fal | minimax/h3-max-turbo`; only 2 historical RunPod FLUX rows (pre-`58bfca3`, which already made the story path FLUX2/fal-only).

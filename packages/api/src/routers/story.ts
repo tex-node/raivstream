@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
-import { moderatePrompt } from '../lib/promptModeration';
+import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
@@ -2136,7 +2136,7 @@ async function generateSceneImageAsset(
 
   const moderation = await moderatePrompt(composed.prompt);
   if (!moderation.allowed) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Please try a safer picture idea.' });
+    throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Please try a safer picture idea.') });
   }
 
   const asset = await (ctx.prisma as any).storySceneAsset.create({
@@ -2525,7 +2525,7 @@ async function generateSceneVideoAsset(
 
   const moderation = await moderatePrompt(composed.prompt);
   if (!moderation.allowed) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Please try a safer animation idea.' });
+    throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Please try a safer animation idea.') });
   }
 
   const providerInfo = sceneVideoProviderInfo(input.model);
@@ -2918,7 +2918,7 @@ async function generateSpeechForCue(
 ) {
   const moderation = await moderatePrompt(input.cueText);
   if (!moderation.allowed) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Narration text violates our content guidelines.' });
+    throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Narration text violates our content guidelines.') });
   }
 
   const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
@@ -2988,7 +2988,7 @@ export const storyRouter = router({
       if (!moderation.allowed) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: moderation.reason ?? 'Please try a safer story idea.',
+          message: moderationRejectMessage(moderation, 'Please try a safer story idea.'),
         });
       }
 
@@ -3798,7 +3798,7 @@ export const storyRouter = router({
       if (input.body?.trim()) {
         const moderation = await moderatePrompt(input.body);
         if (!moderation.allowed) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Your edit violates our content guidelines.' });
+          throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Your edit violates our content guidelines.') });
         }
       }
 
@@ -4265,6 +4265,83 @@ export const storyRouter = router({
         orderBy: { shotIndex: 'asc' },
       });
       return { plan, clips };
+    }),
+
+  /**
+   * Complete an unfinished story: fills every gap left by an interrupted story
+   * generation. Today that means generating the missing scene picture for any
+   * scene that has no READY image (the most common incomplete state). Runs
+   * scenes sequentially; one failure is recorded per scene and never blocks the
+   * remaining scenes.
+   */
+  completeUnfinishedStory: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const scenes = await (ctx.prisma as any).storySceneSeed.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { orderIndex: 'asc' },
+        include: {
+          assets: { where: { assetType: 'IMAGE', status: 'READY', deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+      });
+      const missing = scenes.filter(
+        (scene: any) => scene.imageStatus !== 'READY' || !scene.assets?.[0]?.assetUrl,
+      );
+
+      if (missing.length === 0) {
+        return {
+          alreadyComplete: true as const,
+          checked: scenes.length,
+          generated: 0,
+          failed: 0,
+          skipped: 0,
+          scenes: [] as any[],
+        };
+      }
+
+      const results: any[] = [];
+      for (const scene of missing) {
+        try {
+          const result = await generateSceneImageAsset(ctx, {
+            projectId: input.projectId,
+            sceneId: scene.id,
+            model: 'FLUX2',
+            isRegeneration: false,
+          });
+          results.push({
+            sceneId: scene.id,
+            orderIndex: scene.orderIndex,
+            title: scene.title,
+            status: 'READY' as const,
+            imageUrl: (result as any)?.asset?.assetUrl ?? null,
+          });
+        } catch (error) {
+          results.push({
+            sceneId: scene.id,
+            orderIndex: scene.orderIndex,
+            title: scene.title,
+            status: 'FAILED' as const,
+            error: (error as Error).message.slice(0, 300),
+          });
+        }
+      }
+
+      await trackStoryAnalytics(ctx, {
+        event: 'story_completed_unfinished',
+        projectId: project.id,
+        audienceMode: project.audienceMode,
+        properties: { checked: scenes.length, missing: missing.length, generated: results.filter((r) => r.status === 'READY').length, failed: results.filter((r) => r.status === 'FAILED').length },
+      });
+
+      return {
+        alreadyComplete: false as const,
+        checked: scenes.length,
+        generated: results.filter((r) => r.status === 'READY').length,
+        failed: results.filter((r) => r.status === 'FAILED').length,
+        skipped: 0,
+        scenes: results,
+      };
     }),
 
   runCreativeCritic: protectedProcedure
@@ -6619,7 +6696,7 @@ export const storyRouter = router({
       const prompt = (input.prompt?.trim() || cue.text?.trim() || defaultMusicPrompt(project)).slice(0, 500);
       const moderation = await moderatePrompt(prompt);
       if (!moderation.allowed) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: moderation.reason ?? 'Music prompt violates our content guidelines.' });
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Music prompt violates our content guidelines.') });
       }
 
       const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_AUDIO_GENERATION_FEATURE_KEY);

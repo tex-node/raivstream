@@ -25,10 +25,14 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\b(rape|non-?con(sensual)?|sexual\s+assault)\b.{0,30}\b(video|image|scene|depict)\b/i,
 ];
 
-function checkBlocklist(prompt: string): string | null {
+function checkBlocklist(prompt: string): { reason: string; phrase: string } | null {
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(prompt)) {
-      return 'Your prompt contains content that violates our community guidelines and cannot be used for generation.';
+    const match = pattern.exec(prompt);
+    if (match) {
+      return {
+        reason: 'Your prompt contains content that violates our community guidelines and cannot be used for generation.',
+        phrase: match[0],
+      };
     }
   }
   return null;
@@ -105,22 +109,53 @@ async function checkOpenAI(prompt: string): Promise<string | null> {
 export interface ModerationResult {
   allowed: boolean;
   reason?: string;
+  /** The specific clause/span that triggered the flag, when it can be isolated. */
+  flaggedPhrase?: string | null;
+}
+
+function splitClauses(prompt: string): string[] {
+  const sentenceSplit = prompt.split(/\s*[.;!?\n]\s*/).filter((s) => s.trim().length >= 4);
+  if (sentenceSplit.length > 1) return sentenceSplit;
+  return prompt.split(/\s*,\s*/).filter((s) => s.trim().length >= 4);
+}
+
+/**
+ * After the whole prompt is flagged, re-check each clause so the user can see
+ * exactly which phrase is the problem (and replace/edit just that). Bounded to
+ * 12 clauses; returns null if none can be isolated.
+ */
+async function locateOpenAIFlag(prompt: string): Promise<string | null> {
+  const clauses = splitClauses(prompt).slice(0, 12);
+  for (const clause of clauses) {
+    const reason = await checkOpenAI(clause);
+    if (reason) return clause.trim();
+  }
+  return null;
 }
 
 export async function moderatePrompt(prompt: string): Promise<ModerationResult> {
   // Layer 1 — always runs, instant
-  const blocklistReason = checkBlocklist(prompt);
-  if (blocklistReason) {
+  const blocklistHit = checkBlocklist(prompt);
+  if (blocklistHit) {
     console.warn('[moderation] Blocked by local blocklist:', prompt.slice(0, 80));
-    return { allowed: false, reason: blocklistReason };
+    return { allowed: false, reason: blocklistHit.reason, flaggedPhrase: blocklistHit.phrase };
   }
 
   // Layer 2 — OpenAI (only if API key configured)
   const openaiReason = await checkOpenAI(prompt);
   if (openaiReason) {
     console.warn('[moderation] Blocked by OpenAI moderation:', prompt.slice(0, 80));
-    return { allowed: false, reason: openaiReason };
+    const phrase = await locateOpenAIFlag(prompt);
+    return { allowed: false, reason: openaiReason, flaggedPhrase: phrase };
   }
 
   return { allowed: true };
+}
+
+/** Human-facing rejection message, including the exact flagged phrase when known. */
+export function moderationRejectMessage(moderation: ModerationResult, fallback: string): string {
+  const base = moderation.reason ?? fallback;
+  const phrase = moderation.flaggedPhrase?.trim();
+  if (!phrase) return base;
+  return `${base} Flagged phrase: “${phrase}”. Edit or replace that phrase to continue.`;
 }

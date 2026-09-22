@@ -49,6 +49,9 @@ export function StoryScreen({ projectId }: { projectId: string }) {
   const continueStory = trpc.story.continueStory.useMutation({
     onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
   });
+  const completeStory = trpc.story.completeUnfinishedStory.useMutation({
+    onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
+  });
 
   if (workspaceQuery.isLoading) {
     return (
@@ -63,9 +66,11 @@ export function StoryScreen({ projectId }: { projectId: string }) {
   }
 
   const project = (workspaceQuery.data as any)?.project;
+  const summary = (workspaceQuery.data as any)?.summary;
   const chapters: any[] = project?.chapters ?? [];
   const latestChapter = chapters[chapters.length - 1] ?? null;
   const paragraphs = splitParagraphs(latestChapter?.body);
+  const missingPictures = Math.max(0, (summary?.sceneCount ?? 0) - (summary?.readyImageCount ?? 0));
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
@@ -86,16 +91,53 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                   <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 6 }}>Tap any paragraph to direct it.</p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => continueStory.mutate({ projectId })}
-                disabled={continueStory.isPending}
-                className="noc-btn-outline"
-                style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
-              >
-                {continueStory.isPending ? 'Adding…' : '+ Add Chapter'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {!isR16 && missingPictures > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => completeStory.mutate({ projectId })}
+                    disabled={completeStory.isPending}
+                    className="noc-btn-outline"
+                    style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap', color: 'var(--noc-purple)', borderColor: 'rgba(178,90,217,0.4)' }}
+                  >
+                    {completeStory.isPending
+                      ? 'Completing…'
+                      : `Complete story (${missingPictures} picture${missingPictures === 1 ? '' : 's'} missing)`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => continueStory.mutate({ projectId })}
+                  disabled={continueStory.isPending}
+                  className="noc-btn-outline"
+                  style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
+                >
+                  {continueStory.isPending ? 'Adding…' : '+ Add Chapter'}
+                </button>
+              </div>
             </div>
+
+            {completeStory.data && (completeStory.data.generated > 0 || completeStory.data.failed > 0) && (
+              <div
+                style={{
+                  borderRadius: 12,
+                  padding: 11,
+                  background: completeStory.data.failed > 0 ? 'rgba(227,93,93,0.1)' : 'rgba(79,139,214,0.1)',
+                  border: `1px solid ${completeStory.data.failed > 0 ? 'rgba(227,93,93,0.3)' : 'rgba(79,139,214,0.3)'}`,
+                }}
+              >
+                <p style={{ fontSize: 13, margin: 0, color: completeStory.data.failed > 0 ? '#e35d5d' : 'var(--noc-blue)' }}>
+                  {completeStory.data.generated > 0
+                    ? `Generated ${completeStory.data.generated} missing picture${completeStory.data.generated === 1 ? '' : 's'}.`
+                    : ''}
+                  {completeStory.data.failed > 0 ? ` ${completeStory.data.failed} could not be generated — open its Scene Director and retry.` : ''}
+                  {completeStory.data.scenes
+                    ?.filter((s: any) => s.status === 'FAILED')
+                    .map((s: any) => s.title)
+                    .join(', ')}
+                </p>
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {paragraphs.map((paragraph, i) => {
