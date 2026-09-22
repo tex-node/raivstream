@@ -65,10 +65,16 @@ const guidedQuestionSchema = z.object({
   answerOptions: z.array(z.string().min(1).max(80)).min(3).max(5),
 });
 
+// A full 3–5 scene story with deep narrative prose runs far beyond the old
+// 6000-char cap, which silently truncated every long story mid-sentence
+// (clampText even stripped the final partial word). 40000 leaves ample room
+// for the longest generated narratives while still bounding stored payloads.
+export const MAX_STORY_BODY_CHARS = 40000;
+
 export const generatedStorySchema = z.object({
   title: z.string().min(1).max(120),
   summary: z.string().min(1).max(500),
-  body: z.string().min(20).max(6000),
+  body: z.string().min(20).max(MAX_STORY_BODY_CHARS),
   ageRange: z.string().min(1).max(80),
   mainCharacterName: z.string().min(1).max(80),
   supportingCharacters: z.array(z.string().min(1).max(80)).default([]),
@@ -257,7 +263,7 @@ export function normaliseGeneratedStoryPayload(raw: unknown, sourceIdea: string)
   const record = asRecord(raw);
   if (!record) throw new Error('Story provider response was not a JSON object');
 
-  const body = clampText(coerceTextBlock(firstValue(record, ['body', 'story', 'text', 'content', 'narrative'])), 6000);
+  const body = clampText(coerceTextBlock(firstValue(record, ['body', 'story', 'text', 'content', 'narrative'])), MAX_STORY_BODY_CHARS);
   const title = clampText(stringValue(firstValue(record, ['title', 'name', 'storyTitle']), titleFromIdea(sourceIdea)), 120);
   const summary = clampText(stringValue(firstValue(record, ['summary', 'logline', 'synopsis']), body.slice(0, 400) || title), 500);
   const mainCharacterName = clampText(stringValue(
