@@ -157,13 +157,13 @@ Models: `lyria-3-clip-preview` (30s) / `lyria-3-pro-preview`; gate `LYRIA_MUSIC_
 
 ## 12. AI Narrative & Production Pipeline (Phase 16) — Claude → GPT-4o → ElevenLabs + MiniMax H3
 
-> **PLANNED.** Story composition and prompt generation move to a staged LLM pipeline whose
-> final stage targets **MiniMax H3** (native synchronized audio/SFX, durations 4–15s,
-> resolutions up to 1080P @ 24 FPS, `first_frame_image` i2v) with **ElevenLabs** scene
-> narration. All destination media infrastructure already exists in this codebase (H3_MAX
-> fal adapter, ElevenLabs `generateCueSpeech` + `AudioCue`/mixer, OpenAI enhancer, Movie
-> Builder mixer); Phase 16 adds the two upstream composition stages and the manifest that
-> binds them.
+> **IMPLEMENTED (2026-09-21).** Story composition and prompt generation run through a staged
+> LLM pipeline whose final stage targets **MiniMax H3** (native synchronized audio/SFX,
+> durations 4–15s, resolutions up to 1080P @ 24 FPS, `first_frame_image` i2v) with
+> **ElevenLabs** scene narration. All destination media infrastructure already exists in this
+> codebase (H3_MAX fal adapter, ElevenLabs `generateCueSpeech` + `AudioCue`/mixer, OpenAI
+> enhancer, Movie Builder mixer); Phase 16 added the two upstream composition stages and the
+> manifest that binds them.
 
 ### 12.1 Pipeline
 
@@ -239,3 +239,86 @@ Because MiniMax H3 generates audio natively, SFX are explicit prompt terms (e.g.
 - **Credits & gating:** fail-closed convention preserved. New switches default **OFF**: `STORY_NARRATIVE_ENGINE_ENABLED` (Stage 1) and `STORY_MANIFEST_STRUCTURER_ENABLED` (Stage 2); local/deterministic fallbacks remain. New credit-rate keys where applicable (e.g. story composition/manifest staging) via `/admin/credits`; existing `story:speech_generation` / `generate:h3_max` gates are reused for the media stages.
 - **Credentials:** `CLAUDE_API` (Anthropic) and `GPT40_API` (OpenAI GPT-4o) are staged in `cred/fal_env.txt` (gitignored) and must map to server-only env in production — never `NEXT_PUBLIC_*`. ElevenLabs uses the existing `ELEVENLABS_API_KEY` / legacy `11_LABS`.
 - **Manifest persistence:** the resolved `ProductionManifest` (with generated video/audio URLs) is persisted per project so renders are reproducible and resumable; it feeds `story.listMovieAssets` / export history.
+
+## 13. Phase 17 — Master Visual Bible, I2V continuity & multi-clip shot engine
+
+> **IMPLEMENTED (2026-09-21/22), slices 1–2.** Anti-drift overhaul: stop scenes switching
+> between photorealism and 2D/animation and stop character faces/wardrobe warping between
+> shots, plus render a scene's 5–6s `shots[]` grid as chained MiniMax H3 clips.
+
+### 13.1 Master Visual Bible (anti-drift)
+
+The ProductionManifest now carries a **visual bible** (`productionStructurer.ts`):
+`master_style` (style-lock anchor), `negative_prompt_suffix`, `characters` (per-character
+physical/wardrobe anchors), and optional per-scene `shots[]` (5–6s grid with
+`camera_setup`, `timeframe`, `video_prompt`, `transition_to_next`). The structurer system
+prompt enforces the strict camera vocabulary and the formula
+`[master_style] + [camera] + [character anchors] + [action] + [--no suffix]`, and the
+project's characterMemory is injected verbatim.
+
+**`lib/visualBible.ts` — `applyMasterVisualBible({ prompt, negativePrompt, bible, sceneCharacters, target })`**
+is the enforcement layer: prepends the style anchor, injects only the scene's character
+anchors verbatim, appends the negative suffix (real negative-prompt field for IMAGE; `--no …`
+inside the positive prompt for VIDEO, since H3 exposes no negative field). Dedupes and is
+idempotent. Applied in BOTH `generateSceneImageAsset` and `generateSceneVideoAsset` right
+before moderation — so every generation payload is locked to the bible even when an LLM
+manifest prompt (raw prose) replaces VPC2's anchor-rich prompt.
+
+### 13.2 I2V chain continuity
+
+`lib/lastFrameExtract.ts` (`extractLastFrameAsSeedImage`) extracts the LAST frame of a clip
+via ffmpeg (`-sseof -0.1`, png → R2) to use as the NEXT shot's opening frame. In
+`generateSceneVideoAsset`, the seed is resolved as: manifest `first_frame_image_url` →
+last frame of the previous scene's clip (`chainLastFrameSeedImage`) → the scene's own still.
+Fail-soft (never blocks generation).
+
+### 13.3 Multi-clip shot engine (shot grid)
+
+- **Schema:** `StorySceneAsset.shotIndex Int?` + `shotGridSeedImageUrl` (migration
+  `20260922110000_story_scene_asset_shot_index_camelcase`; camelCase columns — see §14).
+- **`lib/shotClipEngine.ts` — `buildShotClipPlan(scene)`:** pure plan builder → ordered
+  clip entries (shotId/timeframe/cameraSetup/action/videoPrompt/transition; duration =
+  scene duration ÷ shot count, clamped 4–15s).
+- **`story.generateSceneShotClips`** kicks off `runSceneShotClipChain` (detached,
+  fire-and-forget). Per shot: seed = manifest first frame (shot 0) → **last frame of the
+  previous clip** → scene still; prompt = shot `video_prompt` + bible lock; H3 submit →
+  block on `waitForGenerationOutput` → mirror to R2 → mark READY. **Resumable** (re-runs
+  skip READY clips), chain stops on first failure (asset FAILED + credit refund), guarded
+  against double-start.
+- **`story.getSceneShotClips`** returns the manifest `plan` + ordered clips
+  (READY/GENERATING/FAILED/QUEUED).
+- **Movie planner** excludes shot-indexed clips (`shotIndex: null`) from the single "hero"
+  video pick so the old flow stays deterministic (multi-clip concat per scene segment is a
+  planned follow-up).
+- **Scene Director UI:** "Shot grid — multi-clip" panel (generate/resume + per-shot status,
+  inline video preview, 5s polling while generating).
+
+### 13.4 Story completeness & moderation UX (Phase 17 tail)
+
+- **Truncation root cause fixed:** `generatedStorySchema` capped `body` at 6000 and
+  `normaliseGeneratedStoryPayload` clamped bodies to 6000 — every long story was silently
+  cut mid-sentence. `MAX_STORY_BODY_CHARS = 40000` now bounds both generation and
+  `updateChapter`. Claude narrative `max_tokens` raised 6000→16000; system prompt demands
+  complete, terminally-punctuated bodies.
+- **Complete / regenerate unfinished stories:** `story.completeUnfinishedStory` (fills scenes
+  missing a READY image, sequential, per-scene failure isolation) and `story.regenerateStoryText`
+  (re-drafts ONLY the chapter narrative text — scenes/characters/assets untouched — retries if
+  still cut). `getWorkspace.summary.storyTruncated` flags cut bodies; the story tab shows
+  "Regenerate story" + "Complete story" buttons.
+- **Moderation localization:** `moderatePrompt` returns `flaggedPhrase` — the exact blocklist
+  match, or the OpenAI-flagged clause (re-checked, bounded 12). `moderationRejectMessage`
+  surfaces it at every throw site. `suggestSafeRewrite` proposes a safe replacement for
+  graphic-violence terms; `story.suggestStoryRewrite` + the story editor's **Suggest safe
+  rewrite / Apply fix** implement the auto-fix.
+- **Ops:** `scripts/complete-truncated-story.ts` regenerates a specific project's narrative
+  text server-side (primary Claude provider; runs detached via nohup on the VPS).
+
+## 14. Database migration conventions (camelCase)
+
+`story_scene_assets` (and most tables) use **camelCase columns matching Prisma field names**
+(`sceneId`, `projectId`, `shotIndex`, ...). Prisma maps field → column as-is unless `@map` is
+used. **New migrations MUST use double-quoted camelCase identifiers** —
+`ALTER TABLE ... ADD COLUMN "fieldName" INTEGER` — never snake_case. A snake_case column
+(`shot_index`) silently broke every query touching scene assets (all stories failed to load;
+2026-09-22 incident, corrective migration `20260922110000_story_scene_asset_shot_index_camelcase`).
+Reference: `20260921110000_movie_render_keep_native_audio`.

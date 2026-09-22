@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-21 (fal generation stack DEPLOYED to production — see Recent Changes; earlier sections below predate several shipped phases and remain partially stale outside Recent Changes)
-Current GitHub commit deployed to VPS: `7a3c674` (feat(fal): production release of fal.ai generation stack + staged flow — deployed 2026-09-21)
+Last updated: 2026-09-22 (Phase 17 anti-drift overhaul + studio fal-only + story completeness + moderation localization shipped; truncated-body root cause fixed)
+Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
 
 ## Maintenance Rule
 
@@ -273,6 +273,15 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-22: Holistic documentation + safe-rewrite suggestions + editable story
+
+- **`docs/OVERVIEW.md` (new):** holistic flow-of-operation + architecture document (project at a glance, system flow from story idea → media → movie, architecture layers, data model, providers, operations, runbooks, roadmap pointer).
+- **Safe-rewrite suggestions** (`promptModeration.suggestSafeRewrite` + `story.suggestStoryRewrite`): isolates the flagged clause and maps graphic-violence terms to safe replacements (`gore→tension`, `decapitation→turn away`, `dismember→hurt`, `eviscerate→alarm`, `disembowel→frighten`, `snuff film→disturbing scenes`). Never maps sexual/CSAM/non-consensual terms (zero-tolerance). Story editor has **Suggest safe rewrite** + **Apply fix** (replaces the phrase in the textarea); auto-triggers when a Save is flagged.
+- **Edit body cap fix:** `updateChapter` schema capped `body` at 6000 — saving a full-length story failed with `too_big`. Now `MAX_STORY_BODY_CHARS` (40000), matching the generation cap.
+- **Editable story in the playground:** StoryScreen (`/story/[projectId]/story`) has an **Edit story** button (title + full-body textarea → `updateChapter`); its workspace query uses `staleTime 0` + refetch-on-focus so the completed story always shows fresh.
+- Verified prod: the completed story "Current of Hope" (10,351 chars, Maya Torres) is served in full by both `getProject` and `getWorkspace` (body:true, no remaining truncation).
+- Suite **460/460**, type-check + lint clean.
 
 ### 2026-09-22: ROOT CAUSE — truncated story bodies (6000-char app cap) — FIXED
 

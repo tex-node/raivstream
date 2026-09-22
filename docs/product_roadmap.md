@@ -1356,9 +1356,55 @@ manifest schema, MiniMax H3 prompt formula, and integration map.
   C/D/E/F discipline.
 
 **Priority:** High
-**Status:** [PLANNED]
+**Status:** [IMPLEMENTED — 2026-09-21. 16.1–16.5 shipped; full-stitch E2E 15/15 live; manifest persisted + consumed; native SFX preserved in the mix.]
 **Credentials:** `CLAUDE_API`, `GPT40_API` (staged in `cred/fal_env.txt`); ElevenLabs uses
 existing `ELEVENLABS_API_KEY` / `11_LABS`.
+
+---
+
+## Phase 17 — Anti-Drift Overhaul: Master Visual Bible, I2V Continuity & Multi-Clip Shot Engine
+
+### Objective
+
+Eliminate style drift (photorealism ↔ 2D/animation) and character warp between shots, and
+turn each scene into an ordered set of 5–6s chained MiniMax H3 clips. See
+`docs/architecture.md` §13 for the detailed architecture.
+
+### Sub-phases
+
+- **17.1 · Master Visual Bible + prompt sanitization (IMPLEMENTED).** ProductionManifest gains
+  `master_style`, `negative_prompt_suffix`, `characters`, and optional per-scene `shots[]`.
+  Structurer system prompt enforces the strict camera vocabulary + the
+  `[style]+[camera]+[character]+[action]+[--no suffix]` formula. `lib/visualBible.ts`
+  (`applyMasterVisualBible`) locks every image AND video payload (style anchor prefix +
+  character anchors + negative suffix), applied in both `generateSceneImageAsset` and
+  `generateSceneVideoAsset`.
+- **17.2 · I2V chain continuity (IMPLEMENTED).** `lib/lastFrameExtract.ts` extracts the last
+  frame of a clip (ffmpeg → R2); `generateSceneVideoAsset` seeds each scene video from the
+  previous scene's clip's final frame (manifest first frame → last-frame chain → scene still).
+- **17.3 · Multi-clip shot engine (IMPLEMENTED).** `StorySceneAsset.shotIndex` +
+  `shotGridSeedImageUrl`; `buildShotClipPlan` (lib/shotClipEngine.ts); `generateSceneShotClips`
+  runs `runSceneShotClipChain` (detached, chained last-frame seeding, bible-locked prompts,
+  resumable, per-shot credit + failure isolation); `getSceneShotClips` + Scene Director
+  "Shot grid" panel with 5s polling.
+- **17.4 · Story completeness & moderation UX (IMPLEMENTED).** Body cap root cause fixed
+  (6000 → `MAX_STORY_BODY_CHARS` 40000; Claude `max_tokens` 16000; finish-the-story prompt
+  directives). `completeUnfinishedStory` (missing scene images) + `regenerateStoryText`
+  (narrative-only, non-destructive) + `summary.storyTruncated` + "Regenerate story" button.
+  Moderation `flaggedPhrase` localization + `suggestSafeRewrite` auto-fix (gore→tension, etc.)
+  + story editor "Suggest safe rewrite / Apply fix".
+
+### Next slices (not yet built)
+
+1. **Movie wiring:** concat a scene's shot clips into its movie segment using each shot's
+   `transition_to_next` (crossfade / hard cut).
+2. **Audio-driven timing:** measure narration TTS duration first, then set the shot grid to
+   match voiceover beats.
+3. **Character turnaround sheets** (front/side) generated from the bible as reference control nets.
+4. **Sequence preview render:** concat clips with transitions, narration 100% + music ducked 15–20%.
+
+**Priority:** High
+**Status:** [IN PROGRESS — slices 1–2 (17.1–17.4) shipped 2026-09-21/22; movie wiring next]
 
 ---
 
