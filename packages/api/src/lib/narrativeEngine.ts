@@ -155,7 +155,11 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
       },
       body: JSON.stringify({
         model: claudeStoryModel(this.env),
-        max_tokens: 6000,
+        // A 3–5 scene story with deep narrative prose can exceed 6000 output
+        // tokens; the previous cap truncated long stories mid-JSON (the
+        // truncated-body bug). 16000 leaves comfortable headroom while billing
+        // only charges the tokens actually generated.
+        max_tokens: 16000,
         temperature: 0.8,
         system,
         messages,

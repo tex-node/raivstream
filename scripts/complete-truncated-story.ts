@@ -70,9 +70,12 @@ async function main() {
   let summary = '';
   let truncated = true;
   let attempts = 0;
+  // Empty userId → the narrative engine treats it as "no user context" and uses
+  // the primary Claude provider (the fallback path only runs for canary users
+  // outside the rollout; an ops script should always get the primary draft).
   while (truncated && attempts < 3) {
     attempts += 1;
-    const story = await storyTextService.generateStory(idea, answers, audienceMode, { userId: 'ops:complete-truncated-story' });
+    const story = await storyTextService.generateStory(idea, answers, audienceMode, { userId: '' });
     body = story.body;
     title = story.title ?? title;
     summary = story.summary ?? summary;
