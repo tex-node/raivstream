@@ -55,6 +55,92 @@ const DIRECTOR_GROUPS: Array<{ label: string; fields: Array<{ key: keyof typeof 
   { label: 'Pace', fields: [{ key: 'scenePace', fieldLabel: 'Pace' }] },
 ];
 
+const SHOT_STATUS_LABEL: Record<string, string> = {
+  READY: 'READY',
+  GENERATING: 'GENERATING',
+  FAILED: 'FAILED',
+  QUEUED: 'QUEUED',
+};
+
+const SHOT_STATUS_STYLE: Record<string, { background: string; color: string }> = {
+  READY: { background: 'rgba(79,139,214,0.16)', color: 'var(--noc-blue)' },
+  GENERATING: { background: 'rgba(217,70,168,0.16)', color: 'var(--noc-magenta)' },
+  FAILED: { background: 'rgba(227,93,93,0.16)', color: '#e35d5d' },
+  QUEUED: { background: 'rgba(233,233,237,0.08)', color: 'var(--noc-t5)' },
+};
+
+/**
+ * Phase 17 — multi-clip shot grid. Renders the persisted ProductionManifest's
+ * per-scene `shots[]` as a chained clip list (each clip opens on the last frame
+ * of the previous one). Polls while a clip is generating.
+ */
+function ShotGridSection({ projectId, sceneId }: { projectId: string; sceneId: string }) {
+  const shotQuery = trpc.story.getSceneShotClips.useQuery({ projectId, sceneId }, {
+    refetchInterval: (query) => {
+      const data = query.state.data as any;
+      const running = (data?.clips ?? []).some((c: any) => c.status === 'GENERATING');
+      return running ? 5000 : false;
+    },
+  });
+  const generateClips = trpc.story.generateSceneShotClips.useMutation({
+    onSuccess: () => shotQuery.refetch(),
+  });
+
+  const { plan, clips } = (shotQuery.data ?? { plan: [], clips: [] }) as any;
+  if (!Array.isArray(plan) || plan.length === 0) return null;
+
+  const clipsByIndex = new Map<number, any>((clips ?? []).map((c: any) => [c.shotIndex, c]));
+  const readyCount = (clips ?? []).filter((c: any) => c.status === 'READY').length;
+  const anyGenerating = (clips ?? []).some((c: any) => c.status === 'GENERATING');
+  const running = generateClips.isPending || anyGenerating;
+
+  return (
+    <div style={{ borderTop: '1px solid rgba(233,233,237,0.10)', paddingTop: 14 }}>
+      <span className="noc-label">Shot grid — multi-clip (MiniMax H3)</span>
+      <p style={{ fontSize: 12, color: 'var(--noc-t6)', margin: '4px 0 10px' }}>
+        {plan.length} chained {plan[0]?.durationSeconds ?? 5}s clips. Each clip opens on the last frame of the previous one, keeping characters and lighting glued together.
+      </p>
+      <button
+        type="button"
+        onClick={() => generateClips.mutate({ projectId, sceneId })}
+        disabled={running}
+        style={{ borderRadius: 12, padding: '12px 14px', fontWeight: 700, width: '100%', background: 'linear-gradient(90deg,#d946a8,#b25ad9)', color: '#0B0D14', border: 'none', cursor: running ? 'default' : 'pointer', opacity: running ? 0.5 : 1 }}
+      >
+        {running ? 'Generating clips…' : readyCount > 0 ? `Resume — ${readyCount}/${plan.length} ready` : `Generate ${plan.length} shot clips`}
+      </button>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+        {plan.map((entry: any, index: number) => {
+          const clip = clipsByIndex.get(index);
+          const status = clip?.status ?? 'QUEUED';
+          const style = SHOT_STATUS_STYLE[status] ?? SHOT_STATUS_STYLE.QUEUED;
+          return (
+            <div key={index} style={{ borderRadius: 12, border: '1px solid rgba(233,233,237,0.10)', background: 'rgba(233,233,237,0.03)', padding: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--noc-t4)' }}>SHOT {index + 1}</span>
+                <span style={{ fontSize: 11, color: 'var(--noc-t6)' }}>{entry.timeframe}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: style.background, color: style.color }}>
+                  {SHOT_STATUS_LABEL[status] ?? status}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--noc-t3)', margin: '6px 0 0' }}>{entry.cameraSetup}</p>
+              {clip?.assetUrl && status === 'READY' && (
+                <video controls src={clip.assetUrl} style={{ width: '100%', borderRadius: 10, marginTop: 8 }} />
+              )}
+              {status === 'GENERATING' && (
+                <p style={{ fontSize: 11, color: 'var(--noc-t6)', margin: '6px 0 0' }}>Generating — the next clip will open on this one&apos;s last frame…</p>
+              )}
+              {status === 'FAILED' && (
+                <p style={{ fontSize: 11, color: '#e35d5d', margin: '6px 0 0' }}>{clip?.errorMessage ?? 'Generation failed. Resume to retry from here.'}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string; sceneId: string }) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useUser();
@@ -287,6 +373,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
                   <video controls src={reviewVideoUrl} style={{ width: '100%', borderRadius: 12 }} />
                 )}
               </div>
+              <ShotGridSection projectId={projectId} sceneId={sceneId} />
             </div>
           ) : (
             <p style={{ fontSize: 12.5, color: 'var(--noc-t6)' }}>Advanced scene controls aren&apos;t shown here.</p>

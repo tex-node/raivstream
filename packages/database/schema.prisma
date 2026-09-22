@@ -1324,6 +1324,11 @@ model StorySceneAsset {
   isFavorite      Boolean               @default(false)
   selectedForStorybookAt DateTime?
   deletedAt       DateTime?
+  // Phase 17 — position of this clip within a scene's 5-6s shot grid (0-based).
+  // Null for ordinary single clips / stills. Shot clips are chained via I2V:
+  // each clip's opening frame is the last frame of the previous shot's clip.
+  shotIndex       Int?
+  shotGridSeedImageUrl String?
   selectedInSequenceScenes StorySequenceScene[] @relation("SequenceSelectedAsset")
   futureVideoSequenceScenes StorySequenceScene[] @relation("SequenceFutureVideoAsset")
   projectCovers      StoryProject[]      @relation("ProjectCover")

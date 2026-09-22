@@ -274,6 +274,24 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Phase 17 slice 2 — multi-clip shot engine (shot grid)
+
+Continues the overhaul spec #1: render a scene's 5–6s `shots[]` grid as chained MiniMax H3 clips, each seeded from the last frame of the previous clip.
+
+- **Schema:** `StorySceneAsset.shotIndex Int?` + `shotGridSeedImageUrl` (migration `20260922100000_story_scene_asset_shot_index`). Shot clips are ordinary VIDEO assets tagged with their grid position.
+- **`lib/shotClipEngine.ts`:** pure `buildShotClipPlan(scene)` → ordered clip plan (shotId/timeframe/cameraSetup/action/videoPrompt/transition + duration = scene duration / shot count, clamped 4–15s). Tested.
+- **`story.generateSceneShotClips`:** kicks off `runSceneShotClipChain` (detached, fire-and-forget). Per shot: seed = manifest first frame (shot 0) → **last frame of the previous clip** via `extractLastFrameAsSeedImage` (ffmpeg → R2) → scene still; prompt = shot `video_prompt` + `applyMasterVisualBible` (style lock + character anchors + `--no` suffix); H3 submit → block on `waitForGenerationOutput` → mirror to R2 → mark READY. Resumable: re-runs skip READY clips and continue from the first missing shot; chain stops on first failure (asset marked FAILED + credits refunded). Guards against double-start (`already_running`).
+- **`story.getSceneShotClips`:** returns the manifest `plan` + ordered clips (READY/GENERATING/FAILED/QUEUED).
+- **Movie planner:** `videoAssetsBySceneId` now excludes shot-indexed clips (`shotIndex: null`) so the single "hero" video stays deterministic (multi-clip concat per scene segment is the next slice).
+- **Scene Director UI:** "Shot grid — multi-clip" panel: generate/resume button + per-shot cards (timeframe, camera setup, status badge, inline video preview, chained-seed hint), auto-polls every 5s while a clip is generating.
+- Tests: shotClipEngine 4, full suite **452/452**, web+api type-check/lint clean.
+
+### Roadmap (next slices)
+1. **Movie wiring:** concat a scene's shot clips into its movie segment using `transition_to_next` (crossfade/hard cut).
+2. Audio-driven timing: measure narration TTS duration first, then set the shot grid to match voiceover beats.
+3. Master character turnaround sheets (front/side) from the bible as reference nets.
+4. Sequence preview render: concat clips with transitions, narration 100% + music ducked 15–20%.
+
 ### 2026-09-21: Phase 17 slice 1 — Master Visual Bible + I2V chain continuity
 
 Implements the anti-drift / continuity core of the overhaul spec (character drift & style changes):

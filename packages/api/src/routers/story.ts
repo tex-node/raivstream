@@ -6,6 +6,7 @@ import { storyTextService, type StoryAudienceMode } from '../lib/storyTextServic
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
 import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
+import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
@@ -276,6 +277,190 @@ async function chainLastFrameSeedImage(
     `story-projects/${projectId}/scenes/${previousScene.id}/seeds`,
   );
   return chained ?? fallbackUrl;
+}
+
+/**
+ * Phase 17 — multi-clip shot engine loop. Generates a scene's `shots[]` grid as
+ * ordered MiniMax H3 clips, chaining each clip's opening frame from the LAST
+ * frame of the previous clip (I2V chain continuity). Runs detached from the
+ * request (fire-and-forget) with progress persisted per shot asset; resumable —
+ * a re-run skips READY clips and continues from the first missing one.
+ * Never throws (chain failures are recorded on the shot asset and stop the run).
+ */
+async function runSceneShotClipChain(
+  ctx: any,
+  input: { projectId: string; sceneId: string },
+) {
+  try {
+    const project = await (ctx.prisma as any).storyProject.findFirst({
+      where: { id: input.projectId, userId: ctx.user.id },
+    });
+    if (!project) return;
+    const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+      where: { id: input.sceneId, projectId: input.projectId },
+      include: {
+        assets: { where: { assetType: 'IMAGE', status: 'READY' }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
+    if (!scene) return;
+    const seedImage = scene.assets?.[0];
+    if (!seedImage?.assetUrl) return;
+
+    const manifest = project.productionManifest as unknown as ProductionManifest | null;
+    const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
+    const plan = buildShotClipPlan(manifestScene);
+    if (plan.length === 0) return;
+
+    const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
+    const aspectRatio = '9:16';
+    const resolution = manifestScene?.resolution ?? '1080P';
+    const featureKey = MODEL_FEATURE_KEY.H3_MAX as string | undefined;
+
+    const existing = await (ctx.prisma as any).storySceneAsset.findMany({
+      where: { sceneId: scene.id, projectId: project.id, assetType: 'VIDEO', deletedAt: null, shotIndex: { not: null } },
+      orderBy: { shotIndex: 'asc' },
+    });
+    const readyByIndex = new Map<number, any>(
+      (existing as any[])
+        .filter((a: any) => a.shotIndex != null && a.status === 'READY')
+        .map((a: any) => [a.shotIndex as number, a] as [number, any]),
+    );
+
+    let lastClipUrl: string | null = null;
+    for (const entry of plan) {
+      const ready = readyByIndex.get(entry.shotIndex);
+      if (ready?.assetUrl) {
+        lastClipUrl = ready.assetUrl;
+        continue;
+      }
+
+      let seedImageUrl: string;
+      if (entry.shotIndex === 0) {
+        seedImageUrl = manifestScene?.first_frame_image_url ?? seedImage.assetUrl;
+      } else if (lastClipUrl) {
+        const chained = await extractLastFrameAsSeedImage(
+          lastClipUrl,
+          `story-projects/${project.id}/scenes/${scene.id}/shots/${entry.shotIndex}`,
+        );
+        seedImageUrl = chained ?? seedImage.assetUrl;
+      } else {
+        seedImageUrl = seedImage.assetUrl;
+      }
+
+      const bibleApplied = applyMasterVisualBible({
+        prompt: entry.videoPrompt || manifestScene?.minimax_video_prompt || '',
+        negativePrompt: null,
+        bible: manifest,
+        sceneCharacters: sceneCharacterNames(scene),
+        target: 'VIDEO',
+      });
+      const prompt = bibleApplied.prompt;
+
+      const asset = await (ctx.prisma as any).storySceneAsset.create({
+        data: {
+          sceneId: scene.id,
+          projectId: project.id,
+          userId: ctx.user.id,
+          assetType: 'VIDEO',
+          provider: 'fal',
+          model: 'H3_MAX',
+          composedPrompt: prompt,
+          negativePrompt: bibleApplied.negativePrompt,
+          durationSeconds: entry.durationSeconds,
+          status: 'GENERATING',
+          creativeStatus: 'DRAFT',
+          shotIndex: entry.shotIndex,
+          shotGridSeedImageUrl: seedImageUrl,
+          isLatest: false,
+        },
+      });
+
+      const generationRef = `story-shot-clip-${asset.id}`;
+      let creditsUsed = 0;
+      if (featureKey) {
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`);
+      }
+
+      const generationJob = await (ctx.prisma as any).generationJob.create({
+        data: {
+          userId: ctx.user.id,
+          model: 'H3_MAX',
+          prompt,
+          negativePrompt: bibleApplied.negativePrompt,
+          duration: entry.durationSeconds,
+          aspectRatio,
+          seedImageUrl,
+          resolution,
+          status: 'QUEUED',
+          creditsUsed: creditsUsed || 0,
+          metadata: {
+            storyProjectId: project.id,
+            storySceneId: scene.id,
+            storySceneAssetId: asset.id,
+            shotIndex: entry.shotIndex,
+            shotGrid: true,
+          },
+        },
+      });
+
+      try {
+        const submitted = await submitGenerationJob({
+          model: 'H3_MAX' as SupportedModel,
+          prompt,
+          negativePrompt: bibleApplied.negativePrompt ?? undefined,
+          duration: entry.durationSeconds,
+          aspectRatio,
+          seedImageUrl,
+          resolution,
+        });
+        await (ctx.prisma as any).generationJob.update({
+          where: { id: generationJob.id },
+          data: {
+            providerJobId: submitted.providerJobId,
+            status: submitted.outputUrl ? 'COMPLETED' : 'GENERATING',
+            outputUrl: submitted.outputUrl,
+            thumbnailUrl: submitted.thumbnailUrl,
+          },
+        });
+
+        const providerOutputUrl = await waitForGenerationOutput('H3_MAX' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
+        const r2Key = `story-projects/${project.id}/scenes/${scene.id}/shots/${entry.shotIndex}/clip-${asset.id}.mp4`;
+        const assetUrl = providerOutputUrl.startsWith('data:')
+          ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'video/mp4')) ?? providerOutputUrl
+          : await mirrorUrlToR2(providerOutputUrl, r2Key, 'video/mp4');
+
+        await (ctx.prisma as any).storySceneAsset.update({
+          where: { id: asset.id },
+          data: { status: 'READY', assetUrl, thumbnailUrl: seedImageUrl, r2Key, errorMessage: null },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_completed',
+          projectId: project.id,
+          audienceMode,
+          properties: { sceneId: scene.id, model: 'H3_MAX', generationType: 'VIDEO', shotIndex: entry.shotIndex, shotGrid: true },
+        });
+        lastClipUrl = assetUrl;
+        readyByIndex.set(entry.shotIndex, { ...ready, status: 'READY', assetUrl });
+      } catch (error) {
+        await (ctx.prisma as any).storySceneAsset.update({
+          where: { id: asset.id },
+          data: { status: 'FAILED', errorMessage: (error as Error).message.slice(0, 1000) },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_failed',
+          projectId: project.id,
+          audienceMode,
+          properties: { sceneId: scene.id, model: 'H3_MAX', generationType: 'VIDEO', shotIndex: entry.shotIndex, shotGrid: true },
+        });
+        if (creditsUsed > 0 && featureKey) {
+          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed').catch(() => undefined);
+        }
+        break; // chain stops at the first failure — resumable on the next request
+      }
+    }
+  } catch (error) {
+    console.error('[shotClipEngine] chain failed:', (error as Error).message);
+  }
 }
 
 function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryAudienceMode): StoryAudienceMode {
@@ -731,6 +916,9 @@ async function movieRenderContext(ctx: any, projectId: string, sequenceId?: stri
         assetType: 'VIDEO',
         status: 'READY',
         deletedAt: null,
+        // Phase 17 — shot-grid clips are consumed by the multi-clip engine, not
+        // as the scene's single "hero" video, so exclude them here.
+        shotIndex: null,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -4041,6 +4229,63 @@ export const storyRouter = router({
       resolution: z.string().max(20).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, { ...input, isRegeneration: true })),
+
+  /**
+   * Phase 17 — multi-clip shot engine. Kicks off generation of the scene's
+   * `shots[]` grid (from the persisted ProductionManifest) as chained MiniMax
+   * H3 clips, each seeded from the last frame of the previous clip. Runs
+   * detached; progress is read via getSceneShotClips. Resumable: a re-run
+   * skips READY clips and continues from the first missing shot.
+   */
+  generateSceneShotClips: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+        select: { id: true, orderIndex: true },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      const manifest = project.productionManifest as unknown as ProductionManifest | null;
+      const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
+      const plan = buildShotClipPlan(manifestScene);
+      if (plan.length === 0) {
+        return { started: false as const, reason: 'no_shot_grid', shotCount: 0 };
+      }
+      const inflight = await (ctx.prisma as any).storySceneAsset.count({
+        where: { sceneId: input.sceneId, projectId: input.projectId, assetType: 'VIDEO', shotIndex: { not: null }, status: 'GENERATING' },
+      });
+      if (inflight > 0) {
+        return { started: false as const, reason: 'already_running', shotCount: plan.length };
+      }
+      void runSceneShotClipChain(ctx, { projectId: input.projectId, sceneId: input.sceneId });
+      return {
+        started: true as const,
+        shotCount: plan.length,
+        durationPerShot: plan[0].durationSeconds,
+        resolution: manifestScene?.resolution ?? '1080P',
+      };
+    }),
+
+  /** Phase 17 — read a scene's shot-grid clips + the manifest plan for the grid. */
+  getSceneShotClips: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+      const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+        select: { orderIndex: true },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      const manifest = project.productionManifest as unknown as ProductionManifest | null;
+      const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
+      const plan = buildShotClipPlan(manifestScene);
+      const clips = await (ctx.prisma as any).storySceneAsset.findMany({
+        where: { sceneId: input.sceneId, projectId: input.projectId, assetType: 'VIDEO', shotIndex: { not: null }, deletedAt: null },
+        orderBy: { shotIndex: 'asc' },
+      });
+      return { plan, clips };
+    }),
 
   runCreativeCritic: protectedProcedure
     .input(z.object({
