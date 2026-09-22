@@ -286,12 +286,19 @@ async function assembleMovie(segmentPaths: string[], outputPath: string, plan: M
   const args = ['-y'];
   for (const segmentPath of segmentPaths) args.push('-i', segmentPath);
 
+  // settb=AVTB on every branch: xfade demands matching input timebases, and the
+  // concat chain otherwise ends up on the setpts default (1/1e6) while the
+  // fps-filtered per-shot branches sit on 1/fps — a guaranteed xfade configure
+  // failure ("First input link timebase do not match").
   let filter = '';
   for (let index = 0; index < segmentPaths.length; index += 1) {
-    filter += `[${index}:v]setpts=PTS-STARTPTS,fps=${plan.output.fps},format=${plan.output.pixelFormat},setsar=1[s${index}];`;
+    filter += `[${index}:v]setpts=PTS-STARTPTS,fps=${plan.output.fps},settb=AVTB,format=${plan.output.pixelFormat},setsar=1[s${index}];`;
   }
   let currentLabel = '[s0]';
+  // Timeline length (what the audience sees) drives the xfade offset; the
+  // actually-rendered segment length drives the validity clamp below.
   let assembledDurationSeconds = plan.shots[0]?.durationSeconds ?? 0;
+  let assembledSegmentSeconds = plan.shots[0]?.renderDurationSeconds ?? 0;
   let outputLabel = '';
 
   for (let index = 1; index < segmentPaths.length; index += 1) {
@@ -299,13 +306,22 @@ async function assembleMovie(segmentPaths: string[], outputPath: string, plan: M
     const xfade = transitionName(shot.transition);
     outputLabel = `[v${index}]`;
     if (xfade && shot.transitionDurationSeconds > 0) {
+      // xfade overlaps the tail of the accumulated chain with the start of the
+      // next segment and requires the accumulated input to be at least
+      // offset+duration long. Clamp the offset so it never exceeds the length
+      // the concat chain actually renders (renderDurationSeconds), which is
+      // frame-quantized and can be a hair short of the planned timeline length
+      // — an out-of-range offset is the other classic xfade configure failure.
       const offset = Math.max(0, assembledDurationSeconds - shot.transitionDurationSeconds);
-      filter += `${currentLabel}[s${index}]xfade=transition=${xfade}:duration=${shot.transitionDurationSeconds}:offset=${offset.toFixed(3)}${outputLabel};`;
+      const maxOffset = Math.max(0, assembledSegmentSeconds - shot.transitionDurationSeconds);
+      const safeOffset = Math.min(offset, maxOffset);
+      filter += `${currentLabel}[s${index}]xfade=transition=${xfade}:duration=${shot.transitionDurationSeconds}:offset=${safeOffset.toFixed(3)}${outputLabel};`;
     } else {
-      filter += `${currentLabel}[s${index}]concat=n=2:v=1:a=0${outputLabel};`;
+      filter += `${currentLabel}[s${index}]concat=n=2:v=1:a=0,settb=AVTB${outputLabel};`;
     }
     currentLabel = outputLabel;
     assembledDurationSeconds += shot.durationSeconds;
+    assembledSegmentSeconds += shot.renderDurationSeconds;
   }
 
   args.push(

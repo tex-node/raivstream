@@ -274,6 +274,14 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: ffmpeg exit 234 — root cause found & fixed (assemble xfade timebase)
+
+- User pasted the full failing command: the 5-shot assemble with a trailing `xfade` (offset 23.2s). Reproduced locally with portable ffmpeg 9.0.2 + synthetic 720×1280/30fps segments.
+- **Root cause:** in `assembleMovie`, per-shot branches ran `fps=30` (timebase 1/30) while the concat chain kept `setpts`' default timebase (1/1e6). `xfade` requires matching input timebases → `First input link timebase do not match` → configure failure (exit -22 locally, 234 on the VPS build).
+- **Fix:** every branch (per-shot inputs and every concat output) now ends with `settb=AVTB`; the xfade offset is also clamped to the actually-rendered segment length (`maxOffset = assembledSegmentSeconds - transitionDurationSeconds`) so a frame-short concat can't exceed xfade's `offset+duration` bound. Verified end-to-end: fixed graph renders the 5-shot plan to exactly 30.0s.
+- Regression test added (`movieRenderWorker.test.ts`, asserts `settb=AVTB` + clamped offset in the filter graph). Suite 437/437, type-check clean.
+- The failed job's rendered segments are cached in R2, so a retry reuses them and only re-runs the (now-fixed) assemble.
+
 ### 2026-09-21: Asset reuse across stories + ffmpeg-234 diagnostics
 
 - **#2 Asset reuse (done):** new `story.reuseSceneAsset({ assetId, targetProjectId, targetSceneId? })` — same-story reuse shares the R2 object (same project keyspace) and copies the row; cross-story reuse re-mirrors the R2 object into the target project's namespace (`story-projects/{target}/scenes/{scene}/assets/...`) so cleanup stays per-project. Target scene is picked from the target story or auto-created ("Reused asset"). Assets tab gains a **Reuse** button per asset → story+scene picker modal. New `asset_reused` analytics event.
