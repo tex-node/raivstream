@@ -1035,8 +1035,25 @@ export default function StoryWorkspacePage() {
       trackSequenceAnalytics.mutate({ projectId, sequenceId: sequence.id, event: 'sequence_preview_started', properties: { shotIndex: previewShotIndex + 1, runtimeSeconds: data.runtime.totalRuntimeSeconds } });
     };
 
+    // Every READY asset for the scene, pictures AND videos, including ones
+    // previously discarded (creativeStatus REJECTED) so the shot can be swapped
+    // back to any asset from this scene's library. Videos sort after pictures.
     const selectedAssets = selected
-      ? (selected.storyScene.assets ?? []).filter((asset) => asset.assetType === 'IMAGE' && asset.status === 'READY' && asset.creativeStatus !== 'REJECTED')
+      ? (selected.storyScene.assets ?? [])
+          .filter((asset) => asset.status === 'READY')
+          .sort((a: any, b: any) => (a.assetType === 'VIDEO' ? 1 : 0) - (b.assetType === 'VIDEO' ? 1 : 0))
+          .map((asset: any) => ({
+            ...asset,
+            discarded: asset.creativeStatus === 'REJECTED',
+            statusLabel:
+              asset.creativeStatus === 'APPROVED' ? 'Approved'
+              : selected.storyScene.activeImageAssetId === asset.id ? 'Active'
+              : asset.isFavorite ? 'Favorite'
+              : asset.isLatest ? 'Latest'
+              : asset.creativeStatus === 'REJECTED' ? 'Discarded'
+              : asset.assetType === 'VIDEO' ? 'Clip'
+              : 'Previous',
+          }))
       : [];
 
     return (
@@ -1176,7 +1193,41 @@ export default function StoryWorkspacePage() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  <label className="block text-xs font-black uppercase text-[var(--noc-t4)]">Picture<select value={selected.selectedAssetId ?? ''} onChange={(event) => updateSequenceEntry(selected, { selectedAssetId: event.target.value || null })} className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm normal-case text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]"><option value="">Auto / active image</option>{selectedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.creativeStatus === 'APPROVED' ? 'Approved' : selected.storyScene.activeImageAssetId === asset.id ? 'Active' : asset.isFavorite ? 'Favorite' : asset.isLatest ? 'Latest' : 'Legacy'} - {dateLabel(asset.createdAt)}</option>)}</select></label>
+                  <div>
+                    <p className="text-xs font-black uppercase text-[var(--noc-t4)]">Picture — replace with any asset from this scene&apos;s library</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateSequenceEntry(selected, { selectedAssetId: null })}
+                        className={`flex aspect-[4/3] flex-col items-center justify-center gap-1 rounded-xl border text-[11px] font-black ${selected.selectedAssetId == null ? 'border-[var(--noc-purple)] bg-[rgba(178,90,217,0.12)] text-[var(--noc-t1)]' : 'border-[rgba(233,233,237,0.12)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
+                      >
+                        <Camera size={18} />
+                        Auto / active
+                      </button>
+                      {selectedAssets.map((asset) => {
+                        const isSelected = selected.selectedAssetId === asset.id;
+                        return (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            onClick={() => updateSequenceEntry(selected, { selectedAssetId: asset.id })}
+                            title={`${asset.statusLabel} · ${asset.assetType === 'VIDEO' ? 'video' : 'picture'} · ${dateLabel(asset.createdAt)}`}
+                            className={`relative aspect-[4/3] overflow-hidden rounded-xl border text-left ${isSelected ? 'border-[var(--noc-purple)] ring-2 ring-[var(--noc-purple)]/50' : 'border-[rgba(233,233,237,0.12)]'} ${asset.discarded ? 'opacity-75 saturate-50' : ''}`}
+                          >
+                            {asset.thumbnailUrl ?? asset.assetUrl ? (
+                              <img src={asset.thumbnailUrl ?? asset.assetUrl!} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-[rgba(233,233,237,0.06)] text-[var(--noc-t4)]">
+                                {asset.assetType === 'VIDEO' ? <Clapperboard size={22} /> : <ImagePlus size={22} />}
+                              </div>
+                            )}
+                            <span className="absolute left-1 top-1 rounded-[6px] bg-[rgba(10,11,18,0.75)] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">{asset.assetType === 'VIDEO' ? 'Vid' : 'Pic'}</span>
+                            <span className="absolute bottom-1 left-1 rounded-[6px] bg-[rgba(10,11,18,0.75)] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">{asset.statusLabel}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="text-xs font-black uppercase text-[var(--noc-t4)]">Duration<select value={DURATION_OPTIONS.includes(selected.durationSeconds as any) ? String(selected.durationSeconds) : 'custom'} onChange={(event) => event.target.value !== 'custom' && updateSequenceEntry(selected, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm normal-case text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]">{DURATION_OPTIONS.map((item) => <option key={item} value={item}>{item}s</option>)}<option value="custom">Custom</option></select></label>
                     <label className="text-xs font-black uppercase text-[var(--noc-t4)]">Custom<input type="number" min={0.5} max={60} step={0.5} value={selected.durationSeconds} onChange={(event) => updateSequenceEntry(selected, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm normal-case text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]" /></label>
