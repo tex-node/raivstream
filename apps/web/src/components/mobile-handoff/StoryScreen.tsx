@@ -37,9 +37,18 @@ export function StoryScreen({ projectId }: { projectId: string }) {
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },
-    { enabled: Boolean(isLoaded && isSignedIn && projectId) },
+    { enabled: Boolean(isLoaded && isSignedIn && projectId), staleTime: 0, refetchOnWindowFocus: true },
   );
   const utils = trpc.useUtils();
+  const updateChapter = trpc.story.updateChapter.useMutation({
+    onSuccess: () => {
+      utils.story.getWorkspace.invalidate({ projectId });
+      setEditingStory(false);
+    },
+  });
+  const [editingStory, setEditingStory] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
   const rewriteParagraph = trpc.story.rewriteParagraph.useMutation({
     onSuccess: () => {
       utils.story.getWorkspace.invalidate({ projectId });
@@ -95,7 +104,21 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                   <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 6 }}>Tap any paragraph to direct it.</p>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!isR16 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTitle(latestChapter.title);
+                      setEditBody(latestChapter.body ?? '');
+                      setEditingStory(true);
+                    }}
+                    className="noc-btn-outline"
+                    style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
+                  >
+                    Edit story
+                  </button>
+                )}
                 {storyTruncated && (
                   <button
                     type="button"
@@ -142,6 +165,46 @@ export function StoryScreen({ projectId }: { projectId: string }) {
             {regenerateStoryText.isPending && (
               <div style={{ borderRadius: 12, padding: 11, background: 'rgba(79,139,214,0.1)', border: '1px solid rgba(79,139,214,0.3)' }}>
                 <p style={{ fontSize: 13, margin: 0, color: 'var(--noc-blue)' }}>Rewriting the full story…</p>
+              </div>
+            )}
+
+            {editingStory && (
+              <div style={{ borderRadius: 16, border: '1px solid rgba(178,90,217,0.35)', background: 'rgba(178,90,217,0.07)', padding: 14 }}>
+                <span className="noc-label">Edit story</span>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Story title"
+                  style={{ marginTop: 8, width: '100%', borderRadius: 10, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.05)', color: 'var(--noc-t1)', fontSize: 14, padding: '10px 12px', outline: 'none' }}
+                />
+                <textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  rows={18}
+                  placeholder="Write the full story here…"
+                  style={{ marginTop: 8, width: '100%', borderRadius: 10, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.05)', color: 'var(--noc-t1)', fontSize: 15, lineHeight: 1.6, padding: '12px', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    disabled={updateChapter.isPending}
+                    onClick={() => updateChapter.mutate({ projectId, chapterId: latestChapter.id, title: editTitle, summary: latestChapter.summary ?? '', body: editBody })}
+                    style={{ flex: 1, borderRadius: 10, border: 'none', background: 'var(--noc-purple)', padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0B0D12', cursor: updateChapter.isPending ? 'default' : 'pointer', opacity: updateChapter.isPending ? 0.6 : 1 }}
+                  >
+                    {updateChapter.isPending ? 'Saving…' : 'Save story'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingStory(false)}
+                    style={{ borderRadius: 10, border: '1px solid rgba(233,233,237,0.14)', background: 'transparent', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-t1)', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {updateChapter.error && (
+                  <p style={{ fontSize: 12.5, color: '#e35d5d', margin: '8px 0 0' }}>{updateChapter.error.message}</p>
+                )}
               </div>
             )}
 
