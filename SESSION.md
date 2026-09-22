@@ -274,6 +274,15 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: ROOT CAUSE — truncated story bodies (6000-char app cap) — FIXED
+
+- User's story "Currents of Courage" (cmucb8c6w…) ended mid-sentence at "SCENE 4 … The ". Investigated: chapter body was cut at ~6000 chars.
+- Chased several red herrings (Claude max_tokens 6000→16000, system prompt directives) — the REAL cause was in the app: `generatedStorySchema` capped `body` at `.max(6000)` and `normaliseGeneratedStoryPayload` clamped bodies to 6000 (`clampText`, which even stripped the final partial word). EVERY story over 6000 chars was silently truncated mid-sentence.
+- **Fix:** `MAX_STORY_BODY_CHARS = 40000` (schema + clamp). Kept max_tokens=16000 + the "finish the story" prompt directives.
+- **User's story completed via `scripts/complete-truncated-story.ts`:** regenerated the chapter narrative text (Claude, primary provider) → **"Current of Hope", 10,351 chars, truncated=false, character Maya Torres (matches the scenes)**. Scenes + images untouched.
+- Also shipped earlier this session: `regenerateStoryText` proc + story-builder "Regenerate story" button + truncation banner (`summary.storyTruncated`); moderation flagged-phrase localization; fal-only studio; complete-unfinished-story (scene images).
+- Note: the completion script runs detached via nohup on the VPS (ssh hangs on the process group).
+
 ### 2026-09-22: Complete-unfinished-story + flagged-phrase localization
 
 - **`story.completeUnfinishedStory`**: detects scenes without a READY image and generates them (FLUX2/fal, sequentially, per-scene failure isolation). Story tab shows a **"Complete story (N pictures missing)"** button + result banner. Verified the user's project `cmucb8c6w…` had exactly this gap: 1 chapter (5997 chars body, complete), 5 scenes, scene 4 "The Tangled Otter" with no image.
