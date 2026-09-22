@@ -159,3 +159,49 @@ export function moderationRejectMessage(moderation: ModerationResult, fallback: 
   if (!phrase) return base;
   return `${base} Flagged phrase: “${phrase}”. Edit or replace that phrase to continue.`;
 }
+
+// ─── Safe-rewrite suggestions ─────────────────────────────────────────────────
+// Word-level replacements for the graphic-violence blocklist terms so the user
+// can auto-fix a flagged phrase instead of guessing. Deliberately NEVER maps
+// sexual / CSAM / non-consensual terms — those are zero-tolerance, no rewrite.
+
+const VIOLENCE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\bgore\b/gi, replacement: 'tension' },
+  { pattern: /\bdecapitat(e[sd]?|ions?|ing)\b/gi, replacement: 'turn away' },
+  { pattern: /\bdismember(ed|ing|ment|s)?\b/gi, replacement: 'hurt' },
+  { pattern: /\beviscerat(e[sd]?|ions?|ing)\b/gi, replacement: 'alarm' },
+  { pattern: /\bdisembowel(ed|ing|ment|s)?\b/gi, replacement: 'frighten' },
+  { pattern: /\bsnuff\s+films?\b/gi, replacement: 'disturbing scenes' },
+];
+
+export interface SafeRewriteSuggestion {
+  /** The clause that was flagged (null when the text is clean). */
+  flaggedPhrase: string | null;
+  /** A safe rewrite of that clause (null when no dictionary replacement applies). */
+  safeRewrite: string | null;
+}
+
+/**
+ * Isolate the flagged clause (same logic as moderatePrompt) and, when it
+ * contains a known graphic-violence term, propose a safe word-level rewrite.
+ * Returns `{ flaggedPhrase: null, safeRewrite: null }` for clean text and
+ * `{ flaggedPhrase, safeRewrite: null }` when flagged but no known term maps.
+ */
+export async function suggestSafeRewrite(text: string): Promise<SafeRewriteSuggestion> {
+  const blocklistHit = checkBlocklist(text);
+  let flaggedPhrase: string | null = blocklistHit?.phrase ?? null;
+  if (!flaggedPhrase) {
+    const openaiReason = await checkOpenAI(text);
+    if (openaiReason) {
+      flaggedPhrase = await locateOpenAIFlag(text);
+    }
+  }
+  if (!flaggedPhrase) return { flaggedPhrase: null, safeRewrite: null };
+
+  let rewritten = flaggedPhrase;
+  for (const { pattern, replacement } of VIOLENCE_REPLACEMENTS) {
+    rewritten = rewritten.replace(pattern, replacement);
+  }
+  const safeRewrite = rewritten !== flaggedPhrase ? rewritten : null;
+  return { flaggedPhrase, safeRewrite };
+}

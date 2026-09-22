@@ -44,11 +44,27 @@ export function StoryScreen({ projectId }: { projectId: string }) {
     onSuccess: () => {
       utils.story.getWorkspace.invalidate({ projectId });
       setEditingStory(false);
+      setSuggestionRequested(false);
+    },
+    onError: (error) => {
+      if (error.message.includes('Flagged')) setSuggestionRequested(true);
     },
   });
   const [editingStory, setEditingStory] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [suggestionRequested, setSuggestionRequested] = useState(false);
+  const suggestRewrite = trpc.story.suggestStoryRewrite.useQuery(
+    { text: editBody },
+    { enabled: suggestionRequested, retry: false },
+  );
+
+  const applySuggestion = () => {
+    const suggestion = suggestRewrite.data;
+    if (!suggestion?.flaggedPhrase || !suggestion.safeRewrite) return;
+    setEditBody((body) => body.split(suggestion.flaggedPhrase!).join(suggestion.safeRewrite!));
+    setSuggestionRequested(false);
+  };
   const rewriteParagraph = trpc.story.rewriteParagraph.useMutation({
     onSuccess: () => {
       utils.story.getWorkspace.invalidate({ projectId });
@@ -196,6 +212,14 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                   </button>
                   <button
                     type="button"
+                    disabled={suggestionRequested}
+                    onClick={() => setSuggestionRequested(true)}
+                    style={{ borderRadius: 10, border: '1px solid rgba(178,90,217,0.4)', background: 'rgba(178,90,217,0.08)', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-purple)', cursor: suggestionRequested ? 'default' : 'pointer', opacity: suggestionRequested ? 0.6 : 1 }}
+                  >
+                    {suggestionRequested ? 'Checking…' : 'Suggest safe rewrite'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setEditingStory(false)}
                     style={{ borderRadius: 10, border: '1px solid rgba(233,233,237,0.14)', background: 'transparent', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-t1)', cursor: 'pointer' }}
                   >
@@ -204,6 +228,31 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 </div>
                 {updateChapter.error && (
                   <p style={{ fontSize: 12.5, color: '#e35d5d', margin: '8px 0 0' }}>{updateChapter.error.message}</p>
+                )}
+                {suggestRewrite.data?.flaggedPhrase && (
+                  <div style={{ borderRadius: 10, marginTop: 10, padding: 10, background: 'rgba(227,93,93,0.1)', border: '1px solid rgba(227,93,93,0.3)' }}>
+                    <p style={{ fontSize: 12.5, margin: 0, color: '#e35d5d' }}>
+                      Flagged: “{suggestRewrite.data.flaggedPhrase}”
+                    </p>
+                    {suggestRewrite.data.safeRewrite ? (
+                      <>
+                        <p style={{ fontSize: 12.5, margin: '6px 0 0', color: 'var(--noc-t2)' }}>
+                          Suggested fix: “{suggestRewrite.data.safeRewrite}”
+                        </p>
+                        <button
+                          type="button"
+                          onClick={applySuggestion}
+                          style={{ marginTop: 8, borderRadius: 8, border: 'none', background: 'var(--noc-blue)', padding: '8px 12px', fontSize: 12.5, fontWeight: 800, color: '#0B0D12', cursor: 'pointer' }}
+                        >
+                          Apply fix
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ fontSize: 12.5, margin: '6px 0 0', color: 'var(--noc-t4)' }}>
+                        No automatic replacement found — edit the flagged phrase above, then save.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}

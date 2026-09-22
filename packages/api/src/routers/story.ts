@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
-import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
-import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
+import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
+import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
 import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
@@ -3864,7 +3864,7 @@ export const storyRouter = router({
       chapterId: z.string(),
       title: z.string().min(1).max(160).optional(),
       summary: z.string().max(500).optional(),
-      body: z.string().min(20).max(6000).optional(),
+      body: z.string().min(20).max(MAX_STORY_BODY_CHARS).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
@@ -3896,6 +3896,11 @@ export const storyRouter = router({
       });
       return updated;
     }),
+
+  /** Suggest a safe rewrite for a flagged story/phrase (auto-fix for prohibited expressions). */
+  suggestStoryRewrite: protectedProcedure
+    .input(z.object({ text: z.string().min(1).max(MAX_STORY_BODY_CHARS) }))
+    .query(async ({ input }) => suggestSafeRewrite(input.text)),
 
   /** Rewrite ONE paragraph per a directive (e.g. "Develop this idea"). Splits the
    * chapter body on blank lines (matching the client splitter), rewrites the
