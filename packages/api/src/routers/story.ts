@@ -6849,7 +6849,7 @@ export const storyRouter = router({
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       assertSequenceAllowed(ctx); await ensureProject(ctx, input.projectId);
-      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) return [];
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) return ELEVENLABS_CURATED_VOICES;
       const voices = await listElevenLabsVoices();
       return voices.length > 0 ? voices : ELEVENLABS_CURATED_VOICES;
     }),

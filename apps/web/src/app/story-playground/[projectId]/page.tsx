@@ -388,8 +388,14 @@ export default function StoryWorkspacePage() {
   const updateAudioTrack = trpc.story.updateTrack.useMutation({ onSuccess: () => refreshAudio('Track updated.') });
   const addAudioCue = trpc.story.addCue.useMutation({ onSuccess: () => refreshAudio('Cue added.') });
   const updateAudioCue = trpc.story.updateCue.useMutation({ onSuccess: () => refreshAudio('Cue updated.') });
-  const generateCueSpeech = trpc.story.generateCueSpeech.useMutation({ onSuccess: () => refreshAudio('Narration generated.') });
-  const generateCueMusic = trpc.story.generateCueMusic.useMutation({ onSuccess: () => refreshAudio('Music generated.') });
+  const generateCueSpeech = trpc.story.generateCueSpeech.useMutation({
+    onSuccess: () => refreshAudio('Narration generated.'),
+    onError: (err) => setMessage(err.message),
+  });
+  const generateCueMusic = trpc.story.generateCueMusic.useMutation({
+    onSuccess: () => refreshAudio('Music generated.'),
+    onError: (err) => setMessage(err.message),
+  });
   const narrationVoicesQuery = trpc.story.listNarrationVoices.useQuery(
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn) },
@@ -397,6 +403,8 @@ export default function StoryWorkspacePage() {
   const narrationVoices = (narrationVoicesQuery.data ?? []) as Array<{ voiceId: string; name: string }>;
   const [narrationVoiceId, setNarrationVoiceId] = useState('');
   const [musicPrompt, setMusicPrompt] = useState('');
+  const [cueTextDraft, setCueTextDraft] = useState('');
+  const [cuePerformanceDraft, setCuePerformanceDraft] = useState('');
   const [keepNativeAudio, setKeepNativeAudio] = useState(true);
   const [showMixer, setShowMixer] = useState(false);
   const setProjectCover = trpc.story.setProjectCover.useMutation({ onSuccess: () => refresh('Cover updated.') });
@@ -486,6 +494,21 @@ export default function StoryWorkspacePage() {
     if (tab === 'audio' && !isR16) utils.story.getAudioPlan.invalidate({ projectId });
     if (tab === 'film' && !isR16) utils.story.getMovieBuilder.invalidate({ projectId });
   }, [tab, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync draft state when the selected cue changes so text inputs are not
+  // controlled by the server value (which causes characters to disappear while
+  // the round-trip mutation is in flight).
+  useEffect(() => {
+    const planData = audioPlanQuery.data as any;
+    const tracks: any[] = planData?.plan?.tracks ?? [];
+    const cue = tracks.flatMap((t) => t.cues as any[]).find((c) => c.id === selectedCueId) ?? null;
+    setCueTextDraft(cue?.text ?? '');
+    setCuePerformanceDraft(cue?.performanceDirection ?? '');
+    setNarrationVoiceId('');
+    if (cue?.trackType === 'MUSIC' || cue?.trackType === 'AMBIENCE') {
+      setMusicPrompt(cue.text ?? '');
+    }
+  }, [selectedCueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!sequencePlaying || isR16) return;
@@ -1529,8 +1552,9 @@ export default function StoryWorkspacePage() {
                         </select>
                       </label>
                       <textarea
-                        value={selectedCue.text ?? ''}
-                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, text: e.target.value })}
+                        value={cueTextDraft}
+                        onChange={(e) => setCueTextDraft(e.target.value)}
+                        onBlur={() => { if (cueTextDraft !== (selectedCue.text ?? '')) updateAudioCue.mutate({ projectId, cueId: selectedCue.id, text: cueTextDraft }); }}
                         placeholder="Line or narration text"
                         rows={3}
                         className="w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3 text-sm font-semibold text-[var(--noc-t1)]"
@@ -1547,8 +1571,15 @@ export default function StoryWorkspacePage() {
                       </label>
                       <button
                         type="button"
-                        onClick={() => generateCueSpeech.mutate({ projectId, cueId: selectedCue.id, voiceId: narrationVoiceId || undefined })}
-                        disabled={!selectedCue.text?.trim() || generateCueSpeech.isPending}
+                        onClick={() => {
+                          const doGenerate = () => generateCueSpeech.mutate({ projectId, cueId: selectedCue.id, voiceId: narrationVoiceId || undefined });
+                          if (cueTextDraft !== (selectedCue.text ?? '')) {
+                            updateAudioCue.mutate({ projectId, cueId: selectedCue.id, text: cueTextDraft }, { onSuccess: doGenerate });
+                          } else {
+                            doGenerate();
+                          }
+                        }}
+                        disabled={!cueTextDraft.trim() || generateCueSpeech.isPending}
                         className="inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
                       >
                         {generateCueSpeech.isPending ? <Loader2 className="animate-spin" size={14} /> : <Mic size={14} />}
@@ -1566,8 +1597,9 @@ export default function StoryWorkspacePage() {
                       })()}
                       <label className="block text-xs font-bold text-[var(--noc-t4)]">Performance
                         <input
-                          value={selectedCue.performanceDirection ?? ''}
-                          onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, performanceDirection: e.target.value })}
+                          value={cuePerformanceDraft}
+                          onChange={(e) => setCuePerformanceDraft(e.target.value)}
+                          onBlur={() => { if (cuePerformanceDraft !== (selectedCue.performanceDirection ?? '')) updateAudioCue.mutate({ projectId, cueId: selectedCue.id, performanceDirection: cuePerformanceDraft }); }}
                           placeholder="e.g. curious, then excited"
                           className="mt-1 w-full rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-semibold text-[var(--noc-t1)]"
                         />
