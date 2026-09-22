@@ -1137,7 +1137,7 @@ type ScenePromptContext = {
   };
 };
 
-type SceneImageModel = 'FLUX' | 'FLUX2' | 'GROK_IMAGINE' | 'NANO_BANANA';
+type SceneImageModel = 'FLUX2';
 type SceneVideoModel = 'H3_MAX';
 
 const PROMPT_PROVIDER_META: Record<PromptProvider, {
@@ -1751,33 +1751,12 @@ function imageDimensions(aspectRatio: string) {
   return { width: 720, height: 1280 };
 }
 
-function sceneImageProviderInfo(requestedModel: SceneImageModel, providerJobId?: string | null) {
-  if (requestedModel === 'FLUX') {
-    if (providerJobId?.startsWith('portrait:')) {
-      return {
-        provider: 'RunPod',
-        model: process.env.RUNPOD_FLUX_PORTRAIT_ENDPOINT ?? 'z-image-turbo',
-        requestedModel,
-      };
-    }
-    return {
-      provider: 'RunPod',
-      model: process.env.RUNPOD_FLUX_PUBLIC_ENDPOINT ?? 'black-forest-labs-flux-1-dev',
-      requestedModel,
-    };
-  }
-
-  if (requestedModel === 'FLUX2') {
-    return {
-      provider: 'fal',
-      model: 'fal-ai/flux-2',
-      requestedModel,
-    };
-  }
-
+function sceneImageProviderInfo(requestedModel: SceneImageModel, _providerJobId?: string | null) {
+  // Story scene images are fal.ai-only (FLUX2 → fal-ai/flux-2). RunPod is not
+  // a valid story-scene image provider.
   return {
-    provider: requestedModel,
-    model: requestedModel,
+    provider: 'fal',
+    model: 'fal-ai/flux-2',
     requestedModel,
   };
 }
@@ -2166,7 +2145,8 @@ async function generateSceneImageAsset(
       projectId: project.id,
       userId: ctx.user.id,
       assetType: 'IMAGE',
-      provider: input.model === 'FLUX' ? 'RunPod' : input.model === 'FLUX2' ? 'fal' : input.model,
+      // fal.ai-only for story scene images: FLUX2 (fal-ai/flux-2). No RunPod.
+      provider: 'fal',
       model: input.model,
       promptVersionId: null,
       composedPrompt: composed.prompt,
@@ -2252,7 +2232,7 @@ async function generateSceneImageAsset(
 
     let providerOutputUrl: string;
     let providerJobId: string | undefined;
-    if (!process.env.RUNPOD_API_KEY && input.model === 'FLUX' && process.env.NODE_ENV !== 'production') {
+    if (!process.env.FAL_KEY && input.model === 'FLUX2' && process.env.NODE_ENV !== 'production') {
       providerJobId = `dev-placeholder-${asset.id}`;
       providerOutputUrl = devSceneSvgDataUrl(scene.title, characterReferencesFromScene(scene, scene.project.characterMemory)[0]?.name ?? 'Story Friend');
     } else {

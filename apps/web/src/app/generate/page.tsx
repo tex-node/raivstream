@@ -16,8 +16,12 @@ const AR_OPTIONS: { value: AspectRatio; label: string; icon: string }[] = [
   { value: '1:1',  label: 'Square',    icon: '□' },
 ];
 
-const DEFAULT_IMAGE_MODEL = 'FLUX';
-const DEFAULT_VIDEO_MODEL = 'WAN_25';
+const DEFAULT_IMAGE_MODEL = 'FLUX2';
+const DEFAULT_VIDEO_MODEL = 'H3_MAX';
+// The studio is fal.ai-only: FLUX.2 for images and MiniMax H3 Turbo for video.
+// Every other (RunPod-backed) model is hidden here regardless of what
+// generation.listModels returns.
+const ALLOWED_MODELS       = ['FLUX2', 'H3_MAX'];
 const SLOW_MODELS         = ['LTX2', 'WAN_25', 'SEEDANCE', 'HUNYUAN_VIDEO', 'COG_VIDEO_X'];
 const HIDDEN_MODELS       = ['NANO_BANANA', 'VEO3'];
 const PROMPT_MAX_LENGTH   = 2000;
@@ -52,7 +56,7 @@ export default function GeneratePage() {
 
   // Filter models by mode, excluding always-hidden models as a client-side safety net
   const visibleModels = (models ?? []).filter(
-    (m) => m.mediaType === generationMode && !HIDDEN_MODELS.includes(m.id)
+    (m) => m.mediaType === generationMode && !HIDDEN_MODELS.includes(m.id) && ALLOWED_MODELS.includes(m.id)
   );
   const currentModel  = visibleModels.find((m) => m.id === selectedModel)
     ?? visibleModels[0];

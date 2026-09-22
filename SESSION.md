@@ -274,6 +274,13 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Studio is fal-only — FLUX2 + MiniMax H3 Turbo (no RunPod)
+
+- Verified prod: all story images today are `fal | fal-ai/flux-2`, all videos `fal | minimax/h3-max-turbo`; only 2 historical RunPod FLUX rows (pre-`58bfca3`, which already made the story path FLUX2/fal-only).
+- The reachable RunPod surface was the legacy **AI Studio** (`/generate`, linked from the feed's Create CTA): defaulted to FLUX + WAN_25 (RunPod) and listed every provider. Now allowlisted to **FLUX2** (image) + **H3_MAX** (video) with matching defaults.
+- Hardened the story image path (`story.ts`): `SceneImageModel = 'FLUX2'` only, `sceneImageProviderInfo` returns fal always (RunPod branch removed), `generateSceneImageAsset` provider = 'fal', dev placeholder gated on `FAL_KEY` (was `RUNPOD_API_KEY`).
+- Suite 452/452, web+api type-check/lint clean.
+
 ### 2026-09-22: INCIDENT — all stories failed to load (shotIndex column casing) — fixed
 
 - **Symptom:** every story failed to load and story generation got stuck; `raivstream-web` crash-looping (336 restarts).
