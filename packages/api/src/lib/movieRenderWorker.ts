@@ -52,8 +52,11 @@ function runCommand(command: string, args: string[]) {
     child.stdout.on('data', (chunk) => {
       stdout += String(chunk);
     });
+    // Cap total stderr so a noisy render can't exhaust memory, but keep far
+    // more than the old 4 KB tail — ffmpeg's banner alone is ~20 lines, and a
+    // useful error line is frequently buried behind it.
     child.stderr.on('data', (chunk) => {
-      stderr += String(chunk).slice(-4000);
+      if (stderr.length < 200000) stderr += String(chunk);
     });
     child.on('error', (error) => {
       clearTimeout(timeout);
@@ -62,7 +65,12 @@ function runCommand(command: string, args: string[]) {
     child.on('close', (code) => {
       clearTimeout(timeout);
       if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(`${command} exited with ${code}: ${stderr}`));
+      else {
+        const tail = stderr.slice(-20000);
+        const commandLine = [command, ...args].join(' ');
+        console.error(`[movieRenderWorker] ${command} exited with ${code}\n  command: ${commandLine}\n  stderr tail:\n${tail}`);
+        reject(new Error(`${command} exited with ${code}\ncommand: ${commandLine}\nstderr:\n${tail}`));
+      }
     });
   });
 }
@@ -337,6 +345,27 @@ function parseFps(value: string | undefined) {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
+async function inputHasVideoStream(filePath: string, run: CommandRunner): Promise<boolean> {
+  try {
+    const result = await run('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=codec_type',
+      '-of',
+      'json',
+      filePath,
+    ]);
+    const raw = result && typeof result === 'object' && 'stdout' in result ? result.stdout ?? '' : '';
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed.streams?.[0]?.codec_type === 'video';
+  } catch {
+    return false;
+  }
+}
+
 async function probeMovie(filePath: string, run: CommandRunner): Promise<MovieProbe> {
   const result = await run('ffprobe', [
     '-v',
@@ -385,6 +414,7 @@ const KNOWN_RENDER_ERROR_CODE_PREFIXES = [
   'AUDIO_ASSET_STORAGE_KEY_MISSING',
   'AUDIO_ASSET_STORAGE_KEY_MISMATCH',
   'AUDIO_ASSET_PROBE_FAILED',
+  'MOVIE_RENDER_INPUT_INVALID',
   'OUTPUT_VERIFICATION_FAILED',
 ] as const;
 
@@ -458,6 +488,20 @@ export async function executeMovieRenderJob(
       // Download the source FIRST so native audio can be extracted on both the
       // render and resume paths (Phase 16.5 native-SFX bed).
       await downloadToFile(shot.sourceUrl, inputPath);
+
+      // Pre-flight: a 0/truncated download or a video file with no video stream
+      // is the classic silent ffmpeg-failure cause — catch it here with a typed
+      // error instead of letting ffmpeg emit a bare exit code.
+      const downloaded = await stat(inputPath).catch(() => null);
+      if (!downloaded || downloaded.size <= 0) {
+        throw new Error(`MOVIE_RENDER_INPUT_INVALID: shot ${index + 1} downloaded ${downloaded?.size ?? 0} bytes (${shot.sourceType})`);
+      }
+      if (shot.sourceType === 'VIDEO') {
+        const inputProbe = await inputHasVideoStream(inputPath, run).catch(() => false);
+        if (!inputProbe) {
+          throw new Error(`MOVIE_RENDER_INPUT_INVALID: shot ${index + 1} video source has no decodable video stream`);
+        }
+      }
 
       // Resume: reuse a segment persisted by a prior (failed) attempt of this
       // same job, so a retry only renders the shots that never completed.

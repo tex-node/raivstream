@@ -274,6 +274,12 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Asset reuse across stories + ffmpeg-234 diagnostics
+
+- **#2 Asset reuse (done):** new `story.reuseSceneAsset({ assetId, targetProjectId, targetSceneId? })` — same-story reuse shares the R2 object (same project keyspace) and copies the row; cross-story reuse re-mirrors the R2 object into the target project's namespace (`story-projects/{target}/scenes/{scene}/assets/...`) so cleanup stays per-project. Target scene is picked from the target story or auto-created ("Reused asset"). Assets tab gains a **Reuse** button per asset → story+scene picker modal. New `asset_reused` analytics event.
+- **#4 ffmpeg exit 234 (diagnosable):** `runCommand` now keeps up to 200 KB of stderr (was 4 KB), logs the full `command + args` + stderr tail to the server log, and includes both in the job error message — the next failure will show the real ffmpeg error line instead of just the banner. Added a per-shot **pre-flight** after source download: zero-byte download → typed `MOVIE_RENDER_INPUT_INVALID`; VIDEO shots are ffprobe-checked for a decodable video stream before rendering. New `inputHasVideoStream` helper + `MOVIE_RENDER_INPUT_INVALID` error-code prefix. Worker tests 15/15, full suite 436/436.
+- Still open on #4: the exact cause needs the new error output from a production retry (the earlier paste only contained ffmpeg's banner).
+
 ### 2026-09-21: Scene Director video flow, audio controls, sequence thumbnails
 
 - **Scene Director:** "Animate to Video" now activates immediately after a picture is generated (refreshes the workspace query + treats the freshly generated picture as a ready seed), so you can go picture → video without leaving.
