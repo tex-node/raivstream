@@ -274,6 +274,13 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: INCIDENT — all stories failed to load (shotIndex column casing) — fixed
+
+- **Symptom:** every story failed to load and story generation got stuck; `raivstream-web` crash-looping (336 restarts).
+- **Root cause:** the `20260922100000_story_scene_asset_shot_index` migration created **snake_case** columns `shot_index`/`shot_grid_seed_image_url`, but `story_scene_assets` uses the camelCase field->column convention (`sceneId`, `projectId`, ...). Prisma maps `shotIndex` → column `shotIndex`, so every query touching scene assets threw `column story_scene_assets.shotIndex does not exist`.
+- **Fix:** applied the camelCase columns on prod immediately (`supabase_admin` owns the table, not `postgres`), then added corrective migration `20260922110000_story_scene_asset_shot_index_camelcase` (idempotent, drops snake + adds camel). Confirmed: no new errors, error log static.
+- **Lesson for future migrations in this repo:** follow the camelCase convention — `ALTER TABLE ... ADD COLUMN "fieldName" ...` with double-quoted camelCase identifiers (see `20260921110000_movie_render_keep_native_audio`), NOT snake_case.
+
 ### 2026-09-21: Phase 17 slice 2 — multi-clip shot engine (shot grid)
 
 Continues the overhaul spec #1: render a scene's 5–6s `shots[]` grid as chained MiniMax H3 clips, each seeded from the last frame of the previous clip.
