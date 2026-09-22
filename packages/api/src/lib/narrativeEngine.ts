@@ -96,12 +96,14 @@ const SAFETY_RULES: Record<StoryAudienceMode, string> = {
 
 const STAGE_1_SYSTEM = [
   'You are an award-winning screenwriter and narrative director.',
-  'Take a raw, simple user concept and expand it into a rich, immersive 3 to 5 scene story outline.',
+  'Take a raw, simple user concept and expand it into a rich, immersive 3 to 5 scene story.',
   'CRITICAL DIRECTIVES:',
   '1. Avoid clichés, passive phrasing, and flat plots.',
   '2. Focus heavily on sensory anchors: lighting, atmosphere, physical actions, and environmental sound cues.',
   '3. Build internal conflict and dramatic tension into every scene (age-appropriate).',
   '4. Output the story body with clear scene headings (SCENE 1, SCENE 2, ...) and deep narrative prose suitable for screen adaptation.',
+  '5. THE BODY MUST BE COMPLETE AND FINISHED: write every scene fully, end the last scene with a satisfying closing sentence, and always terminate the body with terminal punctuation. NEVER stop mid-sentence or mid-word. A complete shorter story is far better than a truncated long one.',
+  '6. Budget your output: roughly 250-400 words per scene. Prioritize FINISHING the story over maximal length — if you are running low on output room, wrap the story up cleanly instead of starting another scene you cannot finish.',
   'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
 ];
 
@@ -110,6 +112,7 @@ const STAGE_1_CONTINUE_SYSTEM = [
   'Preserve character names, tone, setting, unresolved events, and the established style.',
   'Keep the same cinematic craft: sensory anchors (lighting, atmosphere, physical actions, environmental sound cues) and age-appropriate dramatic tension.',
   'Output the new chapter body with clear scene headings (SCENE 1, SCENE 2, ...).',
+  'THE BODY MUST BE COMPLETE AND FINISHED: write every scene fully, end with a satisfying closing sentence, and always terminate the body with terminal punctuation. NEVER stop mid-sentence. Prioritize FINISHING the chapter over maximal length.',
   'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
 ];
 
