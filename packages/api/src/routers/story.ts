@@ -6,7 +6,7 @@ import { storyTextService, type StoryAudienceMode } from '../lib/storyTextServic
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
-import { mirrorUrlToR2, uploadBufferToR2 } from '../lib/r2';
+import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
 import {
@@ -5213,6 +5213,140 @@ export const storyRouter = router({
         properties: { sceneId: input.sceneId, assetId: input.assetId, visualStyle: project.visualStyle },
       });
       return { scene, asset };
+    }),
+
+  reuseSceneAsset: protectedProcedure
+    .input(z.object({
+      assetId: z.string(),
+      targetProjectId: z.string(),
+      targetSceneId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const source = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { id: input.assetId, userId: ctx.user.id, deletedAt: null, status: 'READY' },
+      });
+      if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ready source asset not found' });
+      if (!source.r2Key && !source.assetUrl) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source asset has no storable media' });
+
+      const targetProject = await ensureProject(ctx, input.targetProjectId);
+      // Source must belong to the caller too, even when reusing across projects.
+      await ensureProject(ctx, source.projectId);
+
+      let targetSceneId = input.targetSceneId;
+      if (targetSceneId) {
+        const scene = await (ctx.prisma as any).storySceneSeed.findFirst({
+          where: { id: targetSceneId, projectId: input.targetProjectId, userId: ctx.user.id },
+        });
+        if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Target scene not found in the target story' });
+      } else {
+        const maxOrder = await (ctx.prisma as any).storySceneSeed.aggregate({
+          where: { projectId: input.targetProjectId },
+          _max: { orderIndex: true },
+        });
+        const scene = await (ctx.prisma as any).storySceneSeed.create({
+          data: {
+            projectId: input.targetProjectId,
+            chapterId: null,
+            orderIndex: (maxOrder._max.orderIndex ?? 0) + 1,
+            title: 'Reused asset',
+            description: '',
+            imageStatus: source.assetType === 'IMAGE' ? 'READY' : null,
+          },
+        });
+        targetSceneId = scene.id;
+      }
+
+      const crossProject = source.projectId !== input.targetProjectId;
+      const isImage = source.assetType === 'IMAGE';
+
+      if (crossProject) {
+        // Re-mirror the R2 object into the target project's namespace so the
+        // target project owns its own copy and cleanup stays per-project.
+        const newAsset = await (ctx.prisma as any).storySceneAsset.create({
+          data: {
+            sceneId: targetSceneId,
+            projectId: input.targetProjectId,
+            userId: ctx.user.id,
+            assetType: source.assetType,
+            provider: source.provider,
+            model: source.model,
+            composedPrompt: source.composedPrompt,
+            negativePrompt: source.negativePrompt,
+            width: source.width,
+            height: source.height,
+            durationSeconds: source.durationSeconds,
+            status: 'READY',
+            creativeStatus: source.creativeStatus,
+            isLatest: true,
+          },
+        });
+        const ext = isImage ? 'png' : 'mp4';
+        const contentType = isImage ? 'image/png' : 'video/mp4';
+        const newKey = `story-projects/${input.targetProjectId}/scenes/${targetSceneId}/assets/${newAsset.id}.${ext}`;
+        const sourceUrl = source.r2Key ? getPublicUrlForKey(source.r2Key) : source.assetUrl;
+        let assetUrl = source.assetUrl;
+        if (sourceUrl) {
+          try {
+            assetUrl = await mirrorUrlToR2(sourceUrl, newKey, contentType);
+            await (ctx.prisma as any).storySceneAsset.update({
+              where: { id: newAsset.id },
+              data: { r2Key: newKey, assetUrl, thumbnailUrl: source.thumbnailUrl ?? assetUrl },
+            });
+          } catch {
+            // Mirror failed — still usable via the original URL in dev mode.
+          }
+        }
+        if (isImage) {
+          await (ctx.prisma as any).storySceneSeed.update({
+            where: { id: targetSceneId },
+            data: { activeImageAssetId: newAsset.id, imageUrl: assetUrl },
+          });
+        }
+        await trackStoryAnalytics(ctx, {
+          event: 'asset_reused',
+          projectId: input.targetProjectId,
+          audienceMode: targetProject.audienceMode,
+          properties: { sourceProjectId: source.projectId, assetType: source.assetType, crossProject: true },
+        });
+        return { asset: newAsset, sceneId: targetSceneId, crossProject: true };
+      }
+
+      // Same-project reuse: share the identical R2 object (same namespace) and
+      // copy the row into the target scene.
+      const asset = await (ctx.prisma as any).storySceneAsset.create({
+        data: {
+          sceneId: targetSceneId,
+          projectId: input.targetProjectId,
+          userId: ctx.user.id,
+          assetType: source.assetType,
+          provider: source.provider,
+          model: source.model,
+          composedPrompt: source.composedPrompt,
+          negativePrompt: source.negativePrompt,
+          r2Key: source.r2Key,
+          assetUrl: source.assetUrl,
+          thumbnailUrl: source.thumbnailUrl,
+          width: source.width,
+          height: source.height,
+          durationSeconds: source.durationSeconds,
+          status: 'READY',
+          creativeStatus: source.creativeStatus,
+          isLatest: true,
+        },
+      });
+      if (isImage) {
+        await (ctx.prisma as any).storySceneSeed.update({
+          where: { id: targetSceneId },
+          data: { activeImageAssetId: asset.id, imageUrl: source.assetUrl },
+        });
+      }
+      await trackStoryAnalytics(ctx, {
+        event: 'asset_reused',
+        projectId: input.targetProjectId,
+        audienceMode: targetProject.audienceMode,
+        properties: { sourceProjectId: source.projectId, assetType: source.assetType, crossProject: false },
+      });
+      return { asset, sceneId: targetSceneId, crossProject: false };
     }),
 
   favoriteSceneAsset: protectedProcedure

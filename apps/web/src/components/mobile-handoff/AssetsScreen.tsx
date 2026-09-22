@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart } from 'lucide-react';
+import { Heart, Copy } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { trpc } from '@/lib/trpc';
@@ -19,11 +19,10 @@ import { useTrackTab } from './useTrackTab';
  * that lies about what it does. Real, backed filters only: All, Favorites
  * (StorySceneAsset.isFavorite).
  *
- * Responsive desktop reconciliation (Section 10): mobile keeps the exact
- * original 2-col thumbnail grid. At `lg:` and up the grid widens to a
- * real media-browser column count (3 at 1024, 4 at 1280, 6 at wide),
- * filling the available workspace instead of stretching a 2-col grid
- * across a wide viewport.
+ * Reuse: every ready asset can be copied into another scene of the same
+ * story (cheap — the R2 object is shared) or into a different story
+ * (the object is re-mirrored into the target project's R2 namespace).
+ * Picking "Create a new scene" appends a scene to the target story.
  */
 
 type Filter = 'all' | 'favorites';
@@ -32,24 +31,49 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
   const utils = trpc.useUtils();
   const [filter, setFilter] = useState<Filter>('all');
+  const [reuseAsset, setReuseAsset] = useState<any | null>(null);
+  const [targetProjectId, setTargetProjectId] = useState(projectId);
+  const [targetSceneId, setTargetSceneId] = useState('');
   useTrackTab(projectId, 'assets');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && projectId) },
   );
+  const projectsQuery = trpc.story.listMyProjects.useQuery(undefined, {
+    enabled: Boolean(isLoaded && isSignedIn),
+  });
   const favoriteMutation = trpc.story.favoriteSceneAsset.useMutation({
     onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
+  });
+  const reuseMutation = trpc.story.reuseSceneAsset.useMutation({
+    onSuccess: () => {
+      utils.story.getWorkspace.invalidate({ projectId });
+      utils.story.listMyProjects.invalidate();
+      setReuseAsset(null);
+    },
   });
 
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
   const allAssets = scenes.flatMap((scene) =>
     (scene.assets ?? [])
       .filter((a: any) => a.status === 'READY')
-      .map((a: any) => ({ ...a, sceneIndex: scene.orderIndex, isActive: a.id === scene.activeImageAssetId })),
+      .map((a: any) => ({ ...a, sceneIndex: scene.orderIndex, sceneId: scene.id, isActive: a.id === scene.activeImageAssetId })),
   );
   const visibleAssets = filter === 'favorites' ? allAssets.filter((a) => a.isFavorite) : allAssets;
   const favoriteCount = allAssets.filter((a) => a.isFavorite).length;
+
+  const projects: any[] = (projectsQuery.data ?? []) as any[];
+  const targetProject = projects.find((p: any) => p.id === targetProjectId);
+  const targetProjectScenes = ((targetProject?.sceneSeeds ?? []) as any[])
+    .filter((s: any) => !(reuseAsset && targetProjectId === projectId && s.id === reuseAsset.sceneId))
+    .sort((a: any, b: any) => a.orderIndex - b.orderIndex);
+
+  const openReuse = (asset: any) => {
+    setReuseAsset(asset);
+    setTargetProjectId(projectId);
+    setTargetSceneId('');
+  };
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Assets" activeTab="assets" projectId={projectId}>
@@ -122,12 +146,79 @@ export function AssetsScreen({ projectId }: { projectId: string }) {
                       )}
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => openReuse(asset)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8,
+                      fontSize: 11, fontWeight: 700, color: 'var(--noc-purple)',
+                      background: 'rgba(178,90,217,0.10)', border: 'none', borderRadius: 8, padding: '5px 9px', cursor: 'pointer',
+                    }}
+                  >
+                    <Copy size={12} strokeWidth={2} /> Reuse
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {reuseAsset && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,6,12,0.6)', padding: 20 }}>
+          <div style={{ width: '100%', maxWidth: 440, borderRadius: 16, background: 'var(--noc-card)', border: '1px solid rgba(233,233,237,0.12)', padding: 20 }}>
+            <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--noc-t1)', margin: 0 }}>Reuse asset</p>
+            <p style={{ fontSize: 12, color: 'var(--noc-t4)', margin: '4px 0 14px' }}>
+              Scene {String(reuseAsset.sceneIndex + 1).padStart(2, '0')} · {reuseAsset.assetType} — copy it into this story or another story.
+            </p>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--noc-t4)', marginBottom: 12 }}>
+              Target story
+              <select
+                value={targetProjectId}
+                onChange={(e) => { setTargetProjectId(e.target.value); setTargetSceneId(''); }}
+                style={{ width: '100%', marginTop: 5, borderRadius: 10, border: '1px solid rgba(233,233,237,0.12)', background: 'rgba(233,233,237,0.05)', padding: '9px 10px', fontSize: 13, fontWeight: 600, color: 'var(--noc-t1)' }}
+              >
+                {projects.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.title ?? 'Untitled story'}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--noc-t4)', marginBottom: 16 }}>
+              Target scene
+              <select
+                value={targetSceneId}
+                onChange={(e) => setTargetSceneId(e.target.value)}
+                style={{ width: '100%', marginTop: 5, borderRadius: 10, border: '1px solid rgba(233,233,237,0.12)', background: 'rgba(233,233,237,0.05)', padding: '9px 10px', fontSize: 13, fontWeight: 600, color: 'var(--noc-t1)' }}
+              >
+                <option value="">+ Create a new scene</option>
+                {targetProjectScenes.map((s: any) => (
+                  <option key={s.id} value={s.id}>Scene {String(s.orderIndex + 1).padStart(2, '0')} · {s.title || 'Untitled'}</option>
+                ))}
+              </select>
+            </label>
+            {reuseMutation.error && (
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--noc-magenta)', margin: '0 0 12px' }}>{reuseMutation.error.message}</p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setReuseAsset(null)}
+                style={{ borderRadius: 10, border: '1px solid rgba(233,233,237,0.12)', background: 'transparent', padding: '9px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-t1)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={reuseMutation.isPending}
+                onClick={() => reuseMutation.mutate({ assetId: reuseAsset.id, targetProjectId, targetSceneId: targetSceneId || undefined })}
+                style={{ borderRadius: 10, border: 'none', background: 'var(--noc-purple)', padding: '9px 14px', fontSize: 13, fontWeight: 800, color: '#0A0B12', cursor: 'pointer', opacity: reuseMutation.isPending ? 0.6 : 1 }}
+              >
+                {reuseMutation.isPending ? 'Copying…' : 'Copy asset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

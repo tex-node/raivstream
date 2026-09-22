@@ -35,6 +35,7 @@ export const STORY_ANALYTICS_EVENTS = [
   'story_workspace_tab_changed',
   'asset_manager_opened',
   'asset_set_active',
+  'asset_reused',
   'asset_favorited',
   'asset_compared',
   'asset_removed',
