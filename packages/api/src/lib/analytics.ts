@@ -6,6 +6,7 @@ export const STORY_ANALYTICS_EVENTS = [
   'story_questions_generated',
   'story_questions_completed',
   'story_generated',
+  'story_regenerated',
   'story_saved',
   'story_continued',
   'scene_generation_started',

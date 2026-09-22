@@ -52,6 +52,9 @@ export function StoryScreen({ projectId }: { projectId: string }) {
   const completeStory = trpc.story.completeUnfinishedStory.useMutation({
     onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
   });
+  const regenerateStoryText = trpc.story.regenerateStoryText.useMutation({
+    onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }),
+  });
 
   if (workspaceQuery.isLoading) {
     return (
@@ -71,6 +74,7 @@ export function StoryScreen({ projectId }: { projectId: string }) {
   const latestChapter = chapters[chapters.length - 1] ?? null;
   const paragraphs = splitParagraphs(latestChapter?.body);
   const missingPictures = Math.max(0, (summary?.sceneCount ?? 0) - (summary?.readyImageCount ?? 0));
+  const storyTruncated = Boolean(summary?.storyTruncated);
 
   return (
     <Shell backHref={`/story-playground/${projectId}`} title="Story" activeTab="story" projectId={projectId}>
@@ -92,6 +96,17 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
+                {storyTruncated && (
+                  <button
+                    type="button"
+                    onClick={() => regenerateStoryText.mutate({ projectId })}
+                    disabled={regenerateStoryText.isPending}
+                    className="noc-btn-outline"
+                    style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap', color: '#e35d5d', borderColor: 'rgba(227,93,93,0.4)' }}
+                  >
+                    {regenerateStoryText.isPending ? 'Regenerating…' : 'Regenerate story'}
+                  </button>
+                )}
                 {!isR16 && missingPictures > 0 && (
                   <button
                     type="button"
@@ -116,6 +131,19 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 </button>
               </div>
             </div>
+
+            {storyTruncated && !regenerateStoryText.isPending && (
+              <div style={{ borderRadius: 12, padding: 11, background: 'rgba(227,93,93,0.1)', border: '1px solid rgba(227,93,93,0.3)' }}>
+                <p style={{ fontSize: 13, margin: 0, color: '#e35d5d' }}>
+                  This story text was cut off mid-sentence. Tap “Regenerate story” to draft it to completion — your scenes and pictures are kept.
+                </p>
+              </div>
+            )}
+            {regenerateStoryText.isPending && (
+              <div style={{ borderRadius: 12, padding: 11, background: 'rgba(79,139,214,0.1)', border: '1px solid rgba(79,139,214,0.3)' }}>
+                <p style={{ fontSize: 13, margin: 0, color: 'var(--noc-blue)' }}>Rewriting the full story…</p>
+              </div>
+            )}
 
             {completeStory.data && (completeStory.data.generated > 0 || completeStory.data.failed > 0) && (
               <div

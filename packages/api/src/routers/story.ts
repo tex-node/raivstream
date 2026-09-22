@@ -251,6 +251,17 @@ function sceneCharacterNames(scene: { characters?: unknown }): string[] {
 }
 
 /**
+ * Heuristic for an interrupted narrative generation: a complete story body ends
+ * with terminal punctuation. A body that stops mid-word/sentence (e.g. cut at
+ * a token limit) is "truncated" and should be regenerated.
+ */
+function isStoryBodyTruncated(body: string | null | undefined): boolean {
+  const trimmed = (body ?? '').trim();
+  if (!trimmed) return true;
+  return !/[.!?…"'”’)\]]$/.test(trimmed);
+}
+
+/**
  * Phase 17 — I2V chain continuity: seed shot N+1's video with the LAST frame of
  * the previous scene's clip (extracted via ffmpeg) rather than the scene's own
  * still, so background, lighting, and character position carry across the shot
@@ -3468,6 +3479,73 @@ export const storyRouter = router({
       return character;
     }),
 
+  /**
+   * Regenerate the story's narrative TEXT only (a truncated/interrupted body is
+   * re-drafted to completion). Scenes, characters and their generated assets are
+   * left untouched — unlike generateStory, nothing is deleted. Retries up to 3
+   * times if the draft still looks cut off.
+   */
+  regenerateStoryText: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        include: { questions: { orderBy: { orderIndex: 'asc' } } },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+
+      const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
+      const idea = project.originalIdea ?? project.logline ?? project.title;
+      assertKidsSafeIdea(idea, audienceMode);
+
+      const moderation = await moderatePrompt(idea);
+      if (!moderation.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Please try a safer story idea.') });
+      }
+
+      const answers = project.questions
+        .filter((question: any) => question.selectedAnswer)
+        .map((question: any) => ({ questionText: question.questionText, selectedAnswer: question.selectedAnswer }));
+
+      let body = '';
+      let title = project.title ?? 'Untitled Story';
+      let summary = '';
+      let truncated = true;
+      let attempts = 0;
+      while (truncated && attempts < 3) {
+        attempts += 1;
+        const story = await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id });
+        body = story.body;
+        title = story.title ?? title;
+        summary = story.summary ?? summary;
+        truncated = isStoryBodyTruncated(story.body);
+      }
+
+      const firstChapter = await ctx.prisma.storyChapter.findFirst({
+        where: { projectId: project.id },
+        orderBy: { chapterNumber: 'asc' },
+      });
+      if (firstChapter) {
+        await ctx.prisma.storyChapter.update({
+          where: { id: firstChapter.id },
+          data: { title, summary, body, generationPrompt: idea },
+        });
+      } else {
+        await ctx.prisma.storyChapter.create({
+          data: { projectId: project.id, chapterNumber: 1, title, summary, body, generationPrompt: idea },
+        });
+      }
+
+      await trackStoryAnalytics(ctx, {
+        event: 'story_regenerated',
+        projectId: project.id,
+        audienceMode,
+        properties: { attempts, truncated },
+      });
+
+      return { body, title, summary, truncated, attempts };
+    }),
+
   continueStory: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -5541,6 +5619,7 @@ export const storyRouter = router({
         properties: { visualStyle: project.visualStyle, sceneCount: project.sceneSeeds.length, readyImageCount },
       });
       const hydratedProject = await hydrateProjectCriticRuns(ctx, project);
+      const lastChapter = project.chapters[project.chapters.length - 1] ?? null;
       return {
         project: hydratedProject,
         summary: {
@@ -5549,6 +5628,7 @@ export const storyRouter = router({
           sceneCount: project.sceneSeeds.length,
           readyImageCount,
           storybookReady: project.sceneSeeds.length > 0 && readyImageCount > 0,
+          storyTruncated: lastChapter ? isStoryBodyTruncated(lastChapter.body) : false,
           coverThumbnail: coverAsset?.thumbnailUrl ?? coverAsset?.assetUrl ?? project.sceneSeeds.find((scene: any) => scene.imageUrl)?.imageUrl ?? null,
         },
       };
