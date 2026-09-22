@@ -102,7 +102,7 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
     );
   }
 
-  const hasReadyImage = scene.imageStatus === 'READY';
+  const hasReadyImage = scene.imageStatus === 'READY' || Boolean(reviewAssetUrl);
   const isReviewing = Boolean(reviewAssetUrl);
   const previewImage = reviewAssetUrl ?? scene.imageUrl ?? null;
 
@@ -135,6 +135,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
       const result: any = await mutate({ projectId, sceneId, model: sceneImageModel, instruction: instruction.trim() || undefined });
       progress.finish();
       setReviewAssetUrl(result?.assetUrl ?? result?.asset?.assetUrl ?? null);
+      // Refresh so the "Animate to Video" control activates immediately.
+      utils.story.getWorkspace.invalidate({ projectId });
     } catch (e: any) {
       progress.finish();
       setErrorMessage(e?.message ?? 'Generation failed. Try again.');

@@ -4824,7 +4824,11 @@ export const storyRouter = router({
     }),
 
   createMovieRender: protectedProcedure
-    .input(z.object({ projectId: z.string(), sequenceId: z.string().optional().nullable() }))
+    .input(z.object({
+      projectId: z.string(),
+      sequenceId: z.string().optional().nullable(),
+      keepNativeAudio: z.boolean().optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const renderContext = await movieRenderContext(ctx, input.projectId, input.sequenceId);
       if (renderContext.creditCost <= 0) {
@@ -4879,6 +4883,7 @@ export const storyRouter = router({
           renderPlan: renderContext.plan,
           renderPlanHash: combinedRenderHash,
           rendererVersion: renderContext.plan.rendererVersion,
+          keepNativeAudio: input.keepNativeAudio ?? true,
           creditsReserved: renderContext.creditCost,
           creditsCharged: 0,
           events: {

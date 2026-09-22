@@ -397,6 +397,7 @@ export default function StoryWorkspacePage() {
   const narrationVoices = (narrationVoicesQuery.data ?? []) as Array<{ voiceId: string; name: string }>;
   const [narrationVoiceId, setNarrationVoiceId] = useState('');
   const [musicPrompt, setMusicPrompt] = useState('');
+  const [keepNativeAudio, setKeepNativeAudio] = useState(true);
   const [showMixer, setShowMixer] = useState(false);
   const setProjectCover = trpc.story.setProjectCover.useMutation({ onSuccess: () => refresh('Cover updated.') });
 
@@ -1076,9 +1077,16 @@ export default function StoryWorkspacePage() {
                       className={`grid cursor-pointer gap-4 p-4 md:grid-cols-[34px_90px_1fr] ${sequenceScene.enabled ? 'bg-[rgba(233,233,237,0.04)]' : 'bg-[rgba(233,233,237,0.02)] opacity-70'} ${selected?.id === sequenceScene.id ? 'ring-2 ring-[var(--noc-purple)]/40' : ''}`}
                     >
                       <div className="flex items-center justify-center text-[var(--noc-t4)]"><GripVertical size={20} /></div>
-                      <div className="aspect-[9/12] overflow-hidden rounded-xl bg-[rgba(233,233,237,0.06)]">
-                        {asset?.assetUrl ? <img src={asset.assetUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--noc-t4)]"><Clapperboard /></div>}
-                      </div>
+                      <Link
+                        href={`/story-playground/${projectId}/scenes/${sequenceScene.storySceneId}`}
+                        onClick={(event) => event.stopPropagation()}
+                        title="Edit / regenerate this scene"
+                        className="block"
+                      >
+                        <div className="aspect-[9/12] overflow-hidden rounded-xl bg-[rgba(233,233,237,0.06)]">
+                          {asset?.assetUrl ? <img src={asset.assetUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[var(--noc-t4)]"><Clapperboard /></div>}
+                        </div>
+                      </Link>
                       <div className="min-w-0">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div>
@@ -1087,6 +1095,7 @@ export default function StoryWorkspacePage() {
                             <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--noc-t4)]">{sequenceScene.storyScene.description}</p>
                           </div>
                           <div className="flex flex-wrap gap-2">
+                            <Link href={`/story-playground/${projectId}/scenes/${sequenceScene.storySceneId}`} onClick={(event) => event.stopPropagation()} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-xs font-black text-[var(--noc-t1)]"><Pencil className="mr-1 inline" size={14} />Edit Scene</Link>
                             <button onClick={(event) => { event.stopPropagation(); duplicateSequenceScene.mutate({ projectId, sequenceId: sequence.id, sequenceSceneId: sequenceScene.id }); }} className="rounded-xl bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[var(--noc-purple)]"><Copy className="mr-1 inline" size={14} />Duplicate</button>
                             <button onClick={(event) => { event.stopPropagation(); updateSequenceEntry(sequenceScene, { enabled: !sequenceScene.enabled }); }} className="rounded-xl bg-[rgba(233,233,237,0.06)] px-3 py-2 text-xs font-black text-[var(--noc-t1)]">{sequenceScene.enabled ? 'Disable' : 'Enable'}</button>
                             <button onClick={(event) => { event.stopPropagation(); removeSequenceScene.mutate({ projectId, sequenceId: sequence.id, sequenceSceneId: sequenceScene.id }); }} className="rounded-xl bg-[rgba(217,70,168,0.08)] px-3 py-2 text-xs font-black text-[var(--noc-magenta)]"><Trash2 className="mr-1 inline" size={14} />Remove</button>
@@ -1560,6 +1569,16 @@ export default function StoryWorkspacePage() {
                         onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, durationSeconds: e.target.value === '' ? null : Number(e.target.value) })}
                         className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
                     </label>
+                    <label className="text-xs font-bold text-[var(--noc-t4)]">Trim in (s)
+                      <input type="number" min={0} step={0.1} value={selectedCue.trimStartSeconds ?? ''}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, trimStartSeconds: e.target.value === '' ? null : Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
+                    </label>
+                    <label className="text-xs font-bold text-[var(--noc-t4)]">Trim out (s)
+                      <input type="number" min={0} step={0.1} value={selectedCue.trimEndSeconds ?? ''}
+                        onChange={(e) => updateAudioCue.mutate({ projectId, cueId: selectedCue.id, trimEndSeconds: e.target.value === '' ? null : Number(e.target.value) })}
+                        className="mt-1 w-full rounded-lg border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-2 text-sm font-black text-[var(--noc-t1)]" />
+                    </label>
                     {showMixer && (
                       <>
                         <label className="text-xs font-bold text-[var(--noc-t4)]">Volume
@@ -1711,9 +1730,18 @@ export default function StoryWorkspacePage() {
               <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t2)]">Movie Builder</p>
               <h2 className="mt-1 text-3xl font-black text-[var(--noc-t1)]">Render Story Movie</h2>
               <p className="mt-2 max-w-3xl text-sm font-semibold text-[var(--noc-t4)]">Build a deterministic MP4 from the saved Film Blueprint. Shots use scene videos (MiniMax H3) when available, otherwise the selected stills, mixed with narration and music.</p>
+              <label className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--noc-t4)]">
+                <input
+                  type="checkbox"
+                  checked={keepNativeAudio}
+                  onChange={(e) => setKeepNativeAudio(e.target.checked)}
+                  className="h-4 w-4 accent-[var(--noc-purple)]"
+                />
+                Retain scene videos&apos; native MiniMax audio in the mix
+              </label>
             </div>
             <button
-              onClick={() => createMovieRender.mutate({ projectId, sequenceId: data?.sequenceId ?? undefined })}
+              onClick={() => createMovieRender.mutate({ projectId, sequenceId: data?.sequenceId ?? undefined, keepNativeAudio })}
               disabled={!canRender}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
             >

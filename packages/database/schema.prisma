@@ -1457,6 +1457,8 @@ model MovieRenderJob {
   cancelledAt           DateTime?
   errorCode             String?
   errorMessage          String?
+  // Phase 16.5 — retain each scene clip's native audio (MiniMax SFX) in the mix.
+  keepNativeAudio       Boolean           @default(true)
   creditsReserved       Int               @default(0)
   creditsCharged        Int               @default(0)
 

@@ -443,7 +443,7 @@ export async function executeMovieRenderJob(
     const segmentPaths: string[] = [];
     const segmentKeys: string[] = [];
     const nativeAudioSources: Array<{ order: number; startTimeSeconds: number; durationSeconds: number; filePath: string }> = [];
-    const keepNativeAudio = (process.env.MOVIE_RENDER_KEEP_NATIVE_AUDIO ?? 'true') !== 'false';
+    const keepNativeAudio = job.keepNativeAudio ?? (process.env.MOVIE_RENDER_KEEP_NATIVE_AUDIO ?? 'true') !== 'false';
     const shotAttempts = Number(process.env.MOVIE_RENDER_SHOT_ATTEMPTS ?? 2);
     let canonicalTimeSeconds = 0;
     for (let index = 0; index < plan.shots.length; index += 1) {

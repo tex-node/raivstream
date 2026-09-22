@@ -274,6 +274,15 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Scene Director video flow, audio controls, sequence thumbnails
+
+- **Scene Director:** "Animate to Video" now activates immediately after a picture is generated (refreshes the workspace query + treats the freshly generated picture as a ready seed), so you can go picture → video without leaving.
+- **Movie native-audio toggle:** new `MovieRenderJob.keepNativeAudio` (migration `20260921110000_movie_render_keep_native_audio`, default true); `createMovieRender` accepts `keepNativeAudio` and the worker uses the job value (env fallback). Film tab has a **"Retain scene videos' native MiniMax audio in the mix"** checkbox.
+- **Audio trim:** the cue inspector now has **Trim in (s)** / **Trim out (s)** inputs (`trimStartSeconds`/`trimEndSeconds`, already supported by `updateCue` + the mixer).
+- **Sequence editor:** each shot's **thumbnail is now a link to its Scene Director** (edit/regenerate image or video) + an explicit **"Edit Scene"** button on each shot row.
+- Verified: web + api type-check, strict web lint, **436/436 tests**.
+- Deferred: cross-story asset reuse (#2 in the report) is a larger feature (copying R2 assets between projects) — tracked for a follow-up.
+
 ### 2026-09-21: Add chapters + scenes, and one-click narration
 
 - **Story tab → Add Chapter:** the workspace Story screen now has a **"+ Add Chapter"** button (`story.continueStory`) next to the chapter header.
