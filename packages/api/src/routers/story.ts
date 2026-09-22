@@ -4,6 +4,8 @@ import { protectedProcedure, router } from '../trpc';
 import { moderatePrompt } from '../lib/promptModeration';
 import { storyTextService, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
+import { applyMasterVisualBible } from '../lib/visualBible';
+import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
@@ -232,6 +234,48 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
   });
   if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
   return project;
+}
+
+function sceneCharacterNames(scene: { characters?: unknown }): string[] {
+  if (Array.isArray(scene.characters)) {
+    return scene.characters.flatMap((ch) => {
+      if (typeof ch === 'string') return [ch];
+      if (ch && typeof ch === 'object' && typeof (ch as Record<string, unknown>).name === 'string') {
+        return [(ch as Record<string, unknown>).name as string];
+      }
+      return [];
+    });
+  }
+  return [];
+}
+
+/**
+ * Phase 17 — I2V chain continuity: seed shot N+1's video with the LAST frame of
+ * the previous scene's clip (extracted via ffmpeg) rather than the scene's own
+ * still, so background, lighting, and character position carry across the shot
+ * boundary. Falls back to the scene image whenever no prior clip exists or the
+ * extraction fails.
+ */
+async function chainLastFrameSeedImage(
+  prisma: any,
+  projectId: string,
+  orderIndex: number,
+  fallbackUrl: string,
+): Promise<string> {
+  if (!orderIndex || orderIndex <= 1) return fallbackUrl;
+  const previousScene = await prisma.storySceneSeed.findFirst({
+    where: { projectId, orderIndex: orderIndex - 1 },
+    include: {
+      assets: { where: { assetType: 'VIDEO', status: 'READY', deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+  });
+  const previousVideo = previousScene?.assets?.[0];
+  if (!previousVideo?.assetUrl) return fallbackUrl;
+  const chained = await extractLastFrameAsSeedImage(
+    previousVideo.assetUrl,
+    `story-projects/${projectId}/scenes/${previousScene.id}/seeds`,
+  );
+  return chained ?? fallbackUrl;
 }
 
 function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryAudienceMode): StoryAudienceMode {
@@ -1840,6 +1884,7 @@ async function generateSceneImageAsset(
           tone: true,
           synopsis: true,
           storyDna: true,
+          productionManifest: true,
           characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
@@ -1900,6 +1945,25 @@ async function generateSceneImageAsset(
         ? `${composed.deterministicPrompt}. Creator change: ${instruction}`
         : composed.deterministicPrompt,
       providerHints: { ...composed.providerHints, creatorInstruction: instruction } as any,
+    };
+  }
+
+  // Phase 17 — Master Visual Bible enforcement: lock the style anchor, the
+  // scene's character anchors, and the negative suffix onto EVERY image payload.
+  if (project.productionManifest) {
+    const bibleApplied = applyMasterVisualBible({
+      prompt: composed.prompt,
+      negativePrompt: composed.negativePrompt,
+      bible: project.productionManifest as unknown as ProductionManifest,
+      sceneCharacters: sceneCharacterNames(scene),
+      target: 'IMAGE',
+    });
+    composed = {
+      ...composed,
+      prompt: limitText(bibleApplied.prompt, GENERATION_PROMPT_MAX_LENGTH),
+      negativePrompt: bibleApplied.negativePrompt
+        ? limitText(bibleApplied.negativePrompt, NEGATIVE_PROMPT_MAX_LENGTH)
+        : composed.negativePrompt,
     };
   }
 
@@ -2221,6 +2285,11 @@ async function generateSceneVideoAsset(
   const manifest = project.productionManifest as unknown as ProductionManifest | null;
   const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
   const duration = Math.min(15, Math.max(4, manifestScene?.duration_sec ?? input.duration ?? 5));
+  // Phase 17 — I2V chain continuity: prefer the manifest's first frame, then the
+  // LAST frame of the previous scene's clip (extracted via ffmpeg), then the
+  // scene's own still as the opening frame.
+  const seedImageUrl = manifestScene?.first_frame_image_url
+    ?? await chainLastFrameSeedImage(ctx.prisma, project.id, scene.orderIndex, seedImage.assetUrl);
 
   await trackStoryAnalytics(ctx, {
     event: 'scene_generation_started',
@@ -2263,6 +2332,26 @@ async function generateSceneVideoAsset(
       ...composed,
       prompt: limitText(`${composed.prompt}. Change requested by the creator: ${instruction}`, GENERATION_PROMPT_MAX_LENGTH),
       providerHints: { ...composed.providerHints, creatorInstruction: instruction } as any,
+    };
+  }
+
+  // Phase 17 — Master Visual Bible enforcement on EVERY video payload. The
+  // manifest prompt is raw LLM prose (no style lock, no character anchors, no
+  // negative tags); the bible re-locks it before it reaches MiniMax. Negative
+  // tags ride inside the positive prompt (--no …) because H3 has no negative
+  // prompt field.
+  if (manifest) {
+    const bibleApplied = applyMasterVisualBible({
+      prompt: composed.prompt,
+      negativePrompt: composed.negativePrompt,
+      bible: manifest,
+      sceneCharacters: sceneCharacterNames(scene),
+      target: 'VIDEO',
+    });
+    composed = {
+      ...composed,
+      prompt: limitText(bibleApplied.prompt, GENERATION_PROMPT_MAX_LENGTH),
+      negativePrompt: bibleApplied.negativePrompt ?? composed.negativePrompt,
     };
   }
 
@@ -2321,7 +2410,7 @@ async function generateSceneVideoAsset(
         negativePrompt: composed.negativePrompt,
         duration,
         aspectRatio: composed.aspectRatio ?? '9:16',
-        seedImageUrl: manifestScene?.first_frame_image_url ?? seedImage.assetUrl,
+        seedImageUrl,
         resolution: manifestScene?.resolution,
         status: 'QUEUED',
         creditsUsed: creditsUsed || 0,
@@ -2345,7 +2434,7 @@ async function generateSceneVideoAsset(
       negativePrompt: composed.negativePrompt,
       duration,
       aspectRatio: composed.aspectRatio,
-      seedImageUrl: manifestScene?.first_frame_image_url ?? seedImage.assetUrl,
+      seedImageUrl,
       resolution: input.resolution ?? manifestScene?.resolution,
     });
     const providerJobId = submitted.providerJobId;
@@ -3872,11 +3961,21 @@ export const storyRouter = router({
         .join('\n\n')
         .trim();
       if (!prose) return { enabled: true as const, manifest: null as ProductionManifest | null };
+      const characterMemory = await ctx.prisma.storyCharacterMemory.findMany({
+        where: { projectId: project.id },
+        orderBy: { createdAt: 'asc' },
+        select: { name: true, visualDescription: true },
+      });
+      const characterBible = characterMemory
+        .map((c: any) => `${c.name}: ${c.visualDescription ?? ''}`.trim())
+        .filter((line: string) => line.length > 0)
+        .join('\n');
       const manifest = await structureProductionManifest({
         title: project.title,
         logline: project.logline ?? project.originalIdea ?? undefined,
         prose,
         audienceMode: (project.audienceMode as StoryAudienceMode | undefined) ?? undefined,
+        supporting: characterBible ? { characterBible } : undefined,
       });
       // Phase 16.5 — persist as the canonical creative specification.
       await ctx.prisma.storyProject.update({

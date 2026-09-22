@@ -3,12 +3,18 @@ import {
   isManifestStructurerEnabled,
   structureProductionManifest,
   normaliseProductionManifest,
+  buildManifestUserMessage,
   GPT40_DEFAULT_MODEL,
 } from '../productionStructurer';
 
 const SAMPLE_MANIFEST = {
   title: 'The Ember’s Edge',
   logline: 'A weary knight discovers a relic pulsing with dark magic in a frozen wasteland.',
+  master_style: 'Cinematic live-action photorealism, 35mm anamorphic lens, volumetric lighting, Kodachrome color grade',
+  negative_prompt_suffix: '2d, animation, cartoon, illustration, anime, 3d render, low quality, morphing',
+  characters: {
+    ELDON: 'A 60-year-old knight with a grey beard, worn silver plate armor and a fur-lined cloak',
+  },
   scenes: [
     {
       scene_id: 1,
@@ -18,6 +24,16 @@ const SAMPLE_MANIFEST = {
       duration_sec: 6,
       resolution: '1080P',
       first_frame_image_url: null,
+      shots: [
+        {
+          shot_id: 'SCENE_01_SHOT_01',
+          timeframe: '00:00 - 00:05',
+          camera_setup: 'Close-Up, Slow Push-In, Eye Level',
+          action_description: 'Eldon kneels and breathes heavily.',
+          video_prompt: 'Cinematic low-angle close up of ELDON, slow push-in, frost on steel.',
+          transition_to_next: 'Cut to wide shot.',
+        },
+      ],
     },
   ],
 };
@@ -67,9 +83,34 @@ describe('productionStructurer', () => {
       expect(manifest.scenes[0].duration_sec).toBe(15);
       expect(manifest.scenes[0].resolution).toBe('1080P');
       expect(manifest.scenes[0].first_frame_image_url).toBeNull();
+      // Master Visual Bible fields fall back to safe defaults when absent.
+      expect(manifest.master_style.length).toBeGreaterThan(0);
+      expect(manifest.negative_prompt_suffix).toContain('animation');
+      expect(manifest.characters).toEqual({});
+    });
+    it('normalises the master visual bible + per-scene shot grid', () => {
+      const manifest = normaliseProductionManifest(SAMPLE_MANIFEST, 'T');
+      expect(manifest.master_style).toContain('photorealism');
+      expect(manifest.negative_prompt_suffix).toContain('2d');
+      expect(manifest.characters.ELDON).toContain('knight');
+      expect(manifest.scenes[0].shots).toHaveLength(1);
+      expect(manifest.scenes[0].shots![0].shot_id).toBe('SCENE_01_SHOT_01');
+      expect(manifest.scenes[0].shots![0].camera_setup).toBe('Close-Up, Slow Push-In, Eye Level');
     });
     it('rejects a manifest with no scenes', () => {
       expect(() => normaliseProductionManifest({ title: 'T', logline: 'L', scenes: [] }, 'T')).toThrow();
+    });
+  });
+
+  describe('buildManifestUserMessage', () => {
+    it('injects the character bible so anchors are reused verbatim', () => {
+      const message = buildManifestUserMessage({
+        title: 'T',
+        prose: 'the knight walks',
+        supporting: { characterBible: 'ELDON: a 60-year-old knight with a grey beard' },
+      });
+      expect(message).toContain('ELDON: a 60-year-old knight with a grey beard');
+      expect(message).toContain('Character bible');
     });
   });
 
@@ -85,7 +126,7 @@ describe('productionStructurer', () => {
         const body = JSON.parse(String((init as RequestInit).body));
         expect(body.model).toBe(GPT40_DEFAULT_MODEL);
         expect(body.response_format).toEqual({ type: 'json_object' });
-        expect(body.messages[0].content).toContain('Director of Photography');
+        expect(body.messages[0].content).toContain('MASTER VISUAL BIBLE');
         return openAiResponse(JSON.stringify(SAMPLE_MANIFEST));
       });
       const manifest = await structureProductionManifest(
@@ -97,6 +138,10 @@ describe('productionStructurer', () => {
       expect(manifest.scenes).toHaveLength(1);
       expect(manifest.scenes[0].resolution).toBe('1080P');
       expect(manifest.scenes[0].duration_sec).toBe(6);
+      expect(manifest.master_style).toContain('anamorphic');
+      expect(manifest.negative_prompt_suffix).toContain('morphing');
+      expect(manifest.characters.ELDON).toContain('knight');
+      expect(manifest.scenes[0].shots?.[0].video_prompt).toContain('ELDON');
     });
 
     it('throws when the provider returns invalid JSON', async () => {

@@ -274,6 +274,21 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-21: Phase 17 slice 1 — Master Visual Bible + I2V chain continuity
+
+Implements the anti-drift / continuity core of the overhaul spec (character drift & style changes):
+
+- **Master Visual Bible in the ProductionManifest** (`productionStructurer.ts`): new `master_style` (style-lock anchor), `negative_prompt_suffix`, `characters` map, and optional per-scene `shots[]` 5–6s grid. System prompt rewritten: strict camera vocabulary (shot sizes/motions/angles/lens-lighting), prompt formula `[master_style]+[camera]+[character anchors]+[action]+[--no suffix]`, negative suffix on every payload, 20s→4×5s decomposition rule. `buildManifestUserMessage` now injects the project's characterMemory bible verbatim.
+- **`lib/visualBible.ts`** — pure `applyMasterVisualBible({ prompt, negativePrompt, bible, sceneCharacters, target })`: prepends the style anchor, injects only the scene's character anchors verbatim, appends the negative suffix (into the real negative prompt for IMAGE; into the positive prompt as `--no …` for VIDEO since H3 has no negative field). Dedupes, idempotent. Applied in BOTH `generateSceneImageAsset` and `generateSceneVideoAsset` right before moderation — so every generation payload is locked even when the LLM manifest prompt (raw prose) replaces VPC2's anchor-rich prompt.
+- **I2V chain continuity** (`lib/lastFrameExtract.ts` + `chainLastFrameSeedImage` in story.ts): `generateSceneVideoAsset` now seeds from `manifest.first_frame_image_url` → else the **last frame of the previous scene's clip** (ffmpeg `-sseof -0.1`, uploaded to R2) → else the scene's own still. Fail-soft (never blocks generation).
+- Tests: visualBible (9), structurer bible/shots/user-message (11). Suite 448/448, lint + type-check clean.
+
+### Roadmap (next slices of the overhaul)
+1. Multi-clip per-scene engine: render a scene's `shots[]` as 4×5–6s clips chained via last-frame seeding (currently one clip/scene, shots[0] data model only).
+2. Audio-driven timing: measure narration TTS duration first, then set the shot grid to match voiceover beats.
+3. Master character turnaround sheets (front/side) generated from the bible + used as reference control nets.
+4. Sequence preview: concat clips with crossfade/hard-cut per `transition_to_next`, narration 100% + music ducked 15–20%.
+
 ### 2026-09-21: ffmpeg exit 234 — root cause found & fixed (assemble xfade timebase)
 
 - User pasted the full failing command: the 5-shot assemble with a trailing `xfade` (offset 23.2s). Reproduced locally with portable ffmpeg 9.0.2 + synthetic 720×1280/30fps segments.
