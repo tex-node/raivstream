@@ -274,6 +274,18 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-23: Launch Closure instruments — evidence-gated final decision
+
+Added the close-out instruments for the three remaining launch conditions; **no decision change** (still CONDITIONAL GO until evidence is recorded). No product code changed.
+
+- `docs/operations/launch-closure-evidence.json` — the three records to complete (human UX sessions, alert ownership, storage thresholds), all PENDING/OPEN.
+- `docs/operations/ux-acceptance-sessions.md` — runnable Gate 5 protocol + observation checklist + recording instructions.
+- `docs/operations/launch-ratification.md` — alert-ownership matrix and proposed storage thresholds (pending named-owner ratification).
+- `scripts/launch-closure-check.ts` — regenerates the acceptance matrix + GO/CONDITIONAL GO decision; emits **GO only when all three records are complete** (verified: currently CONDITIONAL GO, 3 conditions remain).
+- `docs/operations/phase-9-final-launch-acceptance.md` — added the Final Closure Sequence.
+
+The final report must not claim GO until the three records are actually recorded; the checker enforces this.
+
 ### 2026-09-23: Launch Closure Pass — telemetry + cost visibility closed; operations mechanism delivered
 
 Focused only on the five remaining launch conditions. No product capability added; architecture/CreativeCritic/production engine/moderation/R16 untouched. Report: `docs/operations/phase-9-final-launch-acceptance.md`; alert policy: `docs/operations/alert-routing.md`.

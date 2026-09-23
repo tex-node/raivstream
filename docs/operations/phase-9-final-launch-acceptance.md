@@ -164,6 +164,20 @@ None.
 
 Launch may proceed once the three conditions in §9 are satisfied.
 
+### Final Closure Sequence (evidence-gated)
+
+The final decision is **produced, not asserted**. Three records must be completed, then the matrix/decision is regenerated:
+
+1. **Human UX sessions** → `docs/operations/ux-acceptance-sessions.md` (protocol) → record in `docs/operations/launch-closure-evidence.json`.
+2. **Alert-routing ownership** → `docs/operations/launch-ratification.md` §A → record owners + wiring.
+3. **Storage thresholds** → `docs/operations/launch-ratification.md` §B → ratify values + enable enforcement.
+
+Then regenerate the decision:
+```bash
+pnpm exec tsx scripts/launch-closure-check.ts
+```
+The checker emits **GO** only when all three records are complete; otherwise it emits **CONDITIONAL GO** and lists what remains. As of this report, no evidence is recorded, so the checker (and this report) correctly return **CONDITIONAL GO**. When all three close, the regenerated report reads: *GO — Raivstream 5.0 is accepted for launch.*
+
 ---
 
 ## 12. Post-Launch Boundary

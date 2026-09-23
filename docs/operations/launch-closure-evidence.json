@@ -1,0 +1,40 @@
+{
+  "$comment": "Raivstream 5.0 launch-closure evidence. Fill these three records, then run `pnpm exec tsx scripts/launch-closure-check.ts` to regenerate the acceptance matrix and final decision. The decision is GO only when all three are complete. Do not set a status to PASS without an actual recorded session.",
+  "release": "Raivstream 5.0",
+  "baselineCommit": "6c37550",
+  "humanUx": {
+    "status": "PENDING",
+    "protocol": "docs/operations/ux-acceptance-sessions.md",
+    "facilitator": null,
+    "date": null,
+    "sessions": [
+      { "journey": "A", "persona": "Storyteller", "participant": null, "date": null, "result": "PENDING", "notes": null },
+      { "journey": "B", "persona": "Educator", "participant": null, "date": null, "result": "PENDING", "notes": null },
+      { "journey": "C", "persona": "Professional Studio", "participant": null, "date": null, "result": "PENDING", "notes": null }
+    ],
+    "acceptanceCriteriaMet": false
+  },
+  "alertOwnership": {
+    "ratified": false,
+    "record": "docs/operations/launch-ratification.md",
+    "ratifiedBy": null,
+    "date": null,
+    "owners": { "P0": null, "P1": null, "P2": null, "P3": null },
+    "escalation": null,
+    "alertsWired": false
+  },
+  "storageThresholds": {
+    "ratified": false,
+    "record": "docs/operations/launch-ratification.md",
+    "ratifiedBy": null,
+    "date": null,
+    "values": {
+      "totalAssetsWarn": null,
+      "totalAssetsCrit": null,
+      "failedAssetsWarn": null,
+      "stuckAssetsWarn": null,
+      "staleRunsWarn": null
+    },
+    "enforcementEnabled": false
+  }
+}
