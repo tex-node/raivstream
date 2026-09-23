@@ -1988,6 +1988,18 @@ enum CreativeMemoryKind {
   DIRECTION
 }
 
+enum CreativeProducedAssetKind {
+  IMAGE
+  VIDEO
+}
+
+enum CreativeProducedAssetStatus {
+  QUEUED
+  GENERATING
+  READY
+  FAILED
+}
+
 model CreativeProject {
   id                   String                @id @default(cuid())
   userId               String
@@ -1999,6 +2011,7 @@ model CreativeProject {
   bible                CreativeBible?
   memories             CreativeMemory[]
   productionPlan       CreativeProductionPlan?
+  producedAssets       CreativeProducedAsset[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -2072,4 +2085,24 @@ model CreativeProductionPlan {
   updatedAt DateTime       @updatedAt
 
   @@map("creative_production_plans")
+}
+
+model CreativeProducedAsset {
+  id            String                        @id @default(cuid())
+  projectId     String
+  project       CreativeProject               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sceneId       String
+  shotId        String?
+  kind          CreativeProducedAssetKind
+  status        CreativeProducedAssetStatus   @default(QUEUED)
+  assetUrl      String?
+  thumbnailUrl  String?
+  errorMessage  String?
+  provider      String?
+  createdAt     DateTime                      @default(now())
+  updatedAt     DateTime                      @updatedAt
+
+  @@index([projectId, sceneId])
+  @@index([projectId, status])
+  @@map("creative_produced_assets")
 }

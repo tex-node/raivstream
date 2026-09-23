@@ -10,6 +10,7 @@ import { CreativeBibleView } from '@/components/creative/CreativeBibleView';
 import { NextActionCard } from '@/components/creative/NextActionCard';
 import { PlanView } from '@/components/creative/PlanView';
 import { PreviewPanel } from '@/components/creative/PreviewPanel';
+import { ProductionPanel } from '@/components/creative/ProductionPanel';
 
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
@@ -78,11 +79,16 @@ export default function CreativeProjectPage() {
         ) : plan ? (
           <>
             <PlanView plan={plan.plan} />
-            <PreviewPanel
-              preview={plan.preview}
-              approving={approve.isPending}
-              onApprove={() => approve.mutate({ projectId, status: 'APPROVED' })}
-            />
+            {project.status === 'PREVIEW' && (
+              <PreviewPanel
+                preview={plan.preview}
+                approving={approve.isPending}
+                onApprove={() => approve.mutate({ projectId, status: 'APPROVED' })}
+              />
+            )}
+            {['APPROVED', 'GENERATING', 'REVIEW'].includes(project.status) && (
+              <ProductionPanel projectId={projectId} status={project.status} />
+            )}
           </>
         ) : null}
       </CreativeCanvas>

@@ -274,6 +274,19 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 3 (PRODUCE)
+
+Slice 2 confirmed complete; built PRODUCE per the specified boundary: `Approved Plan → ProductionService → CapabilityRouter → GenerationAdapter → existing generation infra`.
+
+- **Schema:** `CreativeProducedAsset` (sceneId/shotId/kind IMAGE|VIDEO/status QUEUED→GENERATING→READY|FAILED/assetUrl/errorMessage) — migration `20260922140000_creative_produced_asset` (enums renamed to avoid colliding with the existing `CreativeAssetStatus`). Additive.
+- **`production/capabilityRouter.ts`:** decides internally what/how — one still (FLUX2) + one video (H3 I2V) per scene, H3-clamped durations, prompt from scene + bible visualLanguage/characters with `applyMasterVisualBible`. No provider/model knowledge leaks upward.
+- **`production/generationAdapter.ts`:** the ONLY touch of existing infra — `submitGenerationJob`/`pollJobStatus` (FLUX2/H3_MAX), R2 mirroring, `extractLastFrameAsSeedImage` for continuity.
+- **`production/runner.ts`:** `runCreativeProduction` — validated APPROVED plan, detached + resumable (skips READY assets), last-frame chaining (video N seeds from last frame of video N-1, else its still), per-asset credits (FLUX2/H3 rates) with refund-on-failure, partial failure never stops the run, moves status GENERATING → REVIEW in a finally. Dependencies injectable for hermetic tests.
+- **Service/routers:** `ProductionPlanService.produce` (requires status APPROVED + plan — `PLAN_NOT_APPROVED` otherwise; sets GENERATING), `productionStatus` (scene-level progress for the UI), `getAssets`; `creative.production.{produce,productionStatus,getAssets}` gated on `RAIVSTREAM_5_PRODUCTION_ENABLED`.
+- **Frontend:** `ProductionPanel` — creator sees only **Produce → "Creating your scenes…"** (progress bar + per-scene status + visuals when ready) → results with **Retry N scenes** on partial failure. No providers/models/prompts/JSON.
+- **Tests:** runner.test.ts (9: full produce, chaining, partial failure, resumability, state transitions, approval gate, capability routing for commercial/story/education) — suite **492/492**, type-check + lint clean.
+- **Excluded by design (kept for later slices):** AI Director, semantic Direct, Review UI, Critic redesign, versioning, Series, Studio, camera controls, provider selection, prompt editing.
+
 ### 2026-09-22: Raivstream 5.0 — slice 2 (PLAN: Production Plan + Preview)
 
 Slice 1 confirmed complete; built the PLAN stage: Brief + Bible → Production Plan → Scenes → Shots → Timeline → Preview.

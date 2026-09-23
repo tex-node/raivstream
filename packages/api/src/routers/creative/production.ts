@@ -2,12 +2,12 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../../trpc';
 import { productionPlanService } from '../../lib/creative/production/service';
-import { isCreativePreviewEnabled } from '../../lib/creative/featureFlags';
+import { isCreativePreviewEnabled, isCreativeProductionEnabled } from '../../lib/creative/featureFlags';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
 function toTrpcError(error: unknown, fallback: string): TRPCError {
   if (error instanceof CreativeError) {
-    const code = error.code === 'PROJECT_NOT_FOUND' ? 'NOT_FOUND' : error.code === 'CREATIVE_DISABLED' ? 'FORBIDDEN' : 'BAD_REQUEST';
+    const code = error.code === 'PROJECT_NOT_FOUND' ? 'NOT_FOUND' : error.code === 'CREATIVE_DISABLED' ? 'FORBIDDEN' : error.code === 'PLAN_NOT_APPROVED' ? 'BAD_REQUEST' : 'BAD_REQUEST';
     return new TRPCError({ code, message: error.message });
   }
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: fallback });
@@ -53,6 +53,41 @@ export const creativeProductionRouter = router({
         return await productionPlanService.adapt(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
       } catch (error) {
         throw toTrpcError(error, 'Plan adaptation failed.');
+      }
+    }),
+
+  /** Slice 3 — start production of an approved plan ("Produce"). */
+  produce: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await productionPlanService.produce(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
+      } catch (error) {
+        throw toTrpcError(error, 'Production could not start.');
+      }
+    }),
+
+  /** Scene-level production progress (polled by the UI). */
+  productionStatus: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      if (!isCreativeProductionEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 production is not enabled.' });
+      try {
+        return await productionPlanService.productionStatus(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
+      } catch (error) {
+        throw toTrpcError(error, 'Production status unavailable.');
+      }
+    }),
+
+  /** Produced assets for a project. */
+  getAssets: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      if (!isCreativeProductionEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 production is not enabled.' });
+      try {
+        return await productionPlanService.getAssets(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
+      } catch (error) {
+        throw toTrpcError(error, 'Assets unavailable.');
       }
     }),
 });

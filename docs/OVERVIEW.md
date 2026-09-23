@@ -178,8 +178,8 @@ audio-driven timing.
 
 **Raivstream 5.0 (in progress):** a semantic creative-orchestration layer above the production
 infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slice 1
-(Creative Foundation + Create + Intent: `CreativeProject/Brief/Bible/Memory` + flags + intent
-engine + `/create` + `/projects`) and Slice 2 (PLAN: Brief+Bible → scenes→shots→timeline →
-Preview, `CreativeProductionPlan` + `creative/production` router + Plan/Preview UI) shipped.
-See `docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
+(Creative Foundation + Create + Intent), Slice 2 (PLAN: Brief+Bible → scenes→shots→timeline →
+Preview) and Slice 3 (PRODUCE: approved plan → ProductionService → CapabilityRouter →
+GenerationAdapter → existing FLUX2/H3/last-frame infra, scene-level progress, partial-failure
+retry) shipped. See `docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
 `packages/api/src/lib/creative/`.
