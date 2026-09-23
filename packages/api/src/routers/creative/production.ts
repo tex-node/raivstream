@@ -22,13 +22,9 @@ export const creativeProductionRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!isCreativePreviewEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 preview is not enabled.' });
       try {
-        const result = await timedCreative('plan.build', () => productionPlanService.plan(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id }));
-        // Building the plan moves the project into preview so the creator can approve it.
-        await ctx.prisma.creativeProject.update({
-          where: { id: input.projectId },
-          data: { status: 'PREVIEW' as never },
-        });
-        return result;
+        // ProductionPlanService.plan persists the plan AND moves the project to
+        // PREVIEW (the state transition is owned by the service).
+        return await timedCreative('plan.build', () => productionPlanService.plan(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id }));
       } catch (error) {
         throw toTrpcError(error, 'Plan building failed.');
       }

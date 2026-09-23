@@ -102,6 +102,11 @@ export class ProductionPlanService {
       });
     }
 
+    // Planning owns the transition into PREVIEW so the creator can approve it.
+    // (The router previously did this separately; centralizing it keeps the
+    // state machine consistent for every caller, including tooling.)
+    await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'PREVIEW' as never } });
+
     return { plan, preview };
   }
 

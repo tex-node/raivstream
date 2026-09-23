@@ -97,6 +97,15 @@ describe('phase 9 — context pipeline', () => {
     expect(line).toContain('young professionals');
   });
 
+  it('reads the studio-seeded brand shape (brandIdentity.name) used by campaign projects', () => {
+    const seeded = { version: 1, brand: { brandIdentity: { name: 'Voltaic Noir' }, approvedMessaging: ['Night belongs to you'], product: 'Radiance Serum' }, visualLanguage: { style: 'noir cinematic' } } as never;
+    const context = buildProductionContext({ bible: seeded });
+    expect(context.source).toBe('STUDIO');
+    expect(context.brandName).toBe('Voltaic Noir');
+    expect(context.approvedMessaging).toContain('Night belongs to you');
+    expect(contextPromptLine(context)).toContain('Voltaic Noir');
+  });
+
   it('recognizes series context from canon alone', () => {
     const context = buildProductionContext({ bible: { version: 1, canon: { world: { name: 'Lagos' } } } as never });
     expect(context.source).toBe('SERIES');
@@ -293,6 +302,19 @@ describe('phase 9 — approval-state consistency', () => {
       },
     } as never;
   }
+
+  it('planning owns the transition into PREVIEW', async () => {
+    const updates: any[] = [];
+    const prisma: any = {
+      creativeProject: {
+        findFirst: async () => ({ id: 'p1', userId: 'u1', projectType: 'COMMERCIAL', title: 'x', brief: null, bible: null, productionPlan: null }),
+        update: async ({ data }: any) => { updates.push(data); return {}; },
+      },
+      creativeProductionPlan: { create: async () => ({ id: 'pl1' }) },
+    };
+    await new ProductionPlanService().plan(prisma as never, { projectId: 'p1', userId: 'u1' });
+    expect(updates.some((entry) => entry.status === 'PREVIEW')).toBe(true);
+  });
 
   it('rejects an impossible status transition and allows a valid one', async () => {
     const service = new ProjectService();

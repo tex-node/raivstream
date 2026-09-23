@@ -253,8 +253,18 @@ export async function recoverStuckProductions(
       alreadyActive.push(project.id);
       continue;
     }
-    if (latestRun && latestRun.status === 'RUNNING') stale.push(project.id);
-    await runCreativeProduction(prisma, { projectId: project.id, attempt: (latestRun ? 2 : 1) }, deps, { now });
+    if (latestRun && latestRun.status === 'RUNNING') {
+      stale.push(project.id);
+      if (model?.update) {
+        await model.update({ where: { id: latestRun.id }, data: { attempt: { increment: 1 }, stage: 'recovering', lastError: 'Recovered after a process restart.' } }).catch(() => undefined);
+      }
+    }
+    await runCreativeProduction(
+      prisma,
+      { projectId: project.id, runId: latestRun?.status === 'RUNNING' ? latestRun.id : undefined, attempt: latestRun ? 2 : 1 },
+      deps,
+      { now },
+    );
     recovered.push(project.id);
   }
   return { recovered, alreadyActive, stale };

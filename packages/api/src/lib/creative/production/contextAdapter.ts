@@ -68,15 +68,19 @@ export function buildProductionContext(input: {
   const visualLanguage = asRecord(bible?.visualLanguage);
   const audioLanguage = asRecord(bible?.audioLanguage);
   const audience = asRecord(bible?.audience);
+  const brandIdentity = asRecord(brand.brandIdentity);
+  const brandTone = asRecord(brand.tone);
 
-  const brandName = str(brand.name) ?? str(brand.brandName);
+  // Studio seeding stores the brand name under `brand.brandIdentity.name` and the
+  // product name under `brand.product`; accept both plus a direct `brand.name`.
+  const brandName = str(brand.name) ?? str(brand.brandName) ?? str(brandIdentity.name) ?? str(brand.product);
   const hasSeriesCanon = Boolean(canon.world ?? canon.storyRules ?? canon.worldRules ?? canon.characterCanon);
   const source: ProductionContextSource = brandName ? 'STUDIO' : hasSeriesCanon ? 'SERIES' : 'PROJECT';
 
   return {
     source,
     audience: str(brief?.audience) ?? str(audience.description) ?? str(audience.primary),
-    tone: str(brief?.tone) ?? str(brand.tone) ?? str(visualLanguage.tone),
+    tone: str(brandTone.style) ?? str(brandTone.description) ?? str(brief?.tone) ?? str(visualLanguage.tone),
     brandName,
     approvedMessaging: strList(brand.approvedMessaging),
     visualLanguage: str(visualLanguage.style),
