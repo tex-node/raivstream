@@ -6,7 +6,7 @@ import { transformAcceptsVideo } from '@/lib/creativeCapabilities';
 export type ReadinessContextType = 'PRODUCT' | 'BRAND' | 'LOGO' | 'PERSON' | 'SOURCE';
 
 export type ReadinessResolution =
-  | { kind: 'asset'; fileName?: string }
+  | { kind: 'asset'; fileName?: string; file?: File }
   | { kind: 'describe'; text: string }
   | { kind: 'fictional' };
 
@@ -109,7 +109,7 @@ export function ReadinessGate({
                   disabled={busy}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) onResolve({ kind: 'asset', fileName: file.name });
+                    if (file) onResolve({ kind: 'asset', fileName: file.name, file });
                   }}
                 />
                 {labels.upload}

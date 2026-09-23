@@ -18,6 +18,8 @@ import { analyzeImpact, planSceneIds } from './impact';
 import { approvalService } from '../approval/service';
 import type { DirectorDecision, DirectiveInternal } from './types';
 import type { EntityReference } from '../review/types';
+import { interpret } from '../intent/interpreter';
+import { assessIntentReadiness, type IntentReadiness } from '../intent/readiness';
 
 type VersionRow = { id: string; projectId: string; versionNumber: number; label: string | null; snapshot: unknown; createdAt: Date };
 
@@ -178,14 +180,29 @@ export class DirectorService {
    * version → apply → mark only the affected scenes for regeneration. Returns
    * the decision so the UI can show change/preserve/impact and what it will
    * regenerate.
+   *
+   * If the instruction semantically changes the project into user-owned
+   * commercial territory (e.g. "Make this an advert for my skincare brand"),
+   * readiness is re-evaluated and a `requiredAction` is returned so the UI
+   * can surface the ReadinessGate BEFORE offering production. The apply still
+   * happens (it's a semantic-only change, always reversible) but the UI must
+   * not offer "Regenerate" while `requiredAction` is present.
    */
   async applyInstruction(
     prisma: PrismaClient,
     input: { projectId: string; userId: string; instruction: string },
-  ): Promise<{ applied: boolean; affectedSceneIds: string[]; impact: DirectorDecision['impact']; directiveId: string; versionId: string; decision: DirectorDecision }> {
+  ): Promise<{
+    applied: boolean;
+    affectedSceneIds: string[];
+    impact: DirectorDecision['impact'];
+    directiveId: string;
+    versionId: string;
+    decision: DirectorDecision;
+    requiredAction?: Extract<IntentReadiness, { ready: false }>;
+  }> {
     const directed = await this.direct(prisma, input);
     const applied = await this.apply(prisma, { projectId: input.projectId, userId: input.userId, directiveId: directed.directiveId });
-    return {
+    const base = {
       applied: applied.applied,
       affectedSceneIds: applied.affectedSceneIds,
       impact: applied.impact,
@@ -193,6 +210,46 @@ export class DirectorService {
       versionId: directed.version.id,
       decision: directed.decision,
     };
+
+    // Re-evaluate readiness for the instruction text. A directive that pivots
+    // the creative into user-owned commercial territory (product/brand) requires
+    // context the original brief may not have. Catch it here, before production.
+    let instructionReadiness: IntentReadiness = { ready: true };
+    try {
+      const interpretation = interpret(input.instruction);
+      const project = await prisma.creativeProject
+        .findFirst({ where: { id: input.projectId }, include: { brief: true } })
+        .catch(() => null);
+      const attachments = Array.isArray((project?.brief as Record<string, unknown> | null)?.attachments)
+        ? ((project?.brief as Record<string, unknown>)?.attachments as unknown[])
+        : [];
+      const hasSourceAsset = attachments.some((a) => typeof (a as Record<string, unknown>)?.url === 'string' && (a as Record<string, unknown>)?.url);
+      const studioProduct = await prisma.creativeProduct
+        .findFirst({ where: { studio: { userId: input.userId } }, select: { id: true } })
+        .catch(() => null);
+      instructionReadiness = assessIntentReadiness(input.instruction, interpretation, {
+        hasSourceAsset,
+        hasStudioProduct: Boolean(studioProduct),
+      });
+    } catch {
+      // interpret() can throw if intent feature flag is off — don't block in that case
+    }
+
+    if (!instructionReadiness.ready) {
+      // Persist the new commercial context to refinedIntent so the production
+      // boundary (assertSourceReady) also catches it if the UI is bypassed.
+      try {
+        await prisma.creativeBrief.updateMany({
+          where: { projectId: input.projectId },
+          data: { refinedIntent: input.instruction },
+        });
+      } catch {
+        // Non-fatal — the production invariant will still catch it
+      }
+      return { ...base, requiredAction: instructionReadiness as Extract<IntentReadiness, { ready: false }> };
+    }
+
+    return base;
   }
 
   async explore(prisma: PrismaClient, input: { projectId: string; userId: string; instruction: string }): Promise<{ decision: DirectorDecision; versions: VersionRow[] }> {

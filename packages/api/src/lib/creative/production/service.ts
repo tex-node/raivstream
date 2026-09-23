@@ -85,13 +85,17 @@ export class ProductionPlanService {
    */
   private async assertSourceReady(
     prisma: PrismaClient,
-    project: { userId: string; brief: { originalIntent?: string | null; attachments?: unknown } | null },
+    project: { userId: string; brief: { originalIntent?: string | null; refinedIntent?: string | null; attachments?: unknown } | null },
   ): Promise<void> {
+    // Use the combined intent so a Director instruction that changed the brief's
+    // refinedIntent (e.g. "Make this a product ad for my brand") is also checked.
     const originalIntent = project.brief?.originalIntent ?? '';
-    if (!originalIntent) return;
+    const refinedIntent = project.brief?.refinedIntent ?? '';
+    const intentText = [originalIntent, refinedIntent].filter(Boolean).join(' ');
+    if (!intentText) return;
     let interpretation;
     try {
-      interpretation = intentService.interpret(originalIntent);
+      interpretation = intentService.interpret(intentText);
     } catch {
       return; // cannot interpret → do not block
     }
@@ -100,8 +104,8 @@ export class ProductionPlanService {
       .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
       .catch(() => null);
     const signals = { hasStudioProduct: Boolean(studioProduct) };
-    const withoutAsset = assessIntentReadiness(originalIntent, interpretation, { ...signals, hasSourceAsset: false });
-    const withAsset = assessIntentReadiness(originalIntent, interpretation, { ...signals, hasSourceAsset: attachments.length > 0 });
+    const withoutAsset = assessIntentReadiness(intentText, interpretation, { ...signals, hasSourceAsset: false });
+    const withAsset = assessIntentReadiness(intentText, interpretation, { ...signals, hasSourceAsset: attachments.length > 0 });
 
     if (withAsset.ready) {
       // If the source is what satisfied readiness, it must be utilizable.

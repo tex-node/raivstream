@@ -175,6 +175,79 @@ describe('intent readiness — creative freedom vs essential source', () => {
   });
 });
 
+function withFlags<T>(fn: () => Promise<T>): Promise<T> {
+  process.env.RAIVSTREAM_5_ENABLED = 'true';
+  process.env.RAIVSTREAM_5_INTENT_ENABLED = 'true';
+  process.env.RAIVSTREAM_5_PREVIEW_ENABLED = 'true';
+  const done = () => {
+    delete process.env.RAIVSTREAM_5_ENABLED;
+    delete process.env.RAIVSTREAM_5_INTENT_ENABLED;
+    delete process.env.RAIVSTREAM_5_PREVIEW_ENABLED;
+  };
+  return fn().finally(done);
+}
+
+function prismaForWithRefined(originalIntent: string, refinedIntent: string, attachments: unknown[]) {
+  const brief = { originalIntent, refinedIntent, attachments };
+  const project = { id: 'p1', userId: 'u1', title: 'x', projectType: 'COMMERCIAL', status: 'PLANNING', brief, bible: null, productionPlan: null };
+  return {
+    creativeProject: {
+      findFirst: async () => ({ ...project, brief, bible: null, productionPlan: null }),
+      update: async () => project,
+    },
+    creativeProduct: { findFirst: async () => null },
+    creativeProductionPlan: { create: async () => ({ id: 'pl1' }), update: async () => ({ id: 'pl1' }) },
+  } as never;
+}
+
+// ─── Direct → readiness lifecycle ────────────────────────────────────────────
+describe('readiness — promotion lifecycle', () => {
+  it('"Promote my skincare brand." → MISSING_BRAND_NAME (need=NAME, contextType=BRAND)', () => {
+    const r = notReady(assess('Promote my skincare brand.'));
+    expect(r.need).toBe('NAME');
+    expect(r.contextType).toBe('BRAND');
+    expect(r.reason).toBe('MISSING_ESSENTIAL_CONTEXT');
+  });
+
+  it('"Promote my skincare brand called GlowHaus." → MISSING_PRODUCT_SOURCE (need=ASSET)', () => {
+    const r = notReady(assess('Promote my skincare brand called GlowHaus.'));
+    expect(r.need).toBe('ASSET');
+    expect(extractBrandName('Promote my skincare brand called GlowHaus.')).toBe('GlowHaus');
+  });
+
+  it('"Promote my skincare brand called GlowHaus." with usable source → READY', () => {
+    expect(assess('Promote my skincare brand called GlowHaus.', { hasSourceAsset: true }).ready).toBe(true);
+  });
+
+  it('fictional brand/product → READY without any source', () => {
+    expect(assess('Create a fictional skincare brand called GlowHaus and promote it.').ready).toBe(true);
+    expect(assess('Invent a luxury perfume brand and make a commercial.').ready).toBe(true);
+  });
+
+  it('assertSourceReady uses refinedIntent to catch post-directive commercial context', () =>
+    withFlags(async () => {
+      // Original intent is a neutral story — passes by itself.
+      // refinedIntent (set by the director pivot) contains the product ownership cue.
+      const prisma = prismaForWithRefined(
+        'Create a cinematic story.',
+        'Make this an advert for my skincare product.',
+        [],
+      );
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+    }));
+
+  it('a ready-original + ready-refined (source supplied) → proceeds', () =>
+    withFlags(async () => {
+      const prisma = prismaForWithRefined(
+        'Create a cinematic story.',
+        'Make this an advert for my skincare product.',
+        [{ label: 'Product', kind: 'image', url: 'r2://product.png' }],
+      );
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.plan.scenes.length).toBeGreaterThan(0);
+    }));
+});
+
 // ─── Production-boundary invariant (defensive) ───────────────────────────────
 describe('production invariant — source is required before rendering', () => {
   function prismaFor(brief: { originalIntent: string; attachments: unknown[] }) {

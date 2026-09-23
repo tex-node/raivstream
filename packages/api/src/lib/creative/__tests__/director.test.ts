@@ -130,3 +130,71 @@ describe('director service', () => {
     expect(prisma.__memories.some((m: any) => m.kind === 'DIRECTION')).toBe(true);
   });
 });
+
+describe('director applyInstruction — readiness re-evaluation after directive', () => {
+  function prismaMockWithBrief(originalIntent: string, attachments: unknown[] = []) {
+    const versions: any[] = [];
+    const directives: any[] = [];
+    const memories: any[] = [];
+    const briefUpdates: any[] = [];
+    const project = { id: 'p1', userId: 'u1', projectType: 'COMMERCIAL', title: 'Skincare', status: 'REVIEW', currentVersionId: null };
+    const bible = { version: 1, characters: [], worlds: [] };
+    const brief = { originalIntent, attachments, refinedIntent: null };
+    const prisma: any = {
+      creativeProject: {
+        findFirst: async () => ({ ...project, productionPlan: { plan: PLAN }, bible, brief }),
+        update: async ({ data }: any) => { Object.assign(project, data); return project; },
+      },
+      creativeVersion: {
+        findFirst: async () => versions[versions.length - 1] ?? null,
+        create: async ({ data }: any) => { const v = { id: `v${versions.length + 1}`, createdAt: new Date(), ...data }; versions.push(v); return v; },
+      },
+      creativeDirective: { create: async ({ data }: any) => { const d = { id: `d${directives.length + 1}`, createdAt: new Date(), ...data }; directives.push(d); return d; }, findFirst: async () => directives[directives.length - 1] ?? null },
+      creativeMemory: { create: async ({ data }: any) => { memories.push(data); return { id: 'm1' }; } },
+      creativeBible: { upsert: async ({ update }: any) => ({ id: 'b1', ...update }) },
+      creativeApproval: { updateMany: async () => ({ count: 0 }) },
+      creativeProductionPlan: { upsert: async ({ update }: any) => ({ id: 'plan1', ...update }) },
+      creativeProducedAsset: { deleteMany: async () => ({ count: 0 }) },
+      creativeBrief: { updateMany: async ({ data }: any) => { briefUpdates.push(data); return { count: 1 }; } },
+      creativeProduct: { findFirst: async () => null },
+      __briefUpdates: briefUpdates,
+    };
+    return prisma;
+  }
+
+  it('a purely stylistic directive (no ownership) has no requiredAction', async () => {
+    const prisma = prismaMockWithBrief('Create a cinematic commercial.');
+    const result = await new DirectorService().applyInstruction(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Make the ending more hopeful.' });
+    expect(result.applied).toBe(true);
+    expect(result.requiredAction).toBeUndefined();
+  });
+
+  it('a directive pivoting to user-owned product returns requiredAction (not ready)', async () => {
+    const prisma = prismaMockWithBrief('Create a cinematic story.');
+    const result = await new DirectorService().applyInstruction(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Make this an advert for my skincare product.' });
+    expect(result.applied).toBe(true);
+    expect(result.requiredAction).toBeDefined();
+    expect(result.requiredAction!.ready).toBe(false);
+    expect(result.requiredAction!.reason).toBe('MISSING_ESSENTIAL_CONTEXT');
+  });
+
+  it('a directive naming the brand still blocks on missing source', async () => {
+    const prisma = prismaMockWithBrief('Create a cinematic story.');
+    const result = await new DirectorService().applyInstruction(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Promote my skincare brand called GlowHaus.' });
+    expect(result.requiredAction).toBeDefined();
+    expect(result.requiredAction!.need).toBe('ASSET');
+  });
+
+  it('persists refinedIntent when requiredAction is returned', async () => {
+    const prisma = prismaMockWithBrief('Create a cinematic story.');
+    await new DirectorService().applyInstruction(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Make this an advert for my skincare product.' });
+    expect(prisma.__briefUpdates.length).toBeGreaterThan(0);
+    expect(prisma.__briefUpdates[0].refinedIntent).toContain('skincare');
+  });
+
+  it('a directive with an attached usable source does NOT return requiredAction', async () => {
+    const prisma = prismaMockWithBrief('Create a commercial.', [{ label: 'Product', kind: 'image', url: 'r2://product.png' }]);
+    const result = await new DirectorService().applyInstruction(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Make this an advert for my skincare product.' });
+    expect(result.requiredAction).toBeUndefined();
+  });
+});

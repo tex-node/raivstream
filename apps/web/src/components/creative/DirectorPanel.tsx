@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { ReadinessGate, type ReadinessResolution } from '@/components/creative/ReadinessGate';
 
 type Decision = {
   interpretation: string;
@@ -30,24 +31,38 @@ const FALLBACK_EXAMPLES: Array<{ label: string; instruction: string }> = [
  * regenerated. That is the mind-reader moment: Raivstream understood the
  * meaning, not just the words.
  */
+type RequiredAction = { ready: false; reason: string; need: 'NAME' | 'ASSET'; question: string; contextType: string };
+
 export function DirectorPanel({ projectId }: { projectId: string }) {
   const [instruction, setInstruction] = useState('');
+  const [gateResolved, setGateResolved] = useState(false);
   const utils = trpc.useUtils();
   const propose = trpc.creative.director.propose.useMutation();
   const explore = trpc.creative.director.explore.useMutation();
   const applyInstruction = trpc.creative.director.applyInstruction.useMutation({
     onSuccess: () => {
+      setGateResolved(false);
       utils.creative.director.versions.invalidate({ projectId });
       utils.creative.project.get.invalidate({ projectId });
     },
   });
   const produce = trpc.creative.production.produce.useMutation({ onSuccess: () => utils.creative.project.get.invalidate({ projectId }) });
+  const updateBrief = trpc.creative.project.updateBrief.useMutation();
+  const requestUpload = trpc.creative.project.requestAttachmentUpload.useMutation();
+  const confirmAttachment = trpc.creative.project.confirmAttachment.useMutation({
+    onSuccess: () => {
+      setGateResolved(true);
+      utils.creative.project.get.invalidate({ projectId });
+    },
+  });
   const versionsQuery = trpc.creative.director.versions.useQuery({ projectId });
   const suggestionsQuery = trpc.creative.director.suggestions.useQuery({ projectId });
   const suggestions = (suggestionsQuery.data as Array<{ label: string; instruction: string }> | undefined) ?? FALLBACK_EXAMPLES;
 
   const decision = propose.data?.decision as Decision | undefined;
   const applied = applyInstruction.data;
+  const requiredAction: RequiredAction | undefined = applied?.requiredAction as RequiredAction | undefined;
+  const showGate = Boolean(requiredAction && !gateResolved);
   const exploreVersions = explore.data?.versions as Array<{ id: string; versionNumber: number; label: string | null }> | undefined;
   const versions = versionsQuery.data as Array<{ id: string; versionNumber: number; label: string | null }> | undefined;
 
@@ -56,6 +71,35 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
     if (!ready) return;
     applyInstruction.reset();
     propose.mutate({ projectId, instruction });
+  };
+
+  const gateLoading = updateBrief.isPending || requestUpload.isPending || confirmAttachment.isPending;
+
+  const resolveGate = async (resolution: ReadinessResolution) => {
+    if (resolution.kind === 'fictional') {
+      await updateBrief.mutateAsync({ projectId, refinedIntent: `${instruction} Use a fictional concept — invent it rather than using a real one.` });
+      setGateResolved(true);
+      return;
+    }
+    if (resolution.kind === 'describe') {
+      await updateBrief.mutateAsync({ projectId, refinedIntent: `${instruction} ${resolution.text}` });
+      setGateResolved(true);
+      return;
+    }
+    // kind === 'asset' — upload the file then record it in the brief
+    if (resolution.file) {
+      try {
+        const { uploadUrl, key } = await requestUpload.mutateAsync({ projectId, fileName: resolution.fileName ?? resolution.file.name, contentType: resolution.file.type || 'image/jpeg' });
+        await fetch(uploadUrl, { method: 'PUT', body: resolution.file, headers: { 'Content-Type': resolution.file.type || 'image/jpeg' } });
+        await confirmAttachment.mutateAsync({ projectId, key, label: requiredAction?.contextType ?? 'Source', kind: resolution.file.type.startsWith('video') ? 'video' : 'image' });
+      } catch {
+        // errors surfaced via mutation error state
+      }
+    } else {
+      // No actual file (e.g. fileName only) — record as label-only attachment; production boundary will catch it
+      await updateBrief.mutateAsync({ projectId, refinedIntent: `${instruction} ${resolution.fileName ?? 'product photo uploaded'}` });
+      setGateResolved(true);
+    }
   };
 
   return (
@@ -161,7 +205,24 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {applied && (
+      {applied && showGate && requiredAction && (
+        <div className="rounded-2xl border border-[rgba(178,90,217,0.3)] bg-[rgba(178,90,217,0.05)] p-5">
+          <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Before I can regenerate</p>
+          <ReadinessGate
+            question={requiredAction.question}
+            contextType={requiredAction.contextType as import('@/components/creative/ReadinessGate').ReadinessContextType}
+            need={requiredAction.need}
+            busy={gateLoading}
+            onResolve={(r) => { void resolveGate(r); }}
+            onBack={() => { applyInstruction.reset(); setGateResolved(false); }}
+          />
+          {(updateBrief.error || requestUpload.error || confirmAttachment.error) && (
+            <p className="mt-2 text-sm text-[#e35d5d]">{(updateBrief.error ?? requestUpload.error ?? confirmAttachment.error)?.message}</p>
+          )}
+        </div>
+      )}
+
+      {applied && !showGate && (
         <div className="rounded-2xl border border-[rgba(79,139,214,0.25)] bg-[rgba(79,139,214,0.06)] p-5">
           <p className="text-sm font-bold text-[var(--noc-blue)]">
             Applied. {applied.affectedSceneIds.length} scene{applied.affectedSceneIds.length === 1 ? '' : 's'} will be regenerated — everything else stays exactly as it is.
