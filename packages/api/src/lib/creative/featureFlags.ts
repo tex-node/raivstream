@@ -31,6 +31,10 @@ export const CREATIVE_FLAGS = {
   DIRECTOR_ENABLED: 'RAIVSTREAM_5_DIRECTOR_ENABLED',
   /** Review engine. */
   REVIEW_ENABLED: 'RAIVSTREAM_5_REVIEW_ENABLED',
+  /** Version-specific approval. */
+  APPROVAL_ENABLED: 'RAIVSTREAM_5_APPROVAL_ENABLED',
+  /** Output derivatives of an approved version. */
+  OUTPUT_ENABLED: 'RAIVSTREAM_5_OUTPUT_ENABLED',
   /** Studio (brands/products/campaigns). */
   STUDIO_ENABLED: 'RAIVSTREAM_5_STUDIO_ENABLED',
 } as const;
@@ -73,6 +77,14 @@ export function isCreativeDirectorEnabled(env: NodeJS.ProcessEnv = process.env):
 
 export function isCreativeReviewEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return isCreativeEnabled(env) && flagOn('REVIEW_ENABLED', env);
+}
+
+export function isCreativeApprovalEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isCreativeEnabled(env) && flagOn('APPROVAL_ENABLED', env);
+}
+
+export function isCreativeOutputEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isCreativeEnabled(env) && flagOn('OUTPUT_ENABLED', env);
 }
 
 export function isCreativeStudioEnabled(env: NodeJS.ProcessEnv = process.env): boolean {

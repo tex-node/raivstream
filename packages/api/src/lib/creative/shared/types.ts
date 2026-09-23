@@ -124,6 +124,7 @@ export interface CreativeProjectState {
   brief?: CreativeBriefState | null;
   bible?: CreativeBibleState | null;
   hasPlan: boolean;
+  currentVersionId?: string | null;
   nextAction: NextAction;
   createdAt: Date;
   updatedAt: Date;

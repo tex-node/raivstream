@@ -15,6 +15,7 @@ import type { CreativeProductionPlanState } from '../production/plan';
 import { interpretDirective } from './interpreter';
 import { resolveEntities } from './resolver';
 import { analyzeImpact, planSceneIds } from './impact';
+import { approvalService } from '../approval/service';
 import type { DirectorDecision, DirectiveInternal } from './types';
 import type { EntityReference } from '../review/types';
 
@@ -51,6 +52,9 @@ async function snapshotVersion(prisma: PrismaClient, projectId: string, state: R
     data: { projectId, versionNumber, label, snapshot: state as never },
   });
   await prisma.creativeProject.update({ where: { id: projectId }, data: { currentVersionId: version.id } });
+  // Material creative change → invalidate any prior approvals (never leave a
+  // previously approved version silently approved).
+  await approvalService.invalidateProjectApprovals(prisma, projectId);
   return { id: version.id, projectId, versionNumber, label, snapshot: version.snapshot, createdAt: version.createdAt };
 }
 

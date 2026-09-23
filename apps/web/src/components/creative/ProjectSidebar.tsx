@@ -6,6 +6,7 @@ export type CreativeProject = {
   projectType: string;
   status: string;
   nextAction: string;
+  currentVersionId?: string | null;
   brief?: { originalIntent: string; refinedIntent?: string; objective?: string; audience?: string; format?: string; durationSeconds?: number; tone?: string; setting?: string } | null;
   bible?: { version: number; story?: unknown; characters?: unknown[]; worlds?: unknown[]; visualLanguage?: unknown } | null;
 };

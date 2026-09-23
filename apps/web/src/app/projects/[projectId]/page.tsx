@@ -13,6 +13,8 @@ import { PreviewPanel } from '@/components/creative/PreviewPanel';
 import { ProductionPanel } from '@/components/creative/ProductionPanel';
 import { ReviewPanel } from '@/components/creative/ReviewPanel';
 import { DirectorPanel } from '@/components/creative/DirectorPanel';
+import { ApprovalBar } from '@/components/creative/ApprovalBar';
+import { OutputPanel } from '@/components/creative/OutputPanel';
 
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
@@ -95,6 +97,12 @@ export default function CreativeProjectPage() {
               <>
                 <ReviewPanel projectId={projectId} />
                 <DirectorPanel projectId={projectId} />
+              </>
+            )}
+            {project.currentVersionId && (
+              <>
+                <ApprovalBar projectId={projectId} currentVersionId={project.currentVersionId} />
+                <OutputPanel projectId={projectId} currentVersionId={project.currentVersionId} />
               </>
             )}
           </>

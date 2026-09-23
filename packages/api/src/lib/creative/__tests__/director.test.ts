@@ -87,6 +87,7 @@ describe('director service', () => {
       creativeDirective: { create: async ({ data }: any) => { const d = { id: `d${directives.length + 1}`, createdAt: new Date(), ...data }; directives.push(d); return d; }, findFirst: async () => directives[directives.length - 1] ?? null },
       creativeMemory: { create: async ({ data }: any) => { memories.push(data); return { id: 'm1' }; } },
       creativeBible: { upsert: async ({ update }: any) => ({ id: 'b1', ...update }) },
+      creativeApproval: { updateMany: async () => ({ count: 0 }) },
       creativeProductionPlan: { upsert: async ({ update }: any) => ({ id: 'plan1', ...update }) },
       creativeProducedAsset: { deleteMany: async ({ where }: any) => { deleted.push(JSON.stringify(where)); return { count: 1 }; } },
       __versions: versions, __directives: directives, __memories: memories, __deleted: deleted,

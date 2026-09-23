@@ -274,6 +274,17 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 5 (APPROVAL → OUTPUTS)
+
+Per the slice-5 boundary: Approval first (version-specific, invalidated on material change), then Outputs as derivatives of an approved version. No hidden NLE — OutputService owns the mechanics.
+
+- **Models (2 additive migrations):** `20260922170000_creative_approval` — `CreativeApproval` (versionId+kind unique; CREATIVE/PRODUCTION/OUTPUT; PENDING/APPROVED/REJECTED/CHANGES_REQUESTED/INVALIDATED); `20260922180000_creative_output` — `CreativeOutput` (versionId, format MASTER/LANDSCAPE/PORTRAIT/SQUARE, durationSeconds, status). Both relate back to `CreativeVersion` (provenance).
+- **5A Approval:** `lib/creative/approval/service.ts` — `decide` (approve/reject/request_changes), `isApproved`, `list`, `invalidateProjectApprovals`. **Invalidation is wired into the Director's `snapshotVersion`** — a material Direct/Explore creates a new version and marks every prior APPROVED approval INVALIDATED (never silently re-approved); non-material actions (re-review, production retry) never invalidate. `creative.approval.{decide,list}` gated on `RAIVSTREAM_5_APPROVAL_ENABLED`.
+- **5B Outputs:** `lib/creative/output/{derivation,render,service}.ts` — `deriveOutput` (16:9/9:16/1:1 center-crop + duration trim mechanics), `renderOutputDerivative` (concat the version's scene clips in plan order → scale/crop → trim → R2; injectable for hermetic tests), `OutputService.{derive,render,list}`. **Only an APPROVED version can produce outputs** (`PLAN_NOT_APPROVED` otherwise); outputs are derivatives with provenance back to the source version; the original produced assets are never mutated. `creative.output.{derive,render,list}` gated on `RAIVSTREAM_5_OUTPUT_ENABLED`.
+- **Frontend:** `ApprovalBar` (per-version Creative/Production/Output approve/request-changes/reject) + `OutputPanel` (format + duration selects → "Derive output" → gallery with provenance), wired into `/projects/[projectId]` when a version exists.
+- **Tests:** approval.test.ts (4: approve current, material Direct invalidates, non-material leaves intact, reject/request-changes) + output.test.ts (7: 16:9/1:1/duration derivation, approved-only gate, provenance, original untouched, renderer mechanics) — suite **517/517**, type-check + lint clean.
+- **Kept out (per boundary):** Series/Studio, collaboration, pricing, advanced prompting, provider selection, full asset-management redesign, durable queue, full NLE, broad version-management UX.
+
 ### 2026-09-22: Raivstream 5.0 — slice 4 (JUDGE: Review → Director → minimal Versioning)
 
 Per the sequencing refinement: **Review first, then Director consumes findings.** ReviewService wraps the existing CreativeCritic (via `creativeCriticProvider.evaluate` — no legacy writes); DirectorService is a semantic control system (change+preserve+impact → version → ProductionService). The Director never generates.

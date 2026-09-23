@@ -177,10 +177,11 @@ completeness + moderation UX) slices 1–2 shipped. Next: movie wiring for shot 
 audio-driven timing.
 
 **Raivstream 5.0 (in progress):** a semantic creative-orchestration layer above the production
-infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slices 1–4
+infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slices 1–5
 shipped: CREATE+INTENT (foundation), PLAN (scenes→shots→timeline→preview), PRODUCE
 (ProductionService→CapabilityRouter→GenerationAdapter→existing infra), JUDGE (Review wraps the
 existing CreativeCritic → human KEEP/FIX/REVIEW findings; Director resolves change+preserve+
-impact → version → targeted production; minimal versioning). See
-`docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
+impact → version → targeted production), APPROVAL→OUTPUTS (version-specific approval with
+invalidation on material change; outputs as derivatives of an approved version — 16:9/9:16/1:1
++ duration cuts). See `docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
 `packages/api/src/lib/creative/`.

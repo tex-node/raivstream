@@ -23,6 +23,7 @@ type CreativeProjectRow = {
   projectType: string;
   status: string;
   legacyStoryProjectId: string | null;
+  currentVersionId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   brief?: { originalIntent: string; refinedIntent: string | null; objective: string | null; audience: string | null; format: string | null; durationSeconds: number | null; genre: string | null; tone: string | null; theme: string | null; setting: string | null; attachments: unknown } | null;
@@ -70,6 +71,7 @@ export function serializeProject(row: CreativeProjectRow): CreativeProjectState 
     brief,
     bible,
     hasPlan: Boolean(row.productionPlan),
+    currentVersionId: row.currentVersionId ?? null,
     nextAction: nextActionFor(row.status as CreativeProjectState['status'], Boolean(bible), Boolean(row.productionPlan)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

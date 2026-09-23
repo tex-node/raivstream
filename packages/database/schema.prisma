@@ -2027,6 +2027,34 @@ enum CreativeReviewResolutionKind {
   REVIEW
 }
 
+enum CreativeApprovalKind {
+  CREATIVE
+  PRODUCTION
+  OUTPUT
+}
+
+enum CreativeApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  INVALIDATED
+}
+
+enum CreativeOutputFormat {
+  MASTER
+  LANDSCAPE
+  PORTRAIT
+  SQUARE
+}
+
+enum CreativeOutputStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
 model CreativeProject {
   id                   String                @id @default(cuid())
   userId               String
@@ -2042,6 +2070,8 @@ model CreativeProject {
   versions             CreativeVersion[]
   directives           CreativeDirective[]
   reviewRuns           CreativeReviewRun[]
+  approvals            CreativeApproval[]
+  outputs              CreativeOutput[]
   currentVersionId     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -2148,6 +2178,9 @@ model CreativeVersion {
   snapshot      Json
   createdAt     DateTime        @default(now())
 
+  approvals CreativeApproval[]
+  outputs   CreativeOutput[]
+
   @@unique([projectId, versionNumber])
   @@index([projectId])
   @@map("creative_versions")
@@ -2200,4 +2233,42 @@ model CreativeReviewResolution {
 
   @@unique([runId, findingId])
   @@map("creative_review_resolutions")
+}
+
+model CreativeApproval {
+  id          String                 @id @default(cuid())
+  projectId   String
+  project     CreativeProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     CreativeVersion        @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  kind        CreativeApprovalKind
+  status      CreativeApprovalStatus @default(PENDING)
+  decidedById String?
+  note        String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([versionId, kind])
+  @@index([projectId])
+  @@map("creative_approvals")
+}
+
+model CreativeOutput {
+  id              String                @id @default(cuid())
+  projectId       String
+  project         CreativeProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId       String
+  version         CreativeVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  format          CreativeOutputFormat
+  durationSeconds Int?
+  status          CreativeOutputStatus  @default(PENDING)
+  assetUrl        String?
+  thumbnailUrl    String?
+  errorMessage    String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([projectId])
+  @@index([versionId])
+  @@map("creative_outputs")
 }
