@@ -17,7 +17,7 @@ describe('creative project state', () => {
   it('derives next action from status + bible presence', () => {
     expect(nextActionFor('IDEA', false)).toBe('UNDERSTAND_INTENT');
     expect(nextActionFor('PLANNING', false)).toBe('BUILD_BIBLE');
-    expect(nextActionFor('PLANNING', true)).toBe('REVIEW_PLAN');
+    expect(nextActionFor('PLANNING', true, true)).toBe('REVIEW_PLAN');
     expect(nextActionFor('PREVIEW', true)).toBe('APPROVE_PREVIEW');
     expect(nextActionFor('REVIEW', true)).toBe('REVIEW_OUTPUT');
     expect(nextActionFor('APPROVED', true)).toBe('APPROVE_OUTPUT');

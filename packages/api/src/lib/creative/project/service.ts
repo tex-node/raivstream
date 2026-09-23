@@ -27,6 +27,7 @@ type CreativeProjectRow = {
   updatedAt: Date;
   brief?: { originalIntent: string; refinedIntent: string | null; objective: string | null; audience: string | null; format: string | null; durationSeconds: number | null; genre: string | null; tone: string | null; theme: string | null; setting: string | null; attachments: unknown } | null;
   bible?: { version: number; story: unknown; characters: unknown; worlds: unknown; visualLanguage: unknown; audioLanguage: unknown; audience: unknown; brand: unknown; constraints: unknown; canon: unknown } | null;
+  productionPlan?: { id: string } | null;
 };
 
 export function serializeProject(row: CreativeProjectRow): CreativeProjectState {
@@ -68,7 +69,8 @@ export function serializeProject(row: CreativeProjectRow): CreativeProjectState 
     legacyStoryProjectId: row.legacyStoryProjectId,
     brief,
     bible,
-    nextAction: nextActionFor(row.status as CreativeProjectState['status'], Boolean(bible)),
+    hasPlan: Boolean(row.productionPlan),
+    nextAction: nextActionFor(row.status as CreativeProjectState['status'], Boolean(bible), Boolean(row.productionPlan)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -114,7 +116,7 @@ export class ProjectService {
           },
         },
       },
-      include: { brief: true, bible: true },
+      include: { brief: true, bible: true, productionPlan: true },
     });
 
     if (isCreativeBibleEnabled()) {
@@ -123,7 +125,7 @@ export class ProjectService {
 
     const withBible = await prisma.creativeProject.findUnique({
       where: { id: project.id },
-      include: { brief: true, bible: true },
+      include: { brief: true, bible: true, productionPlan: true },
     });
     if (!withBible) throw new CreativeError('PROJECT_NOT_FOUND', 'Project creation failed.');
     return serializeProject(withBible);
@@ -132,7 +134,7 @@ export class ProjectService {
   async get(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<CreativeProjectState> {
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      include: { brief: true, bible: true },
+      include: { brief: true, bible: true, productionPlan: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
     return serializeProject(project);
@@ -143,7 +145,7 @@ export class ProjectService {
       where: { userId, status: { not: 'ARCHIVED' } },
       orderBy: { updatedAt: 'desc' },
       take: 50,
-      include: { brief: true, bible: true },
+      include: { brief: true, bible: true, productionPlan: true },
     });
     return projects.map(serializeProject);
   }
@@ -157,7 +159,7 @@ export class ProjectService {
     const updated = await prisma.creativeProject.update({
       where: { id: input.projectId },
       data: { status: input.status as never },
-      include: { brief: true, bible: true },
+      include: { brief: true, bible: true, productionPlan: true },
     });
     void project;
     return serializeProject(updated);

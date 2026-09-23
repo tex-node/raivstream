@@ -1,6 +1,7 @@
 import { router } from '../../trpc';
 import { creativeProjectRouter } from './project';
 import { creativeIntentRouter } from './intent';
+import { creativeProductionRouter } from './production';
 
 /**
  * Raivstream 5.0 — Creative API surface.
@@ -9,4 +10,5 @@ import { creativeIntentRouter } from './intent';
 export const creativeRouter = router({
   project: creativeProjectRouter,
   intent: creativeIntentRouter,
+  production: creativeProductionRouter,
 });

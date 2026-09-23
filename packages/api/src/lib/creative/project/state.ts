@@ -43,13 +43,14 @@ export function canTransition(from: CreativeProjectStatus, to: CreativeProjectSt
 export function nextActionFor(
   status: CreativeProjectStatus,
   hasBible: boolean,
+  hasPlan = false,
 ): NextAction {
   switch (status) {
     case 'IDEA':
     case 'INTERPRETING':
       return 'UNDERSTAND_INTENT';
     case 'PLANNING':
-      return hasBible ? 'REVIEW_PLAN' : 'BUILD_BIBLE';
+      return hasPlan ? 'REVIEW_PLAN' : 'BUILD_BIBLE';
     case 'PREVIEW':
       return 'APPROVE_PREVIEW';
     case 'DIRECTING':

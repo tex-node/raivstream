@@ -8,7 +8,8 @@ import { CreativeCanvas } from '@/components/creative/CreativeCanvas';
 import { CreativeBriefView } from '@/components/creative/CreativeBriefView';
 import { CreativeBibleView } from '@/components/creative/CreativeBibleView';
 import { NextActionCard } from '@/components/creative/NextActionCard';
-import { SceneCard } from '@/components/creative/SceneCard';
+import { PlanView } from '@/components/creative/PlanView';
+import { PreviewPanel } from '@/components/creative/PreviewPanel';
 
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
@@ -19,6 +20,21 @@ export default function CreativeProjectPage() {
     { projectId },
     { enabled: Boolean(isLoaded && isSignedIn && projectId) },
   );
+  const utils = trpc.useUtils();
+
+  const planQuery = trpc.creative.production.getPlan.useQuery(
+    { projectId },
+    { enabled: Boolean(isLoaded && isSignedIn && projectId && (projectQuery.data as any)?.hasPlan), retry: false },
+  );
+  const buildPlan = trpc.creative.production.plan.useMutation({
+    onSuccess: async () => {
+      await utils.creative.project.get.invalidate({ projectId });
+      await planQuery.refetch();
+    },
+  });
+  const approve = trpc.creative.project.updateStatus.useMutation({
+    onSuccess: () => utils.creative.project.get.invalidate({ projectId }),
+  });
 
   if (projectQuery.isLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-[var(--noc-page)] text-[var(--noc-t4)]">Loading project…</div>;
@@ -35,6 +51,8 @@ export default function CreativeProjectPage() {
 
   const project = projectQuery.data as any;
   if (!project) return null;
+  const plan = planQuery.data as any;
+  const canBuildPlan = !project.hasPlan && !buildPlan.isPending;
 
   return (
     <CreativeShell project={project}>
@@ -42,15 +60,31 @@ export default function CreativeProjectPage() {
         <NextActionCard project={project} />
         <CreativeBriefView project={project} />
         <CreativeBibleView project={project} />
-        <section id="plan" className="space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Plan</p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <SceneCard index={1} />
-            <SceneCard index={2} />
-            <SceneCard index={3} />
-          </div>
-          <p className="text-sm text-[var(--noc-t6)]">Shot breakdown, timing, narration and visuals are decided automatically during planning.</p>
-        </section>
+
+        {canBuildPlan ? (
+          <section className="rounded-2xl border border-dashed border-[rgba(178,90,217,0.4)] bg-[rgba(178,90,217,0.06)] p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Plan</p>
+            <p className="mt-1 text-sm text-[var(--noc-t3)]">The plan turns your brief + bible into scenes, shots and a timeline — all decided automatically.</p>
+            <button
+              type="button"
+              disabled={buildPlan.isPending}
+              onClick={() => buildPlan.mutate({ projectId })}
+              className="mt-4 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-white disabled:opacity-50"
+            >
+              {buildPlan.isPending ? 'Planning…' : 'Build the production plan'}
+            </button>
+            {buildPlan.error && <p className="mt-2 text-sm text-[#e35d5d]">{buildPlan.error.message}</p>}
+          </section>
+        ) : plan ? (
+          <>
+            <PlanView plan={plan.plan} />
+            <PreviewPanel
+              preview={plan.preview}
+              approving={approve.isPending}
+              onApprove={() => approve.mutate({ projectId, status: 'APPROVED' })}
+            />
+          </>
+        ) : null}
       </CreativeCanvas>
     </CreativeShell>
   );

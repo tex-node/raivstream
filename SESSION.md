@@ -274,6 +274,17 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 2 (PLAN: Production Plan + Preview)
+
+Slice 1 confirmed complete; built the PLAN stage: Brief + Bible → Production Plan → Scenes → Shots → Timeline → Preview.
+
+- **Schema:** `CreativeProductionPlan` (unique projectId; `plan` Json + `preview` Json + version) — migration `20260922130000_creative_production_plan`. `CreativeProject.hasPlan` + plan-aware `nextActionFor` (PLANNING+plan → REVIEW_PLAN).
+- **`lib/creative/production/`:** `plan.ts` (deterministic Brief+Bible → semantic scenes→shots→timeline; auto shot breakdown 5–6s; structure templates per type: story 4-act, commercial hook→product→benefit→CTA, education hook→explain→example→recap, transformation before→during→after), `preview.ts` (cheap text + references — no media — the "is this what I meant?" screen), `adapter.ts` (semantic plan → existing ProductionManifest-shaped outline WITHOUT an LLM — the Slice-3 seam), `service.ts` (ProductionPlanService.plan/getPlan/adapt; persists + moves project → PREVIEW).
+- **API:** `creative.production.{plan,getPlan,adapt}` (gated on `RAIVSTREAM_5_PREVIEW_ENABLED`), registered under `creative`.
+- **Frontend:** `/projects/[projectId]` — "Build the production plan" → `PlanView` (scenes → shots → timeline + notes) + `PreviewPanel` ("Yes, this is what I meant — approve preview" → status APPROVED).
+- **Tests:** production.test.ts (6: commercial/story/education plans, auto shot grid, preview, adapter, next-action) — suite **483/483**, type-check + lint clean.
+- **Known limits:** plan is deterministic (no LLM structurer call yet — adapter seam exists); keyframes/visual previews arrive in Slice 3 (PRODUCE).
+
 ### 2026-09-22: Raivstream 5.0 — slice 1 (Creative Foundation + Create + Intent)
 
 Per the 5.0 implementation prompt (docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md): inspected the repo, then built the FIRST vertical slice only — the semantic orchestration layer above existing production infrastructure.

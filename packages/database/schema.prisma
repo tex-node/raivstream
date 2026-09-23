@@ -1998,6 +1998,7 @@ model CreativeProject {
   brief                CreativeBrief?
   bible                CreativeBible?
   memories             CreativeMemory[]
+  productionPlan       CreativeProductionPlan?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -2058,4 +2059,17 @@ model CreativeMemory {
 
   @@index([projectId])
   @@map("creative_memories")
+}
+
+model CreativeProductionPlan {
+  id        String         @id @default(cuid())
+  projectId String         @unique
+  project   CreativeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version   Int            @default(1)
+  plan      Json
+  preview   Json?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("creative_production_plans")
 }

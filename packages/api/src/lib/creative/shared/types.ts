@@ -123,6 +123,7 @@ export interface CreativeProjectState {
   legacyStoryProjectId: string | null;
   brief?: CreativeBriefState | null;
   bible?: CreativeBibleState | null;
+  hasPlan: boolean;
   nextAction: NextAction;
   createdAt: Date;
   updatedAt: Date;
