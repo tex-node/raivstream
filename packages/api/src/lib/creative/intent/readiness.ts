@@ -71,7 +71,7 @@ const OWNED_PERSON = /\b(my|our)\b[^.?!]{0,16}\b(face|likeness|selfie|resemblanc
 // entity here?" so it generalizes to any product/brand/business. Only used to
 // pick the creator-facing context TYPE (BRAND vs PRODUCT).
 const OWNERSHIP = /\b(my|our)\b/i;
-const COMMERCIAL_PURPOSE = /\b(promote|promotion|adverti[sz](e|ing)|ads?\b|campaign|commercial|market(ing)?|launch(ing)?|sell(ing)?|sale)\b/i;
+const COMMERCIAL_PURPOSE = /\b(promot(e|ion(al)?)|adverti[sz](e|ing|ement)?|ads?\b|campaign|commercial|market(ing)?|launch(ing)?|sell(ing)?|sale)\b/i;
 const BRAND_LIKE = /\b(brand|company|business|label|store|shop|restaurant|salon|clinic|agency|startup|firm|enterprise|studio)\b/i;
 
 const SOURCE_ASSET = /\b(turn|transform|convert|animate|restyle|upgrade|remix)\b[^.?!]{0,30}\b(this|my|our|the)\b[^.?!]{0,20}\b(image|photo|picture|video|clip|recording|footage|song|track|audio|design|logo|artwork)\b|\busing (this|my|our|the) (image|photo|video|clip|recording|footage)\b|\bfrom (this|my|our|the) (image|photo|video|clip)\b/i;
@@ -121,7 +121,7 @@ export function assessIntentReadiness(
       const contextType: ReadinessContextType = brandLike ? 'BRAND' : 'PRODUCT';
       const question = contextType === 'BRAND'
         ? 'Add the brand or product image so I can create the promotion.'
-        : 'Can you upload a photo of the product — or describe it — so I use the real product?';
+        : 'Can you upload a photo of the product so I use the real one?';
       return notReady(contextType, 'ASSET', question);
     }
   }

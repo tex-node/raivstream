@@ -173,6 +173,21 @@ describe('intent readiness — creative freedom vs essential source', () => {
       expect(assess(text).ready).toBe(false);
     }
   });
+
+  // ── "promotional" keyword (word-boundary regression) ─────────────────────
+  it('"Create a promotional video for my skincare product." → not ready, PRODUCT/ASSET', () => {
+    const r = notReady(assess('Create a promotional video for my skincare product.'));
+    expect(r.contextType).toBe('PRODUCT');
+    expect(r.need).toBe('ASSET');
+  });
+
+  it('"Create a promotional video for my skincare product." with source → READY', () => {
+    expect(assess('Create a promotional video for my skincare product.', { hasSourceAsset: true }).ready).toBe(true);
+  });
+
+  it('"Create a promotional video for my skincare product." fictional → READY', () => {
+    expect(assess('Create a promotional video for my skincare product. Use a fictional concept — invent it rather than using a real one.').ready).toBe(true);
+  });
 });
 
 function withFlags<T>(fn: () => Promise<T>): Promise<T> {
@@ -306,5 +321,19 @@ describe('production invariant — source is required before rendering', () => {
       await expect(new ProductionPlanService().plan(concept, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
       const story = prismaFor({ originalIntent: 'Create a cinematic short film about a woman returning home.', attachments: [] });
       await expect(new ProductionPlanService().plan(story, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
+    }));
+
+  it('"Create a promotional video for my skincare product." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION (never reaches renderer)', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create a promotional video for my skincare product.', attachments: [{ label: 'Product' }] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
+    }));
+
+  it('"Create a promotional video for my skincare product." with real URL → proceeds', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create a promotional video for my skincare product.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://product.png' }] });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.plan.scenes.length).toBeGreaterThan(0);
+      expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://product.png');
     }));
 });

@@ -13,6 +13,7 @@ import { InlineSignIn } from '@/components/auth/InlineSignIn';
 import { clearDraft, isMeaningfulDraft, loadDraft, pickResumeProject, saveDraft, CREATE_DRAFT_VERSION, type CreateDraft } from '@/lib/creativeDraft';
 
 type SaveState = 'idle' | 'saving' | 'saved';
+type PendingSource = { file: File; label: string; kind: 'image' | 'video' };
 
 const CONTEXT_ATTACHMENT: Record<string, string> = { PRODUCT: 'Product', BRAND: 'Brand', LOGO: 'Logo', PERSON: 'Reference', SOURCE: 'Source' };
 
@@ -35,6 +36,7 @@ export default function CreatePage() {
   // 'continue' = user tried to proceed past input; 'start' = user tried to start the project
   const [authPendingFor, setAuthPendingFor] = useState<'continue' | 'start' | null>(null);
   const hydratedRef = useRef(false);
+  const pendingSourceRef = useRef<PendingSource | null>(null);
 
   const hasSourceAsset = attachments.length > 0 || sourceSupplied;
 
@@ -98,14 +100,42 @@ export default function CreatePage() {
   );
 
   const planMutation = trpc.creative.production.plan.useMutation();
+  const requestUpload = trpc.creative.project.requestAttachmentUpload.useMutation();
+  const confirmUpload = trpc.creative.project.confirmAttachment.useMutation();
   const createProject = trpc.creative.project.create.useMutation({
     onSuccess: async (project) => {
       const storage = browserStorage();
       if (storage) clearDraft(storage, userId);
-      try {
-        await planMutation.mutateAsync({ projectId: project.id });
-      } catch {
-        /* the workspace can still build the plan */
+
+      const pending = pendingSourceRef.current;
+      pendingSourceRef.current = null;
+      let readyForPlan = !pending;
+
+      if (pending) {
+        try {
+          const { uploadUrl, key } = await requestUpload.mutateAsync({
+            projectId: project.id,
+            fileName: pending.file.name,
+            contentType: pending.file.type || 'image/jpeg',
+          });
+          await fetch(uploadUrl, {
+            method: 'PUT',
+            body: pending.file,
+            headers: { 'Content-Type': pending.file.type || 'image/jpeg' },
+          });
+          await confirmUpload.mutateAsync({ projectId: project.id, key, label: pending.label, kind: pending.kind });
+          readyForPlan = true;
+        } catch {
+          // Upload failed — navigate to project; user can re-upload there
+        }
+      }
+
+      if (readyForPlan) {
+        try {
+          await planMutation.mutateAsync({ projectId: project.id });
+        } catch {
+          /* the workspace can still build the plan */
+        }
       }
       router.push(`/projects/${project.id}`);
     },
@@ -140,13 +170,21 @@ export default function CreatePage() {
       appendText('Use a fictional concept — invent it rather than using a real one.');
       return;
     }
-    // The source is now supplied. Record it as a managed reference so it
-    // propagates into the project (and the production boundary can verify it).
-    setSourceSupplied(true);
-    const label = readiness && readiness.ready === false ? (CONTEXT_ATTACHMENT[readiness.contextType] ?? 'Source') : 'Source';
-    const chip = resolution.kind === 'asset' && resolution.fileName ? `${label}: ${resolution.fileName}` : label;
-    setAttachments((current) => (current.includes(chip) ? current : [...current, chip]));
-    if (resolution.kind === 'describe') appendText(resolution.text);
+    if (resolution.kind === 'asset') {
+      // Real file selected — mark source supplied, add chip, store file for upload
+      setSourceSupplied(true);
+      const label = readiness && readiness.ready === false ? (CONTEXT_ATTACHMENT[readiness.contextType] ?? 'Source') : 'Source';
+      const chip = resolution.fileName ? `${label}: ${resolution.fileName}` : label;
+      setAttachments((current) => (current.includes(chip) ? current : [...current, chip]));
+      if (resolution.file) {
+        const isVideo = resolution.file.type.startsWith('video/');
+        pendingSourceRef.current = { file: resolution.file, label, kind: isVideo ? 'video' : 'image' };
+      }
+    } else if (resolution.kind === 'describe') {
+      // NAME-gate response: append brand/product name to intent text only.
+      // Does NOT mark source as supplied — readiness will re-evaluate on next query.
+      appendText(resolution.text);
+    }
   };
 
   const startOver = () => {
