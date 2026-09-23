@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Launch Readiness — six-gate review; moderation-bypass + R16 blockers fixed; diagnostics/monitor/runbook; 563/563 tests; conditional GO)
+Last updated: 2026-09-23 (Launch Closure Pass — real production telemetry + cost visibility closed; storage/alert mechanisms delivered; CONDITIONAL GO with 3 human/policy conditions)
 Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
 
 ## Maintenance Rule
@@ -273,6 +273,17 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-23: Launch Closure Pass — telemetry + cost visibility closed; operations mechanism delivered
+
+Focused only on the five remaining launch conditions. No product capability added; architecture/CreativeCritic/production engine/moderation/R16 untouched. Report: `docs/operations/phase-9-final-launch-acceptance.md`; alert policy: `docs/operations/alert-routing.md`.
+
+- **Condition 4 — production telemetry: CLOSED.** `scripts/phase9-telemetry-sample.ts` ran 4 real-provider samples and merged all completed runs. Real baseline: intent P50 1ms · plan P50 11ms · production run P50 36.4s/P95 70.9s · **FIRST_VISUAL P50 6.2s**/P95 42.0s · review P50 4.5s · propose P50 4ms · apply P50 31ms · output derive P50 9ms · output render P50 5.7s. All samples 0 failed. Gate 4 → **PASS**.
+- **Condition 5 — cost visibility: CLOSED.** `scripts/creative-cost-report.ts` derives cost from the credit ledger (reference `creative-produce-<assetId>-a<attempt>`): 30-day total 5,800 credits (FLUX2 1,600 / H3 4,200; IMAGE 1,600 / VIDEO 4,200), retry 400 (1 asset), 9 productions, 11 outputs, render 0 credits; per-project/scene/kind/day breakdown.
+- **Condition 2/3 — operations mechanism: DONE (owners/thresholds OPEN).** `scripts/creative-storage-monitor.sh` (live: 29 assets, 0 failed, 0 stuck, 0 stale runs, DB 25 MB) + `docs/operations/alert-routing.md` (P0–P3 matrix, monitor→severity wiring, proposed storage thresholds pending ratification).
+- **Condition 1 — human UX: PENDING** (requires real creators; protocol defined).
+- Cleaned the last smoke artifact (orphaned GENERATING asset); DB now 0 stuck / 0 failed.
+- **563/563 tests**; type-check + lint + build clean. Decision: **CONDITIONAL GO** (3 human/policy conditions remain; no blockers).
 
 ### 2026-09-23: Launch Readiness — six-gate review, two safety blockers FIXED, operational tooling
 
