@@ -81,8 +81,35 @@ The creator-perception metric to watch is **time to first meaningful visual**, n
 ## 5. Verification
 
 - `pnpm --filter @raivstream/api type-check` — clean
-- `pnpm --filter @raivstream/api test` — **546/546** (16 new Phase 9 tests in `packages/api/src/lib/creative/__tests__/phase9.test.ts`)
+- `pnpm --filter @raivstream/api test` — **549/549** (Phase 9 tests in `packages/api/src/lib/creative/__tests__/phase9.test.ts`)
 - `pnpm --filter @raivstream/web type-check` — clean
 - `pnpm --filter @raivstream/web lint --max-warnings=0` — clean
+- `pnpm --filter @raivstream/web build` — clean
 
-Not performed in this phase: production deployment, real-provider smoke, staging qualification. The migration is additive and must be deployed with `prisma migrate deploy` before the durable run endpoints are exercised.
+## 6. Completion gate (production)
+
+Committed (`beed6dc`, `ec5e18c`, `815d888`) and deployed via GitHub Actions.
+
+**Migration `20260923120000_creative_production_run`** applied and verified on production: table `creative_production_runs` (15 columns), enum `CreativeProductionRunStatus`, indexes `(projectId,idempotencyKey)` + `(projectId,status)`. Pre-migration backup `/root/raivstream/backups/pre_phase9_production_run_20260923-111422.sql` (sha256 `e4c28359…`). Existing data intact. App + R16 health green.
+
+**Live smoke `scripts/phase9-live-smoke.ts` (real providers):**
+- **P — full loop:** CREATE → PLAN/PREVIEW → PRODUCE (2 scenes) → FIRST_VISUAL 5.8s → REVIEW → `DIRECT.propose` (no side effects) → APPLY (targeted) → TARGETED REGENERATION (unaffected scenes untouched) → APPROVAL → OUTPUT READY.
+- **X — context participates:** Studio "Voltaic Noir" → campaign project → `contextSnapshot.source=STUDIO` → real provider prompt included "Voltaic Noir".
+- **R — recovery:** producer killed mid-run → RUNNING/STALE → `RECOVER` resumed the same run (attempt 2) → regenerated only the missing video → project REVIEW, run COMPLETED, completed asset NOT regenerated.
+
+## 7. Before / after UX
+
+| | Old experience | Phase 9 experience |
+|---|---|---|
+| Surface | Brief, Bible, Scenes, Production, Review, Director all visible | One stage at a time; Bible/Versions behind "Advanced details" |
+| Refine | "Edit Scene 3" / translate a critic finding into a prompt | "What would you like to change?" → "Here's what I'll change / preserve / affects N scenes" |
+| Review | Finding → FIX → Director (manual translation) | Finding → understood problem → proposed correction → impact → [Fix it] |
+| Waiting | provider/job internals, percentage | Stage checklist + real dimensions ("Raivstream is still working on my film") |
+| Context | re-enter brand/character context | inherited context participates in production ("Raivstream remembered") |
+
+The creator flow is now: **tell us what you're imagining → here's what I understood → here's the plan → creating it → here's what I found → what would you like to change? → here's what I'll change / preserve → done.**
+
+**Milestone:** Phase 9 — Implementation COMPLETE · Automated Verification PASS · Build PASS · Migration PASS · Deployment PASS · Live Validation PASS · Final Closure PASS. Regression baseline **549/549** (from 530/530).
+
+Not performed: no new feature phase started. Next recommended step is a short production hardening / launch-readiness review.
+

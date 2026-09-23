@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Phase 9 — Mind-Reader UX refinement: progressive disclosure, dominant Direct, closed Review→Director loop, stage-based production, context pipeline, durable production runs + observability)
+Last updated: 2026-09-23 (Phase 9 completion gate — committed, migration deployed + verified, live smoke P/X/R PASS, recovery validated, UX confirmed in production)
 Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
 
 ## Maintenance Rule
@@ -273,6 +273,25 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-23: Phase 9 completion gate — COMMITTED, DEPLOYED, LIVE-VALIDATED
+
+Executed the Phase 9 completion gate end-to-end on production.
+
+**Commit/deploy:** `beed6dc` (Phase 9 implementation) → `ec5e18c` (gate fixes: studio brand context via `brand.brandIdentity.name`, plan-owned `PREVIEW` transition, run-resuming recovery) → `815d888` (smoke recovery setup). All three deployed via GitHub Actions (migration → build → atomic swap → PM2 → health).
+
+**Migration (applied + verified):** `20260923120000_creative_production_run`. Table `creative_production_runs` exists with 15 columns; enum `CreativeProductionRunStatus` = `RUNNING,COMPLETED,PARTIAL,FAILED,CANCELLED`; indexes `pkey`, `(projectId,idempotencyKey)`, `(projectId,status)`. Pre-migration backup: `/root/raivstream/backups/pre_phase9_production_run_20260923-111422.sql` (sha256 `e4c28359…`). Existing data unaffected (7 creative projects, 20 assets, 8 versions, 8 directives, 2 series, 1 studio, 27 users, 12 videos intact). Health: app + R16 both `healthy`.
+
+**Live smoke (`scripts/phase9-live-smoke.ts`, REAL fal/critic/ffmpeg/R2) — ALL PASS:**
+- **Journey P (full loop):** CREATE → PLAN + PREVIEW → PRODUCE (2 scenes, 4 assets) → **FIRST_VISUAL 5.8s** → REVIEW (real critic) → `DIRECT.propose` (no side effects; 1 affected scene) → APPLY (version snapshotted, affected assets dropped, unaffected preserved) → TARGETED REGENERATION (2 regenerated; unaffected scenes untouched) → APPROVAL → **OUTPUT LANDSCAPE READY (R2)**.
+- **Journey X (context participates in production):** Studio "Voltaic Noir" (noir tone, "Night belongs to you" messaging) → campaign project → `contextSnapshot` = `source=STUDIO, brand=Voltaic Noir` → real provider prompt **included "Voltaic Noir"** → 2 assets generated, 0 failed.
+- **Journey R (recovery):** producer process killed mid-run → run stayed `RUNNING` (dead process) → `RECOVER` resumed the **same run** (attempt 2, `stale=1`) → regenerated only the missing video (still skipped) → project `REVIEW`, run `COMPLETED`, **completed asset NOT regenerated**. PM2 restart + health verified separately.
+
+**Deployed UX validation:** `/create` serves the four intent suggestions (HTTP 200); the built bundle contains "What would you like to change", "what I understand", "Advanced details", "Suggested fix", "I'll preserve". Production stage labels are backend-derived (correctly served by the API, not hard-coded in the bundle).
+
+**Regression baseline advanced:** 530/530 → **549/549** API tests; API + web type-check clean; web lint `--max-warnings=0` clean; web build clean.
+
+**Milestone status:** Implementation COMPLETE · Automated Verification PASS · Build PASS · Migration PASS · Deployment PASS · Live Validation PASS · Final Closure PASS.
 
 ### 2026-09-23: Phase 9 — Mind-Reader UX Refinement + Reliability + Performance
 
