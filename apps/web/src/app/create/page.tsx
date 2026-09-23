@@ -1,15 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
-import { useUser } from '@/lib/auth';
+import { useAuth, useUser, type AuthUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
 import { CreateHero } from '@/components/creative/CreateHero';
 import { CreativeInput } from '@/components/creative/CreativeInput';
 import { InterpretationPanel } from '@/components/creative/InterpretationPanel';
 import { ReadinessGate, type ReadinessResolution } from '@/components/creative/ReadinessGate';
-import { clearDraft, loadDraft, pickResumeProject, saveDraft, CREATE_DRAFT_VERSION, type CreateDraft } from '@/lib/creativeDraft';
+import { InlineSignIn } from '@/components/auth/InlineSignIn';
+import { clearDraft, isMeaningfulDraft, loadDraft, pickResumeProject, saveDraft, CREATE_DRAFT_VERSION, type CreateDraft } from '@/lib/creativeDraft';
 
 type SaveState = 'idle' | 'saving' | 'saved';
 
@@ -22,6 +23,7 @@ function browserStorage() {
 export default function CreatePage() {
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
+  const { setUser } = useAuth();
   const userId = user?.id ?? null;
 
   const [text, setText] = useState('');
@@ -30,6 +32,8 @@ export default function CreatePage() {
   const [interpreted, setInterpreted] = useState(false);
   const [restored, setRestored] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  // 'continue' = user tried to proceed past input; 'start' = user tried to start the project
+  const [authPendingFor, setAuthPendingFor] = useState<'continue' | 'start' | null>(null);
   const hydratedRef = useRef(false);
 
   const hasSourceAsset = attachments.length > 0 || sourceSupplied;
@@ -37,16 +41,34 @@ export default function CreatePage() {
   // Restore an interrupted create session (client only).
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
     const storage = browserStorage();
-    const draft = storage ? loadDraft(storage, userId) : null;
-    if (draft) {
+    if (!storage) return;
+
+    // If text is already meaningful (inline auth — state lives in React), don't overwrite.
+    if (isMeaningfulDraft({ version: CREATE_DRAFT_VERSION, text, attachments, sourceSupplied, interpreted, updatedAt: '' })) return;
+
+    // Try user-keyed draft first; fall back to anon draft written before a sign-in redirect.
+    let draft = loadDraft(storage, userId);
+    if (!isMeaningfulDraft(draft)) {
+      const anonDraft = loadDraft(storage, null);
+      if (isMeaningfulDraft(anonDraft)) {
+        draft = anonDraft;
+        clearDraft(storage, null); // adopt it, remove anon copy
+      }
+    }
+
+    if (draft && isMeaningfulDraft(draft)) {
       setText(draft.text);
       setAttachments(draft.attachments);
       setSourceSupplied(draft.sourceSupplied);
       setInterpreted(draft.interpreted);
       setRestored(true);
     }
-    hydratedRef.current = true;
+  // text + attachments checked at effect time — deps intentionally omitted to avoid restore loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn, userId]);
 
   // Quiet autosave (debounced): Saving… → ✓ Saved. Failures never destroy the
@@ -87,6 +109,18 @@ export default function CreatePage() {
     },
   });
 
+  // Called by InlineSignIn after successful auth — continues the deferred flow without a page reload.
+  const handleAuthSuccess = useCallback((authedUser: AuthUser) => {
+    setUser(authedUser);
+    const pending = authPendingFor;
+    setAuthPendingFor(null);
+    if (pending === 'continue') {
+      setInterpreted(true);
+    } else if (pending === 'start') {
+      createProject.mutate({ text, attachments });
+    }
+  }, [authPendingFor, setUser, text, attachments, createProject]);
+
   const projectList = trpc.creative.project.list.useQuery(undefined, { enabled: Boolean(isLoaded && isSignedIn) });
   const resumable = pickResumeProject(
     (projectList.data ?? []) as Array<{ id: string; title: string; status?: string; updatedAt?: string | Date }>,
@@ -122,6 +156,23 @@ export default function CreatePage() {
     setInterpreted(false);
     setRestored(false);
     setSaveState('idle');
+    setAuthPendingFor(null);
+  };
+
+  const handleContinue = () => {
+    if (!isSignedIn) {
+      setAuthPendingFor('continue');
+      return;
+    }
+    setInterpreted(true);
+  };
+
+  const handleStart = () => {
+    if (!isSignedIn) {
+      setAuthPendingFor('start');
+      return;
+    }
+    createProject.mutate({ text, attachments });
   };
 
   const showGate = Boolean(readiness && readiness.ready === false);
@@ -151,7 +202,14 @@ export default function CreatePage() {
           </a>
         )}
 
-        {!interpreted ? (
+        {authPendingFor ? (
+          <InlineSignIn
+            heading="Your draft is saved"
+            subtext="Sign in to continue — it'll still be here."
+            onSuccess={handleAuthSuccess}
+            onBack={() => setAuthPendingFor(null)}
+          />
+        ) : !interpreted ? (
           <>
             <CreateHero />
             <CreativeInput
@@ -159,7 +217,7 @@ export default function CreatePage() {
               onChange={setText}
               attachments={attachments}
               onToggleAttachment={toggleAttachment}
-              onSubmit={() => setInterpreted(true)}
+              onSubmit={handleContinue}
               disabled={createProject.isPending}
             />
           </>
@@ -178,7 +236,7 @@ export default function CreatePage() {
             error={readinessQuery.error?.message}
             interpretation={readinessQuery.data?.interpretation}
             onBack={() => setInterpreted(false)}
-            onStart={() => createProject.mutate({ text, attachments })}
+            onStart={handleStart}
             starting={createProject.isPending || planMutation.isPending}
             startError={createProject.error?.message}
           />
