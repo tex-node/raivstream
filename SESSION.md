@@ -274,6 +274,20 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-23: Phase 8 — 5.0 Integration Validation (golden journeys, REAL providers)
+
+Enabled the 12 `RAIVSTREAM_5_*` flags on the VPS (`apps/web/.env.local`, progressive order preserved by independent gates), then executed the four golden journeys against the deployed system with REAL fal/critic/ffmpeg via `scripts/phase8-golden-journeys.ts` (isolated integration user `integration-5@raivstream.com`, funded balance, production bounded to 2 scenes/journey).
+
+**Results — ALL FOUR JOURNEYS PASS:**
+- **A · Storyteller:** STORY intent → brief+bible → plan → **real 2-scene produce (4 ready, 0 failed)** → review (real critic, 2/2 completed) → Direct invalidated prior approval → re-approved → **LANDSCAPE + PORTRAIT outputs READY (R2)**.
+- **B · Educator:** EDUCATION intent → real produce (4 ready) → review (2 runs) → **SQUARE output READY**.
+- **C · Studio:** brand DNA → product → campaign → campaign project with **inherited Brief+Bible** → real produce → review → Direct → re-approved → **LANDSCAPE + PORTRAIT + SQUARE outputs READY**.
+- **D · Series:** canon → episode 1 real produce (4 ready) → episode 2 **inherits identity + previous-episode context** → episode state evolves (wardrobe red, identity unchanged) → **Direct "darker" = episode-level lighting; series canon preserved**.
+
+First run: D failed only the final step (ep2 wasn't planned before directing) — fixed (plan ep2, no media) and re-ran D → COMPLETE, zero failures.
+
+**Validated against real systems:** fal FLUX2 stills + MiniMax H3 clips (last-frame I2V), OpenAI critic, ffmpeg output derivation, R2 storage, approval invalidation, series context, studio inheritance. The 5.0 feature architecture is now **frozen** at 530/530 unit baseline + 4/4 golden journeys.
+
 ### 2026-09-22: Raivstream 5.0 — slice 7 (STUDIO)
 
 Commercial creative operating layer — persistent brand/product/campaign context feeding the **exact same** Brief/Bible/Director/Production/Approval/Outputs engine. No StudioBrief/StudioBible/StudioDirector/etc.
