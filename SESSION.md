@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Launch Closure Pass — real production telemetry + cost visibility closed; storage/alert mechanisms delivered; CONDITIONAL GO with 3 human/policy conditions)
-Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
+Last updated: 2026-09-23 (Creator UX exposed + Intent Readiness Gate + commercial source propagation + contextual Director; deployed `8b1049a`; CONDITIONAL GO — Human UX Acceptance still PENDING)
+Current GitHub commit deployed to VPS: `8b1049a` (feat(creative): contextual Director suggestions, brand-name readiness, and canonical source propagation — deployed 2026-09-23)
 
 ## Maintenance Rule
 
@@ -44,6 +44,8 @@ Raivstream is a short-form vertical video platform with web, mobile, shared API,
 - **Staged fal generation flow (credits → submit → poll → publish): proven live 21/21 on scratch staging DB, deployed to production.** `generation.create` now accepts `VEED_FABRIC` + `audioUrl` (prompt optional only for VEED, canned default otherwise); `GenerationJob.audioUrl` persists the lip-sync track for retry. New E2E script `packages/api/scripts/fal-generation-e2e.ts` (`pnpm fal:e2e`). Chained run: FLUX2 still → H3_MAX animation of that still → VEED lip-sync of that still + staging audio fixture; all three R2-mirrored, published to (unlisted) Video rows, ledger exact (5000→4420, 80+200+300), zero residue after cleanup. Scratch container/tunnel torn down. **Deployed to production 2026-09-21 (commit `7a3c674`); fal switches remain OFF in prod env (see Recent Changes).**
 
 - **Phase 16 — AI Narrative & Production Pipeline (Claude → GPT-4o → ElevenLabs + MiniMax H3).** Docs updated (`docs/architecture.md` §12, `docs/product_roadmap.md` Phase 16). **16.1–16.5 all IMPLEMENTED + full-stitch E2E 15/15**: Claude narrative engine; GPT-4o `ProductionManifest` structurer; MiniMax H3-Max Turbo (15s/1080P/native audio, ADR-002); ElevenLabs scene narration (E2E 12/12); manifest persistence + scene-video consumption; native-SFX preservation in the Movie Builder mix. Full pipeline: idea → Claude cinematic story → GPT-4o manifest → per-scene MiniMax video + ElevenLabs VO → Movie Builder stitch (live-proven). Credentials staged in `cred/fal_env.txt` (gitignored): `CLAUDE_API`, `GPT40_API` — server-only, never `NEXT_PUBLIC_*`; ElevenLabs reuses `11_LABS`/`ELEVENLABS_API_KEY`.
+
+- **Raivstream 5.0 — semantic creative studio (creator UX exposed, deployed `8b1049a`; state CONDITIONAL GO).** The 5.0 orchestration layer sits above the existing Story/production infrastructure: `CreativeProject → Brief → Bible → Intent → Plan → Preview → Produce → Review → Director → Approval → Outputs`, plus **Series** (canon/memory/episodes) and **Studio** (Brand DNA/products/campaigns). Reachable at `/create` (canonical entry) and `/projects/[projectId]` (Project │ Canvas │ Director). Launch hardening complete: moderation at the adapter boundary, R16-gated `creativeProcedure`, durable/resumable production runs with recovery, run diagnostics, autosave/resume, contextual Director, and an Intent Readiness Gate (never invents user-owned source entities). **Human UX Acceptance is PENDING (requires real creators)** — see `docs/operations/phase-9-final-launch-acceptance.md`, `docs/operations/ux-acceptance-sessions.md` and `docs/operations/launch-closure-evidence.json`.
 
 ## Monorepo Layout
 
@@ -273,6 +275,18 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-23: Creator UX exposure, Intent Readiness, commercial source & contextual Director (`19c8cf9` → `8b1049a`)
+
+Made the already-built 5.0 semantic studio reachable/usable in the actual app, then fixed the readiness/source/context defects found in human testing. No creative engine replaced. `docs/operations/launch-closure-evidence.json` untouched; Human UX Acceptance remains PENDING; launch state CONDITIONAL GO.
+
+- **Creator UX exposed (`19c8cf9`):** Navbar now leads to `/create` (Story Playground kept as legacy); `/projects/[projectId]` is a persistent **Project │ Canvas │ Director** layout (`CreativeShell` director column on `xl`, drawer below); `ProductionPanel` errors translated to creator language (`errorMessages.ts`). API tests 563/563.
+- **Intent Readiness Gate + concise create (`bc45fd8`):** new pure `assessIntentReadiness(text, interpretation, signals)` (`intent/readiness.ts`) + `creative.intent.readiness` (reuses the Intent Engine). `/create` = hero + input + 4 starters + managed reference chips; interpretation is concise with Auto controls behind "Fine-tune"; primary action **Build this** wires `creative.project.create` + `creative.production.plan`. Rule: invent creative treatment, never user-owned source entities.
+- **Progressive workspace + durable autosave/resume + Transform readiness (`f3b8549`):** `PlanView` detail (shots/camera/notes) collapsed behind disclosures; `apps/web/src/lib/creativeDraft.ts` (pure, injectable storage) + quiet "Saving…/✓ Saved", restore-on-reload, "Continue where you left off" (`pickResumeProject`), `Start over`; web now runs vitest (`apps/web/vitest.config.ts`), 9/9 autosave tests; Transform became source-bound (`TRANSFORM_INTENT`), capability-aware source kinds (`creativeCapabilities.ts`, image only — no V2V).
+- **Commercial source enforcement (`6ba08c9`):** replaced noun-list detection with **semantic ownership** (`my/our` + commercial purpose via the interpretation); readiness gate gained a **real file upload action**; `project.create` accepts `attachments` → `CreativeBrief.attachments`; `ProductionPlanService.plan/produce` gained a **production-boundary invariant** (`assertSourceReady`) throwing `MISSING_SOURCE` before the renderer. API 595/595.
+- **Contextual Director + brand-name + source propagation (`8b1049a`):** new pure `director/suggestions.ts` derives suggestions from brief/bible/characters/brand/plan/current-scene/CreativeCritic findings (exposed as `creative.director.suggestions`; `DirectorPanel` uses them). Readiness now distinguishes `need: 'NAME' | 'ASSET'`: `"Promote my skincare brand."` → **"What's the brand name?"**; `"…brand called GlowHaus."` → name recognized, asks for source; Studio/fictional skip. Canonical `CreativeSourceReference` carried on the **plan**, resolved by the runner and passed to the H3 I2V adapter as the **opening seed**; label-only source → `UNSUPPORTED_SOURCE_OPERATION` **before** the renderer with an honest message (no faked utilization). Error translation distinguishes missing/unsupported/generic. API **608/608** (was 595).
+- **Honest remaining gap (C):** the source reference is carried and enforced and the adapter plumbing consumes a resolvable `url`, but there is no binary reference-upload capability, so a UI "upload" records a label-only reference → production returns `UNSUPPORTED_SOURCE_OPERATION` honestly. Completing true pixel utilization needs one follow-up: a reference upload that stores `attachments[].url` (the consumption path is already wired).
+- **Verification:** API 608/608 · web 9/9 · api+web type-check, web lint `--max-warnings=0`, web build (52/52) all clean. Deployed via CI; app + R16 healthy; `/create` 200; R16 `/create` 307.
 
 ### 2026-09-23: Launch Closure instruments — evidence-gated final decision
 
