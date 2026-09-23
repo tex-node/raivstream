@@ -63,6 +63,61 @@ export function buildCriticInput(input: {
   };
 }
 
+interface FixProposal {
+  instruction: string;
+  preserves: string[];
+  impact: 'LOCAL' | 'MULTI_SCENE' | 'PROJECT';
+}
+
+function fixProposalFor(issue: { category: string }, sceneRef: EntityReference | undefined): FixProposal {
+  const category = CATEGORY_MAP[issue.category] ?? 'VISUAL';
+  const where = sceneRef?.name ? ` in ${sceneRef.name}` : '';
+  switch (category) {
+    case 'CONTINUITY':
+      return {
+        instruction: `Restore the established visual continuity${where} while preserving the scene's wardrobe and lighting.`,
+        preserves: ['character identity', 'wardrobe', 'lighting', 'earlier scenes'],
+        impact: 'LOCAL',
+      };
+    case 'CHARACTER':
+      return {
+        instruction: `Keep the character's established identity and appearance${where}, adjusting only the emotional performance.`,
+        preserves: ['character identity', 'appearance', 'wardrobe', 'world'],
+        impact: 'MULTI_SCENE',
+      };
+    case 'VISUAL':
+      return {
+        instruction: `Refine the visual style${where} to match the established visual language.`,
+        preserves: ['story', 'characters', 'world', 'continuity'],
+        impact: 'MULTI_SCENE',
+      };
+    case 'WORLD':
+      return {
+        instruction: `Keep the world consistent${where} — introduce no new environmental elements.`,
+        preserves: ['story', 'characters', 'established world'],
+        impact: 'LOCAL',
+      };
+    case 'STORY':
+      return {
+        instruction: `Adjust the story beat${where} without changing the established premise.`,
+        preserves: ['characters', 'world', 'unaffected scenes'],
+        impact: 'LOCAL',
+      };
+    case 'TECHNICAL':
+      return {
+        instruction: `Rerender${where} with consistent technical quality.`,
+        preserves: ['story', 'characters', 'world', 'creative direction'],
+        impact: 'LOCAL',
+      };
+    default:
+      return {
+        instruction: `Refine${where} to match the established creative language.`,
+        preserves: ['story', 'characters', 'world'],
+        impact: 'LOCAL',
+      };
+  }
+}
+
 export function translateCriticResult(
   result: CreativeCriticResult,
   refs: EntityReference[],
@@ -83,12 +138,16 @@ export function translateCriticResult(
   for (const [index, issue] of result.issues.slice(0, 8).entries()) {
     const category = CATEGORY_MAP[issue.category] ?? 'VISUAL';
     const label = CATEGORY_LABEL[issue.category] ?? category;
+    const fix = fixProposalFor(issue, refs[0]);
     findings.push({
       id: `issue-${index}`,
       category,
       description: `${label} — ${issue.description}`,
       affectedEntities: refs,
       suggestedAction: `Review this ${category.toLowerCase().replace('_', ' ')} and direct a change if needed.`,
+      suggestedFixInstruction: fix.instruction,
+      suggestedPreserves: fix.preserves,
+      suggestedImpact: fix.impact,
       resolution: 'REVIEW',
       severity: issue.severity,
       raw: { score: result.scores[issue.category.toLowerCase() as keyof typeof result.scores] ?? result.overallScore, issue },

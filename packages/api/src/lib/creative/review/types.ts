@@ -22,6 +22,14 @@ export interface ReviewFinding {
   description: string;
   affectedEntities: EntityReference[];
   suggestedAction?: string;
+  /** A Director-ready natural-language instruction that fixes this finding
+   *  ("Restore established continuity in Scene 4 while preserving wardrobe and
+   *  lighting") — so the creator never translates a finding into a prompt. */
+  suggestedFixInstruction?: string;
+  /** What the suggested correction explicitly preserves (shown as "Preserves:"). */
+  suggestedPreserves?: string[];
+  /** Expected blast radius of the suggested fix (LOCAL / MULTI_SCENE / PROJECT). */
+  suggestedImpact?: 'LOCAL' | 'MULTI_SCENE' | 'PROJECT';
   /** Default action offered in the UI (KEEP / FIX / REVIEW). */
   resolution?: 'KEEP' | 'FIX' | 'REVIEW';
   severity: 'LOW' | 'MEDIUM' | 'HIGH';

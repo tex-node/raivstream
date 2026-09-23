@@ -42,6 +42,37 @@ export const NEXT_ACTIONS = [
 ] as const;
 export type NextAction = (typeof NEXT_ACTIONS)[number];
 
+// ─── Progressive disclosure (Phase 9) ────────────────────────────────────────
+//
+// The creator sees one meaningful stage at a time. Capability exists before the
+// interface asks the creator to understand it: Bible / Characters / Worlds /
+// Versions / Canon / Brand DNA are advanced detail, never required to proceed.
+
+export const WORKSPACE_STAGES = ['UNDERSTAND', 'PLAN', 'PREVIEW', 'PRODUCE', 'REVIEW', 'DELIVER'] as const;
+export type WorkspaceStage = (typeof WORKSPACE_STAGES)[number];
+
+export const WORKSPACE_STAGE_LABEL: Record<WorkspaceStage, string> = {
+  UNDERSTAND: 'Here’s what I understand',
+  PLAN: 'Here’s the plan',
+  PREVIEW: 'Is this what you meant?',
+  PRODUCE: 'Creating your film',
+  REVIEW: 'Your film is ready',
+  DELIVER: 'Your deliverables',
+};
+
+export interface WorkspaceProgress {
+  /** The one stage the creator is in right now. */
+  stage: WorkspaceStage;
+  /** Human label for the stage. */
+  label: string;
+  /** Stages already completed (for a stage bar). */
+  completed: WorkspaceStage[];
+  /** Advanced-detail availability — never required to proceed. */
+  hasBible: boolean;
+  hasPlan: boolean;
+  hasVersion: boolean;
+}
+
 // ─── Interpretation ──────────────────────────────────────────────────────────
 
 export interface IntentQuestion {
@@ -126,6 +157,8 @@ export interface CreativeProjectState {
   hasPlan: boolean;
   currentVersionId?: string | null;
   nextAction: NextAction;
+  /** Backend-derived progressive-disclosure state; the UI never guesses it. */
+  workspace: WorkspaceProgress;
   createdAt: Date;
   updatedAt: Date;
 }

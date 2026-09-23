@@ -14,6 +14,8 @@ import type { CreativeBibleState, CreativeProjectType } from '../shared/types';
 import { buildCreativePlan, type CreativeProductionPlanState } from './plan';
 import { buildPreview, type PreviewState } from './preview';
 import { adaptPlanToManifest, type AdapterManifest } from './adapter';
+import { buildProductionContext } from './contextAdapter';
+import { deriveProductionStages, type ProductionStage, type ProductionStageEntry } from './stages';
 import { runCreativeProduction } from './runner';
 
 type PlanRow = {
@@ -36,6 +38,17 @@ export interface ProductionStatus {
   failed: number;
   generating: number;
   progressPercent: number;
+  /** Meaningful creative stage for the UI (never provider/job language). */
+  stage: ProductionStage;
+  /** Stage checklist the creator actually reads. */
+  stages: ProductionStageEntry[];
+  totalScenes: number;
+  currentSceneIndex: number;
+  /** Real progress dimensions — not a fake percentage. */
+  images: { ready: number; expected: number };
+  videos: { ready: number; expected: number };
+  runId: string | null;
+  runStatus: string | null;
   scenes: ProductionSceneStatus[];
 }
 
@@ -74,6 +87,7 @@ export class ProductionPlanService {
       brief,
       bible,
       version: (project.productionPlan?.version ?? 0) + 1,
+      context: buildProductionContext({ brief, bible }),
     });
     const preview = buildPreview(plan, bible);
 
@@ -129,7 +143,7 @@ export class ProductionPlanService {
    * point for the 5.0 semantic layer. Validates approval, moves the project to
    * GENERATING, and runs the (detached, resumable) production runner.
    */
-  async produce(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ started: boolean; reason?: 'already_running' }> {
+  async produce(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ started: boolean; reason?: 'already_running'; runId?: string | null }> {
     if (!isCreativeProductionEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 production is not enabled.');
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
@@ -137,23 +151,48 @@ export class ProductionPlanService {
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
     if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build and approve a production plan before producing.');
-    if (project.status !== 'APPROVED') {
+    // The first production requires an approved preview; a refinement after a
+    // directive (REVIEW / REFINING / DIRECTING) may regenerate affected scenes.
+    const producible = project.status === 'APPROVED' || project.status === 'REVIEW' || project.status === 'REFINING' || project.status === 'DIRECTING';
+    if (!producible) {
       if (project.status === 'GENERATING') return { started: false, reason: 'already_running' };
       throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the preview before producing.');
     }
+
+    // Idempotent production operations (Phase 9): never start a second run while
+    // one is genuinely active. A stale RUNNING row (dead process) is recovered
+    // by `recoverStuckProductions`, not started twice here.
+    const runModel = (prisma as unknown as { creativeProductionRun?: { findFirst?: (args: unknown) => Promise<{ id: string; status: string; heartbeatAt: Date } | null>; create?: (args: unknown) => Promise<{ id: string }> } }).creativeProductionRun;
+    const activeRun = runModel?.findFirst
+      ? await runModel.findFirst({ where: { projectId: project.id, status: 'RUNNING' }, orderBy: { startedAt: 'desc' } }).catch(() => null)
+      : null;
+    if (activeRun) return { started: false, reason: 'already_running', runId: activeRun.id };
+
+    const plan = project.productionPlan.plan as unknown as CreativeProductionPlanState;
+    let runId: string | null = null;
+    if (runModel?.create) {
+      try {
+        const run = await runModel.create({ data: { projectId: project.id, status: 'RUNNING', totalScenes: plan.scenes.length, stage: 'creating_scenes', contextSnapshot: plan.contextSnapshot ?? undefined } });
+        runId = run.id;
+      } catch {
+        runId = null;
+      }
+    }
+
     await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'GENERATING' as never } });
-    void runCreativeProduction(prisma, { projectId: project.id });
-    return { started: true };
+    void runCreativeProduction(prisma, { projectId: project.id, runId: runId ?? undefined });
+    return { started: true, runId };
   }
 
   /** Scene-level production progress suitable for the UI (no generation-job detail). */
   async productionStatus(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<ProductionStatus> {
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      include: { productionPlan: true },
+      include: { productionPlan: true, bible: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
     const plan = project.productionPlan?.plan as unknown as CreativeProductionPlanState | undefined;
+    const bible = project.bible as unknown as CreativeBibleState | null;
     const assets = (await prisma.creativeProducedAsset.findMany({ where: { projectId: project.id }, orderBy: { createdAt: 'asc' } })) as unknown as Array<{ id: string; sceneId: string; shotId: string | null; kind: string; status: string; assetUrl: string | null; thumbnailUrl: string | null; errorMessage: string | null }>;
     const ready = assets.filter((a) => a.status === 'READY').length;
     const failed = assets.filter((a) => a.status === 'FAILED').length;
@@ -163,6 +202,31 @@ export class ProductionPlanService {
       const sceneAssets = assets.filter((a) => a.sceneId === scene.sceneId);
       return { sceneId: scene.sceneId, title: scene.title, status: deriveSceneStatus(sceneAssets), assets: sceneAssets };
     });
+
+    const totalScenes = scenes.length;
+    const currentSceneIndexRaw = scenes.findIndex((scene) => scene.status !== 'READY');
+    const currentSceneIndex = currentSceneIndexRaw < 0 ? Math.max(0, totalScenes - 1) : currentSceneIndexRaw;
+
+    const imagesReady = assets.filter((a) => a.kind === 'IMAGE' && a.status === 'READY').length;
+    const videosReady = assets.filter((a) => a.kind === 'VIDEO' && a.status === 'READY').length;
+    const hasCharacters = ((bible?.characters ?? []) as unknown[]).length > 0;
+    const { stage, stages } = deriveProductionStages({
+      projectStatus: project.status,
+      hasPlan: Boolean(plan),
+      hasBible: Boolean(bible),
+      hasCharacters,
+      ready,
+      failed,
+      generating,
+      expected,
+      currentSceneIndex,
+    });
+
+    const runModel = (prisma as unknown as { creativeProductionRun?: { findFirst?: (args: unknown) => Promise<{ id: string; status: string } | null> } }).creativeProductionRun;
+    const latestRun = runModel?.findFirst
+      ? await runModel.findFirst({ where: { projectId: project.id }, orderBy: { startedAt: 'desc' } }).catch(() => null)
+      : null;
+
     return {
       status: project.status,
       expected,
@@ -170,6 +234,14 @@ export class ProductionPlanService {
       failed,
       generating,
       progressPercent: expected > 0 ? Math.min(100, Math.round(((ready + failed) / expected) * 100)) : 0,
+      stage,
+      stages,
+      totalScenes,
+      currentSceneIndex,
+      images: { ready: imagesReady, expected: totalScenes },
+      videos: { ready: videosReady, expected: totalScenes },
+      runId: latestRun?.id ?? null,
+      runStatus: latestRun?.status ?? null,
       scenes,
     };
   }

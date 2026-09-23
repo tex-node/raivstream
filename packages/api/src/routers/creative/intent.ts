@@ -4,6 +4,7 @@ import { protectedProcedure, router } from '../../trpc';
 import { intentService } from '../../lib/creative/intent/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { CREATIVE_PROJECT_TYPES } from '../../lib/creative/shared/types';
+import { timedCreative } from '../../lib/creative/observability/metrics';
 
 function toTrpcError(error: unknown): TRPCError {
   if (error instanceof CreativeError) {
@@ -19,9 +20,9 @@ export const creativeIntentRouter = router({
       text: z.string().min(1).max(4000),
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
     }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       try {
-        return intentService.interpret(input.text, input.projectType);
+        return await timedCreative('intent.interpret', async () => intentService.interpret(input.text, input.projectType));
       } catch (error) {
         throw toTrpcError(error);
       }

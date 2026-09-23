@@ -180,6 +180,10 @@ audio-driven timing.
 infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slices 1–7
 shipped: CREATE+INTENT, PLAN, PRODUCE, JUDGE (Review→Director), APPROVAL→OUTPUTS, SERIES
 (Canon + Memory + Episodes), and STUDIO (Brand DNA + Products + Campaigns feeding the same
-engine — no second Brief/Bible/Director architecture). See
-`docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
-`packages/api/src/lib/creative/`.
+engine — no second Brief/Bible/Director architecture). **Phase 9 (Mind-Reader UX refinement +
+reliability + performance)** then made the loop intuitive: progressive disclosure, Direct as the
+dominant interaction, the closed Review→Director loop, stage-based production progress, the
+Series/Studio→Bible→plan→generation context pipeline, durable/resumable production runs with
+stale-run recovery, and creative latency observability. See
+`docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md`,
+`docs/operations/phase-9-ux-refinement.md` and `packages/api/src/lib/creative/`.

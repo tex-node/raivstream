@@ -38,6 +38,10 @@ export interface DirectorDecision {
   };
   affectedEntities: EntityReference[];
   preservedEntities: EntityReference[];
+  /** Plain-language "I'll preserve" list (never technical). */
+  preserves: string[];
+  /** Scene ids this directive will regenerate. */
+  affectedSceneIds: string[];
   creativeChanges: CreativeChange[];
   productionChanges: ProductionChange[];
   continuityImplications: Array<{ type: string; description: string }>;

@@ -10,6 +10,7 @@
 import { applyMasterVisualBible, type VisualBibleSource } from '../../visualBible';
 import type { CreativeBibleState, CreativeProjectType } from '../shared/types';
 import type { CreativeProductionPlanState, PlanScene } from './plan';
+import { contextPromptLine, type ProductionContext } from './contextAdapter';
 
 export type GenerationKind = 'IMAGE' | 'VIDEO';
 
@@ -49,11 +50,13 @@ export function buildPrompt(
   scene: PlanScene,
   kind: GenerationKind,
   bible?: CreativeBibleState | null,
+  context?: ProductionContext | null,
 ): { prompt: string; negativePrompt?: string } {
   const bibleSource = visualBibleSource(bible);
   const visualLanguage = (bible?.visualLanguage ?? {}) as Record<string, unknown>;
   const style = typeof visualLanguage.style === 'string' ? visualLanguage.style : 'cinematic';
-  const base = `${scene.description} ${scene.title}. ${kind === 'IMAGE' ? 'Key visual' : 'Motion sequence'}, ${style}, consistent character identity and visual language, vertical framing.`;
+  const contextLine = contextPromptLine(context);
+  const base = `${scene.description} ${scene.title}. ${kind === 'IMAGE' ? 'Key visual' : 'Motion sequence'}, ${style}, consistent character identity and visual language, vertical framing.${contextLine ? ` ${contextLine}.` : ''}`;
   const applied = applyMasterVisualBible({ prompt: base, negativePrompt: undefined, bible: bibleSource, sceneCharacters: scene.characters, target: kind === 'IMAGE' ? 'IMAGE' : 'VIDEO' });
   return { prompt: applied.prompt, negativePrompt: applied.negativePrompt ?? undefined };
 }
@@ -68,10 +71,15 @@ export function clampH3Duration(seconds: number): number {
  * Videos are chained by the runner (last-frame continuity) — the router only
  * declares intent, never the provider.
  */
-export function routeProduction(plan: CreativeProductionPlanState, bible?: CreativeBibleState | null): GenerationSpec[] {
+export function routeProduction(
+  plan: CreativeProductionPlanState,
+  bible?: CreativeBibleState | null,
+  context?: ProductionContext | null,
+): GenerationSpec[] {
   const specs: GenerationSpec[] = [];
+  const effectiveContext = context ?? plan.contextSnapshot ?? null;
   for (const scene of plan.scenes) {
-    const still = buildPrompt(scene, 'IMAGE', bible);
+    const still = buildPrompt(scene, 'IMAGE', bible, effectiveContext);
     specs.push({
       kind: 'IMAGE',
       sceneId: scene.sceneId,
@@ -79,7 +87,7 @@ export function routeProduction(plan: CreativeProductionPlanState, bible?: Creat
       negativePrompt: still.negativePrompt,
       aspectRatio: '9:16',
     });
-    const video = buildPrompt(scene, 'VIDEO', bible);
+    const video = buildPrompt(scene, 'VIDEO', bible, effectiveContext);
     specs.push({
       kind: 'VIDEO',
       sceneId: scene.sceneId,

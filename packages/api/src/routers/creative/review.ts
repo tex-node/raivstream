@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { protectedProcedure, router } from '../../trpc';
 import { reviewService } from '../../lib/creative/review/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
+import { timedCreative } from '../../lib/creative/observability/metrics';
 
 function toTrpcError(error: unknown, fallback: string): TRPCError {
   if (error instanceof CreativeError) {
@@ -18,7 +19,7 @@ export const creativeReviewRouter = router({
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
-        return await reviewService.runReview(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
+        return await timedCreative('review.run', () => reviewService.runReview(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id }));
       } catch (error) {
         throw toTrpcError(error, 'Review could not run.');
       }

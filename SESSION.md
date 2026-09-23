@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-22 (Phase 17 anti-drift overhaul + studio fal-only + story completeness + moderation localization shipped; truncated-body root cause fixed)
+Last updated: 2026-09-23 (Phase 9 — Mind-Reader UX refinement: progressive disclosure, dominant Direct, closed Review→Director loop, stage-based production, context pipeline, durable production runs + observability)
 Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
 
 ## Maintenance Rule
@@ -273,6 +273,26 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-23: Phase 9 — Mind-Reader UX Refinement + Reliability + Performance
+
+Made the frozen 5.0 core loop feel dramatically more intuitive without adding a new product capability. Full detail: `docs/operations/phase-9-ux-refinement.md`.
+
+**Progressive disclosure (workstream 1):** backend-derived `project.workspace` (`workspaceProgressFor` in `lib/creative/project/state.ts`) maps status → one creator-facing stage (`UNDERSTAND→PLAN→PREVIEW→PRODUCE→REVIEW→DELIVER`) + completed stages + advanced-detail availability. `apps/web/src/app/projects/[projectId]/page.tsx` reveals one stage at a time; Brief / Creative Bible / Versions moved under `AdvancedDetails`; `ProjectSidebar` is stage-aware and shows advanced items only when they exist. A first-time storyteller sees interpretation → plan → preview → production → review.
+
+**Direct is dominant (workstream 2):** `DirectorPanel` opens with "What would you like to change?" + contextual example chips. New `director.propose` (no persistence) and `director.applyInstruction` (propose → snapshot → apply → mark affected scenes) back the **I'll change / I'll preserve / Impact / This affects N scenes** answer before anything regenerates. `DirectorDecision` gained `preserves` + `affectedSceneIds`.
+
+**Closed Review → Director loop (workstream 3):** `review/criticAdapter` now attaches `suggestedFixInstruction` + `suggestedPreserves` + `suggestedImpact` to every finding. `ReviewPanel` shows Finding → understood problem → proposed correction → impact → [Fix it] → [Apply change] → [Regenerate N affected scenes]; `[Keep as is]` / `[Direct myself]` remain.
+
+**Production feels alive (workstream 4):** `production/stages.ts` (`deriveProductionStages`) yields a real stage checklist (`✓ Understanding your story … ● Checking continuity ○ Preparing your final cut`) plus scene-of-N and real dimensions (Character consistency = stills, Visual continuity = clips, Final assembly). No fake percentage, no provider/job language.
+
+**Context pipeline — "Raivstream remembered":** new `production/contextAdapter.ts` turns inherited Series/Studio context (already in the Bible/Brief) into a `ProductionContext`, snapshotted onto the plan (`contextSnapshot`) and appended to generation prompts by `capabilityRouter`. Series/Studio context now auto-drives prompts through the existing semantic adapters.
+
+**Reliability hardening:** new `CreativeProductionRun` model + additive migration `20260923120000_creative_production_run` (status/attempt/stage/counts/idempotencyKey/contextSnapshot/heartbeatAt/finishedAt). `produce` is idempotent (never starts a second active run); the runner heartbeats and returns `{generated,failed,runId,status}`; bounded per-asset retry (`DEFAULT_MAX_ATTEMPTS=2`); `recoverStuckProductions` re-kicks stale runs after a process restart (heartbeat-based, caller-scoped via `creative.production.recover`); `director.apply` still regenerates only affected scenes; `project.updateStatus` enforces the state machine; `output.render` refuses a version that is no longer approved; structured safe `[creative.production]` events.
+
+**Performance — measure first:** `observability/metrics.ts` ring-buffer timings + summary; instrumented `intent.interpret`, `plan.build`, `production.produce`, `production.status`, `review.run`, `output.derive`, `output.render`, plus `FIRST_VISUAL`; exposed via `creative.observability.{metrics,timings,reset}`.
+
+**Verification:** API type-check clean; API tests **546/546** (16 new in `lib/creative/__tests__/phase9.test.ts`); web type-check clean; web lint `--max-warnings=0` clean. Not deployed; migration is additive.
 
 ### 2026-09-23: Phase 8 — 5.0 Integration Validation (golden journeys, REAL providers)
 

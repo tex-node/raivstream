@@ -14,7 +14,7 @@ import { isCreativeBibleEnabled, isCreativeCreateEnabled } from '../featureFlags
 import { CreativeError } from '../shared/errors';
 import type { CreativeBriefState, CreativeInterpretation, CreativeMemoryKind, CreativeProjectState } from '../shared/types';
 import { seedBibleFromInterpretation } from '../bible/service';
-import { nextActionFor } from './state';
+import { canTransition, nextActionFor, workspaceProgressFor } from './state';
 
 type CreativeProjectRow = {
   id: string;
@@ -73,6 +73,7 @@ export function serializeProject(row: CreativeProjectRow): CreativeProjectState 
     hasPlan: Boolean(row.productionPlan),
     currentVersionId: row.currentVersionId ?? null,
     nextAction: nextActionFor(row.status as CreativeProjectState['status'], Boolean(bible), Boolean(row.productionPlan)),
+    workspace: workspaceProgressFor(row.status as CreativeProjectState['status'], Boolean(bible), Boolean(row.productionPlan), Boolean(row.currentVersionId)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -157,13 +158,17 @@ export class ProjectService {
     input: { projectId: string; userId: string; status: string },
   ): Promise<CreativeProjectState> {
     const project = await this.get(prisma, { projectId: input.projectId, userId: input.userId });
-    // allow the client to request a transition the state machine permits
+    // Approval-state consistency (Phase 9): only state-machine transitions are
+    // allowed, so a project can never be silently pushed into an impossible state.
+    const to = input.status as CreativeProjectState['status'];
+    if (to !== project.status && !canTransition(project.status, to)) {
+      throw new CreativeError('INVALID_STATE_TRANSITION', `Cannot move a project from ${project.status} to ${to}.`);
+    }
     const updated = await prisma.creativeProject.update({
       where: { id: input.projectId },
       data: { status: input.status as never },
       include: { brief: true, bible: true, productionPlan: true },
     });
-    void project;
     return serializeProject(updated);
   }
 

@@ -41,7 +41,9 @@ export class OutputService {
       throw new CreativeError('PLAN_NOT_APPROVED', 'Approve this version before creating outputs.');
     }
     const snapshot = version.snapshot as unknown as { plan?: CreativeProductionPlanState };
-    const totalRuntime = snapshot.plan?.totalRuntimeSeconds ?? 30;
+    // Provenance validation: a version without a plan cannot be derived from.
+    if (!snapshot.plan) throw new CreativeError('PLAN_NOT_APPROVED', 'This version has no plan to derive from.');
+    const totalRuntime = snapshot.plan.totalRuntimeSeconds ?? 30;
     const derivation = deriveOutput(input.format, input.durationSeconds ?? null, totalRuntime);
 
     const row = await prisma.creativeOutput.create({
@@ -65,6 +67,12 @@ export class OutputService {
   ): Promise<OutputState> {
     const row = await prisma.creativeOutput.findFirst({ where: { id: input.outputId, projectId: input.projectId } });
     if (!row) throw new CreativeError('PROJECT_NOT_FOUND', 'Output not found.');
+    // Provenance validation: an output may only render while its source version
+    // is still approved (a material Direct invalidates it).
+    if (!(await approvalService.isApproved(prisma, { projectId: input.projectId, versionId: row.versionId, kind: 'CREATIVE' }))) {
+      await prisma.creativeOutput.update({ where: { id: row.id }, data: { status: 'FAILED' as never, errorMessage: 'The source version is no longer approved. Re-approve it before rendering.' } });
+      return this.serialize(prisma, row.id);
+    }
     await prisma.creativeOutput.update({ where: { id: row.id }, data: { status: 'GENERATING' as never } });
 
     try {

@@ -164,7 +164,7 @@ describe('creative capability router + approval gate', () => {
     const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'APPROVED', projectType: 'COMMERCIAL' }, plan });
     const service = new ProductionPlanService();
     const result = await service.produce(prisma as never, { projectId: 'p1', userId: 'u1' });
-    expect(result).toEqual({ started: true });
+    expect(result).toEqual({ started: true, runId: null });
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(prisma.__statusLog[0]).toBe('GENERATING');
   });

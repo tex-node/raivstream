@@ -2000,6 +2000,14 @@ enum CreativeProducedAssetStatus {
   FAILED
 }
 
+enum CreativeProductionRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
 enum CreativeDirectiveMode {
   DIRECT
   EXPLORE
@@ -2105,6 +2113,7 @@ model CreativeProject {
   memories             CreativeMemory[]
   productionPlan       CreativeProductionPlan?
   producedAssets       CreativeProducedAsset[]
+  productionRuns       CreativeProductionRun[]
   versions             CreativeVersion[]
   directives           CreativeDirective[]
   reviewRuns           CreativeReviewRun[]
@@ -2204,6 +2213,28 @@ model CreativeProducedAsset {
   @@index([projectId, sceneId])
   @@index([projectId, status])
   @@map("creative_produced_assets")
+}
+
+model CreativeProductionRun {
+  id              String                       @id @default(cuid())
+  projectId       String
+  project         CreativeProject              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status          CreativeProductionRunStatus  @default(RUNNING)
+  attempt         Int                          @default(1)
+  stage           String?
+  totalScenes     Int                          @default(0)
+  readyScenes     Int                          @default(0)
+  failedScenes    Int                          @default(0)
+  idempotencyKey  String?
+  contextSnapshot Json?
+  lastError       String?
+  startedAt       DateTime                     @default(now())
+  heartbeatAt     DateTime                     @default(now())
+  finishedAt      DateTime?
+
+  @@unique([projectId, idempotencyKey])
+  @@index([projectId, status])
+  @@map("creative_production_runs")
 }
 
 model CreativeVersion {

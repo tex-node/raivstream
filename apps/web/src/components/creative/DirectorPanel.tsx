@@ -5,24 +5,38 @@ import { trpc } from '@/lib/trpc';
 
 type Decision = {
   interpretation: string;
-  directive: { scope: string };
+  directive: { scope: string; intent: string };
   affectedEntities: Array<{ type: string; name?: string; id?: string }>;
   preservedEntities: Array<{ type: string; name?: string; id?: string }>;
+  preserves: string[];
+  affectedSceneIds: string[];
   creativeChanges: Array<{ scope: string; field: string; to: unknown }>;
-  impact: string;
   productionChanges: Array<{ description: string }>;
+  impact: string;
 };
 
+const EXAMPLES = [
+  'Make her more confident',
+  'Make the lighting warmer',
+  'Make this scene feel more expensive',
+  'Keep everything except the wardrobe',
+  'Make the ending more hopeful',
+];
+
 /**
- * Raivstream 5.0 — Director (DIRECT / EXPLORE). Change + Preserve + Impact,
- * then hand off to Production. The creator never sees providers or generation.
+ * Raivstream 5.0 — Director (DIRECT / EXPLORE).
+ *
+ * Direct is the dominant interaction. The creator types what they want; the
+ * Director answers with change + preserve + impact BEFORE anything is
+ * regenerated. That is the mind-reader moment: Raivstream understood the
+ * meaning, not just the words.
  */
 export function DirectorPanel({ projectId }: { projectId: string }) {
   const [instruction, setInstruction] = useState('');
   const utils = trpc.useUtils();
-  const direct = trpc.creative.director.direct.useMutation();
+  const propose = trpc.creative.director.propose.useMutation();
   const explore = trpc.creative.director.explore.useMutation();
-  const apply = trpc.creative.director.applyDirective.useMutation({
+  const applyInstruction = trpc.creative.director.applyInstruction.useMutation({
     onSuccess: () => {
       utils.creative.director.versions.invalidate({ projectId });
       utils.creative.project.get.invalidate({ projectId });
@@ -31,61 +45,84 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
   const produce = trpc.creative.production.produce.useMutation({ onSuccess: () => utils.creative.project.get.invalidate({ projectId }) });
   const versionsQuery = trpc.creative.director.versions.useQuery({ projectId });
 
-  const decision = direct.data?.decision as Decision | undefined;
+  const decision = propose.data?.decision as Decision | undefined;
+  const applied = applyInstruction.data;
   const exploreVersions = explore.data?.versions as Array<{ id: string; versionNumber: number; label: string | null }> | undefined;
   const versions = versionsQuery.data as Array<{ id: string; versionNumber: number; label: string | null }> | undefined;
 
-  const handleApply = () => {
-    if (!direct.data) return;
-    apply.mutate({ projectId, directiveId: direct.data.directiveId });
+  const ready = instruction.trim().length > 2;
+  const run = () => {
+    if (!ready) return;
+    applyInstruction.reset();
+    propose.mutate({ projectId, instruction });
   };
 
   return (
     <section id="director" className="space-y-4">
       <div className="rounded-2xl border border-dashed border-[rgba(178,90,217,0.4)] bg-[rgba(178,90,217,0.06)] p-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Director</p>
-        <p className="mt-1 text-sm text-[var(--noc-t3)]">Direct a change in plain words — “Make the ending hopeful”, “Make her more confident”, “Give me three endings”.</p>
+        <p className="mt-1 text-lg font-black text-[var(--noc-t1)]">What would you like to change?</p>
+        <p className="mt-1 text-sm text-[var(--noc-t3)]">Say it in your own words. Raivstream figures out what changes and what stays.</p>
+
         <input
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && instruction.trim().length > 2) direct.mutate({ projectId, instruction });
+            if (e.key === 'Enter') run();
           }}
           placeholder="Direct a change…"
           className="mt-3 w-full rounded-xl border border-[rgba(233,233,237,0.14)] bg-[rgba(233,233,237,0.05)] px-4 py-3 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]"
         />
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {EXAMPLES.map((example) => (
+            <button
+              key={example}
+              type="button"
+              onClick={() => {
+                setInstruction(example);
+                propose.reset();
+                propose.mutate({ projectId, instruction: example });
+              }}
+              className="rounded-full border border-[rgba(178,90,217,0.35)] bg-[rgba(178,90,217,0.08)] px-3 py-1 text-xs font-bold text-[var(--noc-purple)] hover:bg-[rgba(178,90,217,0.16)]"
+            >
+              ✦ {example}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={direct.isPending || instruction.trim().length < 2}
-            onClick={() => direct.mutate({ projectId, instruction })}
+            disabled={propose.isPending || !ready}
+            onClick={run}
             className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-4 py-2 text-sm font-black text-white disabled:opacity-40"
           >
-            {direct.isPending ? 'Directing…' : 'Direct'}
+            {propose.isPending ? 'Understanding…' : 'Direct'}
           </button>
           <button
             type="button"
-            disabled={explore.isPending || instruction.trim().length < 2}
+            disabled={explore.isPending || !ready}
             onClick={() => explore.mutate({ projectId, instruction })}
             className="rounded-xl border border-[rgba(178,90,217,0.5)] px-4 py-2 text-sm font-black text-[var(--noc-purple)] disabled:opacity-40"
           >
-            {explore.isPending ? 'Exploring…' : 'Explore'}
+            {explore.isPending ? 'Exploring…' : 'Explore alternatives'}
           </button>
         </div>
-        {direct.error && <p className="mt-2 text-sm text-[#e35d5d]">{direct.error.message}</p>}
+        {propose.error && <p className="mt-2 text-sm text-[#e35d5d]">{propose.error.message}</p>}
         {explore.error && <p className="mt-2 text-sm text-[#e35d5d]">{explore.error.message}</p>}
       </div>
 
       {decision && (
         <div className="rounded-2xl border border-[rgba(233,233,237,0.1)] bg-[rgba(233,233,237,0.03)] p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Decision · {decision.directive.scope}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Here&apos;s what I understand</p>
           <p className="mt-1 text-lg font-black">{decision.interpretation}</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div>
-              <p className="text-xs font-black uppercase text-[var(--noc-t6)]">Change</p>
+              <p className="text-xs font-black uppercase text-[var(--noc-t6)]">I&apos;ll change</p>
               <ul className="mt-1 space-y-1 text-sm text-[var(--noc-t2)]">
                 {decision.creativeChanges.map((change, index) => (
-                  <li key={index}>• {change.field}: {String(change.to)}</li>
+                  <li key={index}>• {change.field}{change.to ? `: ${String(change.to)}` : ''}</li>
                 ))}
                 {decision.productionChanges.map((change, index) => (
                   <li key={`p${index}`} className="text-[var(--noc-t5)]">• {change.description}</li>
@@ -93,35 +130,45 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
               </ul>
             </div>
             <div>
-              <p className="text-xs font-black uppercase text-[var(--noc-t6)]">Preserve</p>
+              <p className="text-xs font-black uppercase text-[var(--noc-t6)]">I&apos;ll preserve</p>
               <ul className="mt-1 space-y-1 text-sm text-[var(--noc-t3)]">
-                {decision.preservedEntities.length > 0
-                  ? decision.preservedEntities.map((entity, index) => <li key={index}>• {entity.name ?? entity.type}</li>)
-                  : <li className="text-[var(--noc-t5)]">• identity, world, premise, approved decisions</li>}
+                {(decision.preserves.length ? decision.preserves : decision.preservedEntities.map((entity) => entity.name ?? entity.type)).map((item, index) => (
+                  <li key={index}>• {item}</li>
+                ))}
               </ul>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[rgba(79,139,214,0.14)] px-3 py-1 text-xs font-black uppercase text-[var(--noc-blue)]">Impact: {decision.impact}</span>
+            <span className="text-xs text-[var(--noc-t5)]">
+              This affects {decision.affectedSceneIds.length} scene{decision.affectedSceneIds.length === 1 ? '' : 's'}.
+            </span>
             <button
               type="button"
-              disabled={apply.isPending}
-              onClick={handleApply}
+              disabled={applyInstruction.isPending}
+              onClick={() => applyInstruction.mutate({ projectId, instruction })}
               className="ml-auto rounded-xl bg-[var(--noc-purple)] px-4 py-2 text-sm font-black text-[#0B0D12] disabled:opacity-50"
             >
-              {apply.isPending ? 'Applying…' : 'Apply & regenerate affected scenes'}
+              {applyInstruction.isPending ? 'Applying…' : 'Apply change'}
             </button>
           </div>
-          {apply.data && (
-            <button
-              type="button"
-              disabled={produce.isPending}
-              onClick={() => produce.mutate({ projectId })}
-              className="mt-3 w-full rounded-xl bg-[linear-gradient(90deg,#4f8bd6,#b25ad9)] px-4 py-2.5 text-sm font-black text-[#0B0D12] disabled:opacity-50"
-            >
-              {produce.isPending ? 'Starting…' : `Regenerate ${apply.data.affectedSceneIds.length} affected scene${apply.data.affectedSceneIds.length === 1 ? '' : 's'}`}
-            </button>
-          )}
+          {applyInstruction.error && <p className="mt-2 text-sm text-[#e35d5d]">{applyInstruction.error.message}</p>}
+        </div>
+      )}
+
+      {applied && (
+        <div className="rounded-2xl border border-[rgba(79,139,214,0.25)] bg-[rgba(79,139,214,0.06)] p-5">
+          <p className="text-sm font-bold text-[var(--noc-blue)]">
+            Applied. {applied.affectedSceneIds.length} scene{applied.affectedSceneIds.length === 1 ? '' : 's'} will be regenerated — everything else stays exactly as it is.
+          </p>
+          <button
+            type="button"
+            disabled={produce.isPending}
+            onClick={() => produce.mutate({ projectId })}
+            className="mt-3 w-full rounded-xl bg-[linear-gradient(90deg,#4f8bd6,#b25ad9)] px-4 py-2.5 text-sm font-black text-[#0B0D12] disabled:opacity-50"
+          >
+            {produce.isPending ? 'Starting…' : `Regenerate ${applied.affectedSceneIds.length} affected scene${applied.affectedSceneIds.length === 1 ? '' : 's'}`}
+          </button>
         </div>
       )}
 
@@ -139,8 +186,8 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
       )}
 
       {versions && versions.length > 0 && (
-        <div className="rounded-2xl border border-[rgba(233,233,237,0.1)] bg-[rgba(233,233,237,0.03)] p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Versions</p>
+        <details className="rounded-2xl border border-[rgba(233,233,237,0.1)] bg-[rgba(233,233,237,0.03)] p-5">
+          <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Versions ({versions.length})</summary>
           <div className="mt-2 flex flex-wrap gap-2">
             {versions.map((version) => (
               <span key={version.id} className="rounded-full bg-[rgba(233,233,237,0.08)] px-3 py-1 text-xs font-bold text-[var(--noc-t4)]">
@@ -148,7 +195,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
               </span>
             ))}
           </div>
-        </div>
+        </details>
       )}
     </section>
   );

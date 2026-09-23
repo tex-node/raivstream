@@ -10,6 +10,8 @@ type SceneStatus = {
   assets: Array<{ id: string; kind: string; status: string; assetUrl: string | null; thumbnailUrl: string | null; errorMessage: string | null }>;
 };
 
+type StageEntry = { id: string; label: string; state: 'done' | 'active' | 'pending' };
+
 type ProductionStatus = {
   status: string;
   expected: number;
@@ -17,13 +19,42 @@ type ProductionStatus = {
   failed: number;
   generating: number;
   progressPercent: number;
+  stage: string;
+  stages: StageEntry[];
+  totalScenes: number;
+  currentSceneIndex: number;
+  images: { ready: number; expected: number };
+  videos: { ready: number; expected: number };
+  runStatus: string | null;
   scenes: SceneStatus[];
 };
 
+function StageMark({ state }: { state: StageEntry['state'] }) {
+  if (state === 'done') return <span className="text-[var(--noc-blue)]">✓</span>;
+  if (state === 'active') return <span className="animate-pulse text-[var(--noc-magenta)]">●</span>;
+  return <span className="text-[var(--noc-t6)]">○</span>;
+}
+
+function DimensionBar({ label, ready, expected, waiting }: { label: string; ready: number; expected: number; waiting?: boolean }) {
+  const pct = expected > 0 ? Math.round((ready / expected) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-[var(--noc-t4)]">
+        <span>{label}</span>
+        <span>{waiting ? 'Waiting' : `${ready} / ${expected}`}</span>
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(233,233,237,0.12)]">
+        <div className="h-full rounded-full bg-[var(--noc-gradient)] transition-all" style={{ width: `${waiting ? 0 : pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 /**
- * Raivstream 5.0 — Slice 3 production surface.
- * The creator sees: Produce → "Creating your scenes…" → results + retry.
- * No providers, models, prompts, JSON or generation-job terminology.
+ * Raivstream 5.0 — production surface.
+ *
+ * The creator sees meaningful creative progress — a stage checklist and real
+ * dimensions — never providers, models, jobs or a fake percentage.
  */
 export function ProductionPanel({ projectId, status }: { projectId: string; status: string }) {
   const { isLoaded, isSignedIn } = useUser();
@@ -71,21 +102,10 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
 
   if (!isProducing && !isReview) return null;
 
-  if (isProducing && !data) {
-    return (
-      <section className="rounded-2xl border border-[rgba(233,233,237,0.1)] bg-[var(--noc-bar)] p-5 text-white">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t2)]">Production</p>
-        <p className="mt-1 text-lg font-black">Creating your scenes…</p>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[rgba(233,233,237,0.12)]">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--noc-gradient)]" />
-        </div>
-      </section>
-    );
-  }
-
   const scenes = data?.scenes ?? [];
   const failedScenes = scenes.filter((scene) => scene.status === 'FAILED');
   const complete = isReview && failedScenes.length === 0;
+  const stages = data?.stages ?? [];
 
   return (
     <section className="space-y-4">
@@ -93,15 +113,35 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
         <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t2)]">Production</p>
         {isProducing ? (
           <>
-            <p className="mt-1 text-lg font-black">Creating your scenes…</p>
-            <p className="mt-1 text-xs text-[var(--noc-t4)]">{data?.ready ?? 0} of {data?.expected ?? 0} ready</p>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[rgba(233,233,237,0.12)]">
-              <div className="h-full rounded-full bg-[var(--noc-gradient)] transition-all" style={{ width: `${data?.progressPercent ?? 0}%` }} />
-            </div>
+            <p className="mt-1 text-lg font-black">Creating your film</p>
+            {data && data.totalScenes > 0 && (
+              <p className="mt-1 text-xs text-[var(--noc-t4)]">
+                Scene {Math.min(data.currentSceneIndex + 1, data.totalScenes)} of {data.totalScenes}
+              </p>
+            )}
+
+            {stages.length > 0 && (
+              <ul className="mt-3 space-y-1.5 text-sm text-[var(--noc-t2)]">
+                {stages.map((entry) => (
+                  <li key={entry.id} className="flex items-center gap-2">
+                    <StageMark state={entry.state} />
+                    <span className={entry.state === 'active' ? 'font-bold text-[var(--noc-t1)]' : entry.state === 'pending' ? 'text-[var(--noc-t5)]' : ''}>{entry.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {data && (
+              <div className="mt-4 space-y-3">
+                <DimensionBar label="Character consistency" ready={data.images.ready} expected={data.images.expected} />
+                <DimensionBar label="Visual continuity" ready={data.videos.ready} expected={data.videos.expected} />
+                <DimensionBar label="Final assembly" ready={1} expected={1} waiting />
+              </div>
+            )}
           </>
         ) : (
           <>
-            <p className="mt-1 text-lg font-black">{complete ? 'Your scenes are ready' : 'Production finished with a few things to fix'}</p>
+            <p className="mt-1 text-lg font-black">{complete ? 'Your film is ready' : 'Production finished with a few things to fix'}</p>
             {failedScenes.length > 0 && (
               <button
                 type="button"

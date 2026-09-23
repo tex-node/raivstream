@@ -7,6 +7,7 @@ import { CreativeShell } from '@/components/creative/CreativeShell';
 import { CreativeCanvas } from '@/components/creative/CreativeCanvas';
 import { CreativeBriefView } from '@/components/creative/CreativeBriefView';
 import { CreativeBibleView } from '@/components/creative/CreativeBibleView';
+import { AdvancedDetails } from '@/components/creative/AdvancedDetails';
 import { NextActionCard } from '@/components/creative/NextActionCard';
 import { PlanView } from '@/components/creative/PlanView';
 import { PreviewPanel } from '@/components/creative/PreviewPanel';
@@ -16,6 +17,13 @@ import { DirectorPanel } from '@/components/creative/DirectorPanel';
 import { ApprovalBar } from '@/components/creative/ApprovalBar';
 import { OutputPanel } from '@/components/creative/OutputPanel';
 
+/**
+ * Raivstream 5.0 — project workspace with progressive disclosure.
+ *
+ * A first-time storyteller sees: what Raivstream understood → the plan →
+ * preview → production → review. Bible / Characters / Worlds / Versions live
+ * under "Advanced details" and only appear when they exist.
+ */
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
   const { isLoaded, isSignedIn } = useUser();
@@ -58,13 +66,20 @@ export default function CreativeProjectPage() {
   if (!project) return null;
   const plan = planQuery.data as any;
   const canBuildPlan = !project.hasPlan && !buildPlan.isPending;
+  const hasAdvanced = Boolean(project.brief || project.bible || project.currentVersionId);
 
   return (
     <CreativeShell project={project}>
       <CreativeCanvas project={project}>
         <NextActionCard project={project} />
-        <CreativeBriefView project={project} />
-        <CreativeBibleView project={project} />
+
+        {/* "Here's what I understand" — always visible, in the creator's words. */}
+        {project.brief?.refinedIntent && (
+          <div className="rounded-2xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.02)] p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Here&apos;s what I understand</p>
+            <p className="mt-1 text-sm text-[var(--noc-t2)]">{project.brief.refinedIntent}</p>
+          </div>
+        )}
 
         {canBuildPlan ? (
           <section className="rounded-2xl border border-dashed border-[rgba(178,90,217,0.4)] bg-[rgba(178,90,217,0.06)] p-5">
@@ -91,7 +106,9 @@ export default function CreativeProjectPage() {
               />
             )}
             {['APPROVED', 'GENERATING', 'REVIEW'].includes(project.status) && (
-              <ProductionPanel projectId={projectId} status={project.status} />
+              <div id="production">
+                <ProductionPanel projectId={projectId} status={project.status} />
+              </div>
             )}
             {project.status === 'REVIEW' && (
               <>
@@ -107,6 +124,15 @@ export default function CreativeProjectPage() {
             )}
           </>
         ) : null}
+
+        {hasAdvanced && (
+          <AdvancedDetails title="Advanced details" hint="Everything Raivstream knows and must preserve. You never need this to create — open it only when you want deeper control.">
+            <div className="space-y-4">
+              {project.brief && <CreativeBriefView project={project} />}
+              {project.bible && <CreativeBibleView project={project} />}
+            </div>
+          </AdvancedDetails>
+        )}
       </CreativeCanvas>
     </CreativeShell>
   );

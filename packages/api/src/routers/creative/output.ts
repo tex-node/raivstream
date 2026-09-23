@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { protectedProcedure, router } from '../../trpc';
 import { outputService } from '../../lib/creative/output/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
+import { timedCreative } from '../../lib/creative/observability/metrics';
 
 function toTrpcError(error: unknown, fallback: string): TRPCError {
   if (error instanceof CreativeError) {
@@ -18,7 +19,7 @@ export const creativeOutputRouter = router({
     .input(z.object({ projectId: z.string(), versionId: z.string(), format: z.enum(['MASTER', 'LANDSCAPE', 'PORTRAIT', 'SQUARE']), durationSeconds: z.number().int().min(5).max(600).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
-        return await outputService.derive(ctx.prisma, { projectId: input.projectId, versionId: input.versionId, format: input.format, durationSeconds: input.durationSeconds });
+        return await timedCreative('output.derive', () => outputService.derive(ctx.prisma, { projectId: input.projectId, versionId: input.versionId, format: input.format, durationSeconds: input.durationSeconds }));
       } catch (error) {
         throw toTrpcError(error, 'Output could not be derived.');
       }
@@ -29,7 +30,7 @@ export const creativeOutputRouter = router({
     .input(z.object({ projectId: z.string(), outputId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
-        return await outputService.render(ctx.prisma, { projectId: input.projectId, outputId: input.outputId });
+        return await timedCreative('output.render', () => outputService.render(ctx.prisma, { projectId: input.projectId, outputId: input.outputId }));
       } catch (error) {
         throw toTrpcError(error, 'Output could not be rendered.');
       }

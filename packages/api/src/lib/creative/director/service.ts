@@ -27,6 +27,7 @@ function buildDecision(
   affected: EntityReference[],
   preserved: EntityReference[],
   impact: ReturnType<typeof analyzeImpact>,
+  affectedSceneIds: string[],
   explanation?: string,
 ): DirectorDecision {
   return {
@@ -34,6 +35,8 @@ function buildDecision(
     directive: { instruction, intent: interpretation.intent, scope: interpretation.scope },
     affectedEntities: affected,
     preservedEntities: preserved,
+    preserves: interpretation.preserves,
+    affectedSceneIds,
     creativeChanges: interpretation.changes,
     productionChanges: impact.downstream.map((description) => ({ target: 'scenes', description })),
     continuityImplications: impact.affectedSceneIndices.length > 1
@@ -126,7 +129,7 @@ export class DirectorService {
     const interpretation = interpretDirective(input.instruction, plan);
     const resolved = resolveEntities({ plan, bible, sceneIndices: interpretation.affectedSceneIndices, scope: interpretation.scope });
     const impact = analyzeImpact({ declared: interpretation.impact, sceneIndices: interpretation.affectedSceneIndices, totalScenes: plan.scenes.length });
-    const decision = buildDecision(input.instruction, interpretation, resolved.affected, resolved.preserved, impact);
+    const decision = buildDecision(input.instruction, interpretation, resolved.affected, resolved.preserved, impact, planSceneIds(plan, interpretation.affectedSceneIndices));
 
     const version = await snapshotVersion(prisma, project.id, currentState(plan, bible, project), `Direct: ${interpretation.intent}`);
     const directive = await prisma.creativeDirective.create({
@@ -148,6 +151,50 @@ export class DirectorService {
     return { decision, version, directiveId: directive.id };
   }
 
+  /**
+   * PROPOSE — the "mind-reader moment". Interpret a directive and return the
+   * change/preserve/impact WITHOUT persisting anything or creating a version.
+   * This is what powers the closed Review → Director loop: the creator sees what
+   * Raivstream understood before committing.
+   */
+  async propose(prisma: PrismaClient, input: { projectId: string; userId: string; instruction: string }): Promise<{ decision: DirectorDecision }> {
+    if (!isCreativeDirectorEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 director is not enabled.');
+    const project = await prisma.creativeProject.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      include: { productionPlan: true, bible: true },
+    });
+    if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build a plan before directing.');
+    const plan = project.productionPlan.plan as unknown as CreativeProductionPlanState;
+    const bible = project.bible as unknown as CreativeBibleState | null;
+    const interpretation = interpretDirective(input.instruction, plan);
+    const resolved = resolveEntities({ plan, bible, sceneIndices: interpretation.affectedSceneIndices, scope: interpretation.scope });
+    const impact = analyzeImpact({ declared: interpretation.impact, sceneIndices: interpretation.affectedSceneIndices, totalScenes: plan.scenes.length });
+    return { decision: buildDecision(input.instruction, interpretation, resolved.affected, resolved.preserved, impact, planSceneIds(plan, interpretation.affectedSceneIndices)) };
+  }
+
+  /**
+   * APPLY INSTRUCTION — one call for the "Fix it" moment: propose → snapshot a
+   * version → apply → mark only the affected scenes for regeneration. Returns
+   * the decision so the UI can show change/preserve/impact and what it will
+   * regenerate.
+   */
+  async applyInstruction(
+    prisma: PrismaClient,
+    input: { projectId: string; userId: string; instruction: string },
+  ): Promise<{ applied: boolean; affectedSceneIds: string[]; impact: DirectorDecision['impact']; directiveId: string; versionId: string; decision: DirectorDecision }> {
+    const directed = await this.direct(prisma, input);
+    const applied = await this.apply(prisma, { projectId: input.projectId, userId: input.userId, directiveId: directed.directiveId });
+    return {
+      applied: applied.applied,
+      affectedSceneIds: applied.affectedSceneIds,
+      impact: applied.impact,
+      directiveId: directed.directiveId,
+      versionId: directed.version.id,
+      decision: directed.decision,
+    };
+  }
+
   async explore(prisma: PrismaClient, input: { projectId: string; userId: string; instruction: string }): Promise<{ decision: DirectorDecision; versions: VersionRow[] }> {
     if (!isCreativeDirectorEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 director is not enabled.');
     const project = await prisma.creativeProject.findFirst({
@@ -160,7 +207,7 @@ export class DirectorService {
     const interpretation = interpretDirective(input.instruction, plan);
     const resolved = resolveEntities({ plan, bible, sceneIndices: interpretation.affectedSceneIndices, scope: interpretation.scope });
     const impact = analyzeImpact({ declared: interpretation.impact, sceneIndices: interpretation.affectedSceneIndices, totalScenes: plan.scenes.length });
-    const decision = buildDecision(input.instruction, interpretation, resolved.affected, resolved.preserved, impact);
+    const decision = buildDecision(input.instruction, interpretation, resolved.affected, resolved.preserved, impact, planSceneIds(plan, interpretation.affectedSceneIndices));
 
     const count = interpretation.exploreCount ?? 3;
     const versions: VersionRow[] = [];

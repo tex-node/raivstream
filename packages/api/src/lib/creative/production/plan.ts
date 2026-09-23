@@ -9,6 +9,7 @@
  */
 
 import type { CreativeBibleState, CreativeBriefState, CreativeProjectType } from '../shared/types';
+import type { ProductionContext } from './contextAdapter';
 
 export interface PlanShot {
   shotId: string;
@@ -49,6 +50,9 @@ export interface CreativeProductionPlanState {
   totalRuntimeSeconds: number;
   timeline: PlanTimelineEntry[];
   notes: string[];
+  /** Context snapshot (Phase 9): the inherited series/studio context the plan
+   *  was built with, so production is reproducible ("Raivstream remembered"). */
+  contextSnapshot?: ProductionContext;
 }
 
 // ─── Structure templates by project type ──────────────────────────────────────
@@ -148,6 +152,7 @@ export function buildCreativePlan(input: {
   brief?: CreativeBriefState | null;
   bible?: CreativeBibleState | null;
   version?: number;
+  context?: ProductionContext;
 }): CreativeProductionPlanState {
   const structure = structureFor(input.projectType);
   const characters = characterNames(input.bible);
@@ -190,9 +195,12 @@ export function buildCreativePlan(input: {
       'Shot breakdown is decided automatically so the timing stays tight and cinematic.',
       'Continuity (character identity, world, visual language, last-frame flow) is protected during production.',
       'You direct the outcome — you never need to touch shots, models or providers.',
+      input.context?.source === 'SERIES' ? 'This episode inherits your series canon — identity, world and visual language are already remembered.' : undefined,
+      input.context?.source === 'STUDIO' ? `This campaign inherits your brand context${input.context.brandName ? ` (${input.context.brandName})` : ''} — no need to re-enter it.` : undefined,
       input.brief?.durationSeconds && Math.abs(cursor - input.brief.durationSeconds) > 12
         ? `Target runtime ${input.brief.durationSeconds}s; this plan previews ~${cursor}s. You can direct the pacing later.`
         : undefined,
     ].filter((note): note is string => Boolean(note)),
+    contextSnapshot: input.context,
   };
 }

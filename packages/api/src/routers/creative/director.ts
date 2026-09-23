@@ -24,6 +24,28 @@ export const creativeDirectorRouter = router({
       }
     }),
 
+  /** PROPOSE — interpret a directive (change/preserve/impact) without persisting. */
+  propose: protectedProcedure
+    .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await directorService.propose(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id, instruction: input.instruction });
+      } catch (error) {
+        throw toTrpcError(error, 'Could not understand the direction.');
+      }
+    }),
+
+  /** APPLY INSTRUCTION — propose + snapshot + apply + mark affected scenes. */
+  applyInstruction: protectedProcedure
+    .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await directorService.applyInstruction(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id, instruction: input.instruction });
+      } catch (error) {
+        throw toTrpcError(error, 'Could not apply the direction.');
+      }
+    }),
+
   /** EXPLORE — N variations as separate versions; original preserved. */
   explore: protectedProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
