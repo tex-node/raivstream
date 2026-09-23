@@ -214,6 +214,9 @@ async function journeyR(userId: string) {
   const built = await productionPlanService.plan(prisma as never, { projectId: project.id, userId });
   await persistTrimmed(project.id, built.plan, 1);
   await projectService.updateStatus(prisma as never, { projectId: project.id, userId, status: 'APPROVED' });
+  // Simulate the app's `produce` path: the project enters GENERATING before the
+  // detached runner starts (recovery scans GENERATING projects).
+  await projectService.updateStatus(prisma as never, { projectId: project.id, userId, status: 'GENERATING' });
 
   // Start production in a SEPARATE producer process, then kill it mid-run to
   // simulate the application process dying during a detached run.
