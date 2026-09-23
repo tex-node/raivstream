@@ -2,8 +2,8 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Creator UX exposed + Intent Readiness Gate + commercial source propagation + contextual Director; deployed `8b1049a`; CONDITIONAL GO — Human UX Acceptance still PENDING)
-Current GitHub commit deployed to VPS: `8b1049a` (feat(creative): contextual Director suggestions, brand-name readiness, and canonical source propagation — deployed 2026-09-23)
+Last updated: 2026-09-23 (Director→Readiness fix: applyInstruction re-evaluates readiness after a directive, assertSourceReady uses combined intent+refinedIntent, DirectorPanel shows inline ReadinessGate on block; deployed `a89bba1`; CONDITIONAL GO — Human UX Acceptance still PENDING)
+Current GitHub commit deployed to VPS: `a89bba1` (fix(creative): re-evaluate readiness after Director instruction changes commercial context — deployed 2026-09-23)
 
 ## Maintenance Rule
 
