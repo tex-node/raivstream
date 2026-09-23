@@ -11,6 +11,8 @@ import { NextActionCard } from '@/components/creative/NextActionCard';
 import { PlanView } from '@/components/creative/PlanView';
 import { PreviewPanel } from '@/components/creative/PreviewPanel';
 import { ProductionPanel } from '@/components/creative/ProductionPanel';
+import { ReviewPanel } from '@/components/creative/ReviewPanel';
+import { DirectorPanel } from '@/components/creative/DirectorPanel';
 
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
@@ -88,6 +90,12 @@ export default function CreativeProjectPage() {
             )}
             {['APPROVED', 'GENERATING', 'REVIEW'].includes(project.status) && (
               <ProductionPanel projectId={projectId} status={project.status} />
+            )}
+            {project.status === 'REVIEW' && (
+              <>
+                <ReviewPanel projectId={projectId} />
+                <DirectorPanel projectId={projectId} />
+              </>
             )}
           </>
         ) : null}

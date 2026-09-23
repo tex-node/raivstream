@@ -274,6 +274,18 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 4 (JUDGE: Review → Director → minimal Versioning)
+
+Per the sequencing refinement: **Review first, then Director consumes findings.** ReviewService wraps the existing CreativeCritic (via `creativeCriticProvider.evaluate` — no legacy writes); DirectorService is a semantic control system (change+preserve+impact → version → ProductionService). The Director never generates.
+
+- **Models (2 additive migrations):** `20260922150000_creative_version_directive` — `CreativeVersion` (snapshot), `CreativeDirective` (mode/instruction/change/preserve/impact/scopes/executionPlan), `CreativeProject.currentVersionId`; `20260922160000_creative_review` — `CreativeReviewRun` (findings) + `CreativeReviewResolution` (KEEP/FIX/REVIEW). Enums: `CreativeDirectiveMode`, `CreativeImpactLevel`, `CreativeReviewRunStatus`, `CreativeReviewResolutionKind`.
+- **4A Review:** `lib/creative/review/{types,criticAdapter,service}` — `buildCriticInput` from produced asset + scene (no legacy tables), `evaluateWithCritic` (injectable evaluator; graceful null when critic unavailable), `translateCriticResult` (human findings — categories + "Character continuity — …", raw diagnostics kept separate, strengths → KEEP), `ReviewService.{runReview,getReview,resolve}`. `creative.review.{run,get,resolve}` gated on `RAIVSTREAM_5_REVIEW_ENABLED`.
+- **4B Director:** `lib/creative/director/{types,interpreter,resolver,impact,service}` — deterministic interpreter covering the golden directives (confident/emotional → character state + preserve identity; wardrobe-only → preserve everything else; hopeful ending → PROJECT/last scene; three endings → EXPLORE n=3; warm lighting → LOCAL; warm scene 3 → index 2; opening faster; premium; world richer; less formal dialogue; child-safe; scene N). `DirectorService.{direct,explore,apply,versions}` — snapshots a CreativeVersion + records a CreativeDirective on every direct/explore (original preserved), `apply` re-interprets the directive, mutates plan/bible (ending/lighting/character state), and marks only affected scenes for targeted regeneration (deletes their produced assets → resumable runner regenerates just them), records DIRECTION memory. `creative.director.{direct,explore,apply,versions}` gated on `RAIVSTREAM_5_DIRECTOR_ENABLED`.
+- **Frontend:** `ReviewPanel` (run review → human findings with KEEP/FIX/REVIEW; Fix routes to Director) + `DirectorPanel` (direct input, change/preserve/impact decision, Apply & regenerate affected scenes → produce, Explore → Ending A/B/C, version strip). Wired into `/projects/[projectId]` at REVIEW.
+- **Tests:** review.test.ts (4: translation, critic-input build, graceful-unavailable, service run) + director.test.ts (10: golden directives, impact normalization, direct creates version+directive + never generates, explore preserves original, apply marks only affected scenes) — suite **506/506**, type-check + lint clean.
+- **Kept out (per boundary):** Series/Studio, collaboration, pricing, provider selection, advanced prompting, camera controls, raw critic dashboards, durable queue, unrelated refactors.
+- **Known limits:** director is deterministic (no LLM interpretation yet); review findings require the critic provider configured (else runs mark FAILED gracefully); versioning is minimal (snapshots + labels only).
+
 ### 2026-09-22: Raivstream 5.0 — slice 3 (PRODUCE)
 
 Slice 2 confirmed complete; built PRODUCE per the specified boundary: `Approved Plan → ProductionService → CapabilityRouter → GenerationAdapter → existing generation infra`.

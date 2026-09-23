@@ -2000,6 +2000,33 @@ enum CreativeProducedAssetStatus {
   FAILED
 }
 
+enum CreativeDirectiveMode {
+  DIRECT
+  EXPLORE
+  REVIEW
+}
+
+enum CreativeImpactLevel {
+  NONE
+  LOCAL
+  MULTI_SCENE
+  PROJECT
+  OUTPUT
+}
+
+enum CreativeReviewRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum CreativeReviewResolutionKind {
+  KEEP
+  FIX
+  REVIEW
+}
+
 model CreativeProject {
   id                   String                @id @default(cuid())
   userId               String
@@ -2012,6 +2039,10 @@ model CreativeProject {
   memories             CreativeMemory[]
   productionPlan       CreativeProductionPlan?
   producedAssets       CreativeProducedAsset[]
+  versions             CreativeVersion[]
+  directives           CreativeDirective[]
+  reviewRuns           CreativeReviewRun[]
+  currentVersionId     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -2105,4 +2136,68 @@ model CreativeProducedAsset {
   @@index([projectId, sceneId])
   @@index([projectId, status])
   @@map("creative_produced_assets")
+}
+
+model CreativeVersion {
+  id            String          @id @default(cuid())
+  projectId     String
+  project       CreativeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  label         String?
+  description   String?
+  snapshot      Json
+  createdAt     DateTime        @default(now())
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+  @@map("creative_versions")
+}
+
+model CreativeDirective {
+  id               String                @id @default(cuid())
+  projectId        String
+  project          CreativeProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId        String?
+  mode             CreativeDirectiveMode
+  instruction      String
+  interpretation   String
+  change           Json
+  preserve         Json
+  impact           CreativeImpactLevel
+  scopes           Json
+  approvalRequired Boolean               @default(true)
+  executionPlan    Json
+  createdAt        DateTime              @default(now())
+
+  @@index([projectId])
+  @@map("creative_directives")
+}
+
+model CreativeReviewRun {
+  id        String                 @id @default(cuid())
+  projectId String
+  project   CreativeProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sceneId   String?
+  assetId   String?
+  status    CreativeReviewRunStatus @default(PENDING)
+  findings  Json
+  provider  String?
+  resolutions CreativeReviewResolution[]
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@index([projectId])
+  @@map("creative_review_runs")
+}
+
+model CreativeReviewResolution {
+  id         String                         @id @default(cuid())
+  runId      String
+  run        CreativeReviewRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  findingId  String
+  resolution CreativeReviewResolutionKind
+  createdAt  DateTime                       @default(now())
+
+  @@unique([runId, findingId])
+  @@map("creative_review_resolutions")
 }
