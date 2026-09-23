@@ -39,8 +39,10 @@ export default function CreatePage() {
   const hasSourceAsset = attachments.length > 0 || sourceSupplied;
 
   // Restore an interrupted create session (client only).
+  // Runs as soon as auth resolves (isLoaded), regardless of sign-in state, so
+  // anonymous drafts are loaded and autosave is unblocked for logged-out users.
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded) return;
     if (hydratedRef.current) return;
     hydratedRef.current = true;
 
@@ -50,13 +52,13 @@ export default function CreatePage() {
     // If text is already meaningful (inline auth — state lives in React), don't overwrite.
     if (isMeaningfulDraft({ version: CREATE_DRAFT_VERSION, text, attachments, sourceSupplied, interpreted, updatedAt: '' })) return;
 
-    // Try user-keyed draft first; fall back to anon draft written before a sign-in redirect.
-    let draft = loadDraft(storage, userId);
+    // Try user-keyed draft first (when signed in); fall back to anon draft.
+    let draft = isSignedIn ? loadDraft(storage, userId) : null;
     if (!isMeaningfulDraft(draft)) {
       const anonDraft = loadDraft(storage, null);
       if (isMeaningfulDraft(anonDraft)) {
         draft = anonDraft;
-        clearDraft(storage, null); // adopt it, remove anon copy
+        if (isSignedIn) clearDraft(storage, null); // adopt it once signed in
       }
     }
 
@@ -160,6 +162,7 @@ export default function CreatePage() {
   };
 
   const handleContinue = () => {
+    if (!isLoaded) return; // auth still resolving — button is harmless dead zone
     if (!isSignedIn) {
       setAuthPendingFor('continue');
       return;
@@ -168,6 +171,7 @@ export default function CreatePage() {
   };
 
   const handleStart = () => {
+    if (!isLoaded) return;
     if (!isSignedIn) {
       setAuthPendingFor('start');
       return;
@@ -176,6 +180,18 @@ export default function CreatePage() {
   };
 
   const showGate = Boolean(readiness && readiness.ready === false);
+
+  // While auth is resolving show an intentional loading state — never blank.
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
+        <Navbar />
+        <div className="mx-auto max-w-3xl px-4 pt-28 pb-16 text-center">
+          <p className="text-sm text-[var(--noc-t5)]">Preparing your creative workspace…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">

@@ -49,7 +49,9 @@ export function InterpretationPanel({
     );
   }
 
-  if (!interpretation) return null;
+  if (!interpretation) {
+    return <p className="py-10 text-center text-[var(--noc-t4)]">Understanding what you&apos;re imagining…</p>;
+  }
 
   const controls: Array<{ label: string; value?: string | number }> = [
     { label: 'Duration', value: interpretation.explicit.durationSeconds ? `${interpretation.explicit.durationSeconds}s` : undefined },
