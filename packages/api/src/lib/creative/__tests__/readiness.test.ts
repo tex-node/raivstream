@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { assessIntentReadiness, type IntentReadiness } from '../intent/readiness';
 import { interpret } from '../intent/interpreter';
 
-function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean } = {}): IntentReadiness {
+function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean } = {}): IntentReadiness {
   return assessIntentReadiness(text, interpret(text), signals);
 }
 
@@ -75,5 +75,27 @@ describe('intent readiness — creative freedom vs essential source', () => {
   it('real-person likeness without a reference: asks for PERSON', () => {
     const r = notReady(assess('Create a video using a photo of me.'));
     expect(r.contextType).toBe('PERSON');
+  });
+
+  it('transform starter with no source: not ready, asks for SOURCE', () => {
+    const r = notReady(assess('Transform something'));
+    expect(r.contextType).toBe('SOURCE');
+  });
+
+  it('"transform this into an ad" without a source: not ready (never reaches production)', () => {
+    const r = notReady(assess('Transform this into a cinematic advertisement.'));
+    expect(r.contextType).toBe('SOURCE');
+  });
+
+  it('transform with an attached image source: ready', () => {
+    expect(assess('Transform this into a cinematic advertisement.', { hasSourceAsset: true }).ready).toBe(true);
+  });
+
+  it('transform with an existing project source: ready', () => {
+    expect(assess('Transform this into a cinematic advertisement.', { hasProjectSource: true }).ready).toBe(true);
+  });
+
+  it('transform with explicit fictional authorization: ready', () => {
+    expect(assess('Create a fictional futuristic car and transform it into a cinematic ad.').ready).toBe(true);
   });
 });

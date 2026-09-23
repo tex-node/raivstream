@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { transformAcceptsVideo } from '@/lib/creativeCapabilities';
 
 export type ReadinessContextType = 'PRODUCT' | 'BRAND' | 'LOGO' | 'PERSON' | 'SOURCE';
 
@@ -36,10 +37,10 @@ const LABELS: Record<ReadinessContextType, { upload: string; attached: string; f
     placeholder: 'e.g. a woman in her thirties with short hair',
   },
   SOURCE: {
-    upload: 'Attach the source',
+    upload: transformAcceptsVideo() ? 'Upload an image or video' : 'Upload an image',
     attached: 'I’ve added it',
-    fictional: 'Use a fictional source instead',
-    placeholder: 'e.g. a short clip of rain on a window',
+    fictional: 'I don’t have a source — use a fictional one',
+    placeholder: 'e.g. a photo of my product on a table',
   },
 };
 

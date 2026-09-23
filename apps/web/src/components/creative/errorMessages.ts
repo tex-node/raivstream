@@ -16,8 +16,8 @@ export function creatorError(message: string | null | undefined): string {
   if (m.includes('credit')) {
     return 'This scene needs a few more credits. Top up and we’ll continue.';
   }
-  if (m.includes('seed') || m.includes('image-to-video')) {
-    return 'This scene needs its key visual first. Try again and we’ll rebuild it.';
+  if (m.includes('source') || m.includes('seed') || m.includes('image-to-video')) {
+    return 'I need the image or video you want me to transform before I can create this.';
   }
   return 'Something interrupted this scene. Your other scenes are safe — we can try this one again.';
 }
