@@ -2,7 +2,7 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Phase 9 completion gate — committed, migration deployed + verified, live smoke P/X/R PASS, recovery validated, UX confirmed in production)
+Last updated: 2026-09-23 (Launch Readiness — six-gate review; moderation-bypass + R16 blockers fixed; diagnostics/monitor/runbook; 563/563 tests; conditional GO)
 Current GitHub commit deployed to VPS: `71ecb9c` (feat(story): safe-rewrite suggestions for flagged content + fix edit body cap — deployed 2026-09-22)
 
 ## Maintenance Rule
@@ -273,6 +273,28 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-09-23: Launch Readiness — six-gate review, two safety blockers FIXED, operational tooling
+
+Production Hardening / Launch Readiness (not a feature slice). Full report: `docs/operations/phase-9-launch-readiness.md`; runbook: `docs/operations/creative-production-runbook.md`.
+
+**Gate 3 (Safety) — two launch blockers found & fixed:**
+- **Moderation bypass:** the 5.0 generation adapter called `submitGenerationJob` with no moderation. Now `generateStill`/`generateVideo` call `moderatePrompt` at the adapter boundary; a rejection is a typed `CONTENT_REJECTED` error that fails only that asset, refunds credits, and is never retried. Live `scripts/phase9-safety-probe.ts` PASS (benign allowed, blocklisted rejected).
+- **R16 not gated:** creative routers used `protectedProcedure`. New `creativeProcedure` (auth + `isNotR16`) now guards all 67 creative procedures; `/create`, `/projects`, `/series`, `/studio` added to `R16_BLOCKED_ROUTES`. Live: those routes 307 → `/` with `?r16=1`.
+
+**Gate 1 (Reliability):** hermetic failure matrix added (`launch.test.ts`): provider timeout, provider rejection, R2/storage failure, partial-scene failure, bounded retry, full-failure, output-render failure — each affects the smallest scope. Live recovery already validated (Journey R).
+
+**Gate 2 (Data/provenance):** `buildRunDiagnostics` + `creative.production.diagnostics` return the full chain (project → plan/context → run → assets → review → directives → versions → approvals → outputs) with provider/model/prompt internals normalized to `internal`. Verified live on a real project.
+
+**Gate 4 (Performance):** `scripts/phase9-perf-baseline.ts` — deterministic stages P95 ≤ 0.07 ms (intent 0.04, plan 0.02, route 0.07). Real reference: FIRST_VISUAL 5.8 s, H3 clip ≈ 25–31 s. `[creative.production]` + `creative.observability.metrics` now expose production P50/P95.
+
+**Gate 6 (Operations):** backup/restore verified (restored the pre-Phase9 dump into a scratch DB; counts matched). Added `scripts/creative-run-monitor.sh` (stale-run alert), `scripts/creative-run-diagnostics.ts` (operator CLI). Runbook covers diagnose/recover/flag-rollback/deploy-rollback/schema-rollback/backup.
+
+**Gate 5 (UX acceptance):** protocol defined; requires real creators — **PENDING (human)**.
+
+**Verification:** 563/563 API tests (was 549), API + web type-check clean, web lint `--max-warnings=0` clean. Deployed `8a5ac92`.
+
+**Decision: conditional GO** — safety blockers fixed and deployed; broad exposure gated on human UX acceptance + four operational policy items (alert routing, storage thresholds, cost dashboard). No further capability work required.
 
 ### 2026-09-23: Phase 9 completion gate — COMMITTED, DEPLOYED, LIVE-VALIDATED
 
