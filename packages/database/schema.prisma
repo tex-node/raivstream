@@ -2073,6 +2073,21 @@ enum CreativeEpisodeStatus {
   ARCHIVED
 }
 
+enum CreativeCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum CreativeStudioAssetKind {
+  IMAGE
+  VIDEO
+  LOGO
+  AUDIO
+}
+
 model CreativeProject {
   id                   String                @id @default(cuid())
   userId               String
@@ -2083,6 +2098,8 @@ model CreativeProject {
   seriesId             String?
   series               CreativeSeries?      @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   episode              CreativeEpisode?
+  campaignId           String?
+  campaign             CreativeCampaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   brief                CreativeBrief?
   bible                CreativeBible?
   memories             CreativeMemory[]
@@ -2332,4 +2349,76 @@ model CreativeEpisode {
   @@unique([seriesId, seasonNumber, episodeNumber])
   @@index([seriesId])
   @@map("creative_episodes")
+}
+
+model CreativeStudio {
+  id              String                @id @default(cuid())
+  userId          String
+  name            String
+  brandIdentity   Json?
+  visualLanguage  Json?
+  audioLanguage   Json?
+  tone            Json?
+  audience        Json?
+  approvedMessaging Json?
+  constraints     Json?
+  products        CreativeProduct[]
+  campaigns       CreativeCampaign[]
+  assets          CreativeStudioAsset[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([userId])
+  @@map("creative_studios")
+}
+
+model CreativeProduct {
+  id          String             @id @default(cuid())
+  studioId    String
+  studio      CreativeStudio     @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  identity    Json?
+  imagery     Json?
+  claims      Json?
+  variants    Json?
+  campaigns   CreativeCampaign[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([studioId])
+  @@map("creative_products")
+}
+
+model CreativeCampaign {
+  id        String                @id @default(cuid())
+  studioId  String
+  studio    CreativeStudio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  productId String?
+  product   CreativeProduct?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name      String
+  objective String?
+  audience  String?
+  context   Json?
+  status    CreativeCampaignStatus @default(DRAFT)
+  projects  CreativeProject[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@index([studioId])
+  @@map("creative_campaigns")
+}
+
+model CreativeStudioAsset {
+  id         String                @id @default(cuid())
+  studioId   String
+  studio     CreativeStudio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  name       String
+  kind       CreativeStudioAssetKind
+  assetUrl   String?
+  provenance Json?
+  createdAt  DateTime              @default(now())
+
+  @@index([studioId])
+  @@map("creative_studio_assets")
 }

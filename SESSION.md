@@ -274,6 +274,17 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 7 (STUDIO)
+
+Commercial creative operating layer — persistent brand/product/campaign context feeding the **exact same** Brief/Bible/Director/Production/Approval/Outputs engine. No StudioBrief/StudioBible/StudioDirector/etc.
+
+- **Models (migration `20260922200000_creative_studio`):** `CreativeStudio` (Brand DNA: brandIdentity/visualLanguage/audioLanguage/tone/audience/approvedMessaging/constraints), `CreativeProduct` (identity/imagery/claims/variants), `CreativeCampaign` (productId, objective, audience, status; projects), `CreativeStudioAsset` (kind IMAGE/VIDEO/LOGO/AUDIO + provenance); `CreativeProject.campaignId` (SetNull).
+- **`lib/creative/studio/`:** `types.ts` (BrandDNA/ProductState/CampaignState/StudioContext), `context.ts` (**StudioContextService** — assembles brand + product + campaign + reusable assets; no downstream reconstruction), `service.ts` (studio create/list/get/update; product; campaign; **`createCampaignProject` inherits brand/product/campaign into the EXISTING CreativeBrief + CreativeBible** — visual language, tone, audience, approved messaging, product name — then links the campaign; asset add with provenance).
+- **API:** `creative.studio.{create,list,get,update, product.{create,list}, campaign.{create,list,createProject}, asset.{add,list}, context.{get}}` — gated on `RAIVSTREAM_5_STUDIO_ENABLED`.
+- **Frontend:** `apps/web/src/app/studio/[studioId]/page.tsx` + `components/creative/studio/{StudioHeader,ProductList,CampaignList,NewCampaignPanel}.tsx` — studio home, products, new campaign, campaign→project creation from brand context.
+- **Tests:** studio.test.ts (6 golden: studio w/ brand DNA + no project; product; campaign↔product; **campaign project inherits brand/product into Brief+Bible**; context assembles brand+product+campaign; asset provenance). Suite **530/530**, type-check + lint clean, CI green.
+- **Kept out (per boundary):** collaboration, team permissions, billing/pricing, marketplace, CRM, analytics redesign, publishing, advanced prompting, provider/model controls, full asset-management redesign, brand/product campaigns/characters/worlds reuse via the same machinery only.
+
 ### 2026-09-22: Raivstream 5.0 — slice 6 (SERIES)
 
 Persistent creative universe: Series → Canon → Episodes → Projects, with `SeriesContextService` as the single context assembler. Canon/Memory/Episode-State are distinct structures (never one JSON blob).

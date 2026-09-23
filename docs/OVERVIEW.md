@@ -177,9 +177,9 @@ completeness + moderation UX) slices 1–2 shipped. Next: movie wiring for shot 
 audio-driven timing.
 
 **Raivstream 5.0 (in progress):** a semantic creative-orchestration layer above the production
-infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slices 1–6
-shipped: CREATE+INTENT, PLAN, PRODUCE, JUDGE (Review→Director), APPROVAL→OUTPUTS, and SERIES
-(persistent universe: Canon + Memory + Episodes linked to projects, `SeriesContextService`,
-spinoff context boundary). See
+infrastructure — "Tell Raivstream what you imagine. It figures out how to make it." Slices 1–7
+shipped: CREATE+INTENT, PLAN, PRODUCE, JUDGE (Review→Director), APPROVAL→OUTPUTS, SERIES
+(Canon + Memory + Episodes), and STUDIO (Brand DNA + Products + Campaigns feeding the same
+engine — no second Brief/Bible/Director architecture). See
 `docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md` and
 `packages/api/src/lib/creative/`.
