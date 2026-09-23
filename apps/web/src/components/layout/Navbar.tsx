@@ -60,6 +60,7 @@ export function Navbar() {
       {!isFeed && !isR16 && (
         <div className="hidden md:flex items-center gap-1">
           {[
+            { href: '/create',   label: 'Create'    },
             { href: '/pricing',  label: 'Pricing'   },
             { href: '/story-playground', label: 'Story Playground' },
             { href: '/academy', label: 'Academy' },
@@ -169,7 +170,8 @@ export function Navbar() {
                 >
                   {[
                     { href: `/${user?.username}`, label: 'Profile' },
-                    { href: '/story-playground', label: 'Story Playground' },
+                    { href: '/create', label: '✦ Create' },
+                    { href: '/story-playground', label: 'Story Playground (legacy)' },
                     ...(!isR16 ? [
                       { href: '/academy', label: 'Academy' },
                     ] : []),

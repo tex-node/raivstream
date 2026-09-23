@@ -19,8 +19,19 @@ export default function CreatePage() {
     { text },
     { enabled: Boolean(isLoaded && isSignedIn && text.trim().length > 3 && interpreted), retry: false },
   );
+  const planMutation = trpc.creative.production.plan.useMutation();
   const createProject = trpc.creative.project.create.useMutation({
-    onSuccess: (project) => router.push(`/projects/${project.id}`),
+    onSuccess: async (project) => {
+      // "Build this" → create the project, then build the plan (Interpret →
+      // Build → Plan). If planning is unavailable, fall back to the workspace,
+      // which can build the plan there.
+      try {
+        await planMutation.mutateAsync({ projectId: project.id });
+      } catch {
+        /* workspace still offers Build the production plan */
+      }
+      router.push(`/projects/${project.id}`);
+    },
   });
 
   return (
@@ -47,7 +58,7 @@ export default function CreatePage() {
             interpretation={interpretationQuery.data}
             onBack={() => setInterpreted(false)}
             onStart={() => createProject.mutate({ text })}
-            starting={createProject.isPending}
+            starting={createProject.isPending || planMutation.isPending}
             startError={createProject.error?.message}
           />
         )}

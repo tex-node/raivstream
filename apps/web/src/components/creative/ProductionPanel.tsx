@@ -2,6 +2,7 @@
 
 import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
+import { creatorError } from './errorMessages';
 
 type SceneStatus = {
   sceneId: string;
@@ -186,8 +187,8 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
                     {asset.status === 'FAILED' ? 'Could not generate' : 'Creating…'}
                   </div>
                 )}
-                {asset.status === 'FAILED' && asset.errorMessage && (
-                  <p className="p-2 text-[11px] text-[#e35d5d]">{asset.errorMessage}</p>
+                {asset.status === 'FAILED' && (
+                  <p className="p-2 text-[11px] text-[#e35d5d]">{creatorError(asset.errorMessage)}</p>
                 )}
               </div>
             ))}

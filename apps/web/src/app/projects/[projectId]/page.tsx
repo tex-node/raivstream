@@ -69,7 +69,7 @@ export default function CreativeProjectPage() {
   const hasAdvanced = Boolean(project.brief || project.bible || project.currentVersionId);
 
   return (
-    <CreativeShell project={project}>
+    <CreativeShell project={project} director={plan ? <DirectorPanel projectId={projectId} /> : undefined}>
       <CreativeCanvas project={project}>
         <NextActionCard project={project} />
 
@@ -111,10 +111,7 @@ export default function CreativeProjectPage() {
               </div>
             )}
             {project.status === 'REVIEW' && (
-              <>
-                <ReviewPanel projectId={projectId} />
-                <DirectorPanel projectId={projectId} />
-              </>
+              <ReviewPanel projectId={projectId} />
             )}
             {project.currentVersionId && (
               <>

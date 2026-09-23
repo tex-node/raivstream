@@ -51,7 +51,17 @@ export function InterpretationPanel({
 
   if (!interpretation) return null;
 
-  const explicitEntries = Object.entries(interpretation.explicit).filter(([, value]) => Boolean(value));
+  const controls: Array<{ label: string; value?: string | number }> = [
+    { label: 'Duration', value: interpretation.explicit.durationSeconds ? `${interpretation.explicit.durationSeconds}s` : undefined },
+    { label: 'Format', value: interpretation.explicit.format },
+    { label: 'Genre', value: interpretation.explicit.genre },
+    { label: 'Tone', value: interpretation.explicit.tone },
+    { label: 'Setting', value: interpretation.explicit.setting },
+    { label: 'Visual style', value: interpretation.inferred.style },
+    { label: 'Audience', value: interpretation.explicit.audience },
+    { label: 'Voice', value: undefined },
+    { label: 'Music', value: undefined },
+  ];
 
   return (
     <div className="space-y-4">
@@ -60,23 +70,24 @@ export function InterpretationPanel({
       </button>
 
       <div className="rounded-2xl border border-[rgba(233,233,237,0.1)] bg-[rgba(233,233,237,0.03)] p-6">
-        <div className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-black tracking-tight text-[var(--noc-t1)]">Here&apos;s what I understand</h2>
+        <div className="mt-2 flex items-center gap-3">
           <span className="rounded-full bg-[var(--noc-purple)]/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--noc-purple)]">
             {interpretation.projectType}
           </span>
-          <span className="text-xs text-[var(--noc-t6)]">understood</span>
+          <span className="text-xs text-[var(--noc-t6)]">Raivstream decided this</span>
         </div>
         <p className="mt-3 text-lg font-semibold leading-relaxed text-[var(--noc-t1)]">{interpretation.summary}</p>
 
-        {explicitEntries.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {explicitEntries.map(([key, value]) => (
-              <span key={key} className="rounded-full bg-[rgba(79,139,214,0.12)] px-2.5 py-1 text-xs font-semibold text-[var(--noc-blue)]">
-                {key}: {String(value)}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {controls.map((control) => (
+            <div key={control.label} className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.02)] px-3 py-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">{control.label}</p>
+              <p className="mt-0.5 truncate text-sm font-semibold text-[var(--noc-t2)]">{control.value ?? 'Auto'}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-[var(--noc-t5)]">Raivstream decides these unless you tell it otherwise — just describe the change in your own words.</p>
 
         {interpretation.questions.length > 0 && (
           <div className="mt-5 border-t border-[rgba(233,233,237,0.08)] pt-4">
@@ -136,7 +147,7 @@ export function InterpretationPanel({
           onClick={onStart}
           className="mt-6 w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-5 py-3 font-black text-white disabled:opacity-50"
         >
-          {starting ? 'Creating your project…' : 'Start project'}
+          {starting ? 'Building this…' : 'Build this'}
         </button>
         {startError && <p className="mt-3 text-center text-sm text-[#e35d5d]">{startError}</p>}
       </div>
