@@ -227,11 +227,13 @@ async function journeyD(userId: string) {
   assert((ep2State.state as any)?.wardrobe?.color === 'red', 'D:state', 'episode state did not evolve');
   ok('D:episode state evolved (wardrobe red) — identity unchanged');
 
-  const director = new (await import('../packages/api/src/lib/creative/director/service')).DirectorService();
-  await director.direct(prisma as never, { projectId: ep2.projectId, userId, instruction: 'Make this episode darker.' });
-  const canon = await seriesService.canon.get(prisma as never, series.id);
-  assert((canon as any).visualLanguage.style.includes('photorealistic'), 'D:canon', 'series canon mutated by episode directive');
-  ok('D:director darkened the episode; series canon preserved');
+  // Plan ep2 (no media — plan is data), then Direct it darker; canon must hold.
+  await buildAndTrimPlan(ep2.projectId, 2);
+  const directed2 = await directorService.direct(prisma as never, { projectId: ep2.projectId, userId, instruction: 'Make this episode darker.' });
+  assert(directed2.decision.creativeChanges[0].field === 'lighting', 'D:director', 'darker directive did not resolve to a lighting change');
+  const canonAfter = await seriesService.canon.get(prisma as never, series.id);
+  assert((canonAfter as any).visualLanguage.style.includes('photorealistic'), 'D:canon', 'series canon mutated by episode directive');
+  ok('D:director darkened the episode (episode-level); series canon preserved');
 }
 
 async function main() {
