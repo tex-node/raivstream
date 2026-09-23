@@ -79,15 +79,24 @@ export function InterpretationPanel({
         </div>
         <p className="mt-3 text-lg font-semibold leading-relaxed text-[var(--noc-t1)]">{interpretation.summary}</p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {controls.map((control) => (
-            <div key={control.label} className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.02)] px-3 py-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">{control.label}</p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-[var(--noc-t2)]">{control.value ?? 'Auto'}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-[var(--noc-t5)]">Raivstream decides these unless you tell it otherwise — just describe the change in your own words.</p>
+        {interpretation.inferred.style && (
+          <p className="mt-3 text-sm text-[var(--noc-t3)]">
+            Creative direction: {interpretation.inferred.style} <span className="text-[var(--noc-t5)]">· Auto</span>
+          </p>
+        )}
+
+        <details className="mt-3 rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.02)] p-3">
+          <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Fine-tune · Auto</summary>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {controls.map((control) => (
+              <div key={control.label} className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.02)] px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">{control.label}</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-[var(--noc-t2)]">{control.value ?? 'Auto'}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-[var(--noc-t5)]">Let Raivstream decide — describe any change in your own words.</p>
+        </details>
 
         {interpretation.questions.length > 0 && (
           <div className="mt-5 border-t border-[rgba(233,233,237,0.08)] pt-4">

@@ -9,11 +9,15 @@ const ATTACHMENTS = ['Image', 'Video', 'Script', 'Audio', 'Product'];
 export function CreativeInput({
   text,
   onChange,
+  attachments,
+  onToggleAttachment,
   onSubmit,
   disabled,
 }: {
   text: string;
   onChange: (value: string) => void;
+  attachments: string[];
+  onToggleAttachment: (label: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
 }) {
@@ -43,11 +47,9 @@ export function CreativeInput({
         placeholder="Tell Raivstream what you're imagining..."
         className="w-full resize-none bg-transparent text-lg text-[var(--noc-t1)] outline-none placeholder:text-[var(--noc-t6)]"
       />
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <IntentSuggestions
-          suggestions={SUGGESTIONS}
-          onPick={(suggestion) => onChange(suggestion.toLowerCase().endsWith('?') ? suggestion : suggestion)}
-        />
+        <IntentSuggestions suggestions={SUGGESTIONS} onPick={(suggestion) => onChange(text ? text : suggestion)} />
         <button
           type="button"
           onClick={onSubmit}
@@ -57,18 +59,27 @@ export function CreativeInput({
           Interpret
         </button>
       </div>
+
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[rgba(233,233,237,0.08)] pt-3">
-        <span className="text-xs font-bold text-[var(--noc-t6)]">Attach:</span>
-        {ATTACHMENTS.map((label) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => onChange(text ? `${text} (reference: ${label.toLowerCase()})` : label)}
-            className="rounded-full border border-[rgba(233,233,237,0.14)] px-3 py-1 text-xs font-semibold text-[var(--noc-t4)] hover:border-[var(--noc-purple)]"
-          >
-            {label}
-          </button>
-        ))}
+        <span className="text-xs font-bold text-[var(--noc-t6)]">Add a reference:</span>
+        {ATTACHMENTS.map((label) => {
+          const active = attachments.includes(label);
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggleAttachment(label)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                active
+                  ? 'border-[var(--noc-purple)] bg-[rgba(178,90,217,0.14)] text-[var(--noc-t1)]'
+                  : 'border-[rgba(233,233,237,0.14)] text-[var(--noc-t4)] hover:border-[var(--noc-purple)]'
+              }`}
+            >
+              {active ? `✓ ${label}` : `+ ${label}`}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
