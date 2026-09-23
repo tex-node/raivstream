@@ -10,11 +10,33 @@
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../../generators';
 import { mirrorUrlToR2, uploadBufferToR2 } from '../../r2';
 import { extractLastFrameAsSeedImage } from '../../lastFrameExtract';
+import { moderatePrompt, moderationRejectMessage } from '../../promptModeration';
+import { CreativeError } from '../shared/errors';
 import type { StillSpec, VideoSpec } from './capabilityRouter';
 
 export interface GeneratedMedia {
   assetUrl: string;
   thumbnailUrl?: string;
+}
+
+/**
+ * Safety boundary: every creative generation is moderated before it reaches the
+ * provider. This is the guarantee that the 5.0 semantic layer can never bypass
+ * the existing moderation architecture — moderation lives at the lowest boundary
+ * (the adapter), not in the UI. A rejection is a typed CONTENT_REJECTED error so
+ * the runner fails that asset (smallest scope) and never retries it.
+ */
+async function assertPromptAllowed(prompt: string, negativePrompt?: string): Promise<void> {
+  const moderation = await moderatePrompt(prompt);
+  if (!moderation.allowed) {
+    throw new CreativeError('CONTENT_REJECTED', moderationRejectMessage(moderation, 'This content violates our guidelines.'));
+  }
+  if (negativePrompt) {
+    const negative = await moderatePrompt(negativePrompt);
+    if (!negative.allowed) {
+      throw new CreativeError('CONTENT_REJECTED', moderationRejectMessage(negative, 'This content violates our guidelines.'));
+    }
+  }
 }
 
 async function waitForOutput(model: SupportedModel, providerJobId: string, immediateUrl?: string): Promise<string> {
@@ -40,6 +62,7 @@ async function persist(url: string, key: string, contentType: string): Promise<s
 
 /** Generate a still (FLUX2 → fal). Provider chosen internally, never exposed. */
 export async function generateStill(spec: StillSpec, projectId: string, assetId: string): Promise<GeneratedMedia> {
+  await assertPromptAllowed(spec.prompt, spec.negativePrompt);
   const submitted = await submitGenerationJob({
     model: 'FLUX2' as SupportedModel,
     prompt: spec.prompt,
@@ -54,6 +77,7 @@ export async function generateStill(spec: StillSpec, projectId: string, assetId:
 
 /** Generate a scene video (MiniMax H3 I2V). Provider chosen internally. */
 export async function generateVideo(spec: VideoSpec, projectId: string, assetId: string, seedImageUrl?: string): Promise<GeneratedMedia> {
+  await assertPromptAllowed(spec.prompt);
   const submitted = await submitGenerationJob({
     model: 'H3_MAX' as SupportedModel,
     prompt: spec.prompt,

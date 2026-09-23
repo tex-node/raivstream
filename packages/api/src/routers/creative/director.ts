@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { directorService } from '../../lib/creative/director/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
@@ -13,8 +13,8 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 }
 
 export const creativeDirectorRouter = router({
-  /** DIRECT — resolve intent → change/preserve → impact → new version. Never generates. */
-  direct: protectedProcedure
+  /** DIRECT â€” resolve intent â†’ change/preserve â†’ impact â†’ new version. Never generates. */
+  direct: creativeProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -24,8 +24,8 @@ export const creativeDirectorRouter = router({
       }
     }),
 
-  /** PROPOSE — interpret a directive (change/preserve/impact) without persisting. */
-  propose: protectedProcedure
+  /** PROPOSE â€” interpret a directive (change/preserve/impact) without persisting. */
+  propose: creativeProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -35,8 +35,8 @@ export const creativeDirectorRouter = router({
       }
     }),
 
-  /** APPLY INSTRUCTION — propose + snapshot + apply + mark affected scenes. */
-  applyInstruction: protectedProcedure
+  /** APPLY INSTRUCTION â€” propose + snapshot + apply + mark affected scenes. */
+  applyInstruction: creativeProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -46,8 +46,8 @@ export const creativeDirectorRouter = router({
       }
     }),
 
-  /** EXPLORE — N variations as separate versions; original preserved. */
-  explore: protectedProcedure
+  /** EXPLORE â€” N variations as separate versions; original preserved. */
+  explore: creativeProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -58,7 +58,7 @@ export const creativeDirectorRouter = router({
     }),
 
   /** Apply a directive: mutate the semantic state + mark affected scenes for targeted regeneration. */
-  applyDirective: protectedProcedure
+  applyDirective: creativeProcedure
     .input(z.object({ projectId: z.string(), directiveId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -69,7 +69,7 @@ export const creativeDirectorRouter = router({
     }),
 
   /** Minimal version list (Direct/Explore safety). */
-  versions: protectedProcedure
+  versions: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {

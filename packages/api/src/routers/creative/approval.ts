@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { approvalService } from '../../lib/creative/approval/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
@@ -14,7 +14,7 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 
 export const creativeApprovalRouter = router({
   /** Version-specific approve / reject / request changes (CREATIVE, PRODUCTION, OUTPUT). */
-  decide: protectedProcedure
+  decide: creativeProcedure
     .input(z.object({
       projectId: z.string(),
       versionId: z.string(),
@@ -30,7 +30,7 @@ export const creativeApprovalRouter = router({
       }
     }),
 
-  list: protectedProcedure
+  list: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {

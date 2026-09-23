@@ -91,10 +91,22 @@ const isAdminOrModerator = t.middleware(({ ctx, next }) => {
   });
 });
 
+// Middleware for the Raivstream 5.0 creative layer.
+// The semantic studio has no kids/R16 mode, so — like /generate and
+// /story-studio — it must never be reachable from the R16 surface. This is the
+// API-level guarantee; the web middleware also blocks the routes.
+const isNotR16 = t.middleware(({ ctx, next }) => {
+  if (ctx.isR16) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream Studio is not available in R16 mode.' });
+  }
+  return next();
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(isAuthed);
+export const creativeProcedure = t.procedure.use(isAuthed).use(isNotR16);
 export const adminProcedure = t.procedure.use(isAdmin);
 export const moderatorProcedure = t.procedure.use(isAdminOrModerator);
 export const middleware = t.middleware;

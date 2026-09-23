@@ -36,7 +36,7 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 // Routes that are not appropriate for the kids (R16) subdomain
-const R16_BLOCKED_ROUTES = ['/generate', '/story-studio', '/upload', '/credits', '/pricing', '/analytics', '/settings', '/subscription', '/admin'];
+const R16_BLOCKED_ROUTES = ['/generate', '/story-studio', '/upload', '/credits', '/pricing', '/analytics', '/settings', '/subscription', '/admin', '/create', '/projects', '/series', '/studio'];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

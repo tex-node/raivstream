@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { projectService } from '../../lib/creative/project/service';
 import { memoryService } from '../../lib/creative/memory/service';
 import { isCreativeEnabled } from '../../lib/creative/featureFlags';
@@ -16,7 +16,7 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 }
 
 export const creativeProjectRouter = router({
-  create: protectedProcedure
+  create: creativeProcedure
     .input(z.object({
       text: z.string().min(1).max(4000),
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
@@ -37,13 +37,13 @@ export const creativeProjectRouter = router({
       }
     }),
 
-  list: protectedProcedure
+  list: creativeProcedure
     .query(async ({ ctx }) => {
       if (!isCreativeEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 is not enabled.' });
       return projectService.list(ctx.prisma, ctx.user.id);
     }),
 
-  get: protectedProcedure
+  get: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {
@@ -53,7 +53,7 @@ export const creativeProjectRouter = router({
       }
     }),
 
-  updateStatus: protectedProcedure
+  updateStatus: creativeProcedure
     .input(z.object({ projectId: z.string(), status: z.enum(CREATIVE_PROJECT_STATUSES) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -63,14 +63,14 @@ export const creativeProjectRouter = router({
       }
     }),
 
-  recordMemory: protectedProcedure
+  recordMemory: creativeProcedure
     .input(z.object({ projectId: z.string(), kind: z.enum(CREATIVE_MEMORY_KINDS), content: z.record(z.unknown()) }))
     .mutation(async ({ ctx, input }) => {
       await memoryService.record(ctx.prisma, { projectId: input.projectId, kind: input.kind, content: input.content });
       return { ok: true };
     }),
 
-  getMemories: protectedProcedure
+  getMemories: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       await projectService.get(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });

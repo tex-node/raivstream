@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { studioService } from '../../lib/creative/studio/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
@@ -23,7 +23,7 @@ const brandDNASchema = z.object({
 });
 
 export const creativeStudioRouter = router({
-  create: protectedProcedure
+  create: creativeProcedure
     .input(z.object({ name: z.string().min(1).max(160), brand: brandDNASchema.optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -33,7 +33,7 @@ export const creativeStudioRouter = router({
       }
     }),
 
-  list: protectedProcedure
+  list: creativeProcedure
     .query(async ({ ctx }) => {
       try {
         return await studioService.list(ctx.prisma, ctx.user.id);
@@ -42,7 +42,7 @@ export const creativeStudioRouter = router({
       }
     }),
 
-  get: protectedProcedure
+  get: creativeProcedure
     .input(z.object({ studioId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {
@@ -52,7 +52,7 @@ export const creativeStudioRouter = router({
       }
     }),
 
-  update: protectedProcedure
+  update: creativeProcedure
     .input(z.object({ studioId: z.string(), name: z.string().max(160).optional(), brand: brandDNASchema.optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -63,7 +63,7 @@ export const creativeStudioRouter = router({
     }),
 
   product: router({
-    create: protectedProcedure
+    create: creativeProcedure
       .input(z.object({ studioId: z.string(), name: z.string().min(1).max(160), description: z.string().max(600).optional(), identity: z.record(z.unknown()).optional(), imagery: z.record(z.unknown()).optional(), claims: z.record(z.unknown()).optional(), variants: z.record(z.unknown()).optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -72,7 +72,7 @@ export const creativeStudioRouter = router({
           throw toTrpcError(error, 'Product could not be created.');
         }
       }),
-    list: protectedProcedure
+    list: creativeProcedure
       .input(z.object({ studioId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -84,7 +84,7 @@ export const creativeStudioRouter = router({
   }),
 
   campaign: router({
-    create: protectedProcedure
+    create: creativeProcedure
       .input(z.object({ studioId: z.string(), name: z.string().min(1).max(160), productId: z.string().optional(), objective: z.string().max(600).optional(), audience: z.string().max(400).optional(), context: z.record(z.unknown()).optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -93,7 +93,7 @@ export const creativeStudioRouter = router({
           throw toTrpcError(error, 'Campaign could not be created.');
         }
       }),
-    list: protectedProcedure
+    list: creativeProcedure
       .input(z.object({ studioId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -102,7 +102,7 @@ export const creativeStudioRouter = router({
           throw toTrpcError(error, 'Campaigns unavailable.');
         }
       }),
-    createProject: protectedProcedure
+    createProject: creativeProcedure
       .input(z.object({ campaignId: z.string(), prompt: z.string().min(1).max(2000), title: z.string().max(160).optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -114,7 +114,7 @@ export const creativeStudioRouter = router({
   }),
 
   asset: router({
-    add: protectedProcedure
+    add: creativeProcedure
       .input(z.object({ studioId: z.string(), name: z.string().min(1).max(160), kind: z.enum(['IMAGE', 'VIDEO', 'LOGO', 'AUDIO']), assetUrl: z.string().optional(), provenance: z.record(z.unknown()).optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -123,7 +123,7 @@ export const creativeStudioRouter = router({
           throw toTrpcError(error, 'Asset could not be added.');
         }
       }),
-    list: protectedProcedure
+    list: creativeProcedure
       .input(z.object({ studioId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -136,7 +136,7 @@ export const creativeStudioRouter = router({
   }),
 
   context: router({
-    get: protectedProcedure
+    get: creativeProcedure
       .input(z.object({ studioId: z.string(), campaignId: z.string().optional() }))
       .query(async ({ ctx, input }) => {
         try {

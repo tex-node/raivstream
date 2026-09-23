@@ -1,8 +1,9 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { productionPlanService } from '../../lib/creative/production/service';
 import { recoverStuckProductions } from '../../lib/creative/production/runner';
+import { buildRunDiagnostics } from '../../lib/creative/production/diagnostics';
 import { isCreativePreviewEnabled, isCreativeProductionEnabled } from '../../lib/creative/featureFlags';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { timedCreative } from '../../lib/creative/observability/metrics';
@@ -17,7 +18,7 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 
 export const creativeProductionRouter = router({
   /** Build (and persist) the production plan + preview from Brief + Bible. */
-  plan: protectedProcedure
+  plan: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       if (!isCreativePreviewEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 preview is not enabled.' });
@@ -31,7 +32,7 @@ export const creativeProductionRouter = router({
     }),
 
   /** Read the stored plan + preview. */
-  getPlan: protectedProcedure
+  getPlan: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!isCreativePreviewEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 preview is not enabled.' });
@@ -42,8 +43,8 @@ export const creativeProductionRouter = router({
       }
     }),
 
-  /** Adapter output (internal seam for Slice 3 — not shown to creators). */
-  adapt: protectedProcedure
+  /** Adapter output (internal seam for Slice 3 â€” not shown to creators). */
+  adapt: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!isCreativePreviewEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 preview is not enabled.' });
@@ -54,8 +55,8 @@ export const creativeProductionRouter = router({
       }
     }),
 
-  /** Slice 3 — start production of an approved plan ("Produce"). */
-  produce: protectedProcedure
+  /** Slice 3 â€” start production of an approved plan ("Produce"). */
+  produce: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -66,7 +67,7 @@ export const creativeProductionRouter = router({
     }),
 
   /** Scene-level production progress (polled by the UI). */
-  productionStatus: protectedProcedure
+  productionStatus: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!isCreativeProductionEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 production is not enabled.' });
@@ -78,7 +79,7 @@ export const creativeProductionRouter = router({
     }),
 
   /** Produced assets for a project. */
-  getAssets: protectedProcedure
+  getAssets: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!isCreativeProductionEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 production is not enabled.' });
@@ -90,7 +91,7 @@ export const creativeProductionRouter = router({
     }),
 
   /** Reliability hardening: resume any stuck production run for this user's projects. */
-  recover: protectedProcedure
+  recover: creativeProcedure
     .mutation(async ({ ctx }) => {
       if (!isCreativeProductionEnabled()) throw new TRPCError({ code: 'FORBIDDEN', message: 'Raivstream 5.0 production is not enabled.' });
       try {
@@ -98,6 +99,17 @@ export const creativeProductionRouter = router({
         return { recovered: result.recovered, alreadyActive: result.alreadyActive, stale: result.stale };
       } catch (error) {
         throw toTrpcError(error, 'Recovery failed.');
+      }
+    }),
+
+  /** Diagnose a production run + provenance chain without raw provider internals. */
+  diagnostics: creativeProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        return await buildRunDiagnostics(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id });
+      } catch (error) {
+        throw toTrpcError(error, 'Diagnostics unavailable.');
       }
     }),
 });

@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { reviewService } from '../../lib/creative/review/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { timedCreative } from '../../lib/creative/observability/metrics';
@@ -15,7 +15,7 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 
 export const creativeReviewRouter = router({
   /** Run a review of the produced output (one run per scene image). */
-  run: protectedProcedure
+  run: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -26,7 +26,7 @@ export const creativeReviewRouter = router({
     }),
 
   /** Latest review runs + resolutions. */
-  get: protectedProcedure
+  get: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {
@@ -37,7 +37,7 @@ export const creativeReviewRouter = router({
     }),
 
   /** Record a KEEP / FIX / REVIEW decision on a finding. */
-  resolve: protectedProcedure
+  resolve: creativeProcedure
     .input(z.object({ projectId: z.string(), runId: z.string(), findingId: z.string(), resolution: z.enum(['KEEP', 'FIX', 'REVIEW']) }))
     .mutation(async ({ ctx, input }) => {
       try {

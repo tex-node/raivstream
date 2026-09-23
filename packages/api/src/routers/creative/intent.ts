@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { intentService } from '../../lib/creative/intent/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { CREATIVE_PROJECT_TYPES } from '../../lib/creative/shared/types';
@@ -15,7 +15,7 @@ function toTrpcError(error: unknown): TRPCError {
 }
 
 export const creativeIntentRouter = router({
-  interpret: protectedProcedure
+  interpret: creativeProcedure
     .input(z.object({
       text: z.string().min(1).max(4000),
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),

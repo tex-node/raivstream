@@ -137,6 +137,26 @@ describe('creative output service', () => {
     expect(prisma.__produced.length).toBe(2); // originals untouched
     expect(prisma.__outputs[0].status).toBe('READY');
   });
+
+  it('a failed render marks the output FAILED and never mutates the originals', async () => {
+    const prisma = prismaMock();
+    const director = new DirectorService();
+    const approval = new ApprovalService();
+    const service = new OutputService();
+    const { version } = await director.direct(prisma as never, { projectId: 'p1', userId: 'u1', instruction: 'Make it more cinematic.' });
+    await approval.decide(prisma as never, { projectId: 'p1', versionId: version.id, kind: 'CREATIVE', decision: 'approve' });
+    const { output } = await service.derive(prisma as never, { projectId: 'p1', versionId: version.id, format: 'SQUARE' });
+
+    const deps = {
+      fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => Buffer.from('clip') }) as unknown as Response),
+      ffmpeg: vi.fn(async () => { throw new Error('ffmpeg exited 234'); }),
+      upload: vi.fn(async () => 'r2://never'),
+    };
+    const final = await service.render(prisma as never, { projectId: 'p1', outputId: output.id }, deps as never);
+    expect(final.status).toBe('FAILED');
+    expect(final.errorMessage).toContain('ffmpeg');
+    expect(prisma.__produced.length).toBe(2); // originals untouched
+  });
 });
 
 describe('creative output renderer', () => {

@@ -12,7 +12,8 @@ export type CreativeErrorCode =
   | 'INVALID_STATE_TRANSITION'
   | 'BIBLE_ALREADY_EXISTS'
   | 'LEGACY_BRIDGE_CONFLICT'
-  | 'PLAN_NOT_APPROVED';
+  | 'PLAN_NOT_APPROVED'
+  | 'CONTENT_REJECTED';
 
 export class CreativeError extends Error {
   readonly code: CreativeErrorCode;

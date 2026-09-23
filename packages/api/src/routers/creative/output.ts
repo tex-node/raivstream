@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { outputService } from '../../lib/creative/output/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { timedCreative } from '../../lib/creative/observability/metrics';
@@ -15,7 +15,7 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 
 export const creativeOutputRouter = router({
   /** Create an output derivative from an APPROVED version (PENDING row + derivation plan). */
-  derive: protectedProcedure
+  derive: creativeProcedure
     .input(z.object({ projectId: z.string(), versionId: z.string(), format: z.enum(['MASTER', 'LANDSCAPE', 'PORTRAIT', 'SQUARE']), durationSeconds: z.number().int().min(5).max(600).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -26,7 +26,7 @@ export const creativeOutputRouter = router({
     }),
 
   /** Render a pending output (sync re-encode; mechanics are ours). */
-  render: protectedProcedure
+  render: creativeProcedure
     .input(z.object({ projectId: z.string(), outputId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -37,7 +37,7 @@ export const creativeOutputRouter = router({
     }),
 
   /** Output gallery (provenance back to the source version). */
-  list: protectedProcedure
+  list: creativeProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {

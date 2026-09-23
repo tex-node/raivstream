@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../../trpc';
+import { creativeProcedure, router } from '../../trpc';
 import { seriesService } from '../../lib/creative/series/service';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
@@ -21,7 +21,7 @@ const episodeStateSchema = z.object({
 });
 
 export const creativeSeriesRouter = router({
-  create: protectedProcedure
+  create: creativeProcedure
     .input(z.object({ title: z.string().min(1).max(160), description: z.string().max(600).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -31,7 +31,7 @@ export const creativeSeriesRouter = router({
       }
     }),
 
-  list: protectedProcedure
+  list: creativeProcedure
     .query(async ({ ctx }) => {
       try {
         return await seriesService.list(ctx.prisma, ctx.user.id);
@@ -40,7 +40,7 @@ export const creativeSeriesRouter = router({
       }
     }),
 
-  get: protectedProcedure
+  get: creativeProcedure
     .input(z.object({ seriesId: z.string() }))
     .query(async ({ ctx, input }) => {
       try {
@@ -50,7 +50,7 @@ export const creativeSeriesRouter = router({
       }
     }),
 
-  update: protectedProcedure
+  update: creativeProcedure
     .input(z.object({ seriesId: z.string(), title: z.string().max(160).optional(), description: z.string().max(600).optional(), status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'ARCHIVED']).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -61,7 +61,7 @@ export const creativeSeriesRouter = router({
     }),
 
   canon: router({
-    get: protectedProcedure
+    get: creativeProcedure
       .input(z.object({ seriesId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -70,7 +70,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Canon unavailable.');
         }
       }),
-    update: protectedProcedure
+    update: creativeProcedure
       .input(z.object({ seriesId: z.string(), canon: z.record(z.unknown()) }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -82,7 +82,7 @@ export const creativeSeriesRouter = router({
   }),
 
   memory: router({
-    get: protectedProcedure
+    get: creativeProcedure
       .input(z.object({ seriesId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -91,7 +91,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Memory unavailable.');
         }
       }),
-    update: protectedProcedure
+    update: creativeProcedure
       .input(z.object({ seriesId: z.string(), memory: z.record(z.unknown()) }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -103,7 +103,7 @@ export const creativeSeriesRouter = router({
   }),
 
   episode: router({
-    create: protectedProcedure
+    create: creativeProcedure
       .input(z.object({ seriesId: z.string(), prompt: z.string().max(2000).optional(), seasonNumber: z.number().int().min(1).optional(), episodeNumber: z.number().int().min(1).optional(), title: z.string().max(160).optional(), synopsis: z.string().max(1200).optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -112,7 +112,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Episode could not be created.');
         }
       }),
-    list: protectedProcedure
+    list: creativeProcedure
       .input(z.object({ seriesId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -121,7 +121,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Episodes unavailable.');
         }
       }),
-    get: protectedProcedure
+    get: creativeProcedure
       .input(z.object({ episodeId: z.string() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -130,7 +130,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Episode unavailable.');
         }
       }),
-    update: protectedProcedure
+    update: creativeProcedure
       .input(z.object({ episodeId: z.string(), title: z.string().max(160).optional(), synopsis: z.string().max(1200).optional(), status: z.enum(['DRAFT', 'PLANNING', 'IN_PRODUCTION', 'REVIEW', 'APPROVED', 'PUBLISHED', 'ARCHIVED']).optional(), state: episodeStateSchema.optional() }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -142,7 +142,7 @@ export const creativeSeriesRouter = router({
   }),
 
   context: router({
-    get: protectedProcedure
+    get: creativeProcedure
       .input(z.object({ seriesId: z.string(), episodeId: z.string().optional() }))
       .query(async ({ ctx, input }) => {
         try {
@@ -151,7 +151,7 @@ export const creativeSeriesRouter = router({
           throw toTrpcError(error, 'Series context unavailable.');
         }
       }),
-    spinoff: protectedProcedure
+    spinoff: creativeProcedure
       .input(z.object({ seriesId: z.string(), characterName: z.string().min(1) }))
       .query(async ({ ctx, input }) => {
         try {

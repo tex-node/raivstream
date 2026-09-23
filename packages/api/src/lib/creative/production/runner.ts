@@ -21,6 +21,7 @@
 import type { PrismaClient } from '@raivstream/database';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import type { CreativeBibleState } from '../shared/types';
+import { CreativeError } from '../shared/errors';
 import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } from './capabilityRouter';
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
@@ -177,10 +178,14 @@ export async function runCreativeProduction(
           }
         } catch (error) {
           lastError = error as Error;
+          // A content rejection is deterministic — never retry it. It fails only
+          // this asset (smallest scope) and the credits are refunded.
+          const rejected = error instanceof CreativeError && error.code === 'CONTENT_REJECTED';
           if (creditsUsed > 0 && featureKey) {
             await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed').catch(() => undefined);
           }
-          logProductionEvent({ type: 'asset_failed', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt, final: attempt >= maxAttempts, message: lastError.message.slice(0, 200) });
+          logProductionEvent({ type: 'asset_failed', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt, final: rejected || attempt >= maxAttempts, message: lastError.message.slice(0, 200) });
+          if (rejected) break;
         }
       }
 
