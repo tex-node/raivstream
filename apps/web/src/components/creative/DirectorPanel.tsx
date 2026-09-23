@@ -15,12 +15,11 @@ type Decision = {
   impact: string;
 };
 
-const EXAMPLES = [
-  'Make her more confident',
-  'Make the lighting warmer',
-  'Make this scene feel more expensive',
-  'Keep everything except the wardrobe',
-  'Make the ending more hopeful',
+const FALLBACK_EXAMPLES: Array<{ label: string; instruction: string }> = [
+  { label: 'Make it more cinematic', instruction: 'Make it more cinematic.' },
+  { label: 'Make it feel more premium', instruction: 'Make it feel more premium.' },
+  { label: 'Make the ending more hopeful', instruction: 'Make the ending more hopeful.' },
+  { label: 'You decide', instruction: 'Improve this — decide what needs the most work and make it better.' },
 ];
 
 /**
@@ -44,6 +43,8 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
   });
   const produce = trpc.creative.production.produce.useMutation({ onSuccess: () => utils.creative.project.get.invalidate({ projectId }) });
   const versionsQuery = trpc.creative.director.versions.useQuery({ projectId });
+  const suggestionsQuery = trpc.creative.director.suggestions.useQuery({ projectId });
+  const suggestions = (suggestionsQuery.data as Array<{ label: string; instruction: string }> | undefined) ?? FALLBACK_EXAMPLES;
 
   const decision = propose.data?.decision as Decision | undefined;
   const applied = applyInstruction.data;
@@ -74,22 +75,26 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
           className="mt-3 w-full rounded-xl border border-[rgba(233,233,237,0.14)] bg-[rgba(233,233,237,0.05)] px-4 py-3 text-sm text-[var(--noc-t1)] outline-none focus:border-[var(--noc-purple)]"
         />
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example}
-              type="button"
-              onClick={() => {
-                setInstruction(example);
-                propose.reset();
-                propose.mutate({ projectId, instruction: example });
-              }}
-              className="rounded-full border border-[rgba(178,90,217,0.35)] bg-[rgba(178,90,217,0.08)] px-3 py-1 text-xs font-bold text-[var(--noc-purple)] hover:bg-[rgba(178,90,217,0.16)]"
-            >
-              ✦ {example}
-            </button>
-          ))}
-        </div>
+        {suggestionsQuery.isLoading ? (
+          <p className="mt-3 text-xs text-[var(--noc-t5)]">Thinking about this project…</p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion.label}
+                type="button"
+                onClick={() => {
+                  setInstruction(suggestion.instruction);
+                  propose.reset();
+                  propose.mutate({ projectId, instruction: suggestion.instruction });
+                }}
+                className="rounded-full border border-[rgba(178,90,217,0.35)] bg-[rgba(178,90,217,0.08)] px-3 py-1 text-xs font-bold text-[var(--noc-purple)] hover:bg-[rgba(178,90,217,0.16)]"
+              >
+                ✦ {suggestion.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button

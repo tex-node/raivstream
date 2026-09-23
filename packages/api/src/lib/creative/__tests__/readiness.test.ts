@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { assessIntentReadiness, type IntentReadiness } from '../intent/readiness';
+import { assessIntentReadiness, extractBrandName, type IntentReadiness } from '../intent/readiness';
 import { interpret } from '../intent/interpreter';
 import { ProductionPlanService } from '../production/service';
 
-function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean } = {}): IntentReadiness {
+function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean; hasBrandIdentity?: boolean; brandName?: string } = {}): IntentReadiness {
   return assessIntentReadiness(text, interpret(text), signals);
 }
 
@@ -142,6 +142,37 @@ describe('intent readiness — creative freedom vs essential source', () => {
     expect(assess('Invent a luxury skincare brand and create an advertisement for it.').ready).toBe(true);
     expect(assess('Create a fictional skincare product and make an ad.').ready).toBe(true);
   });
+
+  // ── Brand identity is consequential and asked only when missing ──────────
+  it('"Promote my skincare brand." with no identity → asks for the brand NAME', () => {
+    const r = notReady(assess('Promote my skincare brand.'));
+    expect(r.contextType).toBe('BRAND');
+    expect(r.need).toBe('NAME');
+    expect(r.question.toLowerCase()).toContain('brand name');
+  });
+
+  it('does not ask for the name when it is already provided', () => {
+    const r = notReady(assess('Create an advertisement for my skincare brand called GlowHaus.'));
+    expect(r.need).toBe('ASSET'); // identity known → now needs the source
+    expect(extractBrandName('Create an advertisement for my skincare brand called GlowHaus.')).toBe('GlowHaus');
+    expect(extractBrandName('Promote my brand, named Voltaic.')).toBe('Voltaic');
+  });
+
+  it('does not ask for the name when context already provides it', () => {
+    const r = notReady(assess('Promote my skincare brand.', { hasBrandIdentity: true }));
+    expect(r.need).toBe('ASSET');
+  });
+
+  it('does not ask for the name for fictional or concept brands', () => {
+    expect(assess('Invent a skincare brand and make an ad.').ready).toBe(true);
+    expect(assess('Create a concept brand ad.').ready).toBe(true);
+  });
+
+  it('various owned commercial phrasings require appropriate context (semantic, not a blacklist)', () => {
+    for (const text of ['Promote our skincare brand.', 'Create an ad for my skincare line.', 'Advertise our clothing line.', 'Promote my bakery.', 'Advertise our studio.', 'Market my company.', 'Create a campaign for our new product.']) {
+      expect(assess(text).ready).toBe(false);
+    }
+  });
 });
 
 // ─── Production-boundary invariant (defensive) ───────────────────────────────
@@ -182,11 +213,18 @@ describe('production invariant — source is required before rendering', () => {
       await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
     }));
 
-  it('proceeds once the source is recorded', () =>
+  it('proceeds once a utilizable source is recorded (and carries it onto the plan)', () =>
     withFlags(async () => {
-      const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [{ label: 'Product' }] });
+      const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://source.png' }] });
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
       expect(result.plan.scenes.length).toBeGreaterThan(0);
+      expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://source.png');
+    }));
+
+  it('blocks with UNSUPPORTED_SOURCE_OPERATION when the source exists but is not utilizable (before the renderer)', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Transform this into a cinematic advertisement.', attachments: [{ label: 'Source' }] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
     }));
 
   it('does not block creative concepts (no ownership) or story/education', () =>

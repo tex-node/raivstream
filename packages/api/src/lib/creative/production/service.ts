@@ -11,7 +11,7 @@ import type { PrismaClient } from '@raivstream/database';
 import { isCreativePreviewEnabled, isCreativeProductionEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
 import type { CreativeBibleState, CreativeProjectType } from '../shared/types';
-import { buildCreativePlan, type CreativeProductionPlanState } from './plan';
+import { buildCreativePlan, type CreativeProductionPlanState, type CreativeSourceReference } from './plan';
 import { buildPreview, type PreviewState } from './preview';
 import { adaptPlanToManifest, type AdapterManifest } from './adapter';
 import { buildProductionContext } from './contextAdapter';
@@ -62,13 +62,26 @@ function deriveSceneStatus(assets: Array<{ status: string }>): ProductionSceneSt
   return 'PENDING';
 }
 
+/** Canonical source references resolved from the Brief (the same identity
+ *  readiness uses). Only refs with a `url` are utilizable by a capability. */
+export function sourceReferencesFromBrief(brief: { attachments?: unknown } | null): CreativeSourceReference[] {
+  const list = Array.isArray(brief?.attachments) ? (brief?.attachments as Array<Record<string, unknown>>) : [];
+  return list.map((entry, index) => ({
+    id: typeof entry.id === 'string' ? entry.id : `src-${index}`,
+    kind: entry.kind === 'video' ? 'video' : 'image',
+    origin: entry.origin === 'studio' || entry.origin === 'project' ? entry.origin : 'upload',
+    label: typeof entry.label === 'string' ? entry.label : undefined,
+    url: typeof entry.url === 'string' && entry.url ? entry.url : undefined,
+  }));
+}
+
 export class ProductionPlanService {
   /**
    * Defensive production-boundary invariant: a source-dependent request (real
-   * product/brand/person, or a transform) must never reach production without
-   * its required source. The renderer must never be the component that
-   * discovers the missing source. Readiness normally blocks earlier; this is
-   * the safety net. Failure is creator-actionable.
+   * product/brand/person, or a transform) must never reach production without a
+   * source that the generation capability can actually resolve. The renderer
+   * must never discover a missing/unsupported/lost source. Readiness normally
+   * blocks earlier; this is the safety net. Failures are creator-actionable.
    */
   private async assertSourceReady(
     prisma: PrismaClient,
@@ -80,17 +93,28 @@ export class ProductionPlanService {
     try {
       interpretation = intentService.interpret(originalIntent);
     } catch {
-      return; // cannot interpret → do not block (fail-open only on non-classification)
+      return; // cannot interpret → do not block
     }
     const attachments = Array.isArray(project.brief?.attachments) ? (project.brief?.attachments as unknown[]) : [];
     const studioProduct = await prisma.creativeProduct
       .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
       .catch(() => null);
-    const readiness = assessIntentReadiness(originalIntent, interpretation, {
-      hasSourceAsset: attachments.length > 0,
-      hasStudioProduct: Boolean(studioProduct),
-    });
-    if (!readiness.ready) throw new CreativeError('MISSING_SOURCE', readiness.question);
+    const signals = { hasStudioProduct: Boolean(studioProduct) };
+    const withoutAsset = assessIntentReadiness(originalIntent, interpretation, { ...signals, hasSourceAsset: false });
+    const withAsset = assessIntentReadiness(originalIntent, interpretation, { ...signals, hasSourceAsset: attachments.length > 0 });
+
+    if (withAsset.ready) {
+      // If the source is what satisfied readiness, it must be utilizable.
+      if (!withoutAsset.ready && attachments.length > 0) {
+        const usable = sourceReferencesFromBrief(project.brief).some((ref) => Boolean(ref.url));
+        if (!usable) {
+          throw new CreativeError('UNSUPPORTED_SOURCE_OPERATION', 'I have your image, but I can’t use this type of source yet. Your image is safe in the project.');
+        }
+      }
+      return;
+    }
+    // Not ready even with the source → an identity (name) or other need.
+    throw new CreativeError('MISSING_SOURCE', (withAsset as { question: string }).question);
   }
 
   async plan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ plan: CreativeProductionPlanState; preview: PreviewState }> {
@@ -121,6 +145,7 @@ export class ProductionPlanService {
       bible,
       version: (project.productionPlan?.version ?? 0) + 1,
       context: buildProductionContext({ brief, bible }),
+      sourceReferences: sourceReferencesFromBrief(project.brief),
     });
     const preview = buildPreview(plan, bible);
 

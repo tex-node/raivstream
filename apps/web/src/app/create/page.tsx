@@ -167,6 +167,7 @@ export default function CreatePage() {
           <ReadinessGate
             question={readiness.question}
             contextType={readiness.contextType}
+            need={readiness.need}
             busy={readinessQuery.isFetching}
             onResolve={resolveReadiness}
             onBack={() => setInterpreted(false)}

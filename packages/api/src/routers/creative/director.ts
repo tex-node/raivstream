@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { creativeProcedure, router } from '../../trpc';
 import { directorService } from '../../lib/creative/director/service';
+import { buildDirectorSuggestions } from '../../lib/creative/director/suggestions';
 import { CreativeError } from '../../lib/creative/shared/errors';
 
 function toTrpcError(error: unknown, fallback: string): TRPCError {
@@ -25,6 +26,31 @@ export const creativeDirectorRouter = router({
     }),
 
   /** PROPOSE â€” interpret a directive (change/preserve/impact) without persisting. */
+  /** SUGGESTIONS — context-derived directions for THIS creative (not generic). */
+  suggestions: creativeProcedure
+    .input(z.object({ projectId: z.string(), sceneId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        const project = await ctx.prisma.creativeProject.findFirst({
+          where: { id: input.projectId, userId: ctx.user.id },
+          include: { brief: true, bible: true, productionPlan: true },
+        });
+        if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+        const runs = await ctx.prisma.creativeReviewRun.findMany({ where: { projectId: project.id }, orderBy: { createdAt: 'desc' }, take: 1 });
+        const findings = (runs[0]?.findings as unknown as Array<{ suggestedFixInstruction?: string; description?: string; category?: string }>) ?? [];
+        return buildDirectorSuggestions({
+          projectType: project.projectType,
+          brief: project.brief as never,
+          bible: project.bible as never,
+          plan: (project.productionPlan?.plan as never) ?? null,
+          reviewFindings: findings,
+          currentSceneId: input.sceneId ?? null,
+        });
+      } catch (error) {
+        throw toTrpcError(error, 'Suggestions unavailable.');
+      }
+    }),
+
   propose: creativeProcedure
     .input(z.object({ projectId: z.string(), instruction: z.string().min(2).max(300) }))
     .mutation(async ({ ctx, input }) => {

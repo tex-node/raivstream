@@ -16,8 +16,11 @@ export function creatorError(message: string | null | undefined): string {
   if (m.includes('credit')) {
     return 'This scene needs a few more credits. Top up and we’ll continue.';
   }
-  if (m.includes('source') || m.includes('seed') || m.includes('image-to-video')) {
-    return 'I need the image or video you want me to transform before I can create this.';
+  if (m.includes('use this type of source') || m.includes('unsupported source')) {
+    return 'I have your image, but I can’t use this type of source yet. Your image is safe in the project.';
+  }
+  if (m.includes('need the image') || m.includes('source') || m.includes('seed') || m.includes('image-to-video')) {
+    return 'I need the image you want me to use.';
   }
   return 'Something interrupted this scene. Your other scenes are safe — we can try this one again.';
 }

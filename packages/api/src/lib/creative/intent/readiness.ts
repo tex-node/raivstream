@@ -19,11 +19,15 @@ import { intentService } from './service';
 
 export type ReadinessContextType = 'PRODUCT' | 'BRAND' | 'LOGO' | 'PERSON' | 'SOURCE';
 
+/** What the creator must supply: a NAME (brand identity) or an ASSET (source). */
+export type ReadinessNeed = 'NAME' | 'ASSET';
+
 export type IntentReadiness =
   | { ready: true }
   | {
       ready: false;
       reason: 'MISSING_ESSENTIAL_CONTEXT';
+      need: ReadinessNeed;
       question: string;
       contextType: ReadinessContextType;
     };
@@ -35,6 +39,24 @@ export interface ReadinessSignals {
   hasStudioProduct?: boolean;
   /** The creator already has a usable source asset in this project. */
   hasProjectSource?: boolean;
+  /** The brand identity is already known (from text or context). */
+  hasBrandIdentity?: boolean;
+  /** An explicit brand name supplied by context. */
+  brandName?: string;
+}
+
+/** Extract an explicit brand name from the creator's words (never invented). */
+export function extractBrandName(text: string): string | null {
+  const clean = (value: string) => value.trim().replace(/[.,;:!?]+$/, '').trim();
+  const called = text.match(/\b(?:called|named)\s+([A-Z][\w&'.-]*(?:\s+[A-Z][\w&'.-]*){0,2})/);
+  if (called) return clean(called[1]) || null;
+  const brandIs = text.match(/\bbrand(?:\s+name)?\s+is\s+([A-Z][\w&'.-]*(?:\s+[A-Z][\w&'.-]*){0,2})/);
+  if (brandIs) return clean(brandIs[1]) || null;
+  const brand = text.match(/\bbrand\s+([A-Z][\w&'.-]+)/);
+  if (brand) return clean(brand[1]) || null;
+  const quoted = text.match(/[“"']([A-Z][^”"']{1,40})[”"']/);
+  if (quoted) return clean(quoted[1]) || null;
+  return null;
 }
 
 // Explicit authorization to invent the source entity.
@@ -74,35 +96,47 @@ export function assessIntentReadiness(
   const hasStudioProduct = Boolean(signals.hasStudioProduct);
   const isTransform = interpretation.projectType === 'TRANSFORMATION' || TRANSFORM_INTENT.test(text);
 
+  const notReady = (contextType: ReadinessContextType, need: ReadinessNeed, question: string): IntentReadiness =>
+    ({ ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType, need, question });
+
   // Explicit permission to invent the source entity → Raivstream may proceed.
   if (FICTIONAL.test(text)) return { ready: true };
 
   if (OWNED_LOGO.test(text) && !hasAsset) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'LOGO', question: 'Can you upload your logo so I use the real one?' };
+    return notReady('LOGO', 'ASSET', 'Can you upload your logo so I use the real one?');
   }
+
   // A first-person, commercially-purposed request refers to a real user-owned
-  // entity → require its source unless an asset/Studio context already exists.
+  // entity. Ask for the brand NAME first when it is consequential and missing;
+  // otherwise ask for the source. Studio context satisfies both.
   const owned = OWNERSHIP.test(text);
   const isCommercial = interpretation.projectType === 'COMMERCIAL' || COMMERCIAL_PURPOSE.test(text);
-  if (owned && isCommercial && !hasAsset && !hasStudioProduct) {
-    const contextType = BRAND_LIKE.test(text) ? 'BRAND' : 'PRODUCT';
-    const question = contextType === 'BRAND'
-      ? 'What are you promoting? Add your brand assets (name and logo) so I use the real brand.'
-      : 'Can you upload a photo of the product — or describe it — so I use the real product?';
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType, question };
+  if (owned && isCommercial && !hasStudioProduct) {
+    const brandLike = BRAND_LIKE.test(text);
+    const hasBrand = Boolean(signals.hasBrandIdentity || signals.brandName || extractBrandName(text));
+    if (brandLike && !hasBrand && !hasAsset) {
+      return notReady('BRAND', 'NAME', "What's the brand name?");
+    }
+    if (!hasAsset) {
+      const contextType: ReadinessContextType = brandLike ? 'BRAND' : 'PRODUCT';
+      const question = contextType === 'BRAND'
+        ? 'Add the brand or product image so I can create the promotion.'
+        : 'Can you upload a photo of the product — or describe it — so I use the real product?';
+      return notReady(contextType, 'ASSET', question);
+    }
   }
+
   if (SOURCE_ASSET.test(text) && !hasAsset) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'SOURCE', question: 'Can you attach the image or video you want me to transform?' };
+    return notReady('SOURCE', 'ASSET', 'Can you attach the image or video you want me to transform?');
   }
   if (OWNED_PERSON.test(text) && !hasAsset) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'PERSON', question: 'Can you attach a reference photo so I keep the right likeness?' };
+    return notReady('PERSON', 'ASSET', 'Can you attach a reference photo so I keep the right likeness?');
   }
 
   // Transform is inherently source-dependent: it needs a real source (an image
-  // the production capabilities can animate) unless invention was authorized
-  // above. This gate fires BEFORE planning/production, never at the renderer.
+  // the production capabilities can animate) unless invention was authorized.
   if (isTransform && !hasAsset) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'SOURCE', question: 'What would you like to transform? Add an image I can use as the source.' };
+    return notReady('SOURCE', 'ASSET', 'What would you like to transform? Add an image I can use as the source.');
   }
 
   // A bare "Promote something" with no subject: ask what it is, exactly once.
@@ -112,7 +146,7 @@ export function assessIntentReadiness(
     !COMMERCIAL_SUBJECT.test(text) &&
     text.trim().split(/\s+/).filter(Boolean).length <= 6
   ) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'PRODUCT', question: 'What are you promoting?' };
+    return notReady('PRODUCT', 'NAME', 'What are you promoting?');
   }
 
   return { ready: true };

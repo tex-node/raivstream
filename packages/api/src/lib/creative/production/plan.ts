@@ -41,6 +41,19 @@ export interface PlanTimelineEntry {
   endSeconds: number;
 }
 
+/**
+ * Canonical source reference — the same identity readiness and production
+ * resolve. `url` is present only when the source is actually usable by a
+ * generation capability (a label-only reference is not utilizable).
+ */
+export interface CreativeSourceReference {
+  id: string;
+  kind: 'image' | 'video';
+  origin: 'upload' | 'project' | 'studio';
+  label?: string;
+  url?: string;
+}
+
 export interface CreativeProductionPlanState {
   version: number;
   structure?: string;
@@ -53,6 +66,9 @@ export interface CreativeProductionPlanState {
   /** Context snapshot (Phase 9): the inherited series/studio context the plan
    *  was built with, so production is reproducible ("Raivstream remembered"). */
   contextSnapshot?: ProductionContext;
+  /** Source references required by this creative, carried into production so
+   *  the generation adapter can resolve the SAME source readiness approved. */
+  sourceReferences?: CreativeSourceReference[];
 }
 
 // ─── Structure templates by project type ──────────────────────────────────────
@@ -153,6 +169,7 @@ export function buildCreativePlan(input: {
   bible?: CreativeBibleState | null;
   version?: number;
   context?: ProductionContext;
+  sourceReferences?: CreativeSourceReference[];
 }): CreativeProductionPlanState {
   const structure = structureFor(input.projectType);
   const characters = characterNames(input.bible);
@@ -202,5 +219,6 @@ export function buildCreativePlan(input: {
         : undefined,
     ].filter((note): note is string => Boolean(note)),
     contextSnapshot: input.context,
+    sourceReferences: input.sourceReferences,
   };
 }

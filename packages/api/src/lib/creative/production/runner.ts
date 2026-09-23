@@ -124,6 +124,9 @@ export async function runCreativeProduction(
   let generated = 0;
   let failed = 0;
   let firstVisualLogged = false;
+  // The same source readiness approved: a resolvable reference the generation
+  // capability (H3 I2V) can actually use as the opening seed.
+  const sourceSeedUrl = plan.sourceReferences?.find((ref) => Boolean(ref.url))?.url;
 
   try {
     for (const spec of specs) {
@@ -146,6 +149,9 @@ export async function runCreativeProduction(
         if (lastClipUrl) {
           const chained = await deps.extractLastFrame(lastClipUrl, `creative/${project.id}/scenes/${spec.sceneId}/seeds`).catch(() => null);
           seedImageUrl = chained ?? still?.assetUrl ?? undefined;
+        } else if (sourceSeedUrl) {
+          // Opening clip is conditioned on the creator's source (Transform/promo).
+          seedImageUrl = sourceSeedUrl;
         } else {
           seedImageUrl = still?.assetUrl ?? undefined;
         }

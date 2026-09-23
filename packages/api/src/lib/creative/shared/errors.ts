@@ -14,7 +14,8 @@ export type CreativeErrorCode =
   | 'LEGACY_BRIDGE_CONFLICT'
   | 'PLAN_NOT_APPROVED'
   | 'CONTENT_REJECTED'
-  | 'MISSING_SOURCE';
+  | 'MISSING_SOURCE'
+  | 'UNSUPPORTED_SOURCE_OPERATION';
 
 export class CreativeError extends Error {
   readonly code: CreativeErrorCode;

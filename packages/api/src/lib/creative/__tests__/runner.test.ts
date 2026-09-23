@@ -125,6 +125,18 @@ describe('creative production runner', () => {
     expect(videoSeeds2.length).toBeLessThan(firstRunVideoCalls);
     expect(prisma.__assets).toHaveLength(plan.scenes.length * 2);
   });
+
+  it('propagates the plan source reference as the opening clip seed (source utilization)', async () => {
+    const plan = buildCreativePlan({
+      projectType: COMMERCIAL.projectType,
+      sourceReferences: [{ id: 's1', kind: 'image', origin: 'upload', url: 'r2://source.png' }],
+    });
+    const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'GENERATING', projectType: 'COMMERCIAL' }, plan });
+    const { deps, videoSeeds } = makeDeps();
+    await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps);
+    // The adapter receives the SAME source reference readiness approved.
+    expect(videoSeeds[0]).toBe('r2://source.png');
+  });
 });
 
 describe('creative capability router + approval gate', () => {
