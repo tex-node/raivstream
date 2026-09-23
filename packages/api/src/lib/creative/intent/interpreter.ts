@@ -31,8 +31,8 @@ export function normalizeIntentText(text: string): string {
 const TYPE_SIGNALS: Record<Exclude<CreativeProjectType, 'UNKNOWN'>, string[]> = {
   COMMERCIAL: [
     'commercial', 'advert', 'ad campaign', 'campaign', 'brand', 'product', 'promote',
-    'launch', 'market', 'sell', 'boost', 'cta', 'offer', 'skincare', 'makeup',
-    'fashion', 'premium', 'luxurious', 'modern brand',
+    'promotional', 'promotion', 'launch', 'market', 'sell', 'boost', 'cta', 'offer',
+    'skincare', 'makeup', 'fashion', 'premium', 'luxurious', 'modern brand',
   ],
   EDUCATION: [
     'teach', 'lesson', 'explain', 'learn', 'learner', 'students', 'tutorial',

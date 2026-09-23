@@ -188,6 +188,17 @@ describe('intent readiness — creative freedom vs essential source', () => {
   it('"Create a promotional video for my skincare product." fictional → READY', () => {
     expect(assess('Create a promotional video for my skincare product. Use a fictional concept — invent it rather than using a real one.').ready).toBe(true);
   });
+
+  // ── "perfume" — COMMERCIAL_PURPOSE matches "promotional" but product noun not in TYPE_SIGNALS ──
+  it('"Create a promotional video for my perfume." → not ready, PRODUCT/ASSET', () => {
+    const r = notReady(assess('Create a promotional video for my perfume.'));
+    expect(r.contextType).toBe('PRODUCT');
+    expect(r.need).toBe('ASSET');
+  });
+
+  it('"Create a promotional video for my perfume." with source → READY', () => {
+    expect(assess('Create a promotional video for my perfume.', { hasSourceAsset: true }).ready).toBe(true);
+  });
 });
 
 function withFlags<T>(fn: () => Promise<T>): Promise<T> {
@@ -335,5 +346,25 @@ describe('production invariant — source is required before rendering', () => {
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
       expect(result.plan.scenes.length).toBeGreaterThan(0);
       expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://product.png');
+    }));
+
+  // ── "perfume" (product noun with no TYPE_SIGNALS match) ───────────────────
+  it('"Create a promotional video for my perfume." with no source → MISSING_SOURCE (never reaches renderer)', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+    }));
+
+  it('"Create a promotional video for my perfume." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [{ label: 'Product' }] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
+    }));
+
+  it('"Create a promotional video for my perfume." with real URL → proceeds', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://perfume.png' }] });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.plan.scenes.length).toBeGreaterThan(0);
     }));
 });

@@ -286,7 +286,7 @@ export default function CreatePage() {
           />
         ) : (
           <InterpretationPanel
-            isLoading={readinessQuery.isLoading}
+            isLoading={readinessQuery.isLoading || readinessQuery.isFetching}
             error={readinessQuery.error?.message}
             interpretation={readinessQuery.data?.interpretation}
             onBack={() => setInterpreted(false)}
