@@ -2055,6 +2055,24 @@ enum CreativeOutputStatus {
   FAILED
 }
 
+enum CreativeSeriesStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum CreativeEpisodeStatus {
+  DRAFT
+  PLANNING
+  IN_PRODUCTION
+  REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
 model CreativeProject {
   id                   String                @id @default(cuid())
   userId               String
@@ -2062,6 +2080,9 @@ model CreativeProject {
   projectType          CreativeProjectType   @default(UNKNOWN)
   status               CreativeProjectStatus @default(IDEA)
   legacyStoryProjectId String?
+  seriesId             String?
+  series               CreativeSeries?      @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  episode              CreativeEpisode?
   brief                CreativeBrief?
   bible                CreativeBible?
   memories             CreativeMemory[]
@@ -2271,4 +2292,44 @@ model CreativeOutput {
   @@index([projectId])
   @@index([versionId])
   @@map("creative_outputs")
+}
+
+model CreativeSeries {
+  id            String               @id @default(cuid())
+  userId        String
+  title         String
+  description   String?
+  status        CreativeSeriesStatus @default(DRAFT)
+  visualLanguage Json?
+  audioLanguage  Json?
+  canon          Json?
+  memory         Json?
+  projects       CreativeProject[]
+  episodes       CreativeEpisode[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("creative_series")
+}
+
+model CreativeEpisode {
+  id            String               @id @default(cuid())
+  seriesId      String
+  series        CreativeSeries       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  projectId     String               @unique
+  project       CreativeProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  seasonNumber  Int                  @default(1)
+  episodeNumber Int
+  title         String
+  synopsis      String?
+  status        CreativeEpisodeStatus @default(DRAFT)
+  state         Json?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([seriesId, seasonNumber, episodeNumber])
+  @@index([seriesId])
+  @@map("creative_episodes")
 }

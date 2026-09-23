@@ -153,6 +153,21 @@ export function interpretDirective(
   }
 
   // Visual language / premium.
+  if (/darker|darker than|moodier/.test(text)) {
+    return {
+      mode: 'DIRECT',
+      intent: 'make this episode darker',
+      scope: 'VISUAL',
+      changes: [{ scope: 'VISUAL', field: 'lighting', to: 'darker, moodier, more contrast' }],
+      preserves: ['story', 'characters', 'world', 'series visual canon'],
+      impact: 'MULTI_SCENE',
+      affectedSceneIndices: plan.scenes.map((_, index) => index),
+      executionPlan: [
+        { step: 'Apply darker lighting to the episode', service: 'director' },
+        { step: 'Regenerate the episode scenes', service: 'production' },
+      ],
+    };
+  }
   if (/more (cinematic|premium|luxurious)/.test(text)) {
     return {
       mode: 'DIRECT',

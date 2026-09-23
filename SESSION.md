@@ -274,6 +274,18 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 6 (SERIES)
+
+Persistent creative universe: Series → Canon → Episodes → Projects, with `SeriesContextService` as the single context assembler. Canon/Memory/Episode-State are distinct structures (never one JSON blob).
+
+- **Models (migration `20260922190000_creative_series`):** `CreativeSeries` (userId, title, status, visualLanguage/audioLanguage/canon/memory JSON), `CreativeEpisode` (seriesId, projectId @unique, seasonNumber, episodeNumber, title, synopsis, status, state JSON; `@@unique([seriesId, seasonNumber, episodeNumber])`), `CreativeProject.seriesId` (SetNull). Season = seasonNumber (no CreativeSeason entity — per boundary).
+- **`lib/creative/series/`:** `canon.ts` (structured canon: world/storyRules/worldRules/characterRules/visualLanguage/audioLanguage/characterCanon — explicit update only, never mutated by episodes), `memory.ts` (learned facts + open threads + preferences; idempotent learn/openThread), `context.ts` (**SeriesContextService**: canon + visual/audio + character memory + world memory + previous episode state + unresolved threads + current episode state; `spinoffContext` inherits identity/world/visual and EXCLUDES episode state), `service.ts` (series create/list/get/update; **episode.create seeds the linked CreativeProject's Bible/Brief from canon** — characters, worlds, visual/audio language; episode state evolves independently).
+- **API:** `creative.series.{create,list,get,update, canon.{get,update}, memory.{get,update}, episode.{create,list,get,update}, context.{get,spinoff}}` — gated on `RAIVSTREAM_5_SERIES_ENABLED` (independently flagged; existing flags untouched).
+- **Director:** gained a "darker / darker than / moodier" visual rule (episode-level lighting change; series visual canon preserved) — the Director operates on the episode project and never touches series canon.
+- **Frontend:** `apps/web/src/app/series/[seriesId]/page.tsx` + `components/creative/series/{SeriesHeader,EpisodeList,CanonPanel,SeriesMemoryPanel,NewEpisodePanel}.tsx` — series home, "What happens next?" episode creation (→ episode project workspace), episode index, canon + memory panels, context summary.
+- **Tests:** series.test.ts (7 golden: creation w/o project + canon initialized; episode creation + linked project + inherited context; identity persists across episodes while episode state evolves (wardrobe blue→red); memory fact retrievable in later context; director darker preserves canon; explore preserves original + canon; spinoff context boundary). Suite **524/524**, type-check + lint clean, CI green.
+- **Kept out (per boundary):** Studio, Brand DNA, products/campaigns, collaboration, permissions, marketplace, pricing, advanced prompting, provider/model selection, NLE, season entity, publishing/distribution, analytics redesign, new generation/continuity engines; **story-intelligence system untouched** (series orchestrates what exists).
+
 ### 2026-09-22: Raivstream 5.0 — slice 5 (APPROVAL → OUTPUTS)
 
 Per the slice-5 boundary: Approval first (version-specific, invalidated on material change), then Outputs as derivatives of an approved version. No hidden NLE — OutputService owns the mechanics.
