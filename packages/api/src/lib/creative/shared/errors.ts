@@ -13,7 +13,8 @@ export type CreativeErrorCode =
   | 'BIBLE_ALREADY_EXISTS'
   | 'LEGACY_BRIDGE_CONFLICT'
   | 'PLAN_NOT_APPROVED'
-  | 'CONTENT_REJECTED';
+  | 'CONTENT_REJECTED'
+  | 'MISSING_SOURCE';
 
 export class CreativeError extends Error {
   readonly code: CreativeErrorCode;

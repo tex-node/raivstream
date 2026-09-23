@@ -21,6 +21,7 @@ export const creativeProjectRouter = router({
       text: z.string().min(1).max(4000),
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
       legacyStoryProjectId: z.string().nullable().optional(),
+      attachments: z.array(z.string().min(1).max(200)).max(20).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -28,6 +29,7 @@ export const creativeProjectRouter = router({
           userId: ctx.user.id,
           text: input.text,
           legacyStoryProjectId: input.legacyStoryProjectId,
+          attachments: input.attachments,
           interpretation: input.projectType
             ? (await import('../../lib/creative/intent/service')).intentService.interpret(input.text, input.projectType)
             : undefined,

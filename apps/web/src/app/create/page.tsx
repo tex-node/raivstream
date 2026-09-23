@@ -13,6 +13,8 @@ import { clearDraft, loadDraft, pickResumeProject, saveDraft, CREATE_DRAFT_VERSI
 
 type SaveState = 'idle' | 'saving' | 'saved';
 
+const CONTEXT_ATTACHMENT: Record<string, string> = { PRODUCT: 'Product', BRAND: 'Brand', LOGO: 'Logo', PERSON: 'Reference', SOURCE: 'Source' };
+
 function browserStorage() {
   return typeof window === 'undefined' ? null : window.localStorage;
 }
@@ -90,20 +92,25 @@ export default function CreatePage() {
     (projectList.data ?? []) as Array<{ id: string; title: string; status?: string; updatedAt?: string | Date }>,
   );
 
+  const readiness = readinessQuery.data?.readiness;
+
   const toggleAttachment = (label: string) =>
     setAttachments((current) => (current.includes(label) ? current.filter((item) => item !== label) : [...current, label]));
 
   const appendText = (addition: string) => setText((current) => `${current.trim().replace(/[.;]?$/, '')}. ${addition}`);
 
   const resolveReadiness = (resolution: ReadinessResolution) => {
-    if (resolution.kind === 'asset') {
-      setSourceSupplied(true);
-    } else if (resolution.kind === 'describe') {
-      setSourceSupplied(true);
-      appendText(resolution.text);
-    } else {
+    if (resolution.kind === 'fictional') {
       appendText('Use a fictional concept — invent it rather than using a real one.');
+      return;
     }
+    // The source is now supplied. Record it as a managed reference so it
+    // propagates into the project (and the production boundary can verify it).
+    setSourceSupplied(true);
+    const label = readiness && readiness.ready === false ? (CONTEXT_ATTACHMENT[readiness.contextType] ?? 'Source') : 'Source';
+    const chip = resolution.kind === 'asset' && resolution.fileName ? `${label}: ${resolution.fileName}` : label;
+    setAttachments((current) => (current.includes(chip) ? current : [...current, chip]));
+    if (resolution.kind === 'describe') appendText(resolution.text);
   };
 
   const startOver = () => {
@@ -117,7 +124,6 @@ export default function CreatePage() {
     setSaveState('idle');
   };
 
-  const readiness = readinessQuery.data?.readiness;
   const showGate = Boolean(readiness && readiness.ready === false);
 
   return (
@@ -171,7 +177,7 @@ export default function CreatePage() {
             error={readinessQuery.error?.message}
             interpretation={readinessQuery.data?.interpretation}
             onBack={() => setInterpreted(false)}
-            onStart={() => createProject.mutate({ text })}
+            onStart={() => createProject.mutate({ text, attachments })}
             starting={createProject.isPending || planMutation.isPending}
             startError={createProject.error?.message}
           />

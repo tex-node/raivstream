@@ -40,10 +40,18 @@ export interface ReadinessSignals {
 // Explicit authorization to invent the source entity.
 const FICTIONAL = /\b(fictional|fictitious|imaginary|invent(ed|ing)?|make[- ]?up|made[- ]?up|concept|mock|pretend|not real|hypothetical|prototype)\b/i;
 
-const OWNED_PRODUCT = /\b(my|our)\b[^.?!]{0,24}\b(product|perfume|serum|skincare|cosmetic|cream|lotion|drink|bottle|whiskey|whisky|wine|beer|sneaker|shoe|bag|watch|jewel|jewellery|jewelry|fashion|apparel|clothing|device|gadget|app|software|service|food|snack|coffee|tea|beverage|candle|soap|makeup|lipstick|product)\b/i;
-const OWNED_BRAND = /\b(my|our)\b[^.?!]{0,20}\b(brand|company|business|label|studio|agency|organi[sz]ation|startup|shop|store|restaurant|salon|clinic)\b/i;
 const OWNED_LOGO = /\b(my|our)\b[^.?!]{0,16}\blogo\b/i;
 const OWNED_PERSON = /\b(my|our)\b[^.?!]{0,16}\b(face|likeness|selfie|resemblance|portrait|photo|picture|image)\b|\b(photo|picture|image|headshot|video) of (me|us)\b|\bbased on (a |the )?real person\b/i;
+
+// Semantic commercial-ownership: a first-person possessor ("my/our") plus a
+// commercial purpose (from the interpretation, or a promotion verb). This is
+// NOT a product-noun list — it asks "does the creator own a real commercial
+// entity here?" so it generalizes to any product/brand/business. Only used to
+// pick the creator-facing context TYPE (BRAND vs PRODUCT).
+const OWNERSHIP = /\b(my|our)\b/i;
+const COMMERCIAL_PURPOSE = /\b(promote|promotion|adverti[sz](e|ing)|ads?\b|campaign|commercial|market(ing)?|launch(ing)?|sell(ing)?|sale)\b/i;
+const BRAND_LIKE = /\b(brand|company|business|label|store|shop|restaurant|salon|clinic|agency|startup|firm|enterprise|studio)\b/i;
+
 const SOURCE_ASSET = /\b(turn|transform|convert|animate|restyle|upgrade|remix)\b[^.?!]{0,30}\b(this|my|our|the)\b[^.?!]{0,20}\b(image|photo|picture|video|clip|recording|footage|song|track|audio|design|logo|artwork)\b|\busing (this|my|our|the) (image|photo|video|clip|recording|footage)\b|\bfrom (this|my|our|the) (image|photo|video|clip)\b/i;
 
 // Transform intent regardless of how the project type is classified (a
@@ -72,14 +80,19 @@ export function assessIntentReadiness(
   if (OWNED_LOGO.test(text) && !hasAsset) {
     return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'LOGO', question: 'Can you upload your logo so I use the real one?' };
   }
-  if (OWNED_BRAND.test(text) && !hasAsset && !hasStudioProduct) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'BRAND', question: 'Can you share your brand assets (name and logo)?' };
+  // A first-person, commercially-purposed request refers to a real user-owned
+  // entity → require its source unless an asset/Studio context already exists.
+  const owned = OWNERSHIP.test(text);
+  const isCommercial = interpretation.projectType === 'COMMERCIAL' || COMMERCIAL_PURPOSE.test(text);
+  if (owned && isCommercial && !hasAsset && !hasStudioProduct) {
+    const contextType = BRAND_LIKE.test(text) ? 'BRAND' : 'PRODUCT';
+    const question = contextType === 'BRAND'
+      ? 'What are you promoting? Add your brand assets (name and logo) so I use the real brand.'
+      : 'Can you upload a photo of the product — or describe it — so I use the real product?';
+    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType, question };
   }
   if (SOURCE_ASSET.test(text) && !hasAsset) {
     return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'SOURCE', question: 'Can you attach the image or video you want me to transform?' };
-  }
-  if (OWNED_PRODUCT.test(text) && !hasAsset && !hasStudioProduct) {
-    return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'PRODUCT', question: 'Can you upload a photo of the product — or describe it — so I use the real product?' };
   }
   if (OWNED_PERSON.test(text) && !hasAsset) {
     return { ready: false, reason: 'MISSING_ESSENTIAL_CONTEXT', contextType: 'PERSON', question: 'Can you attach a reference photo so I keep the right likeness?' };

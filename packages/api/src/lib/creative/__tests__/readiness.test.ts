@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { assessIntentReadiness, type IntentReadiness } from '../intent/readiness';
 import { interpret } from '../intent/interpreter';
+import { ProductionPlanService } from '../production/service';
 
 function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean } = {}): IntentReadiness {
   return assessIntentReadiness(text, interpret(text), signals);
@@ -98,4 +99,101 @@ describe('intent readiness — creative freedom vs essential source', () => {
   it('transform with explicit fictional authorization: ready', () => {
     expect(assess('Create a fictional futuristic car and transform it into a cinematic ad.').ready).toBe(true);
   });
+
+  // ── Commercial real-entity language (human-tested failure) ────────────────
+  it('"Create an advertisement for my skincare brand." → not ready, BRAND', () => {
+    const r = notReady(assess('Create an advertisement for my skincare brand.'));
+    expect(r.contextType).toBe('BRAND');
+  });
+
+  it('"Promote my skincare brand." → not ready, BRAND', () => {
+    const r = notReady(assess('Promote my skincare brand.'));
+    expect(r.contextType).toBe('BRAND');
+  });
+
+  it('"Create an advertisement for my clothing brand." → not ready, BRAND', () => {
+    const r = notReady(assess('Create an advertisement for my clothing brand.'));
+    expect(r.contextType).toBe('BRAND');
+  });
+
+  it('"Promote my restaurant." → not ready (real user-owned entity)', () => {
+    expect(assess('Promote my restaurant.').ready).toBe(false);
+  });
+
+  it('"Advertise my company." → not ready (real user-owned entity)', () => {
+    expect(assess('Advertise my company.').ready).toBe(false);
+  });
+
+  it('"Create a campaign for our new product." → not ready, PRODUCT', () => {
+    const r = notReady(assess('Create a campaign for our new product.'));
+    expect(r.contextType).toBe('PRODUCT');
+  });
+
+  it('commercial real-entity with a supplied source: ready', () => {
+    expect(assess('Create an advertisement for my skincare brand.', { hasSourceAsset: true }).ready).toBe(true);
+    expect(assess('Create an advertisement for my skincare product.', { hasSourceAsset: true }).ready).toBe(true);
+  });
+
+  it('commercial real-entity with an existing Studio product: ready', () => {
+    expect(assess('Create an advertisement for my skincare product.', { hasStudioProduct: true }).ready).toBe(true);
+  });
+
+  it('explicit fictional commercial entity: ready', () => {
+    expect(assess('Invent a luxury skincare brand and create an advertisement for it.').ready).toBe(true);
+    expect(assess('Create a fictional skincare product and make an ad.').ready).toBe(true);
+  });
+});
+
+// ─── Production-boundary invariant (defensive) ───────────────────────────────
+describe('production invariant — source is required before rendering', () => {
+  function prismaFor(brief: { originalIntent: string; attachments: unknown[] }) {
+    const project = { id: 'p1', userId: 'u1', title: 'x', projectType: 'COMMERCIAL', status: 'PLANNING', brief, bible: null, productionPlan: null };
+    return {
+      creativeProject: {
+        findFirst: async () => ({ ...project, brief, bible: null, productionPlan: null }),
+        update: async () => project,
+      },
+      creativeProduct: { findFirst: async () => null },
+      creativeProductionPlan: { create: async () => ({ id: 'pl1' }), update: async () => ({ id: 'pl1' }) },
+    } as never;
+  }
+
+  function withFlags<T>(fn: () => Promise<T>): Promise<T> {
+    process.env.RAIVSTREAM_5_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_INTENT_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_PREVIEW_ENABLED = 'true';
+    const done = () => {
+      delete process.env.RAIVSTREAM_5_ENABLED;
+      delete process.env.RAIVSTREAM_5_INTENT_ENABLED;
+      delete process.env.RAIVSTREAM_5_PREVIEW_ENABLED;
+    };
+    return fn().finally(done);
+  }
+
+  it('blocks a source-dependent commercial request with no source (renderer never invoked)', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+    }));
+
+  it('blocks a transform with no source', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Transform this into a cinematic advertisement.', attachments: [] });
+      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+    }));
+
+  it('proceeds once the source is recorded', () =>
+    withFlags(async () => {
+      const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [{ label: 'Product' }] });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.plan.scenes.length).toBeGreaterThan(0);
+    }));
+
+  it('does not block creative concepts (no ownership) or story/education', () =>
+    withFlags(async () => {
+      const concept = prismaFor({ originalIntent: 'Create a cinematic commercial for a new premium skincare brand.', attachments: [] });
+      await expect(new ProductionPlanService().plan(concept, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
+      const story = prismaFor({ originalIntent: 'Create a cinematic short film about a woman returning home.', attachments: [] });
+      await expect(new ProductionPlanService().plan(story, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
+    }));
 });

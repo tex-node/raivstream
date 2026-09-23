@@ -17,6 +17,8 @@ import { adaptPlanToManifest, type AdapterManifest } from './adapter';
 import { buildProductionContext } from './contextAdapter';
 import { deriveProductionStages, type ProductionStage, type ProductionStageEntry } from './stages';
 import { runCreativeProduction } from './runner';
+import { intentService } from '../intent/service';
+import { assessIntentReadiness } from '../intent/readiness';
 
 type PlanRow = {
   version: number;
@@ -61,12 +63,43 @@ function deriveSceneStatus(assets: Array<{ status: string }>): ProductionSceneSt
 }
 
 export class ProductionPlanService {
+  /**
+   * Defensive production-boundary invariant: a source-dependent request (real
+   * product/brand/person, or a transform) must never reach production without
+   * its required source. The renderer must never be the component that
+   * discovers the missing source. Readiness normally blocks earlier; this is
+   * the safety net. Failure is creator-actionable.
+   */
+  private async assertSourceReady(
+    prisma: PrismaClient,
+    project: { userId: string; brief: { originalIntent?: string | null; attachments?: unknown } | null },
+  ): Promise<void> {
+    const originalIntent = project.brief?.originalIntent ?? '';
+    if (!originalIntent) return;
+    let interpretation;
+    try {
+      interpretation = intentService.interpret(originalIntent);
+    } catch {
+      return; // cannot interpret → do not block (fail-open only on non-classification)
+    }
+    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief?.attachments as unknown[]) : [];
+    const studioProduct = await prisma.creativeProduct
+      .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
+      .catch(() => null);
+    const readiness = assessIntentReadiness(originalIntent, interpretation, {
+      hasSourceAsset: attachments.length > 0,
+      hasStudioProduct: Boolean(studioProduct),
+    });
+    if (!readiness.ready) throw new CreativeError('MISSING_SOURCE', readiness.question);
+  }
+
   async plan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ plan: CreativeProductionPlanState; preview: PreviewState }> {
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
       include: { brief: true, bible: true, productionPlan: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    await this.assertSourceReady(prisma, project as never);
 
     const bible = project.bible as unknown as CreativeBibleState | null;
     const brief = {
@@ -152,9 +185,10 @@ export class ProductionPlanService {
     if (!isCreativeProductionEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 production is not enabled.');
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      include: { productionPlan: true },
+      include: { productionPlan: true, brief: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    await this.assertSourceReady(prisma, project as never);
     if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build and approve a production plan before producing.');
     // The first production requires an approved preview; a refinement after a
     // directive (REVIEW / REFINING / DIRECTING) may regenerate affected scenes.

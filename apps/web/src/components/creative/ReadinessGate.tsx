@@ -1,44 +1,38 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { transformAcceptsVideo } from '@/lib/creativeCapabilities';
 
 export type ReadinessContextType = 'PRODUCT' | 'BRAND' | 'LOGO' | 'PERSON' | 'SOURCE';
 
 export type ReadinessResolution =
-  | { kind: 'asset' }
+  | { kind: 'asset'; fileName?: string }
   | { kind: 'describe'; text: string }
   | { kind: 'fictional' };
 
-const LABELS: Record<ReadinessContextType, { upload: string; attached: string; fictional: string; placeholder: string }> = {
+const LABELS: Record<ReadinessContextType, { upload: string; fictional: string; placeholder: string }> = {
   PRODUCT: {
     upload: 'Upload a product photo',
-    attached: 'I’ve added it',
     fictional: 'I don’t have assets yet — use a fictional product',
     placeholder: 'e.g. a vitamin-C serum in a frosted glass bottle',
   },
   BRAND: {
-    upload: 'Upload brand assets',
-    attached: 'I’ve added them',
+    upload: 'Upload a product or brand image',
     fictional: 'I don’t have assets yet — use a fictional brand',
     placeholder: 'e.g. Voltaic, a premium skincare brand',
   },
   LOGO: {
     upload: 'Upload the logo',
-    attached: 'I’ve added it',
     fictional: 'I don’t have it yet — use a fictional mark',
     placeholder: 'e.g. a minimal serif wordmark',
   },
   PERSON: {
-    upload: 'Attach a reference photo',
-    attached: 'I’ve added it',
+    upload: 'Choose a reference photo',
     fictional: 'Use a fictional character instead',
     placeholder: 'e.g. a woman in her thirties with short hair',
   },
   SOURCE: {
     upload: transformAcceptsVideo() ? 'Upload an image or video' : 'Upload an image',
-    attached: 'I’ve added it',
     fictional: 'I don’t have a source — use a fictional one',
     placeholder: 'e.g. a photo of my product on a table',
   },
@@ -81,21 +75,22 @@ export function ReadinessGate({
           I won’t invent your real {contextType.toLowerCase()}. Share the real one, describe it, or tell me to design a fictional one.
         </p>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Link
-            href="/upload"
-            className="rounded-xl border border-[rgba(233,233,237,0.18)] px-4 py-2 text-sm font-bold text-[var(--noc-t2)] hover:border-[var(--noc-purple)]"
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <label
+            className={`cursor-pointer rounded-xl bg-[var(--noc-purple)] px-4 py-2 text-sm font-black text-[#0B0D12] ${busy ? 'opacity-50' : ''}`}
           >
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onResolve({ kind: 'asset', fileName: file.name });
+              }}
+            />
             {labels.upload}
-          </Link>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onResolve({ kind: 'asset' })}
-            className="rounded-xl bg-[var(--noc-purple)] px-4 py-2 text-sm font-black text-[#0B0D12] disabled:opacity-50"
-          >
-            {labels.attached}
-          </button>
+          </label>
           <button
             type="button"
             disabled={busy}

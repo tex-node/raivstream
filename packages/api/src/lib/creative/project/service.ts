@@ -82,7 +82,7 @@ export function serializeProject(row: CreativeProjectRow): CreativeProjectState 
 export class ProjectService {
   async createFromIntent(
     prisma: PrismaClient,
-    input: { userId: string; text: string; interpretation?: CreativeInterpretation; legacyStoryProjectId?: string | null },
+    input: { userId: string; text: string; interpretation?: CreativeInterpretation; legacyStoryProjectId?: string | null; attachments?: string[] },
   ): Promise<CreativeProjectState> {
     if (!isCreativeCreateEnabled()) {
       throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 create is not enabled.');
@@ -110,6 +110,7 @@ export class ProjectService {
             genre: interpretation.explicit.genre ?? null,
             tone: interpretation.explicit.tone ?? null,
             setting: interpretation.explicit.setting ?? null,
+            attachments: (input.attachments ?? []).map((label) => ({ label, addedAt: new Date().toISOString() })) as never,
           },
         },
         memories: {
