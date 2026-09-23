@@ -36,7 +36,7 @@ export const creativeDirectorRouter = router({
     }),
 
   /** Apply a directive: mutate the semantic state + mark affected scenes for targeted regeneration. */
-  apply: protectedProcedure
+  applyDirective: protectedProcedure
     .input(z.object({ projectId: z.string(), directiveId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {

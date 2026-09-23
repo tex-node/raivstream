@@ -22,7 +22,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
   const utils = trpc.useUtils();
   const direct = trpc.creative.director.direct.useMutation();
   const explore = trpc.creative.director.explore.useMutation();
-  const apply = trpc.creative.director.apply.useMutation({
+  const apply = trpc.creative.director.applyDirective.useMutation({
     onSuccess: () => {
       utils.creative.director.versions.invalidate({ projectId });
       utils.creative.project.get.invalidate({ projectId });
