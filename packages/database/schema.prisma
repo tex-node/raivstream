@@ -1952,3 +1952,110 @@ model AudioAsset {
   @@index([userId])
   @@map("audio_assets")
 }
+
+// ─── Raivstream 5.0 — Creative Foundation (semantic orchestration layer) ─────
+// Additive only. Sits ABOVE the legacy Story domain; legacy StoryProject is
+// bridged via CreativeProject.legacyStoryProjectId (nullable). Columns follow
+// the repo's camelCase convention.
+
+enum CreativeProjectType {
+  STORY
+  EDUCATION
+  COMMERCIAL
+  TRANSFORMATION
+  UNKNOWN
+}
+
+enum CreativeProjectStatus {
+  IDEA
+  INTERPRETING
+  PLANNING
+  PREVIEW
+  DIRECTING
+  GENERATING
+  REVIEW
+  REFINING
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CreativeMemoryKind {
+  PREFERENCE
+  DECISION
+  REJECTION
+  NOTE
+  DIRECTION
+}
+
+model CreativeProject {
+  id                   String                @id @default(cuid())
+  userId               String
+  title                String
+  projectType          CreativeProjectType   @default(UNKNOWN)
+  status               CreativeProjectStatus @default(IDEA)
+  legacyStoryProjectId String?
+  brief                CreativeBrief?
+  bible                CreativeBible?
+  memories             CreativeMemory[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([legacyStoryProjectId])
+  @@map("creative_projects")
+}
+
+model CreativeBrief {
+  id              String         @id @default(cuid())
+  projectId       String         @unique
+  project         CreativeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  originalIntent  String
+  refinedIntent   String?
+  objective       String?
+  audience        String?
+  format          String?
+  durationSeconds Int?
+  genre           String?
+  tone            String?
+  theme           String?
+  setting         String?
+  attachments     Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("creative_briefs")
+}
+
+model CreativeBible {
+  id             String         @id @default(cuid())
+  projectId      String         @unique
+  project        CreativeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version        Int            @default(1)
+  story          Json?
+  characters     Json?
+  worlds         Json?
+  visualLanguage Json?
+  audioLanguage  Json?
+  audience       Json?
+  brand          Json?
+  constraints    Json?
+  canon          Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("creative_bibles")
+}
+
+model CreativeMemory {
+  id        String            @id @default(cuid())
+  projectId String
+  project   CreativeProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      CreativeMemoryKind
+  content   Json
+  createdAt DateTime          @default(now())
+
+  @@index([projectId])
+  @@map("creative_memories")
+}

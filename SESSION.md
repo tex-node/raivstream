@@ -274,6 +274,19 @@ There are other Supabase/Postgres stacks on the VPS for other projects. Do not a
 
 ## Recent Changes
 
+### 2026-09-22: Raivstream 5.0 — slice 1 (Creative Foundation + Create + Intent)
+
+Per the 5.0 implementation prompt (docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md): inspected the repo, then built the FIRST vertical slice only — the semantic orchestration layer above existing production infrastructure.
+
+- **Feature flags:** `lib/creative/featureFlags.ts` — centralized `RAIVSTREAM_5_*` flags (master + create/intent/bible/preview/production/director/review/studio), all default OFF. Documented in `.env.example`.
+- **DB (migration `20260922120000_creative_foundation`):** `CreativeProject` (+`legacyStoryProjectId` nullable), `CreativeBrief`, `CreativeBible`, `CreativeMemory` + enums `CreativeProjectType`/`CreativeProjectStatus`/`CreativeMemoryKind`. Additive; camelCase columns; legacy Story untouched.
+- **`lib/creative/`:** `shared/{types,enums,errors}`, `project/{service,state}` (status machine + backend-derived `nextAction`), `intent/{service,interpreter,questions}` (deterministic intent engine: detect project type → extract explicit → infer → uncertainty → consequential questions with "Let Raivstream decide"; never fabricates certainty), `intelligence/{service,storyAdapter}` (story/education/commercial routing + bridge to existing storyIntelligence), `bible/{service,adapter}` (assumption → proposal → approval → canon; adapters reuse StoryCharacterMemory/StoryEnvironment), `memory/service` (BIBLE=what is true / MEMORY=what happened).
+- **API:** `routers/creative/{index,project,intent}` registered as `creative` on the root router (`creative.intent.interpret`, `creative.project.{create,list,get,updateStatus,recordMemory,getMemories}`).
+- **Frontend:** `/create` (hero "What are you creating?" + natural-language input + suggestions + attachments → InterpretationPanel with questions → Start project) and `/projects/[projectId]` (CreativeShell + sidebar + canvas: Brief, Bible, NextAction, Scene cards). `components/creative/*`.
+- **Tests:** `lib/creative/__tests__/{intent,state}.test.ts` — golden journeys (commercial/education/story/ambiguous) + state transitions + bible seeding. Full suite **477/477**, type-check + lint clean.
+- **Journey verified at unit level:** "Create a 60-second cinematic commercial for a new Nigerian premium skincare brand…" → COMMERCIAL, 60s, consequential questions only, summary preserves original words.
+- **Known limits / next:** production plan adapter + preview (slice 2); director/review/versioning only after the loop is stable. Flags must be turned ON in env to exercise `/create` in a deployed env.
+
 ### 2026-09-22: Holistic documentation + safe-rewrite suggestions + editable story
 
 - **`docs/OVERVIEW.md` (new):** holistic flow-of-operation + architecture document (project at a glance, system flow from story idea → media → movie, architecture layers, data model, providers, operations, runbooks, roadmap pointer).

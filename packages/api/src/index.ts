@@ -18,6 +18,7 @@ import { adminRouter } from './routers/admin';
 import { notificationRouter } from './routers/notification';
 import { storyRouter } from './routers/story';
 import { academyRouter } from './routers/academy';
+import { creativeRouter } from './routers/creative';
 
 // Root app router
 export const appRouter = router({
@@ -34,6 +35,7 @@ export const appRouter = router({
   notification: notificationRouter,
   story: storyRouter,
   academy: academyRouter,
+  creative: creativeRouter,
 });
 
 export type AppRouter = typeof appRouter;

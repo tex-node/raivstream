@@ -175,3 +175,10 @@ must `ADD COLUMN "camelCaseName"` (never snake_case — see the 2026-09-22 incid
 (anti-drift overhaul: Master Visual Bible, I2V continuity, multi-clip shot engine, story
 completeness + moderation UX) slices 1–2 shipped. Next: movie wiring for shot clips, then
 audio-driven timing.
+
+**Raivstream 5.0 (in progress):** a semantic creative-orchestration layer above the
+production infrastructure — "Tell Raivstream what you imagine. It figures out how to make
+it." Slice 1 (Creative Foundation + Create + Intent) shipped: `CreativeProject/Brief/Bible/
+Memory` + centralized `RAIVSTREAM_5_*` feature flags + deterministic intent engine + `/create`
++ `/projects/[projectId]`. See `docs/RAIVSTREAM_5_PRODUCT_ROADMAP_AND_IMPLEMENTATION_PLAN.md`
+and `packages/api/src/lib/creative/`.
