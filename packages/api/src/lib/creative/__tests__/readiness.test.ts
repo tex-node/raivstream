@@ -250,7 +250,7 @@ describe('readiness — promotion lifecycle', () => {
     expect(assess('Invent a luxury perfume brand and make a commercial.').ready).toBe(true);
   });
 
-  it('assertSourceReady uses refinedIntent to catch post-directive commercial context', () =>
+  it('checkPlanReadiness uses refinedIntent to catch post-directive commercial context', () =>
     withFlags(async () => {
       // Original intent is a neutral story — passes by itself.
       // refinedIntent (set by the director pivot) contains the product ownership cue.
@@ -259,7 +259,9 @@ describe('readiness — promotion lifecycle', () => {
         'Make this an advert for my skincare product.',
         [],
       );
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('a ready-original + ready-refined (source supplied) → proceeds', () =>
@@ -270,6 +272,8 @@ describe('readiness — promotion lifecycle', () => {
         [{ label: 'Product', kind: 'image', url: 'r2://product.png' }],
       );
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
       expect(result.plan.scenes.length).toBeGreaterThan(0);
     }));
 });
@@ -300,22 +304,30 @@ describe('production invariant — source is required before rendering', () => {
     return fn().finally(done);
   }
 
-  it('blocks a source-dependent commercial request with no source (renderer never invoked)', () =>
+  it('returns READINESS_REQUIRED for a source-dependent commercial request with no source (plan never created)', () =>
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
+      // "my skincare brand" → brand name needed before asset (NAME gate fires first)
+      expect((result as any).need).toBe('NAME');
     }));
 
-  it('blocks a transform with no source', () =>
+  it('returns READINESS_REQUIRED for a transform with no source (plan never created)', () =>
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Transform this into a cinematic advertisement.', attachments: [] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('proceeds once a utilizable source is recorded (and carries it onto the plan)', () =>
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Create an advertisement for my skincare brand.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://source.png' }] });
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
       expect(result.plan.scenes.length).toBeGreaterThan(0);
       expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://source.png');
     }));
@@ -344,15 +356,19 @@ describe('production invariant — source is required before rendering', () => {
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Create a promotional video for my skincare product.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://product.png' }] });
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
       expect(result.plan.scenes.length).toBeGreaterThan(0);
       expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://product.png');
     }));
 
   // ── "perfume" (product noun with no TYPE_SIGNALS match) ───────────────────
-  it('"Create a promotional video for my perfume." with no source → MISSING_SOURCE (never reaches renderer)', () =>
+  it('"Create a promotional video for my perfume." with no source → READINESS_REQUIRED (plan never created)', () =>
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'MISSING_SOURCE' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('"Create a promotional video for my perfume." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION', () =>
@@ -365,6 +381,86 @@ describe('production invariant — source is required before rendering', () => {
     withFlags(async () => {
       const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [{ label: 'Product', kind: 'image', url: 'r2://perfume.png' }] });
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.plan.scenes.length).toBeGreaterThan(0);
+    }));
+});
+
+// ─── Orchestration: Create → Readiness → Plan pipeline ──────────────────────
+describe('orchestration — plan() enforces readiness before creating a plan', () => {
+  function makeProject(originalIntent: string, attachments: unknown[]) {
+    const brief = { originalIntent, refinedIntent: null, attachments };
+    const project = { id: 'p1', userId: 'u1', title: 'x', projectType: 'COMMERCIAL', status: 'PLANNING', brief, bible: null, productionPlan: null };
+    return {
+      creativeProject: {
+        findFirst: async () => ({ ...project, brief, bible: null, productionPlan: null }),
+        update: async () => project,
+      },
+      creativeProduct: { findFirst: async () => null },
+      creativeProductionPlan: { create: async () => ({ id: 'pl1' }), update: async () => ({ id: 'pl1' }) },
+    } as never;
+  }
+
+  function withFlags<T>(fn: () => Promise<T>): Promise<T> {
+    process.env.RAIVSTREAM_5_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_INTENT_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_PREVIEW_ENABLED = 'true';
+    const done = () => {
+      delete process.env.RAIVSTREAM_5_ENABLED;
+      delete process.env.RAIVSTREAM_5_INTENT_ENABLED;
+      delete process.env.RAIVSTREAM_5_PREVIEW_ENABLED;
+    };
+    return fn().finally(done);
+  }
+
+  // Section 17 regression: fresh account, no prior state
+  it('fresh account with no source → plan() returns READINESS_REQUIRED, never creates a plan', () =>
+    withFlags(async () => {
+      const prisma = makeProject('Create a promotional video for my perfume.', []);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
+      expect((result as any).need).toBe('ASSET');
+      expect((result as any).contextType).toBe('PRODUCT');
+      expect(typeof (result as any).question).toBe('string');
+    }));
+
+  // Section 20: all 7 commercial language variants must return READINESS_REQUIRED
+  const variants = [
+    'Create a promotional video for my perfume.',
+    'Make an advertisement for my skincare product.',
+    'Promote my new product launch.',
+    'Build a commercial for my brand.',
+    'Create a marketing video for my serum.',
+    'I want to advertise my new skincare line.',
+    'Create a product promotion video for my brand.',
+  ];
+
+  for (const variant of variants) {
+    it(`commercial variant "${variant.slice(0, 50)}" → READINESS_REQUIRED with no source`, () =>
+      withFlags(async () => {
+        const prisma = makeProject(variant, []);
+        const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+        expect(result.ok).toBe(false);
+        expect((result as any).code).toBe('READINESS_REQUIRED');
+      }));
+  }
+
+  // Section 21: fictional exception must NOT require upload
+  it('fictional authorization → READY, plan proceeds without upload', () =>
+    withFlags(async () => {
+      const prisma = makeProject('Create a promotional video for a fictional perfume brand — invent the concept.', []);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+    }));
+
+  it('source resolved → plan proceeds after readiness gate', () =>
+    withFlags(async () => {
+      const prisma = makeProject('Create a promotional video for my perfume.', [{ label: 'Product', kind: 'image', url: 'r2://perfume.jpg' }]);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
       expect(result.plan.scenes.length).toBeGreaterThan(0);
     }));
 });

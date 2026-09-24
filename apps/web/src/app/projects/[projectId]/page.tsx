@@ -1,6 +1,7 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
 import { CreativeShell } from '@/components/creative/CreativeShell';
@@ -16,6 +17,7 @@ import { ReviewPanel } from '@/components/creative/ReviewPanel';
 import { DirectorPanel } from '@/components/creative/DirectorPanel';
 import { ApprovalBar } from '@/components/creative/ApprovalBar';
 import { OutputPanel } from '@/components/creative/OutputPanel';
+import { ReadinessGate, type ReadinessResolution } from '@/components/creative/ReadinessGate';
 
 /**
  * Raivstream 5.0 — project workspace with progressive disclosure.
@@ -27,6 +29,7 @@ import { OutputPanel } from '@/components/creative/OutputPanel';
 export default function CreativeProjectPage() {
   const params = useParams<{ projectId: string }>();
   const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
   const projectId = params.projectId;
 
   const projectQuery = trpc.creative.project.get.useQuery(
@@ -49,6 +52,23 @@ export default function CreativeProjectPage() {
     onSuccess: () => utils.creative.project.get.invalidate({ projectId }),
   });
 
+  // Workspace readiness — all hooks must be called unconditionally, before any early returns.
+  const requestUpload = trpc.creative.project.requestAttachmentUpload.useMutation();
+  const confirmUpload = trpc.creative.project.confirmAttachment.useMutation();
+  const [uploadBusy, setUploadBusy] = useState(false);
+
+  // Derive readiness inputs from query data (safe when data is undefined).
+  const projectData = projectQuery.data as any;
+  const workspaceIntent = (projectData?.brief?.originalIntent ?? '').trim();
+  const workspaceBriefAttachments: Array<{ url?: string }> = Array.isArray(projectData?.brief?.attachments)
+    ? projectData.brief.attachments
+    : [];
+  const hasProjectSource = workspaceBriefAttachments.some((a) => Boolean(a.url));
+  const workspaceReadinessQuery = trpc.creative.intent.readiness.useQuery(
+    { text: workspaceIntent, hasSourceAsset: hasProjectSource },
+    { enabled: Boolean(isLoaded && isSignedIn && projectId && workspaceIntent.length > 3 && !projectData?.hasPlan), retry: false },
+  );
+
   if (projectQuery.isLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-[var(--noc-page)] text-[var(--noc-t4)]">Loading project…</div>;
   }
@@ -62,10 +82,41 @@ export default function CreativeProjectPage() {
     );
   }
 
-  const project = projectQuery.data as any;
+  const project = projectData;
   if (!project) return null;
   const plan = planQuery.data as any;
-  const canBuildPlan = !project.hasPlan && !buildPlan.isPending;
+
+  const workspacePlanReadiness = workspaceReadinessQuery.data?.readiness;
+  const needsReadiness = !project.hasPlan && workspacePlanReadiness?.ready === false;
+
+  const resolveWorkspaceReadiness = async (resolution: ReadinessResolution) => {
+    if (resolution.kind === 'fictional') {
+      // Fictional choice: navigate to /create to add the fictional qualifier to the text.
+      router.push('/create');
+      return;
+    }
+    if (resolution.kind === 'asset' && resolution.file) {
+      setUploadBusy(true);
+      try {
+        const { uploadUrl, key } = await requestUpload.mutateAsync({
+          projectId,
+          fileName: resolution.file.name,
+          contentType: resolution.file.type || 'image/jpeg',
+        });
+        await fetch(uploadUrl, { method: 'PUT', body: resolution.file, headers: { 'Content-Type': resolution.file.type || 'image/jpeg' } });
+        const isVideo = resolution.file.type.startsWith('video/');
+        await confirmUpload.mutateAsync({ projectId, key, label: 'Product', kind: isVideo ? 'video' : 'image' });
+        await projectQuery.refetch();
+        await workspaceReadinessQuery.refetch();
+      } catch {
+        // Upload failed — user can retry
+      } finally {
+        setUploadBusy(false);
+      }
+    }
+  };
+
+  const canBuildPlan = !project.hasPlan && !buildPlan.isPending && !needsReadiness;
   const hasAdvanced = Boolean(project.brief || project.bible || project.currentVersionId);
 
   return (
@@ -81,7 +132,16 @@ export default function CreativeProjectPage() {
           </div>
         )}
 
-        {canBuildPlan ? (
+        {needsReadiness && workspacePlanReadiness && workspacePlanReadiness.ready === false ? (
+          <ReadinessGate
+            question={workspacePlanReadiness.question}
+            contextType={workspacePlanReadiness.contextType}
+            need={workspacePlanReadiness.need}
+            busy={uploadBusy || requestUpload.isPending || confirmUpload.isPending || workspaceReadinessQuery.isFetching}
+            onResolve={resolveWorkspaceReadiness}
+            onBack={() => router.push('/create')}
+          />
+        ) : canBuildPlan ? (
           <section className="rounded-2xl border border-dashed border-[rgba(178,90,217,0.4)] bg-[rgba(178,90,217,0.06)] p-5">
             <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Plan</p>
             <p className="mt-1 text-sm text-[var(--noc-t3)]">The plan turns your brief + bible into scenes, shots and a timeline — all decided automatically.</p>

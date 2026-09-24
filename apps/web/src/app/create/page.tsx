@@ -131,10 +131,17 @@ export default function CreatePage() {
       }
 
       if (readyForPlan) {
-        try {
-          await planMutation.mutateAsync({ projectId: project.id });
-        } catch {
-          /* the workspace can still build the plan */
+        // Gate: only advance to plan when the readiness check was satisfied at
+        // the time the creator clicked "Build this". For commercial requests,
+        // readiness.ready is true only after the gate was resolved (source
+        // supplied or fictional chosen). Unresolved readiness skips plan here;
+        // the workspace shows the gate so the creator can resolve it there.
+        if (readiness?.ready !== false) {
+          try {
+            await planMutation.mutateAsync({ projectId: project.id });
+          } catch {
+            /* the workspace can still build the plan */
+          }
         }
       }
       router.push(`/projects/${project.id}`);

@@ -75,7 +75,48 @@ export function sourceReferencesFromBrief(brief: { attachments?: unknown } | nul
   }));
 }
 
+/**
+ * Discriminated union returned by plan(). The `ok: false` path returns a
+ * structured readiness requirement instead of throwing, so the client can
+ * surface it as a gate rather than an error.
+ */
+export type PlanResult =
+  | { ok: true; plan: CreativeProductionPlanState; preview: PreviewState }
+  | { ok: false; code: 'READINESS_REQUIRED'; need: string; contextType: string; question: string };
+
 export class ProductionPlanService {
+  /**
+   * Primary readiness gate for plan(). Returns a structured requirement instead
+   * of throwing so the client receives a typed gate response, not an error.
+   * assertSourceReady() below remains the safety net for edge cases.
+   */
+  private async checkPlanReadiness(
+    prisma: PrismaClient,
+    project: { userId: string; brief: { originalIntent?: string | null; refinedIntent?: string | null; attachments?: unknown } | null },
+  ): Promise<{ ok: true } | { ok: false; code: 'READINESS_REQUIRED'; need: string; contextType: string; question: string }> {
+    const originalIntent = project.brief?.originalIntent ?? '';
+    const refinedIntent = project.brief?.refinedIntent ?? '';
+    const intentText = [originalIntent, refinedIntent].filter(Boolean).join(' ');
+    if (!intentText) return { ok: true };
+    let interpretation;
+    try {
+      interpretation = intentService.interpret(intentText);
+    } catch {
+      return { ok: true };
+    }
+    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief!.attachments as unknown[]) : [];
+    const studioProduct = await prisma.creativeProduct
+      .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
+      .catch(() => null);
+    const readiness = assessIntentReadiness(intentText, interpretation, {
+      hasStudioProduct: Boolean(studioProduct),
+      hasSourceAsset: attachments.length > 0,
+    });
+    if (readiness.ready) return { ok: true };
+    const r = readiness as { ready: false; need: string; contextType: string; question: string };
+    return { ok: false, code: 'READINESS_REQUIRED', need: r.need, contextType: r.contextType, question: r.question };
+  }
+
   /**
    * Defensive production-boundary invariant: a source-dependent request (real
    * product/brand/person, or a transform) must never reach production without a
@@ -121,13 +162,18 @@ export class ProductionPlanService {
     throw new CreativeError('MISSING_SOURCE', (withAsset as { question: string }).question);
   }
 
-  async plan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ plan: CreativeProductionPlanState; preview: PreviewState }> {
+  async plan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<PlanResult> {
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
       include: { brief: true, bible: true, productionPlan: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
-    await this.assertSourceReady(prisma, project as never);
+
+    // Primary gate: return structured readiness requirement before creating any plan.
+    const planReadiness = await this.checkPlanReadiness(prisma, project as never);
+    if (!planReadiness.ok) return planReadiness;
+
+    await this.assertSourceReady(prisma, project as never); // safety net
 
     const bible = project.bible as unknown as CreativeBibleState | null;
     const brief = {
@@ -169,7 +215,7 @@ export class ProductionPlanService {
     // state machine consistent for every caller, including tooling.)
     await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'PREVIEW' as never } });
 
-    return { plan, preview };
+    return { ok: true, plan, preview };
   }
 
   async getPlan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ plan: CreativeProductionPlanState; preview: PreviewState } | null> {
