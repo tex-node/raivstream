@@ -17,6 +17,7 @@ import { adaptPlanToManifest, type AdapterManifest } from './adapter';
 import { buildProductionContext } from './contextAdapter';
 import { deriveProductionStages, type ProductionStage, type ProductionStageEntry } from './stages';
 import { runCreativeProduction } from './runner';
+import { enrichCreativePlan } from './treatmentAdapter';
 import { intentService } from '../intent/service';
 import { assessIntentReadiness } from '../intent/readiness';
 
@@ -194,14 +195,17 @@ export class ProductionPlanService {
       setting: project.brief?.setting ?? undefined,
     };
 
-    const plan = buildCreativePlan({
+    const sourceRefs = sourceReferencesFromBrief(project.brief);
+    const sourceImageUrl = sourceRefs.find((r) => Boolean(r.url))?.url;
+    const basePlan = buildCreativePlan({
       projectType: project.projectType as CreativeProjectType,
       brief,
       bible,
       version: (project.productionPlan?.version ?? 0) + 1,
       context: buildProductionContext({ brief, bible }),
-      sourceReferences: sourceReferencesFromBrief(project.brief),
+      sourceReferences: sourceRefs,
     });
+    const plan = await enrichCreativePlan(basePlan, brief, bible, sourceImageUrl);
     const preview = buildPreview(plan, bible);
 
     if (project.productionPlan) {

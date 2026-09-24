@@ -126,7 +126,7 @@ describe('creative production runner', () => {
     expect(prisma.__assets).toHaveLength(plan.scenes.length * 2);
   });
 
-  it('propagates the plan source reference as the opening clip seed (source utilization)', async () => {
+  it('source-conditioned projects seed each video from its own generated still', async () => {
     const plan = buildCreativePlan({
       projectType: COMMERCIAL.projectType,
       sourceReferences: [{ id: 's1', kind: 'image', origin: 'upload', url: 'r2://source.png' }],
@@ -134,8 +134,10 @@ describe('creative production runner', () => {
     const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'GENERATING', projectType: 'COMMERCIAL' }, plan });
     const { deps, videoSeeds } = makeDeps();
     await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps);
-    // The adapter receives the SAME source reference readiness approved.
-    expect(videoSeeds[0]).toBe('r2://source.png');
+    // Source-conditioned: each video is seeded from the scene's own generated still
+    // (which was source-conditioned via FLUX Kontext), not the raw source photo.
+    // This gives H3 the correct composition for each scene.
+    expect(videoSeeds.every((seed) => seed === 'r2://still')).toBe(true);
   });
 });
 

@@ -33,6 +33,8 @@ export interface PlanScene {
   narration?: string;
   /** Project-wide creative direction applied by the Director (e.g. slogan, tone). */
   creativeDirection?: string;
+  /** Per-scene camera/motion instruction for the video generation step. */
+  motionDirection?: string;
   shots: PlanShot[];
   estimatedDurationSeconds: number;
 }

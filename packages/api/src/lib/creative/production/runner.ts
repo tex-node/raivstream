@@ -148,18 +148,29 @@ export async function runCreativeProduction(
       let seedImageUrl: string | undefined;
       if (spec.kind === 'VIDEO') {
         const still = byKey.get(`${spec.sceneId}:IMAGE`);
-        if (lastClipUrl) {
+        if (sourceSeedUrl) {
+          // Source-conditioned project (product photo uploaded): prefer the scene's
+          // own generated still — it already encodes the source identity via FLUX
+          // Kontext and has the correct composition for this scene. Fall back to the
+          // last-frame chain when the still failed, and ultimately to the raw source.
+          if (still?.assetUrl) {
+            seedImageUrl = still.assetUrl;
+          } else if (lastClipUrl) {
+            const chained = await deps.extractLastFrame(lastClipUrl, `creative/${project.id}/scenes/${spec.sceneId}/seeds`).catch(() => null);
+            seedImageUrl = chained ?? sourceSeedUrl;
+          } else {
+            seedImageUrl = sourceSeedUrl;
+          }
+        } else if (lastClipUrl) {
+          // Non-source-conditioned: last-frame chain preserves narrative continuity.
           const chained = await deps.extractLastFrame(lastClipUrl, `creative/${project.id}/scenes/${spec.sceneId}/seeds`).catch(() => null);
           seedImageUrl = chained ?? still?.assetUrl ?? undefined;
-        } else if (sourceSeedUrl) {
-          // Opening clip is conditioned on the creator's source (Transform/promo).
-          seedImageUrl = sourceSeedUrl;
         } else {
           seedImageUrl = still?.assetUrl ?? undefined;
         }
         // Production integrity invariant: H3_MAX is an image-to-video model and
-        // always requires a seed image. A missing seed means neither the source
-        // reference URL, chained last frame, nor the generated still was available.
+        // always requires a seed image. A missing seed means neither the scene still,
+        // chained last frame, nor the source reference was available.
         // Fail the asset deterministically — never retry, never let the provider
         // emit a cryptic error that masks the root cause.
         if (seedImageUrl === undefined) {

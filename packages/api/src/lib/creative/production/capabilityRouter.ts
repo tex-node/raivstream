@@ -63,7 +63,8 @@ export function buildPrompt(
   const style = typeof visualLanguage.style === 'string' ? visualLanguage.style : 'cinematic';
   const contextLine = contextPromptLine(context);
   const directionLine = scene.creativeDirection ? ` Creative direction: ${scene.creativeDirection}.` : '';
-  const base = `${scene.description} ${scene.title}. ${kind === 'IMAGE' ? 'Key visual' : 'Motion sequence'}, ${style}, consistent character identity and visual language, vertical framing.${directionLine}${contextLine ? ` ${contextLine}.` : ''}`;
+  const motionLine = (kind === 'VIDEO' && scene.motionDirection) ? ` Camera: ${scene.motionDirection}.` : '';
+  const base = `${scene.description} ${scene.title}. ${kind === 'IMAGE' ? 'Key visual' : 'Motion sequence'}, ${style}, consistent character identity and visual language, vertical framing.${directionLine}${motionLine}${contextLine ? ` ${contextLine}.` : ''}`;
   const applied = applyMasterVisualBible({ prompt: base, negativePrompt: undefined, bible: bibleSource, sceneCharacters: scene.characters, target: kind === 'IMAGE' ? 'IMAGE' : 'VIDEO' });
   return { prompt: applied.prompt, negativePrompt: applied.negativePrompt ?? undefined };
 }

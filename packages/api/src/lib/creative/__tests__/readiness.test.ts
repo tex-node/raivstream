@@ -699,11 +699,11 @@ describe('source continuity — URL chain from brief to runner', () => {
 
     await runCreativeProduction(mockPrisma, { projectId: 'p1' }, mockDeps);
 
-    // generateVideo is called once per scene (one scene in this plan has 3 shots but
-    // routeProduction produces one VIDEO spec per scene). The first call must receive
-    // the source URL as the seed since there is no lastClipUrl yet.
+    // generateVideo is called once per scene. For source-conditioned projects, SCENE_01's
+    // video is seeded from its own generated still (which was FLUX Kontext source-conditioned)
+    // rather than the raw source URL. The still has the correct composition for this scene.
     expect(mockDeps.generateVideo).toHaveBeenCalled();
-    expect(capturedSeeds[0]).toBe(SOURCE_URL);
+    expect(capturedSeeds[0]).toBe('https://r2.example.com/still.png');
   });
 
   // ── plan.ts: commercial context — product noun in descriptions ────────────

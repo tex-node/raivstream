@@ -10,8 +10,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildCreativePlan, type PlanScene } from '../production/plan';
-import { buildPrompt } from '../production/capabilityRouter';
+import { buildPrompt, routeProduction, type StillSpec } from '../production/capabilityRouter';
 import { sourceReferencesFromBrief } from '../production/service';
+import { enrichCreativePlan } from '../production/treatmentAdapter';
 import { runCreativeProduction, type ProductionDeps } from '../production/runner';
 import { interpret } from '../intent/interpreter';
 import { MediaProviderError } from '../../mediaProviders/types';
@@ -189,9 +190,9 @@ function prismaMock() {
   };
 }
 
-describe('chain — runner uses sourceSeedUrl from plan.sourceReferences', () => {
-  it('passes the uploaded photo URL as seedImageUrl to generateVideo for SCENE_01', async () => {
-    const { prisma, assets } = prismaMock();
+describe('chain — runner uses scene still as seed for source-conditioned projects', () => {
+  it('passes the scene still URL as seedImageUrl to generateVideo (source-conditioned)', async () => {
+    const { prisma } = prismaMock();
     const generateVideo = vi.fn(async () => ({ assetUrl: 'r2://video' }));
     const deps: ProductionDeps = {
       generateStill: vi.fn(async () => ({ assetUrl: 'r2://still' })),
@@ -199,11 +200,108 @@ describe('chain — runner uses sourceSeedUrl from plan.sourceReferences', () =>
       extractLastFrame: vi.fn(async () => null),
     };
     await runCreativeProduction(prisma, { projectId: 'p1' }, deps, { maxAttempts: 1 });
-    // First scene VIDEO: no lastClipUrl → seedImageUrl = sourceSeedUrl
+    // Source-conditioned: each video seeds from its own scene still (which was generated
+    // with FLUX Kontext using the source photo). Not the raw source URL.
     const firstVideoCall = generateVideo.mock.calls[0] as unknown[];
-    expect(firstVideoCall[3]).toBe('https://cdn.example.com/perfume.jpg');
+    expect(firstVideoCall[3]).toBe('r2://still');
   });
 });
+
+// ─── 7. Creative treatment (enrichCreativePlan) ──────────────────────────────
+
+describe('chain — creative treatment enrichment', () => {
+  it('enriched creative directions differ structurally across scenes, not just by noun', () => {
+    const brief = { originalIntent: 'Promote a perfume' };
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL', brief });
+    const directions = plan.scenes.map((s) => s.creativeDirection ?? '');
+    // All four directions are present and distinct
+    expect(directions.every(Boolean)).toBe(true);
+    const unique = new Set(directions);
+    expect(unique.size).toBe(4);
+    // Each direction reflects its beat (structural differentiation)
+    expect(directions[0]).toContain('Dramatic');
+    expect(directions[1]).toContain('Hero');
+    expect(directions[2]).toContain('Lifestyle');
+    expect(directions[3]).toContain('Brand statement');
+  });
+
+  it('motionDirection reaches the VIDEO prompt as a Camera instruction', () => {
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
+    const sceneWithMotion: PlanScene = { ...plan.scenes[0], motionDirection: 'Slow push-in toward the bottle' };
+    const { prompt } = buildPrompt(sceneWithMotion, 'VIDEO');
+    expect(prompt).toContain('Camera: Slow push-in toward the bottle.');
+  });
+
+  it('motionDirection does not appear in the IMAGE prompt', () => {
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
+    const sceneWithMotion: PlanScene = { ...plan.scenes[0], motionDirection: 'Lateral orbit 90 degrees' };
+    const { prompt } = buildPrompt(sceneWithMotion, 'IMAGE');
+    expect(prompt).not.toContain('Lateral orbit');
+    expect(prompt).not.toContain('Camera:');
+  });
+
+  it('enriched plan has four different motionDirections', async () => {
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
+    const mockEvaluator = async () => ({
+      scenes: [
+        { sceneId: 'SCENE_01', creativeDirection: 'dir1', motionDirection: 'Slow push-in' },
+        { sceneId: 'SCENE_02', creativeDirection: 'dir2', motionDirection: 'Lateral orbit 90 degrees' },
+        { sceneId: 'SCENE_03', creativeDirection: 'dir3', motionDirection: 'Begin wide then reveal product' },
+        { sceneId: 'SCENE_04', creativeDirection: 'dir4', motionDirection: 'Static hold with brightness lift' },
+      ],
+      provider: 'test',
+      model: 'test',
+    });
+    const enriched = await enrichCreativePlan(plan, null, null, undefined, mockEvaluator);
+    const motions = enriched.scenes.map((s) => s.motionDirection);
+    expect(motions.every(Boolean)).toBe(true);
+    const unique = new Set(motions);
+    expect(unique.size).toBe(4);
+  });
+
+  it('enrichment failure leaves the original plan intact', async () => {
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL', brief: { originalIntent: 'Promote a perfume' } });
+    const failingEvaluator = async (): Promise<never> => { throw new Error('Network timeout'); };
+    const result = await enrichCreativePlan(plan, { originalIntent: 'Promote a perfume' }, null, undefined, failingEvaluator);
+    expect(result.scenes).toHaveLength(plan.scenes.length);
+    expect(result.scenes[0].creativeDirection).toBe(plan.scenes[0].creativeDirection);
+    // No motionDirection when enrichment fails
+    expect(result.scenes[0].motionDirection).toBeUndefined();
+  });
+
+  it('enrichment unavailability (no OPENAI_API_KEY) leaves the original plan intact', async () => {
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
+    const { CreativeTreatmentUnavailableError } = await import('../production/treatmentProvider');
+    const unavailableEvaluator = async (): Promise<never> => { throw new CreativeTreatmentUnavailableError(); };
+    const result = await enrichCreativePlan(plan, null, null, undefined, unavailableEvaluator);
+    expect(result.scenes).toHaveLength(plan.scenes.length);
+    expect(result.scenes[0].creativeDirection).toBe(plan.scenes[0].creativeDirection);
+  });
+
+  it('director-applied creativeDirection reaches the generation prompt', () => {
+    // Director instructions run after plan creation and write directly to
+    // scene.creativeDirection; this test verifies they reach buildPrompt.
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
+    const directorScene: PlanScene = { ...plan.scenes[0], creativeDirection: 'slogan is aura for aura' };
+    const { prompt } = buildPrompt(directorScene, 'IMAGE');
+    expect(prompt.toLowerCase()).toContain('slogan is aura for aura');
+    // Enrichment-derived direction would be overwritten by the Director; the
+    // Director change is the one that reaches generation.
+    const videoPrompt = buildPrompt(directorScene, 'VIDEO').prompt;
+    expect(videoPrompt.toLowerCase()).toContain('slogan is aura for aura');
+  });
+
+  it('sourceImageUrl is included in every still spec for source-conditioned plans', () => {
+    const refs = [{ id: 'src-0', kind: 'image' as const, origin: 'upload' as const, url: 'https://cdn.example.com/perfume.jpg' }];
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL', sourceReferences: refs });
+    const specs = routeProduction(plan);
+    const stills = specs.filter((s) => s.kind === 'IMAGE') as StillSpec[];
+    expect(stills).toHaveLength(plan.scenes.length);
+    expect(stills.every((s) => s.sourceImageUrl === 'https://cdn.example.com/perfume.jpg')).toBe(true);
+  });
+});
+
+// ─── 8. PROVIDER_DISABLED errors are not retried ──────────────────────────────
 
 describe('chain — PROVIDER_DISABLED errors are not retried', () => {
   it('does not retry non-retryable MediaProviderError and records one attempt', async () => {
@@ -219,12 +317,11 @@ describe('chain — PROVIDER_DISABLED errors are not retried', () => {
     const result = await runCreativeProduction(prisma, { projectId: 'p1' }, deps, { maxAttempts: 3 });
     // One IMAGE call per scene — PROVIDER_DISABLED is non-retryable (maxAttempts ignored).
     expect(still).toHaveBeenCalledTimes(COMMERCIAL_PLAN.scenes.length);
-    // SCENE_01 VIDEO succeeds via sourceSeedUrl. SCENE_02-N VIDEOs fail: lastClipUrl
-    // is present (from SCENE_01) but extractLastFrame returns null and IMAGE had no
-    // byKey entry → seedImageUrl = undefined → MISSING_SOURCE.
-    // failed = N images + (N-1) videos; generated = 1 video.
-    expect(result.failed).toBe(COMMERCIAL_PLAN.scenes.length + (COMMERCIAL_PLAN.scenes.length - 1));
-    expect(result.generated).toBe(1);
+    // Source-conditioned project: when stills all fail, videos fall back to the raw
+    // sourceSeedUrl (still → undefined; lastClip → extractLastFrame → null → sourceSeedUrl).
+    // All videos succeed. Only images fail.
+    expect(result.failed).toBe(COMMERCIAL_PLAN.scenes.length);
+    expect(result.generated).toBe(COMMERCIAL_PLAN.scenes.length);
     expect(result.status).toBe('PARTIAL');
   });
 });
