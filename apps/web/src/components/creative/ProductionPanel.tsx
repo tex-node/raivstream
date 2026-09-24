@@ -85,7 +85,7 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
 
   // Assembly state: poll the creativeOutput list while in REVIEW so we can
   // reflect ASSEMBLING → FINAL_READY without a page refresh.
-  type OutputState = { id: string; status: string; assetUrl: string | null; format: string; createdAt: string };
+  type OutputState = { id: string; status: string; assetUrl: string | null; format: string; createdAt: Date | string };
   const outputsQuery = trpc.creative.output.list.useQuery(
     { projectId },
     {
