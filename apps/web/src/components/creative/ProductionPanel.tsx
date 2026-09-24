@@ -83,6 +83,24 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
 
   const data = statusQuery.data as ProductionStatus | undefined;
 
+  // Assembly state: poll the creativeOutput list while in REVIEW so we can
+  // reflect ASSEMBLING → FINAL_READY without a page refresh.
+  type OutputState = { id: string; status: string; assetUrl: string | null; format: string; createdAt: string };
+  const outputsQuery = trpc.creative.output.list.useQuery(
+    { projectId },
+    {
+      enabled: Boolean(isLoaded && isSignedIn && isReview),
+      refetchInterval: (query) => {
+        const outputs = (query.state.data ?? []) as OutputState[];
+        const hasReady = outputs.some((o) => o.status === 'READY');
+        return isReview && !hasReady ? 4000 : false;
+      },
+      retry: false,
+    },
+  );
+  const outputs = (outputsQuery.data ?? []) as OutputState[];
+  const latestOutput = outputs[0] ?? null;
+
   if (readyToProduce) {
     return (
       <section className="rounded-2xl border border-dashed border-[rgba(79,139,214,0.4)] bg-[rgba(79,139,214,0.06)] p-5">
@@ -105,8 +123,19 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
 
   const scenes = data?.scenes ?? [];
   const failedScenes = scenes.filter((scene) => scene.status === 'FAILED');
-  const complete = isReview && failedScenes.length === 0;
   const stages = data?.stages ?? [];
+
+  // Fix D state machine — never claim "Your film is ready" until assembly has completed.
+  // NEEDS_ATTENTION: one or more scene VIDEOs failed (assembly is blocked).
+  // ASSEMBLING: all scenes succeeded; assembly is in progress (no READY output yet).
+  // ASSEMBLY_FAILED: assembly ran but FFmpeg or upload failed.
+  // FINAL_READY: assembled film is available.
+  const hasFailedVideos = scenes.some((scene) => scene.assets.some((a) => a.kind === 'VIDEO' && a.status === 'FAILED'));
+  const assemblyFinalReady = latestOutput?.status === 'READY';
+  const assemblyFailed = !assemblyFinalReady && latestOutput?.status === 'FAILED';
+  const assembling = isReview && !hasFailedVideos && !assemblyFinalReady && !assemblyFailed;
+
+  const complete = assemblyFinalReady;
 
   return (
     <section className="space-y-4">
@@ -142,16 +171,50 @@ export function ProductionPanel({ projectId, status }: { projectId: string; stat
           </>
         ) : (
           <>
-            <p className="mt-1 text-lg font-black">{complete ? 'Your film is ready' : 'Production finished with a few things to fix'}</p>
-            {failedScenes.length > 0 && (
-              <button
-                type="button"
-                disabled={produce.isPending}
-                onClick={() => produce.mutate({ projectId })}
-                className="mt-3 rounded-xl bg-[var(--noc-purple)] px-4 py-2 text-sm font-black text-[#0B0D12] disabled:opacity-50"
-              >
-                {produce.isPending ? 'Retrying…' : `Retry ${failedScenes.length} scene${failedScenes.length === 1 ? '' : 's'}`}
-              </button>
+            {complete ? (
+              <>
+                <p className="mt-1 text-lg font-black">Your film is ready</p>
+                {latestOutput?.assetUrl && (
+                  <video
+                    controls
+                    src={latestOutput.assetUrl}
+                    className="mt-4 w-full rounded-xl border border-[rgba(233,233,237,0.08)]"
+                    style={{ aspectRatio: '9/16', maxHeight: '480px', objectFit: 'cover' }}
+                  />
+                )}
+              </>
+            ) : assembling ? (
+              <>
+                <p className="mt-1 text-lg font-black">Assembling your film…</p>
+                <p className="mt-1 text-xs text-[var(--noc-t4)]">Combining all scenes into the final cut</p>
+                <div className="mt-3">
+                  <DimensionBar label="Final assembly" ready={0} expected={1} waiting />
+                </div>
+              </>
+            ) : assemblyFailed ? (
+              <>
+                <p className="mt-1 text-lg font-black">Assembly failed</p>
+                <p className="mt-1 text-xs text-[#e35d5d]">{latestOutput?.assetUrl ?? 'The scenes are ready but the final cut could not be assembled. Please retry.'}</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-lg font-black">Production finished with a few things to fix</p>
+                <p className="mt-1 text-xs text-[var(--noc-t4)]">
+                  {hasFailedVideos
+                    ? `Assembly is waiting on ${failedScenes.length} scene${failedScenes.length === 1 ? '' : 's'} that need attention`
+                    : 'Some scenes could not be generated'}
+                </p>
+                {failedScenes.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={produce.isPending}
+                    onClick={() => produce.mutate({ projectId })}
+                    className="mt-3 rounded-xl bg-[var(--noc-purple)] px-4 py-2 text-sm font-black text-[#0B0D12] disabled:opacity-50"
+                  >
+                    {produce.isPending ? 'Retrying…' : `Retry ${failedScenes.length} scene${failedScenes.length === 1 ? '' : 's'}`}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}

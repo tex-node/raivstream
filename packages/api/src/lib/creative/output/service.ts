@@ -112,6 +112,85 @@ export class OutputService {
     return this.serialize(prisma, row.id);
   }
 
+  /**
+   * Auto-assemble the final film after production completes.
+   *
+   * Called by the runner when all scene VIDEOs are READY. Finds or creates a
+   * CreativeVersion with the plan snapshot, upserts a CREATIVE APPROVED approval,
+   * then derives + renders a PORTRAIT output from the scene videos in plan order.
+   *
+   * Returns early (blocked=true) if any required VIDEO is not READY — the runner
+   * must not call this when failed > 0, but we validate defensively.
+   *
+   * No-op if RAIVSTREAM_5_OUTPUT_ENABLED is not set.
+   */
+  async autoAssemble(
+    prisma: PrismaClient,
+    input: { projectId: string; plan: CreativeProductionPlanState },
+  ): Promise<{ assembled: boolean; blocked: boolean; blockedScenes: string[]; outputId?: string }> {
+    if (!isCreativeOutputEnabled()) return { assembled: false, blocked: false, blockedScenes: [] };
+
+    // All scene VIDEO assets must be READY — block assembly if any are missing or failed.
+    const sceneIds = input.plan.scenes.map((s) => s.sceneId);
+    const videoAssets = await prisma.creativeProducedAsset.findMany({
+      where: { projectId: input.projectId, kind: 'VIDEO' },
+    });
+    const bySceneId = new Map(videoAssets.map((a) => [a.sceneId, a]));
+    const blockedScenes = sceneIds.filter((id) => {
+      const asset = bySceneId.get(id);
+      return !asset || asset.status !== 'READY';
+    });
+    if (blockedScenes.length > 0) {
+      return { assembled: false, blocked: true, blockedScenes };
+    }
+
+    // Find or create a CreativeVersion carrying the production plan snapshot.
+    let version = await prisma.creativeVersion.findFirst({
+      where: { projectId: input.projectId },
+      orderBy: { versionNumber: 'desc' },
+    });
+    if (!version) {
+      version = await prisma.creativeVersion.create({
+        data: {
+          projectId: input.projectId,
+          versionNumber: 1,
+          snapshot: { plan: input.plan } as never,
+        },
+      });
+    }
+
+    // Upsert a CREATIVE APPROVED approval so derive() + render() can proceed.
+    const alreadyApproved = await approvalService.isApproved(prisma, {
+      projectId: input.projectId,
+      versionId: version.id,
+      kind: 'CREATIVE',
+    });
+    if (!alreadyApproved) {
+      await prisma.creativeApproval.upsert({
+        where: { versionId_kind: { versionId: version.id, kind: 'CREATIVE' as never } },
+        update: { status: 'APPROVED' as never },
+        create: {
+          projectId: input.projectId,
+          versionId: version.id,
+          kind: 'CREATIVE' as never,
+          status: 'APPROVED' as never,
+          decidedById: null,
+          note: 'Auto-assembled after all scene videos completed.',
+        },
+      });
+    }
+
+    // Derive a PORTRAIT output (creates the creativeOutput row as PENDING).
+    const { output } = await this.derive(prisma, {
+      projectId: input.projectId,
+      versionId: version.id,
+      format: 'PORTRAIT',
+    });
+    // Render: downloads scene videos in plan order, FFmpeg-concats, uploads to R2.
+    await this.render(prisma, { projectId: input.projectId, outputId: output.id });
+    return { assembled: true, blocked: false, blockedScenes: [], outputId: output.id };
+  }
+
   async list(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<OutputState[]> {
     const project = await prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: input.userId } });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');

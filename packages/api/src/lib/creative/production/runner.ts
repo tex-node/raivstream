@@ -27,6 +27,7 @@ import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } 
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
 import { logProductionEvent } from '../observability/metrics';
+import { outputService } from '../output/service';
 
 export interface ProductionDeps {
   generateStill: (spec: StillSpec, projectId: string, assetId: string) => Promise<GeneratedMedia>;
@@ -234,6 +235,14 @@ export async function runCreativeProduction(
     logProductionEvent({ type: 'run_finished', projectId: project.id, runId, status, generated, failed });
     // Production completed (fully or partially) — hand off to REVIEW.
     await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'REVIEW' as never } }).catch(() => undefined);
+
+    // Auto-assembly: when every scene video succeeded, immediately assemble the
+    // final film. Scene videos are concatenated in plan order via FFmpeg and stored
+    // as a creativeOutput (PORTRAIT). Errors are swallowed — they do not affect
+    // the production result; the UI derives assembly state from creativeOutput status.
+    if (failed === 0) {
+      await outputService.autoAssemble(prisma, { projectId: project.id, plan }).catch(() => undefined);
+    }
   }
 
   return { generated, failed, runId, status: failed === 0 ? 'COMPLETED' : generated > 0 ? 'PARTIAL' : 'FAILED' };
