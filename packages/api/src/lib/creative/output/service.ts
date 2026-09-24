@@ -115,18 +115,26 @@ export class OutputService {
   /**
    * Auto-assemble the final film after production completes.
    *
-   * Called by the runner when all scene VIDEOs are READY. Finds or creates a
-   * CreativeVersion with the plan snapshot, upserts a CREATIVE APPROVED approval,
-   * then derives + renders a PORTRAIT output from the scene videos in plan order.
+   * Authorization: production completion (all scene VIDEOs READY) — NOT a
+   * creator CREATIVE approval. This path deliberately bypasses derive() and
+   * render(), which both require a CREATIVE approval. Auto-assembly does not
+   * create a CREATIVE approval because that record semantically means "creator
+   * explicitly approved this creative version," which did not happen here.
    *
-   * Returns early (blocked=true) if any required VIDEO is not READY — the runner
-   * must not call this when failed > 0, but we validate defensively.
+   * A CreativeVersion is still created (or reused) to satisfy the non-nullable
+   * versionId FK on creativeOutput, and to carry the plan snapshot as provenance.
+   * No creativeApproval row is written. The output row is created directly in
+   * GENERATING state and transitions to READY/FAILED inline.
+   *
+   * Returns blocked=true if any required scene VIDEO is not READY — assembly
+   * cannot produce a complete film from partial inputs.
    *
    * No-op if RAIVSTREAM_5_OUTPUT_ENABLED is not set.
    */
   async autoAssemble(
     prisma: PrismaClient,
     input: { projectId: string; plan: CreativeProductionPlanState },
+    deps: OutputRenderDeps = {},
   ): Promise<{ assembled: boolean; blocked: boolean; blockedScenes: string[]; outputId?: string }> {
     if (!isCreativeOutputEnabled()) return { assembled: false, blocked: false, blockedScenes: [] };
 
@@ -144,7 +152,10 @@ export class OutputService {
       return { assembled: false, blocked: true, blockedScenes };
     }
 
-    // Find or create a CreativeVersion carrying the production plan snapshot.
+    // Find or create a CreativeVersion to satisfy the non-nullable versionId FK.
+    // The version carries the plan snapshot as assembly provenance.
+    // No CREATIVE approval is created — assembly authorization is production
+    // completion, not a creator version approval.
     let version = await prisma.creativeVersion.findFirst({
       where: { projectId: input.projectId },
       orderBy: { versionNumber: 'desc' },
@@ -159,36 +170,52 @@ export class OutputService {
       });
     }
 
-    // Upsert a CREATIVE APPROVED approval so derive() + render() can proceed.
-    const alreadyApproved = await approvalService.isApproved(prisma, {
-      projectId: input.projectId,
-      versionId: version.id,
-      kind: 'CREATIVE',
+    // Create the output row directly in GENERATING state — bypasses derive()'s
+    // CREATIVE approval check.
+    const row = await prisma.creativeOutput.create({
+      data: {
+        projectId: input.projectId,
+        versionId: version.id,
+        format: 'PORTRAIT' as never,
+        status: 'GENERATING' as never,
+      },
     });
-    if (!alreadyApproved) {
-      await prisma.creativeApproval.upsert({
-        where: { versionId_kind: { versionId: version.id, kind: 'CREATIVE' as never } },
-        update: { status: 'APPROVED' as never },
-        create: {
-          projectId: input.projectId,
-          versionId: version.id,
-          kind: 'CREATIVE' as never,
-          status: 'APPROVED' as never,
-          decidedById: null,
-          note: 'Auto-assembled after all scene videos completed.',
-        },
+
+    try {
+      // Build scene manifest in plan order — plan.scenes is the canonical ordering.
+      const produced = await prisma.creativeProducedAsset.findMany({
+        where: { projectId: input.projectId, status: 'READY' },
+        orderBy: { createdAt: 'asc' },
+      });
+      const byScene = new Map<string, { videoUrl?: string | null; stillUrl?: string | null }>();
+      for (const asset of produced) {
+        const entry = byScene.get(asset.sceneId) ?? {};
+        if (asset.kind === 'VIDEO' && asset.assetUrl) entry.videoUrl = asset.assetUrl;
+        if (asset.kind === 'IMAGE' && asset.assetUrl) entry.stillUrl = asset.assetUrl;
+        byScene.set(asset.sceneId, entry);
+      }
+      const scenes: RenderScene[] = input.plan.scenes
+        .map((scene) => ({ sceneId: scene.sceneId, ...(byScene.get(scene.sceneId) ?? {}) }))
+        .filter((scene) => scene.videoUrl || scene.stillUrl);
+
+      const derivation = deriveOutput('PORTRAIT', null, input.plan.totalRuntimeSeconds ?? 30);
+      const rendered = await renderOutputDerivative(
+        { scenes, derivation, r2Prefix: `creative/${input.projectId}/outputs/${row.id}` },
+        deps,
+      );
+      await prisma.creativeOutput.update({
+        where: { id: row.id },
+        data: { status: 'READY' as never, assetUrl: rendered.assetUrl, thumbnailUrl: null, errorMessage: null },
+      });
+    } catch (error) {
+      await prisma.creativeOutput.update({
+        where: { id: row.id },
+        data: { status: 'FAILED' as never, errorMessage: (error as Error).message.slice(0, 500) },
       });
     }
 
-    // Derive a PORTRAIT output (creates the creativeOutput row as PENDING).
-    const { output } = await this.derive(prisma, {
-      projectId: input.projectId,
-      versionId: version.id,
-      format: 'PORTRAIT',
-    });
-    // Render: downloads scene videos in plan order, FFmpeg-concats, uploads to R2.
-    await this.render(prisma, { projectId: input.projectId, outputId: output.id });
-    return { assembled: true, blocked: false, blockedScenes: [], outputId: output.id };
+    const outputId = row.id;
+    return { assembled: true, blocked: false, blockedScenes: [], outputId };
   }
 
   async list(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<OutputState[]> {

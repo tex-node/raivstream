@@ -226,11 +226,8 @@ describe('auto-assembly after production', () => {
     const prisma = assemblyMock();
     const service = new OutputService();
     const deps = renderDeps();
-    // Inject render deps by monkey-patching render (it accepts deps as second arg).
-    const origRender = service.render.bind(service);
-    service.render = (p: any, input: any) => origRender(p, input, deps as never);
 
-    const result = await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN });
+    const result = await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     expect(result.assembled).toBe(true);
     expect(result.blocked).toBe(false);
@@ -240,36 +237,39 @@ describe('auto-assembly after production', () => {
     expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a version and CREATIVE approval when none exist', async () => {
+  it('creates a version but no creativeApproval when none exist', async () => {
     const prisma = assemblyMock();
     const service = new OutputService();
     const deps = renderDeps();
-    const origRenderCreate = service.render.bind(service);
-    service.render = (p: any, input: any) => origRenderCreate(p, input, deps as never);
 
-    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN });
+    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     expect(prisma.__versions.length).toBe(1);
-    expect(prisma.__approvals[0].kind).toBe('CREATIVE');
-    expect(prisma.__approvals[0].status).toBe('APPROVED');
+    expect(prisma.__approvals.length).toBe(0);
+  });
+
+  it('does not create any creativeApproval records (regression: approval model boundary)', async () => {
+    const prisma = assemblyMock();
+    const service = new OutputService();
+    const deps = renderDeps();
+
+    const result = await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
+
+    expect(result.assembled).toBe(true);
+    // Auto-assembly authorization is production completion, not creator approval.
+    // No creativeApproval row must ever be created by this path.
+    expect(prisma.__approvals.length).toBe(0);
   });
 
   it('reuses an existing approved version and does not create a second one', async () => {
     const prisma = assemblyMock();
-    // Pre-populate a version + CREATIVE approval.
-    const existingVersion = await prisma.creativeVersion.create({ data: { projectId: 'p1', versionNumber: 1, snapshot: { plan: FOUR_SCENE_PLAN } } });
-    await prisma.creativeApproval.upsert({
-      where: { versionId_kind: { versionId: existingVersion.id, kind: 'CREATIVE' } },
-      update: { status: 'APPROVED' },
-      create: { projectId: 'p1', versionId: existingVersion.id, kind: 'CREATIVE', status: 'APPROVED', decidedById: null, note: null },
-    });
+    // Pre-populate a version (no CREATIVE approval needed — autoAssemble doesn't check for one).
+    await prisma.creativeVersion.create({ data: { projectId: 'p1', versionNumber: 1, snapshot: { plan: FOUR_SCENE_PLAN } } });
 
     const service = new OutputService();
     const deps = renderDeps();
-    const origRender2 = service.render.bind(service);
-    service.render = (p: any, input: any) => origRender2(p, input, deps as never);
 
-    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN });
+    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     // Should still be exactly 1 version.
     expect(prisma.__versions.length).toBe(1);
@@ -335,10 +335,7 @@ describe('auto-assembly after production', () => {
       await writeFile(args[args.length - 1], Buffer.from('fake-mp4'));
     });
 
-    const origRenderOrder = service.render.bind(service);
-    service.render = (p: any, input: any) => origRenderOrder(p, input, deps as never);
-
-    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN });
+    await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     // The assembled film must include all 4 scenes via FFmpeg (ordered, not reversed).
     expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
