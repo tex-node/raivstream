@@ -25,8 +25,15 @@ export const creativeProductionRouter = router({
       try {
         // ProductionPlanService.plan persists the plan AND moves the project to
         // PREVIEW (the state transition is owned by the service).
-        return await timedCreative('plan.build', () => productionPlanService.plan(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id }));
+        const result = await timedCreative('plan.build', () => productionPlanService.plan(ctx.prisma, { projectId: input.projectId, userId: ctx.user.id }));
+        // { ok: false } must surface as a real error so the client cannot
+        // silently ignore a readiness gate failure (e.g. in a try/catch {}).
+        if (!result.ok) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: result.question });
+        }
+        return result;
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw toTrpcError(error, 'Plan building failed.');
       }
     }),

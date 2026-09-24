@@ -87,6 +87,10 @@ export default function CreativeProjectPage() {
   const plan = planQuery.data as any;
 
   const workspacePlanReadiness = workspaceReadinessQuery.data?.readiness;
+  // Wait for readiness to settle before allowing plan build. While the query is
+  // loading (workspacePlanReadiness === undefined), canBuildPlan must be false —
+  // undefined !== false would silently grant permission before the gate returns.
+  const workspaceReadinessSettled = !workspaceReadinessQuery.isLoading && !workspaceReadinessQuery.isFetching;
   const needsReadiness = !project.hasPlan && workspacePlanReadiness?.ready === false;
 
   const resolveWorkspaceReadiness = async (resolution: ReadinessResolution) => {
@@ -116,7 +120,7 @@ export default function CreativeProjectPage() {
     }
   };
 
-  const canBuildPlan = !project.hasPlan && !buildPlan.isPending && !needsReadiness;
+  const canBuildPlan = !project.hasPlan && !buildPlan.isPending && workspaceReadinessSettled && !needsReadiness;
   const hasAdvanced = Boolean(project.brief || project.bible || project.currentVersionId);
 
   return (

@@ -104,13 +104,16 @@ export class ProductionPlanService {
     } catch {
       return { ok: true };
     }
-    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief!.attachments as unknown[]) : [];
+    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief!.attachments as Array<{ url?: unknown }>) : [];
     const studioProduct = await prisma.creativeProduct
       .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
       .catch(() => null);
+    // Only attachments with a real uploaded URL count as a source asset.
+    // String chip labels ({ label, addedAt }) have no url and must not satisfy
+    // the source gate — doing so would let the plan be built without a real file.
     const readiness = assessIntentReadiness(intentText, interpretation, {
       hasStudioProduct: Boolean(studioProduct),
-      hasSourceAsset: attachments.length > 0,
+      hasSourceAsset: attachments.some((a) => Boolean(a.url)),
     });
     if (readiness.ready) return { ok: true };
     const r = readiness as { ready: false; need: string; contextType: string; question: string };
@@ -140,17 +143,19 @@ export class ProductionPlanService {
     } catch {
       return; // cannot interpret → do not block
     }
-    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief?.attachments as unknown[]) : [];
+    const attachments = Array.isArray(project.brief?.attachments) ? (project.brief?.attachments as Array<{ url?: unknown }>) : [];
     const studioProduct = await prisma.creativeProduct
       .findFirst({ where: { studio: { userId: project.userId } }, select: { id: true } })
       .catch(() => null);
     const signals = { hasStudioProduct: Boolean(studioProduct) };
     const withoutAsset = assessIntentReadiness(intentText, interpretation, { ...signals, hasSourceAsset: false });
-    const withAsset = assessIntentReadiness(intentText, interpretation, { ...signals, hasSourceAsset: attachments.length > 0 });
+    // Only count attachments that have a real uploaded URL — same rule as checkPlanReadiness.
+    const withAsset = assessIntentReadiness(intentText, interpretation, { ...signals, hasSourceAsset: attachments.some((a) => Boolean(a.url)) });
 
     if (withAsset.ready) {
       // If the source is what satisfied readiness, it must be utilizable.
-      if (!withoutAsset.ready && attachments.length > 0) {
+      const hasRealAttachment = attachments.some((a) => Boolean(a.url));
+      if (!withoutAsset.ready && hasRealAttachment) {
         const usable = sourceReferencesFromBrief(project.brief).some((ref) => Boolean(ref.url));
         if (!usable) {
           throw new CreativeError('UNSUPPORTED_SOURCE_OPERATION', 'I have your image, but I can’t use this type of source yet. Your image is safe in the project.');

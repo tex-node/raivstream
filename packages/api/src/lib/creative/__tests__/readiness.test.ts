@@ -338,10 +338,14 @@ describe('production invariant — source is required before rendering', () => {
       expect(result.plan.sourceReferences?.[0]?.url).toBe('r2://source.png');
     }));
 
-  it('blocks with UNSUPPORTED_SOURCE_OPERATION when the source exists but is not utilizable (before the renderer)', () =>
+  it('label-only chip (no URL) on a transform → READINESS_REQUIRED, plan never created', () =>
     withFlags(async () => {
+      // A chip label with no url is not a real source: checkPlanReadiness correctly
+      // returns READINESS_REQUIRED instead of letting the label-only value satisfy the gate.
       const prisma = prismaFor({ originalIntent: 'Transform this into a cinematic advertisement.', attachments: [{ label: 'Source' }] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('story: proceeds without source (never commercial)', () =>
@@ -367,10 +371,14 @@ describe('production invariant — source is required before rendering', () => {
       expect(result.ok).toBe(true);
     }));
 
-  it('"Create a promotional video for my skincare product." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION (never reaches renderer)', () =>
+  it('"Create a promotional video for my skincare product." with label-only attachment (no URL) → READINESS_REQUIRED, plan never created', () =>
     withFlags(async () => {
+      // A UI chip label has no url — it does not count as a source asset.
+      // checkPlanReadiness must return READINESS_REQUIRED, not pass through to assertSourceReady.
       const prisma = prismaFor({ originalIntent: 'Create a promotional video for my skincare product.', attachments: [{ label: 'Product' }] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('"Create a promotional video for my skincare product." with real URL → proceeds', () =>
@@ -392,10 +400,13 @@ describe('production invariant — source is required before rendering', () => {
       expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
-  it('"Create a promotional video for my perfume." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION', () =>
+  it('"Create a promotional video for my perfume." with label-only attachment (no URL) → READINESS_REQUIRED, plan never created', () =>
     withFlags(async () => {
+      // A UI chip label has no url — checkPlanReadiness must not treat it as a source.
       const prisma = prismaFor({ originalIntent: 'Create a promotional video for my perfume.', attachments: [{ label: 'Product' }] });
-      await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 
   it('"Create a promotional video for my perfume." with real URL → proceeds', () =>
@@ -494,6 +505,29 @@ describe('orchestration — plan() enforces readiness before creating a plan', (
       expect((result as any).code).toBe('READINESS_REQUIRED');
       expect((result as any).contextType).toBe('PRODUCT');
       expect((result as any).need).toBe('ASSET');
+    }));
+
+  // Section 6 regression: "Promote a perfume" — the exact runtime bypass reported
+  it('"Promote a perfume" with no source → READINESS_REQUIRED, plan never created', () =>
+    withFlags(async () => {
+      const prisma = makeProject('Promote a perfume', []);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
+      expect((result as any).contextType).toBe('PRODUCT');
+      expect((result as any).need).toBe('ASSET');
+    }));
+
+  // String chip bypass: a label-only chip (no url) must not satisfy the source gate
+  it('"Promote a perfume" with label-only chip (no URL) → READINESS_REQUIRED, plan never created', () =>
+    withFlags(async () => {
+      // Regression: attachments.length > 0 was incorrectly treated as hasSourceAsset.
+      // A chip label like { label: "Product", addedAt: "..." } has no url — the gate
+      // must fire (READINESS_REQUIRED) rather than treating the chip as a source.
+      const prisma = makeProject('Promote a perfume', [{ label: 'Product', addedAt: new Date().toISOString() }]);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
     }));
 });
 

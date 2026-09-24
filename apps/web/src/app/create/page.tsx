@@ -131,12 +131,11 @@ export default function CreatePage() {
       }
 
       if (readyForPlan) {
-        // Gate: only advance to plan when the readiness check was satisfied at
-        // the time the creator clicked "Build this". For commercial requests,
-        // readiness.ready is true only after the gate was resolved (source
-        // supplied or fictional chosen). Unresolved readiness skips plan here;
-        // the workspace shows the gate so the creator can resolve it there.
-        if (readiness?.ready !== false) {
+        // Gate: only advance to plan when readiness is explicitly confirmed
+        // (ready === true). undefined means the query has not yet returned —
+        // treating it as "not false" silently bypasses the gate for commercial
+        // requests that are still loading. The safe condition is ready === true.
+        if (readiness?.ready === true) {
           try {
             await planMutation.mutateAsync({ projectId: project.id });
           } catch {
