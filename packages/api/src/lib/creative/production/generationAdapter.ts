@@ -60,16 +60,26 @@ async function persist(url: string, key: string, contentType: string): Promise<s
   return mirrorUrlToR2(url, key, contentType);
 }
 
-/** Generate a still (FLUX2 → fal). Provider chosen internally, never exposed. */
+/**
+ * Generate a still.
+ *
+ * When spec.sourceImageUrl is present: uses FLUX Kontext (image-conditioned) so
+ * the subject identity from the uploaded product photo is preserved in the output.
+ * When absent: falls back to FLUX2 (text-to-image).
+ *
+ * Provider is chosen internally and never exposed to callers.
+ */
 export async function generateStill(spec: StillSpec, projectId: string, assetId: string): Promise<GeneratedMedia> {
   await assertPromptAllowed(spec.prompt, spec.negativePrompt);
+  const model: SupportedModel = spec.sourceImageUrl ? 'FLUX_KONTEXT' : 'FLUX2';
   const submitted = await submitGenerationJob({
-    model: 'FLUX2' as SupportedModel,
+    model,
     prompt: spec.prompt,
     negativePrompt: spec.negativePrompt,
     aspectRatio: spec.aspectRatio as '9:16' | '16:9' | '1:1' | '4:3' | '3:4',
+    ...(spec.sourceImageUrl ? { seedImageUrl: spec.sourceImageUrl } : {}),
   });
-  const outputUrl = await waitForOutput('FLUX2' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
+  const outputUrl = await waitForOutput(model, submitted.providerJobId, submitted.outputUrl);
   const r2Key = `creative/${projectId}/scenes/${spec.sceneId}/still-${assetId}.png`;
   const assetUrl = await persist(outputUrl, r2Key, 'image/png');
   return { assetUrl, thumbnailUrl: assetUrl };

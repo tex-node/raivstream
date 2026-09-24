@@ -99,8 +99,27 @@ export const VEED_FABRIC_CONTRACT: ModelContract = {
     'Talking-person lip-sync. Output: { video:{url,content_type,...} }. Billed per second (480p $0.08/s, 720p $0.15/s). UGC gating/consent handled above the adapter.',
 };
 
+// ─── Reconciled: fal-ai/flux-pro/v1/kontext (image-conditioned generation) ────
+
+export const FLUX_KONTEXT_CONTRACT: ModelContract = {
+  endpoint: 'fal-ai/flux-pro/v1/kontext',
+  kind: 'image',
+  displayName: 'FLUX Pro Kontext',
+  fields: [
+    { name: 'prompt', required: true, description: 'Text prompt describing the desired output.' },
+    { name: 'image_url', required: true, description: 'Source/reference image; subject identity is preserved.' },
+    { name: 'aspect_ratio', required: false, description: 'Output aspect ratio (e.g. "9:16", "16:9", "1:1").' },
+    { name: 'seed', required: false, description: 'Integer seed; random when omitted.' },
+    { name: 'guidance_scale', required: false, description: 'Guidance scale.' },
+    { name: 'num_images', required: false, description: 'Number of images (default 1).' },
+  ],
+  notes:
+    'Image-conditioned generation. Takes a source image + prompt; outputs images[] matching FLUX Pro output shape. Subject identity (product, person) is preserved from the source image while the scene/background follow the prompt.',
+};
+
 export const FAL_CONTRACTS = {
   image: FLUX_2_CONTRACT,
+  imageCond: FLUX_KONTEXT_CONTRACT,
   video: H3_MAX_I2V_CONTRACT,
   ugc: VEED_FABRIC_CONTRACT,
 } as const;
@@ -135,6 +154,18 @@ function asMedia(candidate: unknown): ParsedMedia | undefined {
 }
 
 // ─── Normalized → fal input ───────────────────────────────────────────────────
+
+export function toFluxKontextInput(input: ImageGenerationInput): Record<string, unknown> {
+  const imageUrl = input.imageUrls?.[0];
+  if (!imageUrl) {
+    throw new MediaProviderError('INVALID_REQUEST', 'FLUX Kontext requires a source image URL (imageUrls[0])');
+  }
+  const payload: Record<string, unknown> = { prompt: input.prompt, image_url: imageUrl };
+  // Kontext Pro API accepts ratio strings directly ('9:16', '16:9', etc.)
+  if (input.aspectRatio) payload.aspect_ratio = input.aspectRatio;
+  if (typeof input.seed === 'number') payload.seed = input.seed;
+  return payload;
+}
 
 export function toFlux2Input(input: ImageGenerationInput): Record<string, unknown> {
   if (input.imageUrls && input.imageUrls.length > 0) {

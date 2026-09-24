@@ -39,6 +39,7 @@ import {
   parseH3MaxOutput,
   parseVeedFabricOutput,
   toFlux2Input,
+  toFluxKontextInput,
   toH3MaxInput,
   toVeedFabricInput,
 } from './contracts';
@@ -134,7 +135,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
   const transport = deps.transport ?? createDefaultFalQueueTransport();
   let requestCount = 0;
 
-  function assertLive(kind: 'image' | 'video' | 'ugc'): void {
+  function assertLive(kind: 'image' | 'imageCond' | 'video' | 'ugc'): void {
     if (!isFalCapabilityLive(config, kind)) {
       throw new MediaProviderError('PROVIDER_DISABLED', `fal ${kind} disabled: ${falDisabledReason(config, kind)}`);
     }
@@ -162,23 +163,37 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
     try {
       return await transport.submit(endpoint, input, { webhookUrl: options.webhookUrl });
     } catch (err) {
-      // FAL returns HTTP 403 with "User is locked" when the account balance is exhausted.
-      // The SDK surfaces this as Error("Forbidden") with .status = 403. Translate to a
-      // non-retryable PROVIDER_DISABLED so the runner does not waste retry attempts.
+      // FAL returns HTTP 403 in two distinct cases:
+      //   a) "User is locked. Reason: Exhausted balance." → permanent until funded → non-retryable
+      //   b) Transient propagation lag after a top-up, or rate-gate → retryable
+      // The @fal-ai/client SDK throws ApiError with .status=403 and .body containing the
+      // parsed JSON (e.g. { detail: "User is locked. Reason: Exhausted balance…" }).
+      // Only the "locked" variant should be classified as PROVIDER_DISABLED; other
+      // 403s should remain as plain errors so the runner can retry them.
       if (err instanceof Error && (err as { status?: unknown }).status === 403) {
-        throw new MediaProviderError(
-          'PROVIDER_DISABLED',
-          `fal ${kind} disabled: account locked or balance exhausted (HTTP 403)`,
-          { retryable: false, providerStatus: 403 },
-        );
+        const detail = String((err as { body?: { detail?: unknown } }).body?.detail ?? '');
+        const isBalanceLocked = detail.includes('locked') || detail.includes('Exhausted');
+        if (isBalanceLocked) {
+          throw new MediaProviderError(
+            'PROVIDER_DISABLED',
+            `fal ${kind} disabled: account locked or balance exhausted (HTTP 403)`,
+            { retryable: false, providerStatus: 403 },
+          );
+        }
       }
       throw err;
     }
   }
 
-  function parseByKind(kind: MediaKind, raw: unknown): MediaJobStatusResult {
+  function parseByKind(kind: MediaKind, raw: unknown, model?: string): MediaJobStatusResult {
+    // imageCond (Kontext) and image (FLUX2) share the same output shape — both return images[].
+    const isKontext = model === 'fal-ai/flux-pro/v1/kontext';
     const parsed =
-      kind === 'image' ? parseFlux2Output(raw) : kind === 'video' ? parseH3MaxOutput(raw) : parseVeedFabricOutput(raw);
+      kind === 'image' || isKontext
+        ? parseFlux2Output(raw)
+        : kind === 'video'
+          ? parseH3MaxOutput(raw)
+          : parseVeedFabricOutput(raw);
     return { status: 'completed', outputUrls: parsed.urls, artifacts: parsed.media, usage: parsed.usage, raw };
   }
 
@@ -193,7 +208,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
       };
     }
     const raw = await transport.result(endpoint, ref.requestId);
-    return parseByKind(ref.kind, raw);
+    return parseByKind(ref.kind, raw, endpoint);
   }
 
   const image: ImageGenerationProvider = {
@@ -236,6 +251,26 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
     },
   };
 
+  const imageCond: ImageGenerationProvider = {
+    name: 'fal',
+    kind: 'image',
+    async submitImage(input: ImageGenerationInput, options: SubmitMediaOptions): Promise<MediaJobRef> {
+      assertLive('imageCond');
+      const endpoint = config.endpoints.imageCond;
+      assertEndpoint(endpoint);
+      const requestId = await guardedSubmit('image', endpoint, toFluxKontextInput(input), options);
+      requestCount += 1;
+      return refOf('image', endpoint, requestId, options);
+    },
+    async getStatus(ref: MediaJobRef): Promise<MediaJobStatusResult> {
+      if (ref.kind !== 'image') throw new MediaProviderError('INVALID_REQUEST', 'ref is not an image job');
+      return statusFor(ref, ref.model ?? config.endpoints.imageCond);
+    },
+    async cancel(ref: MediaJobRef): Promise<void> {
+      await transport.cancel(ref.model ?? config.endpoints.imageCond, ref.requestId);
+    },
+  };
+
   const ugc: UGCVideoProvider = {
     name: 'fal',
     kind: 'ugc_video',
@@ -258,9 +293,10 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
 
   const capabilities: MediaProviderCapabilities[] = [
     { kind: 'image', enabled: isFalCapabilityLive(config, 'image'), reason: falDisabledReason(config, 'image') },
+    { kind: 'image', enabled: isFalCapabilityLive(config, 'imageCond'), reason: falDisabledReason(config, 'imageCond') },
     { kind: 'video', enabled: isFalCapabilityLive(config, 'video'), reason: falDisabledReason(config, 'video') },
     { kind: 'ugc_video', enabled: isFalCapabilityLive(config, 'ugc'), reason: falDisabledReason(config, 'ugc') },
   ];
 
-  return { name: 'fal', capabilities, image, video, ugc };
+  return { name: 'fal', capabilities, image, imageCond, video, ugc };
 }

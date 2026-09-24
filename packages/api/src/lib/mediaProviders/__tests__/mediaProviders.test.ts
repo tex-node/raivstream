@@ -73,7 +73,8 @@ describe('media provider config (default-off)', () => {
 
   it('restricts endpoints to the explicit allowlist', () => {
     expect(isFalEndpointAllowed(FAL_ENDPOINTS.image)).toBe(true);
-    expect(FAL_ALLOWED_ENDPOINTS).toEqual([FAL_ENDPOINTS.image, FAL_ENDPOINTS.video, FAL_ENDPOINTS.ugc]);
+    expect(isFalEndpointAllowed(FAL_ENDPOINTS.imageCond)).toBe(true);
+    expect(FAL_ALLOWED_ENDPOINTS).toEqual([FAL_ENDPOINTS.image, FAL_ENDPOINTS.imageCond, FAL_ENDPOINTS.video, FAL_ENDPOINTS.ugc]);
     expect(isFalEndpointAllowed('evil/model')).toBe(false);
   });
 });
@@ -316,10 +317,13 @@ describe('fal transport 403 → PROVIDER_DISABLED', () => {
     });
   }
 
-  it('translates HTTP 403 from transport.submit to non-retryable PROVIDER_DISABLED (image)', async () => {
+  function lockedErr(detail = 'User is locked. Reason: Exhausted balance. Top up at fal.ai/dashboard/billing.') {
+    return Object.assign(new Error('Forbidden'), { status: 403, body: { detail } });
+  }
+
+  it('translates Exhausted-balance 403 to non-retryable PROVIDER_DISABLED (image)', async () => {
     const transport = fakeTransport();
-    const err403 = Object.assign(new Error('Forbidden'), { status: 403 });
-    transport.submit.mockRejectedValue(err403);
+    transport.submit.mockRejectedValue(lockedErr());
     const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
     const thrown = await provider.image!.submitImage({ prompt: 'x' }, { idempotencyKey: 'k-403-img' }).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(MediaProviderError);
@@ -329,10 +333,9 @@ describe('fal transport 403 → PROVIDER_DISABLED', () => {
     expect(mpe.providerStatus).toBe(403);
   });
 
-  it('translates HTTP 403 from transport.submit to non-retryable PROVIDER_DISABLED (video)', async () => {
+  it('translates Exhausted-balance 403 to non-retryable PROVIDER_DISABLED (video)', async () => {
     const transport = fakeTransport();
-    const err403 = Object.assign(new Error('Forbidden'), { status: 403 });
-    transport.submit.mockRejectedValue(err403);
+    transport.submit.mockRejectedValue(lockedErr());
     const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
     const thrown = await provider.video!.submitVideo(
       { prompt: 'x', imageUrl: 'https://cdn.example.com/img.jpg', durationSeconds: 5, resolution: '720p' },
@@ -343,6 +346,18 @@ describe('fal transport 403 → PROVIDER_DISABLED', () => {
     expect(mpe.code).toBe('PROVIDER_DISABLED');
     expect(mpe.retryable).toBe(false);
     expect(mpe.providerStatus).toBe(403);
+  });
+
+  it('lets a transient 403 (no locked body) pass through as a plain error so the runner can retry', async () => {
+    const transport = fakeTransport();
+    // 403 with no body detail — transient propagation lag, not a locked account
+    const transient403 = Object.assign(new Error('Forbidden'), { status: 403, body: {} });
+    transport.submit.mockRejectedValue(transient403);
+    const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
+    const thrown = await provider.image!.submitImage({ prompt: 'x' }, { idempotencyKey: 'k-403-transient' }).catch((e: unknown) => e);
+    // Should NOT be classified as MediaProviderError — let the runner retry it
+    expect(thrown).not.toBeInstanceOf(MediaProviderError);
+    expect((thrown as Error).message).toBe('Forbidden');
   });
 
   it('does not swallow non-403 transport errors', async () => {

@@ -26,6 +26,7 @@ import { submitHunyuanVideo, getHunyuanVideoStatus } from './hunyuanVideo';
 import { submitCogVideoX, getCogVideoXStatus } from './cogVideoX';
 import { submitSeedance, getSeedanceStatus } from './seedance';
 import { submitFalFlux2, getFalFlux2Status, cancelFalFlux2 } from './falFlux2';
+import { submitFalKontext, getFalKontextStatus, cancelFalKontext } from './falKontext';
 import { submitFalH3Max, getFalH3MaxStatus, cancelFalH3Max } from './falH3Max';
 import { submitFalVeed, getFalVeedStatus, cancelFalVeed } from './falVeed';
 import type { GenerationJobError, GenerationJobState } from './jobModel';
@@ -48,6 +49,7 @@ export type SupportedModel =
   | 'COG_VIDEO_X'
   | 'SEEDANCE'
   | 'FLUX2'
+  | 'FLUX_KONTEXT'
   | 'H3_MAX'
   | 'VEED_FABRIC';
 
@@ -162,6 +164,16 @@ async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<Genera
       return { providerJobId: jobId };
     }
 
+    case 'FLUX_KONTEXT': {
+      const jobId = await submitFalKontext({
+        prompt:          input.prompt,
+        sourceImageUrl:  input.seedImageUrl!,
+        aspectRatio:     input.aspectRatio,
+        seed:            undefined,
+      });
+      return { providerJobId: jobId };
+    }
+
     case 'H3_MAX': {
       const jobId = await submitFalH3Max({
         prompt:        input.prompt,
@@ -259,6 +271,11 @@ export async function pollJobStatus(
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
 
+    case 'FLUX_KONTEXT': {
+      const s = await getFalKontextStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
     case 'H3_MAX': {
       const s = await getFalH3MaxStatus(providerJobId);
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
@@ -282,6 +299,8 @@ export async function cancelProviderJob(model: SupportedModel, providerJobId: st
   switch (model) {
     case 'FLUX2':
       return cancelFalFlux2(providerJobId);
+    case 'FLUX_KONTEXT':
+      return cancelFalKontext(providerJobId);
     case 'H3_MAX':
       return cancelFalH3Max(providerJobId);
     case 'VEED_FABRIC':
@@ -467,6 +486,19 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'fal.ai · FLUX.2',
     providerUrl:          'https://fal.ai/models/fal-ai/flux-2',
     mediaType:            'image',
+  },
+  FLUX_KONTEXT: {
+    label:                'FLUX Kontext',
+    description:          'FLUX Pro Kontext — image-conditioned generation. Your product photo drives subject identity; the prompt drives the scene.',
+    badge:                'live',
+    icon:                 '🖼️',
+    minDuration:          0,
+    maxDuration:          0,
+    supportsImageToVideo: false,
+    provider:             'fal.ai · FLUX Pro Kontext',
+    providerUrl:          'https://fal.ai/models/fal-ai/flux-pro/v1/kontext',
+    mediaType:            'image',
+    hidden:               true,
   },
   H3_MAX: {
     label:                'MiniMax H3-Max Turbo',

@@ -20,6 +20,12 @@ export interface StillSpec {
   prompt: string;
   negativePrompt?: string;
   aspectRatio: string;
+  /**
+   * Source/reference image URL from plan.sourceReferences[0].
+   * When present, image generation uses FLUX Kontext (image-conditioned) instead
+   * of FLUX2 (text-to-image only), preserving the subject identity from the photo.
+   */
+  sourceImageUrl?: string;
 }
 
 export interface VideoSpec {
@@ -79,6 +85,7 @@ export function routeProduction(
 ): GenerationSpec[] {
   const specs: GenerationSpec[] = [];
   const effectiveContext = context ?? plan.contextSnapshot ?? null;
+  const sourceImageUrl = plan.sourceReferences?.find((ref) => Boolean(ref.url))?.url;
   for (const scene of plan.scenes) {
     const still = buildPrompt(scene, 'IMAGE', bible, effectiveContext);
     specs.push({
@@ -87,6 +94,7 @@ export function routeProduction(
       prompt: still.prompt,
       negativePrompt: still.negativePrompt,
       aspectRatio: '9:16',
+      ...(sourceImageUrl ? { sourceImageUrl } : {}),
     });
     const video = buildPrompt(scene, 'VIDEO', bible, effectiveContext);
     specs.push({
