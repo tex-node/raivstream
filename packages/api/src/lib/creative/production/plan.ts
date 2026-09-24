@@ -31,6 +31,8 @@ export interface PlanScene {
   timeOfDay?: string;
   characters: string[];
   narration?: string;
+  /** Project-wide creative direction applied by the Director (e.g. slogan, tone). */
+  creativeDirection?: string;
   shots: PlanShot[];
   estimatedDurationSeconds: number;
 }

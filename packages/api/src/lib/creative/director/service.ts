@@ -92,6 +92,14 @@ async function applyChangeToCreativeState(
           };
         }
       }
+    } else if (change.field === 'creativeDirection') {
+      // Project-wide creative direction (slogan, tone, etc.) written onto every
+      // affected scene so buildPrompt() can include it in generation context.
+      for (const index of affectedSceneIndices) {
+        if (plan.scenes[index]) {
+          plan.scenes[index] = { ...plan.scenes[index], creativeDirection: String(change.to) };
+        }
+      }
     } else if (change.field.startsWith('state.') || change.field === 'wardrobe') {
       // Character-state changes live on the bible characters.
       const bibleCharacters: Array<Record<string, unknown>> = ((input.bible?.characters ?? []) as Array<Record<string, unknown>>).map((c) => ({ ...c }));

@@ -22,6 +22,7 @@ import type { PrismaClient } from '@raivstream/database';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
+import { MediaProviderError } from '../../mediaProviders/types';
 import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } from './capabilityRouter';
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
@@ -197,14 +198,17 @@ export async function runCreativeProduction(
           }
         } catch (error) {
           lastError = error as Error;
-          // A content rejection is deterministic — never retry it. It fails only
-          // this asset (smallest scope) and the credits are refunded.
+          // CONTENT_REJECTED and non-retryable MediaProviderError (e.g. PROVIDER_DISABLED)
+          // are deterministic — never retry. Both fail only this asset (smallest scope).
           const rejected = error instanceof CreativeError && error.code === 'CONTENT_REJECTED';
+          const providerFinal = error instanceof MediaProviderError && !error.retryable;
           if (creditsUsed > 0 && featureKey) {
             await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed').catch(() => undefined);
           }
-          logProductionEvent({ type: 'asset_failed', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt, final: rejected || attempt >= maxAttempts, message: lastError.message.slice(0, 200) });
-          if (rejected) break;
+          const isFinal = rejected || providerFinal || attempt >= maxAttempts;
+          const logCategory = providerFinal ? `PROVIDER_DISABLED: ${(error as MediaProviderError).code}` : undefined;
+          logProductionEvent({ type: 'asset_failed', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt, final: isFinal, message: logCategory ?? lastError.message.slice(0, 200) });
+          if (rejected || providerFinal) break;
         }
       }
 
