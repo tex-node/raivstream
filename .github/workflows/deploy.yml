@@ -105,6 +105,7 @@ jobs:
           rm -rf apps/web/.next-old
 
           echo "==> Restarting PM2..."
+          set -a; source apps/web/.env.local 2>/dev/null || true; set +a
           pm2 restart raivstream-web --update-env
 
           echo "==> Checking production health..."
