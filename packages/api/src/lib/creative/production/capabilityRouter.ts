@@ -95,7 +95,8 @@ export function routeProduction(
       prompt: video.prompt,
       durationSeconds: clampH3Duration(scene.estimatedDurationSeconds),
       aspectRatio: '9:16',
-      resolution: '1080P',
+      // 480p (not HD) — lower cost/latency for draft production.
+      resolution: '480P',
     });
   }
   return specs;

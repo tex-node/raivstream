@@ -148,6 +148,8 @@ describe('creative capability router + approval gate', () => {
     for (const scene of plan.scenes) {
       const video = specs.find((s) => s.kind === 'VIDEO' && s.sceneId === scene.sceneId) as VideoSpec | undefined;
       expect(video && clampH3Duration(video.durationSeconds)).toBeLessThanOrEqual(15);
+      // Videos are generated at 480p (not HD).
+      expect(video?.resolution).toBe('480P');
     }
   });
 
