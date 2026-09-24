@@ -106,22 +106,36 @@ export function assessIntentReadiness(
     return notReady('LOGO', 'ASSET', 'Can you upload your logo so I use the real one?');
   }
 
-  // A first-person, commercially-purposed request refers to a real user-owned
-  // entity. Ask for the brand NAME first when it is consequential and missing;
-  // otherwise ask for the source. Studio context satisfies both.
+  // Any commercial request that involves a promotable subject must establish
+  // whether the product/brand is real (needs source) or fictional (may invent).
+  // The original "owned &&" condition was wrong: "Promote a skin care product"
+  // is just as source-dependent as "Promote MY skin care product" — the absence
+  // of "my/our" does not grant permission to silently invent the product.
   const owned = OWNERSHIP.test(text);
   const isCommercial = interpretation.projectType === 'COMMERCIAL' || COMMERCIAL_PURPOSE.test(text);
-  if (owned && isCommercial && !hasStudioProduct) {
+  // Exclude transform intents — they are handled by the transform block below
+  // and should never be captured by the commercial gate (transform contextType = SOURCE).
+  if (isCommercial && !isTransform && !hasStudioProduct) {
     const brandLike = BRAND_LIKE.test(text);
     const hasBrand = Boolean(signals.hasBrandIdentity || signals.brandName || extractBrandName(text));
-    if (brandLike && !hasBrand && !hasAsset) {
+    // NAME gate only fires for explicitly owned brand references (user said "my brand"
+    // and no brand name is known yet). Non-owned brand references skip to the ASSET
+    // gate so the user can choose fictional without having to supply a name first.
+    if (owned && brandLike && !hasBrand && !hasAsset) {
       return notReady('BRAND', 'NAME', "What's the brand name?");
     }
-    if (!hasAsset) {
+    // ASSET gate: any commercial intent with a promotable subject requires the creator
+    // to decide real vs fictional. hasSubject is true when there is explicit ownership,
+    // a brand-like noun, a named product category, or a promotion-purpose verb — all of
+    // which indicate "something specific is being promoted" rather than pure concept work.
+    const hasSubject = owned || brandLike || COMMERCIAL_SUBJECT.test(text) || COMMERCIAL_PURPOSE.test(text);
+    if (hasSubject && !hasAsset) {
       const contextType: ReadinessContextType = brandLike ? 'BRAND' : 'PRODUCT';
-      const question = contextType === 'BRAND'
-        ? 'Add the brand or product image so I can create the promotion.'
-        : 'Can you upload a photo of the product so I use the real one?';
+      const question = owned
+        ? (contextType === 'BRAND'
+          ? 'Add the brand or product image so I can create the promotion.'
+          : 'Can you upload a photo of the product so I use the real one?')
+        : 'Is this a real product you want to promote, or should I create a fictional one?';
       return notReady(contextType, 'ASSET', question);
     }
   }
@@ -140,8 +154,11 @@ export function assessIntentReadiness(
   }
 
   // A bare "Promote something" with no subject: ask what it is, exactly once.
+  // Only fires when no source is supplied (source implies the product is identified)
+  // and the commercial block above did not already gate it.
   if (
     !isTransform &&
+    !hasAsset &&
     interpretation.projectType === 'COMMERCIAL' &&
     !COMMERCIAL_SUBJECT.test(text) &&
     text.trim().split(/\s+/).filter(Boolean).length <= 6

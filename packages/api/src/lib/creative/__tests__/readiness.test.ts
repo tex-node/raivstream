@@ -21,8 +21,14 @@ describe('intent readiness — creative freedom vs essential source', () => {
     expect(assess('Create a 3-minute lesson explaining photosynthesis to eight-year-olds.').ready).toBe(true);
   });
 
-  it('commercial concept (no ownership): ready', () => {
-    expect(assess('Create a 60-second cinematic commercial for a new premium skincare brand.').ready).toBe(true);
+  it('commercial without fictional auth (no ownership): not ready — real vs fictional must be established', () => {
+    // The absence of "my/our" does not grant permission to invent the product.
+    // Any commercial + product/brand subject requires the creator to decide real vs fictional.
+    expect(assess('Create a 60-second cinematic commercial for a new premium skincare brand.').ready).toBe(false);
+  });
+
+  it('commercial with explicit fictional authorization: ready', () => {
+    expect(assess('Create a 60-second fictional commercial for a new premium skincare brand.').ready).toBe(true);
   });
 
   it('real product without asset: not ready, asks for PRODUCT (never invents it)', () => {
@@ -338,12 +344,27 @@ describe('production invariant — source is required before rendering', () => {
       await expect(new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE_OPERATION' });
     }));
 
-  it('does not block creative concepts (no ownership) or story/education', () =>
+  it('story: proceeds without source (never commercial)', () =>
     withFlags(async () => {
-      const concept = prismaFor({ originalIntent: 'Create a cinematic commercial for a new premium skincare brand.', attachments: [] });
-      await expect(new ProductionPlanService().plan(concept, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
       const story = prismaFor({ originalIntent: 'Create a cinematic short film about a woman returning home.', attachments: [] });
-      await expect(new ProductionPlanService().plan(story, { projectId: 'p1', userId: 'u1' })).resolves.toBeTruthy();
+      const result = await new ProductionPlanService().plan(story, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
+    }));
+
+  it('concept commercial without fictional auth: READINESS_REQUIRED — "my/our" not required to trigger gate', () =>
+    withFlags(async () => {
+      // Even without ownership marker, a commercial + brand subject requires real vs fictional decision.
+      const concept = prismaFor({ originalIntent: 'Create a cinematic commercial for a new premium skincare brand.', attachments: [] });
+      const result = await new ProductionPlanService().plan(concept, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
+    }));
+
+  it('explicitly fictional concept commercial: proceeds without source', () =>
+    withFlags(async () => {
+      const fictional = prismaFor({ originalIntent: 'Create a fictional cinematic commercial for a new premium skincare brand.', attachments: [] });
+      const result = await new ProductionPlanService().plan(fictional, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(true);
     }));
 
   it('"Create a promotional video for my skincare product." with label-only attachment (no URL) → UNSUPPORTED_SOURCE_OPERATION (never reaches renderer)', () =>
@@ -463,4 +484,80 @@ describe('orchestration — plan() enforces readiness before creating a plan', (
       if (!result.ok) return;
       expect(result.plan.scenes.length).toBeGreaterThan(0);
     }));
+
+  // Section 15 regression: "Promote a skin care product" with no attachments → READINESS_REQUIRED
+  it('"Promote a skin care product" with no attachments → READINESS_REQUIRED (the reported bypass is closed)', () =>
+    withFlags(async () => {
+      const prisma = makeProject('Promote a skin care product', []);
+      const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe('READINESS_REQUIRED');
+      expect((result as any).contextType).toBe('PRODUCT');
+      expect((result as any).need).toBe('ASSET');
+    }));
+});
+
+// ─── Section 13: test matrix (real vs fictional, owned vs non-owned) ─────────
+describe('readiness — section 13 test matrix', () => {
+  it('"Promote a skin care product." → NOT READY (non-owned, no fictional auth)', () => {
+    expect(assess('Promote a skin care product.').ready).toBe(false);
+  });
+
+  it('"Promote my skin care product." → NOT READY (owned, no source)', () => {
+    expect(assess('Promote my skin care product.').ready).toBe(false);
+  });
+
+  it('"Create a promotional video for GlowHaus." → NOT READY (named brand, no source)', () => {
+    // Named brand → commercial intent → real vs fictional gate fires
+    expect(assess('Create a promotional video for GlowHaus.').ready).toBe(false);
+  });
+
+  it('"Promote my skin care product." with source → READY', () => {
+    expect(assess('Promote my skin care product.', { hasSourceAsset: true }).ready).toBe(true);
+  });
+
+  it('"Create a fictional skincare product commercial." → READY (explicit fictional auth)', () => {
+    expect(assess('Create a fictional skincare product commercial.').ready).toBe(true);
+  });
+
+  it('"Create a fictional skincare brand called GlowHaus." → READY (explicit fictional auth)', () => {
+    expect(assess('Create a fictional skincare brand called GlowHaus.').ready).toBe(true);
+  });
+
+  it('story/education: never blocked by commercial gate', () => {
+    expect(assess('Create a cinematic short film about a woman returning home.').ready).toBe(true);
+    expect(assess('Create a 3-minute lesson explaining photosynthesis.').ready).toBe(true);
+  });
+});
+
+// ─── Section 14: natural language variations (all must require readiness) ────
+describe('readiness — section 14 natural language variations', () => {
+  const SOURCE_DEPENDENT: string[] = [
+    'Promote a skin care product.',
+    'Create an advertisement for a skincare product.',
+    'Make a commercial for a perfume.',
+    'Create a promotional video for a beauty product.',
+    'Make a marketing video for a cosmetic product.',
+    'Promote a new fragrance.',
+    'Create a product commercial.',
+  ];
+
+  for (const text of SOURCE_DEPENDENT) {
+    it(`"${text}" → NOT READY without source`, () => {
+      expect(assess(text).ready).toBe(false);
+    });
+  }
+
+  it('all section-14 variants become READY after fictional authorization', () => {
+    for (const text of SOURCE_DEPENDENT) {
+      const withFictional = `${text} Use a fictional concept — invent it rather than using a real one.`;
+      expect(assess(withFictional).ready).toBe(true);
+    }
+  });
+
+  it('all section-14 variants become READY after source supplied', () => {
+    for (const text of SOURCE_DEPENDENT) {
+      expect(assess(text, { hasSourceAsset: true }).ready).toBe(true);
+    }
+  });
 });
