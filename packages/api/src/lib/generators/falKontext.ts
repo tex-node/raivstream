@@ -1,5 +1,5 @@
 /**
- * FLUX Pro Kontext — via fal.ai (`fal-ai/flux-pro/v1/kontext`).
+ * FLUX Pro Kontext — via fal.ai (`fal-ai/flux-pro/kontext`).
  *
  * Image-conditioned generation: takes a source/reference image + prompt and
  * produces output images that preserve the subject identity from the source
@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { createFalMediaProvider, persistFalOutput, type MediaJobRef } from '../mediaProviders';
 import { resultInvalid, storageFailed, type GenerationJobError, type GenerationJobState } from './jobModel';
 
-const ENDPOINT = 'fal-ai/flux-pro/v1/kontext';
+const ENDPOINT = 'fal-ai/flux-pro/kontext';
 const PROVIDER_PREFIX = 'fal-kontext:';
 
 export interface FalKontextInput {

@@ -99,10 +99,10 @@ export const VEED_FABRIC_CONTRACT: ModelContract = {
     'Talking-person lip-sync. Output: { video:{url,content_type,...} }. Billed per second (480p $0.08/s, 720p $0.15/s). UGC gating/consent handled above the adapter.',
 };
 
-// ─── Reconciled: fal-ai/flux-pro/v1/kontext (image-conditioned generation) ────
+// ─── Reconciled: fal-ai/flux-pro/kontext (image-conditioned generation) ────
 
 export const FLUX_KONTEXT_CONTRACT: ModelContract = {
-  endpoint: 'fal-ai/flux-pro/v1/kontext',
+  endpoint: 'fal-ai/flux-pro/kontext',
   kind: 'image',
   displayName: 'FLUX Pro Kontext',
   fields: [

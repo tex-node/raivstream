@@ -10,7 +10,7 @@
 
 export const FAL_ENDPOINTS = {
   image: 'fal-ai/flux-2',
-  imageCond: 'fal-ai/flux-pro/v1/kontext',
+  imageCond: 'fal-ai/flux-pro/kontext',
   video: 'minimax/h3-max-turbo/image-to-video',
   ugc: 'veed/fabric-1.0',
 } as const;
@@ -28,7 +28,7 @@ export interface FalMediaConfig {
   /** Must also be true before any real HTTP request leaves the process. Default false. */
   realProviderCallsEnabled: boolean;
   imageEnabled: boolean;
-  /** Image-conditioned generation via FLUX Kontext (fal-ai/flux-pro/v1/kontext). Default false. */
+  /** Image-conditioned generation via FLUX Kontext (fal-ai/flux-pro/kontext). Default false. */
   imageCondEnabled: boolean;
   videoEnabled: boolean;
   ugcEnabled: boolean;

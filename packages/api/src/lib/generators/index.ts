@@ -496,7 +496,7 @@ export const MODEL_META: Record<SupportedModel, {
     maxDuration:          0,
     supportsImageToVideo: false,
     provider:             'fal.ai · FLUX Pro Kontext',
-    providerUrl:          'https://fal.ai/models/fal-ai/flux-pro/v1/kontext',
+    providerUrl:          'https://fal.ai/models/fal-ai/flux-pro/kontext',
     mediaType:            'image',
     hidden:               true,
   },

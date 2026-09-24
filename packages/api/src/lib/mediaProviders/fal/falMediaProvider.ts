@@ -187,7 +187,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
 
   function parseByKind(kind: MediaKind, raw: unknown, model?: string): MediaJobStatusResult {
     // imageCond (Kontext) and image (FLUX2) share the same output shape — both return images[].
-    const isKontext = model === 'fal-ai/flux-pro/v1/kontext';
+    const isKontext = model === 'fal-ai/flux-pro/kontext';
     const parsed =
       kind === 'image' || isKontext
         ? parseFlux2Output(raw)
@@ -207,7 +207,19 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
         ...(remote.error ? { error: { code: 'PROVIDER_ERROR', message: remote.error, retryable: false } } : {}),
       };
     }
-    const raw = await transport.result(endpoint, ref.requestId);
+    let raw: unknown;
+    try {
+      raw = await transport.result(endpoint, ref.requestId);
+    } catch (err) {
+      // Worker-level errors (e.g. "Path not found" for a wrong model identifier) arrive here
+      // after a successful queue submission. Surface as non-retryable so the runner does not
+      // waste a second attempt on a permanent configuration error.
+      throw new MediaProviderError(
+        'PROVIDER_ERROR',
+        err instanceof Error ? err.message : 'Result fetch failed',
+        { retryable: false },
+      );
+    }
     return parseByKind(ref.kind, raw, endpoint);
   }
 
