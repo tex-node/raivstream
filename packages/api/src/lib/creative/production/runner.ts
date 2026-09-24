@@ -155,6 +155,19 @@ export async function runCreativeProduction(
         } else {
           seedImageUrl = still?.assetUrl ?? undefined;
         }
+        // Production integrity invariant: H3_MAX is an image-to-video model and
+        // always requires a seed image. A missing seed means neither the source
+        // reference URL, chained last frame, nor the generated still was available.
+        // Fail the asset deterministically — never retry, never let the provider
+        // emit a cryptic error that masks the root cause.
+        if (seedImageUrl === undefined) {
+          const msg = 'MiniMax H3-Max is an image-to-video model and requires a seed image. No seed was resolved for this scene.';
+          await prisma.creativeProducedAsset.update({ where: { id: asset.id }, data: { status: 'FAILED' as never, errorMessage: msg } });
+          failed += 1;
+          logProductionEvent({ type: 'asset_failed', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt: 1, final: true, message: 'MISSING_SOURCE: no seed resolved' });
+          await heartbeat(prisma, runId, { readyScenes: byKey.size, failedScenes: failed }, now);
+          continue;
+        }
       }
 
       const featureKey = spec.kind === 'IMAGE' ? MODEL_FEATURE_KEY.FLUX2 : MODEL_FEATURE_KEY.H3_MAX;

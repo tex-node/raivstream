@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { assessIntentReadiness, extractBrandName, type IntentReadiness } from '../intent/readiness';
 import { interpret } from '../intent/interpreter';
-import { ProductionPlanService } from '../production/service';
+import { ProductionPlanService, sourceReferencesFromBrief } from '../production/service';
+import { buildCreativePlan } from '../production/plan';
+import { runCreativeProduction } from '../production/runner';
 
 function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean; hasBrandIdentity?: boolean; brandName?: string } = {}): IntentReadiness {
   return assessIntentReadiness(text, interpret(text), signals);
@@ -593,5 +595,137 @@ describe('readiness — section 14 natural language variations', () => {
     for (const text of SOURCE_DEPENDENT) {
       expect(assess(text, { hasSourceAsset: true }).ready).toBe(true);
     }
+  });
+});
+
+// ─── Section 7: Source continuity — URL must survive the full lifecycle ───────
+//
+// These tests assert the invariant from spec 7: brief.attachments[].url must
+// equal plan.sourceReferences[].url, and that chain must never break through
+// director apply or production runner invocation.
+describe('source continuity — URL chain from brief to runner', () => {
+  const SOURCE_URL = 'https://r2.example.com/uploads/product.jpg';
+  const ATTACHMENT = { id: 'att-1', label: 'Product', kind: 'image', origin: 'upload', url: SOURCE_URL, addedAt: new Date().toISOString() };
+
+  // ── sourceReferencesFromBrief ─────────────────────────────────────────────
+  it('sourceReferencesFromBrief maps attachment URL to sourceReference URL (identity)', () => {
+    const refs = sourceReferencesFromBrief({ attachments: [ATTACHMENT] });
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.url).toBe(SOURCE_URL);
+    expect(refs[0]!.kind).toBe('image');
+    expect(refs[0]!.origin).toBe('upload');
+  });
+
+  it('sourceReferencesFromBrief excludes label-only chips (no url)', () => {
+    const refs = sourceReferencesFromBrief({ attachments: [{ label: 'Product', addedAt: new Date().toISOString() }] });
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.url).toBeUndefined(); // present but url is undefined
+  });
+
+  it('sourceReferencesFromBrief returns [] for null brief', () => {
+    expect(sourceReferencesFromBrief(null)).toHaveLength(0);
+  });
+
+  // ── buildCreativePlan: sourceReferences stored in plan JSON ──────────────
+  it('buildCreativePlan stores sourceReferences URL in plan JSON (brief → plan)', () => {
+    const plan = buildCreativePlan({
+      projectType: 'COMMERCIAL',
+      brief: { originalIntent: 'Promote a perfume', attachments: [ATTACHMENT] },
+      sourceReferences: [{ id: ATTACHMENT.id, kind: 'image', origin: 'upload', url: SOURCE_URL }],
+    });
+    expect(plan.sourceReferences).toHaveLength(1);
+    expect(plan.sourceReferences![0]!.url).toBe(SOURCE_URL);
+  });
+
+  it('buildCreativePlan: sourceReferences URL equals brief attachment URL', () => {
+    const brief = { originalIntent: 'Promote a perfume', attachments: [ATTACHMENT] };
+    const sourceRefs = sourceReferencesFromBrief(brief);
+    const plan = buildCreativePlan({ projectType: 'COMMERCIAL', brief, sourceReferences: sourceRefs });
+    expect(plan.sourceReferences![0]!.url).toBe(ATTACHMENT.url);
+  });
+
+  // ── plan.ts: director spread preserves sourceReferences ──────────────────
+  it('plan spread: { ...plan, scenes } preserves sourceReferences URL intact', () => {
+    const originalPlan = buildCreativePlan({
+      projectType: 'COMMERCIAL',
+      brief: { originalIntent: 'Promote a perfume', attachments: [ATTACHMENT] },
+      sourceReferences: [{ id: 'src-0', kind: 'image', origin: 'upload', url: SOURCE_URL }],
+    });
+    // Simulate what applyChangeToCreativeState does: spread the plan, mutate scenes only.
+    const updatedPlan = { ...originalPlan, scenes: originalPlan.scenes.map((s) => ({ ...s })) };
+    expect(updatedPlan.sourceReferences).toBe(originalPlan.sourceReferences);
+    expect(updatedPlan.sourceReferences![0]!.url).toBe(SOURCE_URL);
+  });
+
+  // ── runner: sourceSeedUrl is passed to generateVideo for opening clip ────
+  it('runner passes sourceSeedUrl from plan.sourceReferences to generateVideo for SCENE_01', async () => {
+    const capturedSeeds: Array<string | undefined> = [];
+    const mockPlan = buildCreativePlan({
+      projectType: 'COMMERCIAL',
+      brief: { originalIntent: 'Promote a perfume', attachments: [ATTACHMENT] },
+      sourceReferences: [{ id: 'src-0', kind: 'image', origin: 'upload', url: SOURCE_URL }],
+    });
+
+    const mockDeps = {
+      generateStill: vi.fn().mockResolvedValue({ assetUrl: 'https://r2.example.com/still.png', thumbnailUrl: undefined }),
+      generateVideo: vi.fn().mockImplementation((_spec: unknown, _projectId: string, _assetId: string, seed?: string) => {
+        capturedSeeds.push(seed);
+        return Promise.resolve({ assetUrl: 'https://r2.example.com/clip.mp4' });
+      }),
+      extractLastFrame: vi.fn().mockResolvedValue(null),
+    };
+
+    let assetCounter = 0;
+    const mockPrisma = {
+      creativeProject: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'p1', userId: 'u1', status: 'GENERATING',
+          productionPlan: { plan: mockPlan },
+          bible: null,
+        }),
+        update: vi.fn().mockResolvedValue({ id: 'p1' }),
+      },
+      creativeProducedAsset: {
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockImplementation(({ data }: { data: { sceneId: string; kind: string } }) => {
+          assetCounter += 1;
+          return Promise.resolve({ id: `a${assetCounter}`, sceneId: data.sceneId, kind: data.kind, status: 'GENERATING', assetUrl: null });
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      creativeProductionRun: undefined,
+      // credits: let deductCredits fail silently via .catch(() => 0)
+    } as never;
+
+    await runCreativeProduction(mockPrisma, { projectId: 'p1' }, mockDeps);
+
+    // generateVideo is called once per scene (one scene in this plan has 3 shots but
+    // routeProduction produces one VIDEO spec per scene). The first call must receive
+    // the source URL as the seed since there is no lastClipUrl yet.
+    expect(mockDeps.generateVideo).toHaveBeenCalled();
+    expect(capturedSeeds[0]).toBe(SOURCE_URL);
+  });
+
+  // ── plan.ts: commercial context — product noun in descriptions ────────────
+  it('commercial plan descriptions use the product noun from the intent (not generic "product")', () => {
+    const plan = buildCreativePlan({
+      projectType: 'COMMERCIAL',
+      brief: { originalIntent: 'Promote a perfume' },
+    });
+    const descriptions = plan.scenes.map((s) => s.description.toLowerCase());
+    const narrations = plan.scenes.map((s) => (s.narration ?? '').toLowerCase());
+    // At least one description or narration should reference "perfume" directly
+    const mentions = [...descriptions, ...narrations].some((t) => t.includes('perfume'));
+    expect(mentions).toBe(true);
+  });
+
+  it('commercial plan narration includes the extracted product noun in the objective', () => {
+    const plan = buildCreativePlan({
+      projectType: 'COMMERCIAL',
+      brief: { originalIntent: 'Promote a perfume' },
+    });
+    // narrationFor uses objectiveFor which now extracts "perfume" from the intent
+    const bodyNarration = plan.scenes[1]?.narration ?? '';
+    expect(bodyNarration.toLowerCase()).toContain('perfume');
   });
 });

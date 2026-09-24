@@ -136,8 +136,29 @@ function characterNames(bible?: CreativeBibleState | null): string[] {
     .slice(0, 3);
 }
 
+/**
+ * Extract the product/subject noun from a commercial intent so scene descriptions
+ * and narration name the actual thing being promoted rather than "the product".
+ * Returns "product" as the safe fallback when no noun can be extracted.
+ */
+function extractProductNoun(brief?: CreativeBriefState | null): string {
+  const intent = (brief?.refinedIntent ?? brief?.originalIntent ?? '').trim();
+  if (!intent) return 'product';
+  // Match the subject noun after common commercial verbs and optional articles.
+  const match = intent.match(
+    /(?:promot|advertis|market|commercial\s+for|advertisement\s+for|campaign\s+for|video\s+for|ad\s+for)\w*\s+(?:a\s+|an?\s+|my\s+|our\s+)?([a-z][a-z\s-]{0,40}?)(?:\s+with|\s+using|\s+and|,|\.|called|\s+brand\b|\s+product\b|$)/i,
+  );
+  const noun = match?.[1]?.trim();
+  return noun && noun.length > 1 ? noun : 'product';
+}
+
 function objectiveFor(type: CreativeProjectType, brief?: CreativeBriefState | null): string {
-  return brief?.objective ?? (type === 'COMMERCIAL' ? 'deliver a premium brand moment' : type === 'EDUCATION' ? 'explain the idea clearly' : 'tell the story');
+  if (brief?.objective) return brief.objective;
+  if (type === 'COMMERCIAL') {
+    const noun = extractProductNoun(brief);
+    return noun !== 'product' ? `promote the ${noun}` : 'deliver a premium brand moment';
+  }
+  return type === 'EDUCATION' ? 'explain the idea clearly' : 'tell the story';
 }
 
 function narrationFor(type: CreativeProjectType, scene: SceneTemplate, objective: string, index: number): string {
@@ -174,15 +195,21 @@ export function buildCreativePlan(input: {
   const structure = structureFor(input.projectType);
   const characters = characterNames(input.bible);
   const objective = objectiveFor(input.projectType, input.brief);
+  // For commercial projects, substitute the actual product noun into scene
+  // descriptions so prompts name the thing being promoted rather than "product".
+  const productNoun = input.projectType === 'COMMERCIAL' ? extractProductNoun(input.brief) : 'product';
   const scenes: PlanScene[] = structure.scenes.map((template, index) => {
     const shots = buildShots(index, template);
     const estimatedDurationSeconds = shots.reduce((sum, shot) => sum + shot.durationSeconds, 0);
+    const description = productNoun !== 'product'
+      ? template.description.replace(/\bthe product\b/gi, `the ${productNoun}`).replace(/\bproduct\b/gi, productNoun)
+      : template.description;
     return {
       sceneId: `SCENE_${String(index + 1).padStart(2, '0')}`,
       order: index + 1,
       title: template.title,
       beat: template.beat,
-      description: template.description,
+      description,
       location: template.location,
       timeOfDay: template.timeOfDay,
       characters,

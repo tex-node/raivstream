@@ -138,8 +138,10 @@ describe('launch — reliability failure matrix', () => {
     const result = await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps({ generateStill: still }), { maxAttempts: 2 });
     // 1 image per scene × 2 attempts (bounded) — never unbounded.
     expect(still).toHaveBeenCalledTimes(PLAN.scenes.length * 2);
-    expect(result.failed).toBe(PLAN.scenes.length);
-    expect(result.status).toBe('PARTIAL');
+    // Image fails → no byKey still entry → VIDEO has no seed → also fails deterministically.
+    expect(result.failed).toBe(PLAN.scenes.length * 2);
+    expect(result.generated).toBe(0);
+    expect(result.status).toBe('FAILED');
   });
 
   it('a fully failed run is FAILED, not COMPLETED', async () => {

@@ -117,10 +117,11 @@ describe('safety — content rejection fails only the affected asset and is neve
       extractLastFrame: vi.fn(async () => null),
     };
     const result = await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps, { maxAttempts: 3 });
-    // One call per scene (no retry), each failing only its own image.
+    // One call per scene (no retry on CONTENT_REJECTED), each failing only its own image.
     expect(still).toHaveBeenCalledTimes(PLAN.scenes.length);
-    expect(result.failed).toBe(PLAN.scenes.length);
-    expect(result.generated).toBe(PLAN.scenes.length); // videos still produced
-    expect(result.status).toBe('PARTIAL');
+    // Image fails → no byKey still entry → VIDEO has no seed → also fails deterministically.
+    expect(result.failed).toBe(PLAN.scenes.length * 2);
+    expect(result.generated).toBe(0);
+    expect(result.status).toBe('FAILED');
   });
 });
