@@ -303,3 +303,55 @@ describe('fal model contract mapping', () => {
     expect(err.toNormalized()).toEqual({ code: 'PROVIDER_DISABLED', message: 'fal image disabled', retryable: false });
   });
 });
+
+describe('fal transport 403 → PROVIDER_DISABLED', () => {
+  function liveImageCfg(): FalMediaConfig {
+    return cfg({
+      credentialPresent: true,
+      mediaProviderEnabled: true,
+      realProviderCallsEnabled: true,
+      imageEnabled: true,
+      videoEnabled: true,
+      maxRequests: 10,
+    });
+  }
+
+  it('translates HTTP 403 from transport.submit to non-retryable PROVIDER_DISABLED (image)', async () => {
+    const transport = fakeTransport();
+    const err403 = Object.assign(new Error('Forbidden'), { status: 403 });
+    transport.submit.mockRejectedValue(err403);
+    const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
+    const thrown = await provider.image!.submitImage({ prompt: 'x' }, { idempotencyKey: 'k-403-img' }).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(MediaProviderError);
+    const mpe = thrown as MediaProviderError;
+    expect(mpe.code).toBe('PROVIDER_DISABLED');
+    expect(mpe.retryable).toBe(false);
+    expect(mpe.providerStatus).toBe(403);
+  });
+
+  it('translates HTTP 403 from transport.submit to non-retryable PROVIDER_DISABLED (video)', async () => {
+    const transport = fakeTransport();
+    const err403 = Object.assign(new Error('Forbidden'), { status: 403 });
+    transport.submit.mockRejectedValue(err403);
+    const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
+    const thrown = await provider.video!.submitVideo(
+      { prompt: 'x', imageUrl: 'https://cdn.example.com/img.jpg', durationSeconds: 5, resolution: '720p' },
+      { idempotencyKey: 'k-403-vid' },
+    ).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(MediaProviderError);
+    const mpe = thrown as MediaProviderError;
+    expect(mpe.code).toBe('PROVIDER_DISABLED');
+    expect(mpe.retryable).toBe(false);
+    expect(mpe.providerStatus).toBe(403);
+  });
+
+  it('does not swallow non-403 transport errors', async () => {
+    const transport = fakeTransport();
+    transport.submit.mockRejectedValue(new Error('Network error'));
+    const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
+    const thrown = await provider.image!.submitImage({ prompt: 'x' }, { idempotencyKey: 'k-net' }).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('Network error');
+    expect(thrown).not.toBeInstanceOf(MediaProviderError);
+  });
+});

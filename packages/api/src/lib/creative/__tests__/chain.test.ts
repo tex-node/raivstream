@@ -134,6 +134,11 @@ describe('chain — error categorization', () => {
     expect(creatorError(msg)).toBe('I need the image you want me to use.');
   });
 
+  it('account locked (HTTP 403) maps to friendly message', () => {
+    expect(creatorError('fal image disabled: account locked or balance exhausted (HTTP 403)')).toContain('available right now');
+    expect(creatorError('fal video disabled: account locked or balance exhausted (HTTP 403)')).toContain('available right now');
+  });
+
   it('unknown error produces the generic fallback', () => {
     expect(creatorError('provider rejected the request due to an internal error')).toContain('Something interrupted');
   });

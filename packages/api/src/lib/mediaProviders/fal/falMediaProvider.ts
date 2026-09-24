@@ -153,6 +153,29 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
     return { provider: 'fal', kind, requestId, idempotencyKey: options.idempotencyKey, model: endpoint };
   }
 
+  async function guardedSubmit(
+    kind: 'image' | 'video' | 'ugc',
+    endpoint: string,
+    input: Record<string, unknown>,
+    options: SubmitMediaOptions,
+  ): Promise<string> {
+    try {
+      return await transport.submit(endpoint, input, { webhookUrl: options.webhookUrl });
+    } catch (err) {
+      // FAL returns HTTP 403 with "User is locked" when the account balance is exhausted.
+      // The SDK surfaces this as Error("Forbidden") with .status = 403. Translate to a
+      // non-retryable PROVIDER_DISABLED so the runner does not waste retry attempts.
+      if (err instanceof Error && (err as { status?: unknown }).status === 403) {
+        throw new MediaProviderError(
+          'PROVIDER_DISABLED',
+          `fal ${kind} disabled: account locked or balance exhausted (HTTP 403)`,
+          { retryable: false, providerStatus: 403 },
+        );
+      }
+      throw err;
+    }
+  }
+
   function parseByKind(kind: MediaKind, raw: unknown): MediaJobStatusResult {
     const parsed =
       kind === 'image' ? parseFlux2Output(raw) : kind === 'video' ? parseH3MaxOutput(raw) : parseVeedFabricOutput(raw);
@@ -180,7 +203,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
       assertLive('image');
       const endpoint = config.endpoints.image;
       assertEndpoint(endpoint);
-      const requestId = await transport.submit(endpoint, toFlux2Input(input), { webhookUrl: options.webhookUrl });
+      const requestId = await guardedSubmit('image', endpoint, toFlux2Input(input), options);
       requestCount += 1;
       return refOf('image', endpoint, requestId, options);
     },
@@ -200,7 +223,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
       assertLive('video');
       const endpoint = config.endpoints.video;
       assertEndpoint(endpoint);
-      const requestId = await transport.submit(endpoint, toH3MaxInput(input), { webhookUrl: options.webhookUrl });
+      const requestId = await guardedSubmit('video', endpoint, toH3MaxInput(input), options);
       requestCount += 1;
       return refOf('video', endpoint, requestId, options);
     },
@@ -220,7 +243,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
       assertLive('ugc');
       const endpoint = config.endpoints.ugc;
       assertEndpoint(endpoint);
-      const requestId = await transport.submit(endpoint, toVeedFabricInput(input), { webhookUrl: options.webhookUrl });
+      const requestId = await guardedSubmit('ugc', endpoint, toVeedFabricInput(input), options);
       requestCount += 1;
       return refOf('ugc_video', endpoint, requestId, options);
     },
