@@ -142,16 +142,25 @@ function characterNames(bible?: CreativeBibleState | null): string[] {
  * Extract the product/subject noun from a commercial intent so scene descriptions
  * and narration name the actual thing being promoted rather than "the product".
  * Returns "product" as the safe fallback when no noun can be extracted.
+ *
+ * Prefers originalIntent over refinedIntent: the Director's restatement often
+ * contains format words like "promotional video" that the regex incorrectly
+ * captures as the product noun (e.g. "video" from "Goal: promotional video.").
  */
 function extractProductNoun(brief?: CreativeBriefState | null): string {
-  const intent = (brief?.refinedIntent ?? brief?.originalIntent ?? '').trim();
+  // originalIntent is the raw creator input; refinedIntent has been processed by
+  // the Director and may contain format words that pollute the regex match.
+  const intent = ((brief?.originalIntent ?? '').trim() || (brief?.refinedIntent ?? '').trim());
   if (!intent) return 'product';
   // Match the subject noun after common commercial verbs and optional articles.
   const match = intent.match(
     /(?:promot|advertis|market|commercial\s+for|advertisement\s+for|campaign\s+for|video\s+for|ad\s+for)\w*\s+(?:a\s+|an?\s+|my\s+|our\s+)?([a-z][a-z\s-]{0,40}?)(?:\s+with|\s+using|\s+and|,|\.|called|\s+brand\b|\s+product\b|$)/i,
   );
   const noun = match?.[1]?.trim();
-  return noun && noun.length > 1 ? noun : 'product';
+  // Block format/medium words that name the output type, not the subject being promoted.
+  const formatWords = new Set(['video', 'film', 'commercial', 'ad', 'advertisement', 'content', 'media', 'clip', 'reel']);
+  if (!noun || noun.length <= 1 || formatWords.has(noun.toLowerCase())) return 'product';
+  return noun;
 }
 
 function objectiveFor(type: CreativeProjectType, brief?: CreativeBriefState | null): string {
@@ -166,11 +175,32 @@ function objectiveFor(type: CreativeProjectType, brief?: CreativeBriefState | nu
 function narrationFor(type: CreativeProjectType, scene: SceneTemplate, objective: string, index: number): string {
   switch (type) {
     case 'COMMERCIAL':
-      return index === 3 ? 'Be part of the feeling. Discover the difference.' : `Every detail is designed to ${objective}.`;
+      return index === 3 ? 'Be part of the feeling. Discover the difference.' : `Every detail is designed for ${objective}.`;
     case 'EDUCATION':
-      return index === 0 ? 'Have you ever wondered why this works the way it does?' : index === 3 ? 'Now you know — and you can explain it too.' : 'Let’s look closer at how it works.';
+      return index === 0 ? 'Have you ever wondered why this works the way it does?' : index === 3 ? 'Now you know — and you can explain it too.' : "Let's look closer at how it works.";
     default:
       return `${scene.title} — the story deepens here.`;
+  }
+}
+
+/**
+ * Per-beat creative direction for commercial scenes — gives the generation layer
+ * a specific visual intent for each structural moment rather than leaving all
+ * four scenes with identical generic prompts.
+ */
+function creativeDirectionFor(type: CreativeProjectType, productNoun: string, beat: string): string | undefined {
+  if (type !== 'COMMERCIAL') return undefined;
+  switch (beat) {
+    case 'Grab attention':
+      return `Dramatic atmospheric reveal — evocative mood, premium feel, ${productNoun} as the centrepiece against a moody backdrop`;
+    case 'Introduce the product':
+      return `Hero product moment — pristine ${productNoun} in sharp close-up detail, aspirational framing, luxurious surface texture`;
+    case 'Show the value':
+      return `Lifestyle aspiration — ${productNoun} in a beautiful experiential context that makes the benefit feel tangible and desirable`;
+    case 'Finish strong':
+      return `Brand statement — confident ${productNoun} with clean composition, strong identity, leaves a clear emotional impression`;
+    default:
+      return undefined;
   }
 }
 
@@ -216,6 +246,7 @@ export function buildCreativePlan(input: {
       timeOfDay: template.timeOfDay,
       characters,
       narration: narrationFor(input.projectType, template, objective, index),
+      creativeDirection: creativeDirectionFor(input.projectType, productNoun, template.beat),
       shots,
       estimatedDurationSeconds,
     };

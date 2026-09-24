@@ -105,7 +105,10 @@ describe('chain — Director creativeDirection → buildPrompt', () => {
 
   it('buildPrompt is unchanged when creativeDirection is absent', () => {
     const plan = buildCreativePlan({ projectType: 'COMMERCIAL' });
-    const { prompt } = buildPrompt(plan.scenes[0], 'IMAGE');
+    // Test buildPrompt in isolation: strip the field to confirm the function
+    // produces no "creative direction:" clause when the field is undefined.
+    const sceneWithoutDirection: PlanScene = { ...plan.scenes[0], creativeDirection: undefined };
+    const { prompt } = buildPrompt(sceneWithoutDirection, 'IMAGE');
     expect(prompt.toLowerCase()).not.toContain('creative direction');
   });
 
