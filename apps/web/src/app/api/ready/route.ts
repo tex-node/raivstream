@@ -39,7 +39,6 @@ async function checkStorage(): Promise<{ configured: boolean; reachable: boolean
 }
 
 export async function GET(): Promise<Response> {
-  const _falDiag = { routeKeyLen: (process.env.FAL_KEY ?? '').length, enabled: process.env.FAL_MEDIA_PROVIDER_ENABLED };
   const [database, storage] = await Promise.all([checkDatabase(), checkStorage()]);
   const providers = summarizeProviderRegistry(getProviderRegistry());
 
@@ -53,7 +52,6 @@ export async function GET(): Promise<Response> {
       storage,
     },
     providers,
-    _falDiag,
   };
 
   return new Response(JSON.stringify(body), {
