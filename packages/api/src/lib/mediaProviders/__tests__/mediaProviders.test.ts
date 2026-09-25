@@ -305,6 +305,46 @@ describe('fal model contract mapping', () => {
   });
 });
 
+describe('fal UGC transport (VEED Fabric 480p)', () => {
+  function liveUgcCfg(): FalMediaConfig {
+    return cfg({
+      credentialPresent: true,
+      mediaProviderEnabled: true,
+      realProviderCallsEnabled: true,
+      ugcEnabled: true,
+      maxRequests: 10,
+    });
+  }
+
+  it('submits to the VEED Fabric endpoint with resolution in the payload', async () => {
+    const transport = fakeTransport();
+    transport.result.mockResolvedValue({ video: { url: 'https://fal.media/ugc.mp4' } });
+    const provider = createFalMediaProvider({ config: liveUgcCfg(), transport });
+    const ref = await provider.ugc!.submitUGC(
+      { imageUrl: 'https://cdn.example.com/presenter.jpg', audioUrl: 'https://cdn.example.com/speech.mp3', resolution: '480p' },
+      { idempotencyKey: 'k-ugc-1' },
+    );
+    expect(ref).toMatchObject({ provider: 'fal', kind: 'ugc_video' });
+    expect(transport.submit).toHaveBeenCalledWith(
+      'veed/fabric-1.0',
+      expect.objectContaining({ image_url: 'https://cdn.example.com/presenter.jpg', audio_url: 'https://cdn.example.com/speech.mp3', resolution: '480p' }),
+      expect.anything(),
+    );
+  });
+
+  it('throws PROVIDER_DISABLED when ugcEnabled is false', async () => {
+    const transport = fakeTransport();
+    const provider = createFalMediaProvider({ config: cfg(), transport });
+    await expect(
+      provider.ugc!.submitUGC(
+        { imageUrl: 'https://cdn.example.com/presenter.jpg', audioUrl: 'https://cdn.example.com/speech.mp3' },
+        { idempotencyKey: 'k-ugc-disabled' },
+      ),
+    ).rejects.toMatchObject({ code: 'PROVIDER_DISABLED' });
+    expect(transport.submit).not.toHaveBeenCalled();
+  });
+});
+
 describe('fal transport 403 → PROVIDER_DISABLED', () => {
   function liveImageCfg(): FalMediaConfig {
     return cfg({
@@ -340,6 +380,24 @@ describe('fal transport 403 → PROVIDER_DISABLED', () => {
     const thrown = await provider.video!.submitVideo(
       { prompt: 'x', imageUrl: 'https://cdn.example.com/img.jpg', durationSeconds: 5, resolution: '720p' },
       { idempotencyKey: 'k-403-vid' },
+    ).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(MediaProviderError);
+    const mpe = thrown as MediaProviderError;
+    expect(mpe.code).toBe('PROVIDER_DISABLED');
+    expect(mpe.retryable).toBe(false);
+    expect(mpe.providerStatus).toBe(403);
+  });
+
+  it('translates Exhausted-balance 403 to non-retryable PROVIDER_DISABLED (ugc)', async () => {
+    const transport = fakeTransport();
+    transport.submit.mockRejectedValue(lockedErr());
+    const provider = createFalMediaProvider({
+      config: cfg({ credentialPresent: true, mediaProviderEnabled: true, realProviderCallsEnabled: true, ugcEnabled: true, maxRequests: 10 }),
+      transport,
+    });
+    const thrown = await provider.ugc!.submitUGC(
+      { imageUrl: 'https://cdn.example.com/presenter.jpg', audioUrl: 'https://cdn.example.com/speech.mp3', resolution: '480p' },
+      { idempotencyKey: 'k-403-ugc' },
     ).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(MediaProviderError);
     const mpe = thrown as MediaProviderError;

@@ -188,6 +188,7 @@ async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<Genera
       const jobId = await submitFalVeed({
         imageUrl: input.seedImageUrl!,
         audioUrl: input.audioUrl!,
+        resolution: '480p',
       });
       return { providerJobId: jobId };
     }
