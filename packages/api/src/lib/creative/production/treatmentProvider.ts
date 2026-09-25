@@ -71,9 +71,12 @@ function buildUserPrompt(input: TreatmentInput): string {
       `Scene ${i + 1} (${scene.sceneId}): "${scene.title}" — Beat: "${scene.beat}" — Role: ${scene.description}`,
   );
 
-  const imageNote = input.sourceImageUrl
+  const supportedVision = /\.(png|jpe?g|gif|webp)(\?|$)/i.test(input.sourceImageUrl ?? '');
+  const imageNote = input.sourceImageUrl && supportedVision
     ? 'A product image is attached. Base your treatments on the actual visual characteristics of this product.'
-    : 'No product image provided — infer visual characteristics from the intent.';
+    : input.sourceImageUrl
+      ? 'A product image was provided but cannot be displayed (unsupported format). Infer visual characteristics from the intent.'
+      : 'No product image provided — infer visual characteristics from the intent.';
 
   return [
     `Provide creative treatments for this ${input.scenes.length}-scene commercial.`,
@@ -128,7 +131,9 @@ class OpenAICompatibleCreativeTreatmentProvider {
     const userContent: Array<Record<string, unknown>> = [
       { type: 'text', text: buildUserPrompt(input) },
     ];
-    if (input.sourceImageUrl) {
+    // OpenAI vision only accepts png/jpeg/gif/webp — skip avif and other unsupported formats.
+    const supportedVision = /\.(png|jpe?g|gif|webp)(\?|$)/i.test(input.sourceImageUrl ?? '');
+    if (input.sourceImageUrl && supportedVision) {
       userContent.push({ type: 'image_url', image_url: { url: input.sourceImageUrl } });
     }
 
