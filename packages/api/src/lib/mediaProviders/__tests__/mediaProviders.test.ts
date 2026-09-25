@@ -20,6 +20,7 @@ import {
   parseH3MaxOutput,
   toVeedFabricInput,
   parseVeedFabricOutput,
+  toFluxKontextInput,
   verifyFalWebhookSignature,
   fetchFalJwks,
   __resetFalJwksCacheForTests,
@@ -299,6 +300,21 @@ describe('fal model contract mapping', () => {
     expect(parseVeedFabricOutput({ video: { url: 'https://fal/ugc.mp4' } }).urls).toEqual(['https://fal/ugc.mp4']);
   });
 
+  it('maps FLUX Kontext input: aspect_ratio forwarded, explicit width/height are NOT passthrough', () => {
+    expect(toFluxKontextInput({ prompt: 'p', imageUrls: ['https://in/a.png'], aspectRatio: '16:9' })).toMatchObject({
+      prompt: 'p',
+      image_url: 'https://in/a.png',
+      aspect_ratio: '16:9',
+    });
+    // width and height on ImageGenerationInput are silently ignored — provider accepts only aspect_ratio strings
+    const noExplicitDims = toFluxKontextInput({ prompt: 'p', imageUrls: ['https://in/a.png'], width: 854, height: 480 });
+    expect(noExplicitDims).not.toHaveProperty('width');
+    expect(noExplicitDims).not.toHaveProperty('height');
+    expect(noExplicitDims).not.toHaveProperty('image_size');
+    // requires a source image URL
+    expect(() => toFluxKontextInput({ prompt: 'p' })).toThrowError(/source image/);
+  });
+
   it('normalized error is serializable without secrets', () => {
     const err = new MediaProviderError('PROVIDER_DISABLED', 'fal image disabled', { retryable: false });
     expect(err.toNormalized()).toEqual({ code: 'PROVIDER_DISABLED', message: 'fal image disabled', retryable: false });
@@ -328,6 +344,21 @@ describe('fal UGC transport (VEED Fabric 480p)', () => {
     expect(transport.submit).toHaveBeenCalledWith(
       'veed/fabric-1.0',
       expect.objectContaining({ image_url: 'https://cdn.example.com/presenter.jpg', audio_url: 'https://cdn.example.com/speech.mp3', resolution: '480p' }),
+      expect.anything(),
+    );
+  });
+
+  it('submits 720p resolution to VEED Fabric when resolution is 720p', async () => {
+    const transport = fakeTransport();
+    transport.result.mockResolvedValue({ video: { url: 'https://fal.media/ugc-720p.mp4' } });
+    const provider = createFalMediaProvider({ config: liveUgcCfg(), transport });
+    await provider.ugc!.submitUGC(
+      { imageUrl: 'https://cdn.example.com/presenter.jpg', audioUrl: 'https://cdn.example.com/speech.mp3', resolution: '720p' },
+      { idempotencyKey: 'k-ugc-720p' },
+    );
+    expect(transport.submit).toHaveBeenCalledWith(
+      'veed/fabric-1.0',
+      expect.objectContaining({ resolution: '720p' }),
       expect.anything(),
     );
   });
