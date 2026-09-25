@@ -1,5 +1,7 @@
 'use client';
 
+import { PROJECT_TYPE_LABEL, STATUS_LABEL } from './labels';
+
 export type WorkspaceStage = 'UNDERSTAND' | 'PLAN' | 'PREVIEW' | 'PRODUCE' | 'REVIEW' | 'DELIVER';
 
 export type CreativeProject = {
@@ -47,8 +49,8 @@ export function ProjectSidebar({ project }: { project: CreativeProject }) {
         <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">Project</p>
         <h2 className="mt-1 text-lg font-black leading-tight">{project.title}</h2>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <span className="rounded-full bg-[var(--noc-purple)]/15 px-2 py-0.5 text-[10px] font-black uppercase text-[var(--noc-purple)]">{project.projectType}</span>
-          <span className="rounded-full bg-[rgba(233,233,237,0.08)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--noc-t5)]">{project.status}</span>
+          <span className="rounded-full bg-[var(--noc-purple)]/15 px-2 py-0.5 text-[10px] font-black uppercase text-[var(--noc-purple)]">{PROJECT_TYPE_LABEL[project.projectType] ?? project.projectType}</span>
+          <span className="rounded-full bg-[rgba(233,233,237,0.08)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--noc-t5)]">{STATUS_LABEL[project.status] ?? project.status}</span>
         </div>
       </div>
 

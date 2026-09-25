@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { ReadinessGate, type ReadinessResolution } from '@/components/creative/ReadinessGate';
+import { directorFieldLabel } from './labels';
 
 type Decision = {
   interpretation: string;
@@ -171,7 +172,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
               <p className="text-xs font-black uppercase text-[var(--noc-t6)]">I&apos;ll change</p>
               <ul className="mt-1 space-y-1 text-sm text-[var(--noc-t2)]">
                 {decision.creativeChanges.map((change, index) => (
-                  <li key={index}>• {change.field}{change.to ? `: ${String(change.to)}` : ''}</li>
+                  <li key={index}>• {directorFieldLabel(change.field)}{change.to ? `: ${String(change.to)}` : ''}</li>
                 ))}
                 {decision.productionChanges.map((change, index) => (
                   <li key={`p${index}`} className="text-[var(--noc-t5)]">• {change.description}</li>

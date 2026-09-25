@@ -1,16 +1,18 @@
 'use client';
 
 import type { CreativeProject } from './ProjectSidebar';
+import { bibleContentString } from './labels';
 
 function Section({ title, content }: { title: string; content?: unknown }) {
   const isEmpty = content === undefined || content === null || (Array.isArray(content) && content.length === 0);
+  const display = isEmpty ? null : (bibleContentString(content) ?? null);
   return (
     <div className="rounded-xl border border-[rgba(233,233,237,0.08)] bg-[rgba(233,233,237,0.03)] p-3">
       <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t6)]">{title}</p>
-      {isEmpty ? (
+      {isEmpty || display === null ? (
         <p className="mt-1 text-sm text-[var(--noc-t6)]">To be defined.</p>
       ) : (
-        <p className="mt-1 text-sm font-semibold text-[var(--noc-t2)]">{typeof content === 'string' ? content : JSON.stringify(content, null, 2)}</p>
+        <p className="mt-1 text-sm font-semibold text-[var(--noc-t2)]">{display}</p>
       )}
     </div>
   );
