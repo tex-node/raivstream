@@ -154,13 +154,30 @@ function extractProductNoun(brief?: CreativeBriefState | null): string {
   // the Director and may contain format words that pollute the regex match.
   const intent = ((brief?.originalIntent ?? '').trim() || (brief?.refinedIntent ?? '').trim());
   if (!intent) return 'product';
-  // Match the subject noun after common commercial verbs and optional articles.
-  const match = intent.match(
-    /(?:promot|advertis|market|commercial\s+for|advertisement\s+for|campaign\s+for|video\s+for|ad\s+for)\w*\s+(?:a\s+|an?\s+|my\s+|our\s+)?([a-z][a-z\s-]{0,40}?)(?:\s+with|\s+using|\s+and|,|\.|called|\s+brand\b|\s+product\b|$)/i,
-  );
-  const noun = match?.[1]?.trim();
   // Block format/medium words that name the output type, not the subject being promoted.
   const formatWords = new Set(['video', 'film', 'commercial', 'ad', 'advertisement', 'content', 'media', 'clip', 'reel']);
+  const terminator = /(?:\s+with|\s+using|\s+and|,|\.|called|\s+brand\b|\s+product\b|$)/i;
+  const TERM = '(?:\\s+with|\\s+using|\\s+and|,|\\.|called|\\s+brand\\b|\\s+product\\b|$)';
+
+  // Primary: match subject noun after common commercial verbs + optional articles.
+  const match = intent.match(
+    new RegExp(`(?:promot|advertis|market|commercial\\s+for|advertisement\\s+for|campaign\\s+for|video\\s+for|ad\\s+for)\\w*\\s+(?:a\\s+|an?\\s+|my\\s+|our\\s+)?([a-z][a-z\\s-]{0,40}?)${TERM}`, 'i'),
+  );
+  const noun = match?.[1]?.trim();
+
+  // If the primary match captured a format word (e.g. "promotional" matched
+  // "promot\w*" but then captured "video for X"), fall through to secondary.
+  if (noun && noun.length > 1 && !formatWords.has(noun.toLowerCase().split(/\s+/)[0])) {
+    return noun;
+  }
+
+  // Secondary: "make a video/film/commercial for X" — extract X directly.
+  const forMatch = intent.match(
+    new RegExp(`(?:video|film|commercial|ad|advertisement|content|clip|reel)\\s+for\\s+(?:a\\s+|an?\\s+|my\\s+|our\\s+|the\\s+)?([a-z][a-z\\s-]{0,40}?)${TERM}`, 'i'),
+  );
+  const forNoun = forMatch?.[1]?.trim();
+  if (forNoun && forNoun.length > 1 && !formatWords.has(forNoun.toLowerCase())) return forNoun;
+
   if (!noun || noun.length <= 1 || formatWords.has(noun.toLowerCase())) return 'product';
   return noun;
 }

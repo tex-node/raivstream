@@ -51,6 +51,10 @@ function buildTreatmentInput(
  * Enrich a production plan with AI-derived per-scene creative and motion
  * direction. Returns the original plan on any failure — production is never
  * blocked and the static creativeDirectionFor() template strings survive.
+ *
+ * `lockedSceneIds` — sceneIds whose creativeDirection was explicitly set by
+ * the Director. Treatment enrichment NEVER overwrites these, so Director
+ * decisions survive re-planning (priority invariant: Director > Treatment).
  */
 export async function enrichCreativePlan(
   plan: CreativeProductionPlanState,
@@ -58,6 +62,7 @@ export async function enrichCreativePlan(
   bible?: CreativeBibleState | null,
   sourceImageUrl?: string,
   evaluator: TreatmentEvaluator = defaultEvaluator,
+  lockedSceneIds?: ReadonlySet<string>,
 ): Promise<CreativeProductionPlanState> {
   try {
     const input = buildTreatmentInput(plan, brief, bible, sourceImageUrl);
@@ -65,6 +70,8 @@ export async function enrichCreativePlan(
 
     const treatmentMap = new Map(result.scenes.map((t) => [t.sceneId, t]));
     const enrichedScenes = plan.scenes.map((scene) => {
+      // Director-applied directions must not be overwritten by AI treatment.
+      if (lockedSceneIds?.has(scene.sceneId)) return scene;
       const treatment = treatmentMap.get(scene.sceneId);
       if (!treatment) return scene;
       return { ...scene, creativeDirection: treatment.creativeDirection, motionDirection: treatment.motionDirection };

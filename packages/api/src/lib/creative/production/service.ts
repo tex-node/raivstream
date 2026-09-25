@@ -197,7 +197,7 @@ export class ProductionPlanService {
 
     const sourceRefs = sourceReferencesFromBrief(project.brief);
     const sourceImageUrl = sourceRefs.find((r) => Boolean(r.url))?.url;
-    const basePlan = buildCreativePlan({
+    let basePlan = buildCreativePlan({
       projectType: project.projectType as CreativeProjectType,
       brief,
       bible,
@@ -205,7 +205,46 @@ export class ProductionPlanService {
       context: buildProductionContext({ brief, bible }),
       sourceReferences: sourceRefs,
     });
-    const plan = await enrichCreativePlan(basePlan, brief, bible, sourceImageUrl);
+
+    // Re-plan persistence: Director-applied creativeDirection values must survive
+    // re-planning. Query CreativeMemory for DIRECTION records to find locked sceneIds,
+    // copy those directions from the persisted plan into the basePlan, and tell
+    // enrichCreativePlan not to overwrite them (Director > AI treatment).
+    let lockedSceneIds: ReadonlySet<string> = new Set();
+    if (project.productionPlan) {
+      try {
+        const directionMemories = await (prisma as unknown as { creativeMemory?: { findMany: (args: unknown) => Promise<Array<{ content: unknown }>> } })
+          .creativeMemory?.findMany({ where: { projectId: project.id, kind: 'DIRECTION' }, select: { content: true } }) ?? [];
+        const lockedIds = new Set<string>();
+        for (const memory of directionMemories) {
+          const content = memory.content as { affectedSceneIds?: string[] } | null;
+          if (Array.isArray(content?.affectedSceneIds)) {
+            for (const sceneId of content.affectedSceneIds) lockedIds.add(sceneId);
+          }
+        }
+        if (lockedIds.size > 0) {
+          lockedSceneIds = lockedIds;
+          // Copy Director-set directions from the persisted plan into basePlan so they
+          // survive the fresh buildCreativePlan() call and reach generation prompts.
+          const persistedScenes = (project.productionPlan.plan as unknown as { scenes?: Array<{ sceneId: string; creativeDirection?: string; motionDirection?: string }> })?.scenes ?? [];
+          const directorDirections = new Map(
+            persistedScenes
+              .filter((s) => lockedIds.has(s.sceneId) && s.creativeDirection)
+              .map((s) => [s.sceneId, { creativeDirection: s.creativeDirection!, motionDirection: s.motionDirection }]),
+          );
+          if (directorDirections.size > 0) {
+            basePlan = { ...basePlan, scenes: basePlan.scenes.map((scene) => {
+              const locked = directorDirections.get(scene.sceneId);
+              return locked ? { ...scene, ...locked } : scene;
+            }) };
+          }
+        }
+      } catch {
+        // Non-fatal: if memory query fails, enrich normally without locked scenes.
+      }
+    }
+
+    const plan = await enrichCreativePlan(basePlan, brief, bible, sourceImageUrl, undefined, lockedSceneIds);
     const preview = buildPreview(plan, bible);
 
     if (project.productionPlan) {
