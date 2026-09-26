@@ -170,9 +170,11 @@ export function Navbar() {
                 >
                   {[
                     { href: `/${user?.username}`, label: 'Profile' },
-                    { href: '/create', label: '✦ Create' },
-                    { href: '/story-playground', label: 'Story Playground (legacy)' },
+                    isR16
+                      ? { href: '/story-playground/new?type=story', label: '✦ Create Story' }
+                      : { href: '/create', label: '✦ Create' },
                     ...(!isR16 ? [
+                      { href: '/story-playground', label: 'Story Playground' },
                       { href: '/academy', label: 'Academy' },
                     ] : []),
                     ...(!isR16 ? [
