@@ -35,7 +35,7 @@ const STARTERS = [
 
 const R16_STARTERS = [
   { label: 'Create a Story', icon: Sparkles, type: 'story' },
-  { label: 'Learn a Topic', icon: BookOpen, type: 'idea' },
+  { label: 'Learn a Topic', icon: BookOpen, type: 'educational' },
 ];
 
 function greeting() {
