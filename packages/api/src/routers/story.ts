@@ -3153,7 +3153,10 @@ export const storyRouter = router({
       let educationalContract: import('../lib/storyIntelligence/types').EducationalContract | null = null;
       if (isStoryIntelligenceEnabled()) {
         try {
-          detectedContentType = await storyIntelligenceProvider.classifyContent({ idea, answers, audienceMode });
+          // Classify from the idea alone — wizard Q&A answers are story-framed
+          // and would skew classification away from EDUCATIONAL for ideas like
+          // "Let's talk about ships" if passed as context.
+          detectedContentType = await storyIntelligenceProvider.classifyContent({ idea, answers: [], audienceMode });
           await ctx.prisma.storyProject.update({
             where: { id: project.id },
             data: { contentType: detectedContentType },
