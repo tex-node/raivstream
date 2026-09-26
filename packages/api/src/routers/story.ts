@@ -69,7 +69,7 @@ import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
-const storyTypeSchema = z.enum(['SHORT_STORY', 'PICTURE_BOOK', 'COMIC', 'VIDEO_STORY']);
+const storyTypeSchema = z.enum(['SHORT_STORY', 'PICTURE_BOOK', 'COMIC', 'VIDEO_STORY', 'EDUCATIONAL']);
 const promptOutputTypeSchema = z.enum(['IMAGE', 'SHORT_VIDEO', 'COMIC_PANEL']);
 const promptProviderSchema = z.enum(['FLUX', 'WAN_25', 'KLING_I2V', 'KLING_R2V', 'H3_MAX']);
 const storyVisualStyleSchema = z.enum([
@@ -3026,6 +3026,8 @@ export const storyRouter = router({
           targetAudience: audienceMode === 'KIDS' ? 'children and families' : 'general audience',
           audienceMode,
           storyType: input.storyType,
+          // Persist explicit educational intent immediately so generateStory skips the classifier.
+          ...(input.storyType === 'EDUCATIONAL' ? { contentType: 'EDUCATIONAL' } : {}),
           visualStyle: normaliseStoryVisualStyle(input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE)),
           status: 'DRAFT',
         },
@@ -3054,7 +3056,20 @@ export const storyRouter = router({
       const idea = project.originalIdea ?? project.logline ?? project.title;
       assertKidsSafeIdea(idea, audienceMode);
 
-      const questions = await storyTextService.generateGuidedQuestions(idea, audienceMode);
+      // Educational projects get age/interest questions — not story wizard questions.
+      const isEducational = project.contentType === 'EDUCATIONAL';
+      const questions = isEducational
+        ? [
+            {
+              questionText: 'How old are the children this is for?',
+              answerOptions: ['3–5 years old', '6–8 years old', '9–12 years old', 'Any age'],
+            },
+            {
+              questionText: 'What are you most curious about?',
+              answerOptions: ['How things work', 'History and places', 'Science and nature', 'People and animals'],
+            },
+          ]
+        : await storyTextService.generateGuidedQuestions(idea, audienceMode);
 
       await ctx.prisma.storyQuestion.deleteMany({ where: { projectId: project.id } });
       const createdQuestions = await ctx.prisma.$transaction(
@@ -3076,6 +3091,27 @@ export const storyRouter = router({
         properties: { questionCount: createdQuestions.length },
       });
       return createdQuestions;
+    }),
+
+  previewEducation: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      if (!isStoryIntelligenceEnabled()) return null;
+      const project = await ensureProject(ctx, input.projectId);
+      const idea = project.originalIdea ?? project.logline ?? project.title;
+      const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
+      try {
+        const contract = await storyIntelligenceProvider.planEducation({ idea, answers: [], audienceMode, sceneCount: 4 });
+        return {
+          topic: contract.topic,
+          learningObjective: contract.learningObjective,
+          keyConcepts: contract.keyConcepts,
+          vocabularyLevel: contract.vocabularyLevel,
+          examplesToUse: contract.examplesToUse.slice(0, 2),
+        };
+      } catch {
+        return null;
+      }
     }),
 
   answerQuestion: protectedProcedure
@@ -3149,20 +3185,23 @@ export const storyRouter = router({
         }));
 
       // Phase B: content classification + educational contract (when enabled)
-      let detectedContentType: string | null = null;
+      // Explicit intent (set by createSpark when storyType=EDUCATIONAL) is never overridden.
+      let detectedContentType: string | null = project.contentType ?? null;
       let educationalContract: import('../lib/storyIntelligence/types').EducationalContract | null = null;
       if (isStoryIntelligenceEnabled()) {
-        try {
-          // Classify from the idea alone — wizard Q&A answers are story-framed
-          // and would skew classification away from EDUCATIONAL for ideas like
-          // "Let's talk about ships" if passed as context.
-          detectedContentType = await storyIntelligenceProvider.classifyContent({ idea, answers: [], audienceMode });
-          await ctx.prisma.storyProject.update({
-            where: { id: project.id },
-            data: { contentType: detectedContentType },
-          });
-        } catch (error) {
-          console.warn('[story.generateStory] content classification failed — continuing without:', error instanceof Error ? error.message : error);
+        if (!detectedContentType) {
+          try {
+            // Classify from the idea alone — wizard Q&A answers are story-framed
+            // and would skew classification away from EDUCATIONAL for ideas like
+            // "Let's talk about ships" if passed as context.
+            detectedContentType = await storyIntelligenceProvider.classifyContent({ idea, answers: [], audienceMode });
+            await ctx.prisma.storyProject.update({
+              where: { id: project.id },
+              data: { contentType: detectedContentType },
+            });
+          } catch (error) {
+            console.warn('[story.generateStory] content classification failed — continuing without:', error instanceof Error ? error.message : error);
+          }
         }
 
         if (detectedContentType === 'EDUCATIONAL') {

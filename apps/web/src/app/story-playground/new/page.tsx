@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Pencil, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useR16 } from '@/lib/r16';
@@ -369,7 +369,9 @@ function directorOptionLabel(key: DirectorSettingKey, value?: string | null, isR
 
 export default function StoryPlaygroundPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isR16 = useR16();
+  const isEducationalMode = searchParams.get('type') === 'educational';
   const { isSignedIn, isLoaded, user } = useUser();
   const utils = trpc.useUtils();
   const trackStoryEvent = trpc.analytics.trackStoryEvent.useMutation();
@@ -704,7 +706,14 @@ export default function StoryPlaygroundPage() {
   const answeredCount = questions.filter((question) => question.selectedAnswer).length;
   const canGenerate = questions.length > 0 && answeredCount === questions.length;
   const canUseAdvancedPrompts = !isR16 && !!user && ['ADMIN', 'MODERATOR', 'CREATOR'].includes(user.role);
-  const isBusy = createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || updateSceneDirector.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || createCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
+
+  // Educational mode: "What you'll learn" preview — fires after all questions are answered
+  const educationPreview = trpc.story.previewEducation.useQuery(
+    { projectId: projectId! },
+    { enabled: isEducationalMode && !!projectId && canGenerate },
+  );
+
+  const isBusy =createSpark.isPending || generateQuestions.isPending || answerQuestion.isPending || generateStory.isPending || continueStory.isPending || saveProject.isPending || archiveProject.isPending || updateVisualStyle.isPending || generateScenes.isPending || updateScene.isPending || updateSceneDirector.isPending || generateCharacterBible.isPending || updateCharacterMemory.isPending || createCharacterMemory.isPending || composeScenePrompt.isPending || composeAllScenePrompts.isPending || generateSceneImage.isPending || regenerateSceneImage.isPending;
 
   useEffect(() => {
     if (project?.chapters?.length) setStep('story');
@@ -728,7 +737,7 @@ export default function StoryPlaygroundPage() {
     createSpark.mutate({
       idea: idea.trim(),
       audienceMode: isR16 ? 'KIDS' : 'GENERAL',
-      storyType: 'SHORT_STORY',
+      storyType: isEducationalMode ? 'EDUCATIONAL' : 'SHORT_STORY',
       visualStyle: selectedVisualStyle,
     });
   };
@@ -1092,7 +1101,7 @@ export default function StoryPlaygroundPage() {
               </div>
               <div>
                 <p className="text-sm font-bold uppercase tracking-wide text-[var(--noc-t4)]">Step {step === 'spark' ? '1' : step === 'questions' ? '2' : '3'} of 3</p>
-                <p className="font-black">{step === 'spark' ? 'Story Spark' : step === 'questions' ? 'Questions' : 'Your Story'}</p>
+                <p className="font-black">{step === 'spark' ? (isEducationalMode ? 'Your Topic' : 'Story Spark') : step === 'questions' ? (isEducationalMode ? 'Tell Us More' : 'Questions') : (isEducationalMode ? 'Your Lesson' : 'Your Story')}</p>
               </div>
             </div>
 
@@ -1208,7 +1217,7 @@ export default function StoryPlaygroundPage() {
                 disabled={isBusy || idea.trim().length < 3 || !isSignedIn}
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9,#4f8bd6)] px-6 py-4 text-lg font-black text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isBusy ? 'Starting...' : 'Start Story'}
+                {isBusy ? 'Starting...' : (isEducationalMode ? 'Start Learning' : 'Start Story')}
                 <ChevronRight size={22} />
               </button>
             </div>
@@ -1382,9 +1391,31 @@ export default function StoryPlaygroundPage() {
                 disabled={!canGenerate || generateStory.isPending}
                 className="rounded-xl bg-[var(--noc-blue)] px-5 py-3 font-black text-white disabled:opacity-40"
               >
-                {generateStory.isPending ? 'Creating story...' : 'Create My Story'}
+                {generateStory.isPending
+                  ? (isEducationalMode ? 'Building lesson...' : 'Creating story...')
+                  : (isEducationalMode ? 'Generate Learning Video' : 'Create My Story')}
               </button>
             </div>
+
+            {isEducationalMode && canGenerate && educationPreview.data && (
+              <div className="mt-4 rounded-xl border border-[rgba(178,90,217,0.25)] bg-[rgba(178,90,217,0.08)] p-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--noc-purple)]">What you&apos;ll learn</p>
+                <p className="mb-1 font-bold text-[var(--noc-t1)]">{educationPreview.data.learningObjective}</p>
+                {educationPreview.data.keyConcepts.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {educationPreview.data.keyConcepts.slice(0, 4).map((concept) => (
+                      <span
+                        key={concept}
+                        className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                        style={{ background: 'rgba(178,90,217,0.15)', color: 'var(--noc-purple)' }}
+                      >
+                        {concept}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
