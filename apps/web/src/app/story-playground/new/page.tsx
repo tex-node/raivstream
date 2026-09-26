@@ -158,12 +158,20 @@ function formatStoryDate(value: string | Date) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
-const examples = [
+const STORY_EXAMPLES = [
   'A dog going to school',
   'A robot who lost his voice',
   'A princess who loves football',
   'A dragon afraid of fire',
   'A boy who finds a magic pencil',
+];
+
+const EDUCATIONAL_EXAMPLES = [
+  "Let's talk about ships",
+  "Let's explore the rainforest",
+  "How do volcanoes work?",
+  "Let's learn about the ocean",
+  "What are stars made of?",
 ];
 
 type VisualStyleOption = {
@@ -1179,7 +1187,7 @@ export default function StoryPlaygroundPage() {
               <textarea
                 value={idea}
                 onChange={(event) => setIdea(event.target.value)}
-                placeholder="A dog going to school"
+                placeholder={isR16 ? "Let's talk about ships" : "A dog going to school"}
                 rows={5}
                 className="min-h-48 w-full resize-none rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5 text-2xl font-bold text-[var(--noc-t1)] outline-none transition-colors placeholder:text-[var(--noc-t5)] focus:border-[var(--noc-purple)]"
               />
@@ -1208,7 +1216,7 @@ export default function StoryPlaygroundPage() {
             <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-5">
               <h2 className="mb-3 text-lg font-black">Try one of these</h2>
               <div className="flex flex-col gap-3">
-                {examples.map((example) => (
+                {(isR16 ? EDUCATIONAL_EXAMPLES : STORY_EXAMPLES).map((example) => (
                   <button
                     key={example}
                     onClick={() => setIdea(example)}

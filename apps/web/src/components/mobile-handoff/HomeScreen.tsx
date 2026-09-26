@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Sparkles, Megaphone, Clapperboard, Lightbulb } from 'lucide-react';
+import { Sparkles, Megaphone, Clapperboard, Lightbulb, BookOpen } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState, SectionLabel } from '@/components/mobile/primitives';
 import { gradientPlaceholder, timeAgo } from '@/lib/mobileFormat';
@@ -31,6 +31,11 @@ const STARTERS = [
   { label: 'Create an Advert', icon: Megaphone, type: 'advert' },
   { label: 'Create a Short Film', icon: Clapperboard, type: 'film' },
   { label: 'Start from an Idea', icon: Lightbulb, type: 'idea' },
+];
+
+const R16_STARTERS = [
+  { label: 'Create a Story', icon: Sparkles, type: 'story' },
+  { label: 'Learn a Topic', icon: BookOpen, type: 'idea' },
 ];
 
 function greeting() {
@@ -160,7 +165,7 @@ export function HomeScreen() {
             className="grid grid-cols-2 gap-[9px] lg:grid-cols-4 lg:gap-4"
             style={{ marginTop: 8 }}
           >
-            {(isR16 ? STARTERS.filter((s) => s.type === 'story' || s.type === 'idea') : STARTERS).map(({ label, icon: Icon, type }) => (
+            {(isR16 ? R16_STARTERS : STARTERS).map(({ label, icon: Icon, type }) => (
               <Link
                 key={type}
                 href={`/story-playground/new?type=${type}`}
