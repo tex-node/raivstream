@@ -899,6 +899,7 @@ model StoryProject {
   theme          String?
   visualStyle    String?
   storyDna       Json?
+  contentType    String?
   status         StoryProjectStatus @default(DRAFT)
   creativeCriticMode CreativeCriticMode @default(SUGGEST)
   creativeCriticThreshold Int?
@@ -923,6 +924,7 @@ model StoryProject {
   movieAssets     MovieAsset[]
   audioPerformancePlans AudioPerformancePlan[]
   voiceProfiles   VoiceProfile[]
+  videoExports    StoryVideoExport[]
   audioAssets     AudioAsset[]
   academySubmissions AcademySubmission[]
 
@@ -1205,7 +1207,8 @@ model StoryChapter {
   enhancedBody     String?
   generationPrompt String?
   providerMetadata Json?
-  blueprint        Json?
+  blueprint            Json?
+  educationalContract  Json?
 
   sceneSeeds       StorySceneSeed[]
 
@@ -1284,6 +1287,7 @@ model StorySceneSeed {
   activeImageAssetId String?
   imageStatus    StorySceneAssetStatus?
   imageUrl       String?
+  narrationAudioUrl String?
 
   createdAt      DateTime      @default(now())
 
@@ -1346,6 +1350,44 @@ model StorySceneAsset {
   @@index([creativeStatus])
   @@index([criticScore])
   @@map("story_scene_assets")
+}
+
+enum StoryVideoExportStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model StoryVideoExport {
+  id            String                 @id @default(cuid())
+  projectId     String
+  project       StoryProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId        String
+
+  status        StoryVideoExportStatus @default(PENDING)
+  // Fingerprint of ordered (sceneId:videoAssetId) pairs — used for idempotency.
+  // Reuse existing PENDING/GENERATING/READY export when sourceHash is unchanged.
+  sourceHash    String
+  // Ordered scene IDs included in this export (JSON array of strings).
+  sceneIds      Json
+
+  assetUrl      String?
+  r2Key         String?
+  durationSeconds Float?
+  widthPx       Int?
+  heightPx      Int?
+
+  errorMessage  String?
+
+  completedAt   DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@unique([projectId, sourceHash])
+  @@index([projectId])
+  @@index([projectId, status])
+  @@map("story_video_exports")
 }
 
 model StorySequence {

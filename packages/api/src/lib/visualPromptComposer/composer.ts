@@ -16,6 +16,7 @@ import {
   type LightingSpec,
   type CompositionSpec,
   type CompositionLayout,
+  type EducationalSceneContext,
 } from './types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -189,6 +190,25 @@ function compositionSpecToString(spec: CompositionSpec): string {
 
 // ─── Main Compose Function ────────────────────────────────────────────────────
 
+// Extract educational context from directedScene JSON fields (Phase C)
+function resolveEducationalContext(
+  ds: DirectedScene | null | undefined,
+  explicit?: EducationalSceneContext | null,
+): EducationalSceneContext | null {
+  if (explicit) return explicit;
+  if (!ds) return null;
+  const obj = ds as unknown as Record<string, unknown>;
+  const learningObjective = typeof obj.learningObjective === 'string' ? obj.learningObjective : null;
+  const teachingConcept = typeof obj.teachingConcept === 'string' ? obj.teachingConcept : null;
+  if (!learningObjective && !teachingConcept) return null;
+  return {
+    learningObjective: learningObjective ?? teachingConcept ?? '',
+    teachingConcept: teachingConcept ?? learningObjective ?? '',
+    visualTeachingRequirement: typeof obj.visualTeachingRequirement === 'string' ? obj.visualTeachingRequirement : undefined,
+    antiCommercialNote: typeof obj.antiCommercialNote === 'string' ? obj.antiCommercialNote : undefined,
+  };
+}
+
 export function compose(input: VpcComposerInput): VpcComposerOutput {
   const { scene, project, medium, audienceMode, directedScene: ds, blueprint } = input;
 
@@ -253,6 +273,9 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
   const focalSubject = focalCharacter?.canonicalName
     ?? sceneCharacterNames[0]
     ?? 'the main character';
+
+  // Phase C: educational context
+  const educationalCtx = resolveEducationalContext(ds, input.educationalContext);
 
   // R16 / KIDS safety
   const kidsCheck = checkKidsSafety(audienceMode, action);
@@ -405,6 +428,24 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
       priority: 12,
       label: 'mood',
       text: `Atmosphere: ${mood}`,
+    } : null,
+    educationalCtx ? {
+      priority: 12.5,
+      label: 'educational_objective',
+      text: [
+        `EDUCATIONAL: ${educationalCtx.teachingConcept}`,
+        `learning objective: ${educationalCtx.learningObjective}`,
+        educationalCtx.visualTeachingRequirement
+          ? `visual teaching requirement: ${educationalCtx.visualTeachingRequirement}`
+          : undefined,
+      ].filter(Boolean).join('. '),
+      required: true,
+    } : null,
+    educationalCtx?.antiCommercialNote ? {
+      priority: 12.7,
+      label: 'anti_commercial',
+      text: `Anti-commercial constraint: ${educationalCtx.antiCommercialNote}. Do not frame the subject as a product, luxury item, or advertisement.`,
+      required: true,
     } : null,
     {
       priority: 13,

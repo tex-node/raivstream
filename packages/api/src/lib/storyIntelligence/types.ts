@@ -1,6 +1,37 @@
 import { z } from 'zod';
 import type { StoryAudienceMode } from '../storyTextService';
 
+// ─── Content Type ────────────────────────────────────────────────────────────
+
+export const contentTypeSchema = z.enum([
+  'EDUCATIONAL',
+  'STORY',
+  'COMMERCIAL',
+  'ENTERTAINMENT',
+  'DOCUMENTARY',
+  'TRANSFORMATION',
+]);
+export type ContentType = z.infer<typeof contentTypeSchema>;
+
+// ─── Educational Contract ────────────────────────────────────────────────────
+
+export const educationalContractSchema = z.object({
+  version: z.literal('education_contract_v1'),
+  topic: z.string().min(1).max(200),
+  targetAge: z.string().max(40),
+  learningObjective: z.string().min(10).max(400),
+  keyConcepts: z.array(z.string().max(120)).min(2).max(8),
+  vocabularyLevel: z.enum(['very_simple', 'simple', 'moderate', 'advanced']),
+  explanationStrategy: z.string().max(300),
+  examplesToUse: z.array(z.string().max(150)).max(6).default([]),
+  visualTeachingStrategy: z.string().max(300),
+  narrationRequired: z.boolean().default(true),
+  sceneProgression: z.array(z.string().max(120)).min(2).max(8),
+  recapIncluded: z.boolean().default(true),
+  antiCommercialTopics: z.array(z.string().max(80)).max(10).default([]),
+});
+export type EducationalContract = z.infer<typeof educationalContractSchema>;
+
 // ─── Story Blueprint ────────────────────────────────────────────────────────
 
 export const storyBlueprintSchema = z.object({
@@ -36,6 +67,17 @@ export type StoryBlueprint = z.infer<typeof storyBlueprintSchema>;
 
 // ─── Directed Scene ─────────────────────────────────────────────────────────
 
+export const teachingRoleSchema = z.enum([
+  'INTRODUCTION',
+  'EXPLANATION',
+  'EXAMPLE',
+  'COMPARISON',
+  'DEMONSTRATION',
+  'REINFORCEMENT',
+  'RECAP',
+]);
+export type TeachingRole = z.infer<typeof teachingRoleSchema>;
+
 export const directedSceneSchema = z.object({
   version: z.literal('scene_director_v1'),
   ordinal: z.number().int().min(1),
@@ -54,6 +96,13 @@ export const directedSceneSchema = z.object({
   continuityIn: z.string().max(200).optional(),
   continuityOut: z.string().max(200).optional(),
   mood: z.string().max(80).optional(),
+  // Phase C — educational scene fields (optional; absent for non-educational content)
+  learningObjective: z.string().max(300).optional(),
+  teachingConcept: z.string().max(200).optional(),
+  teachingRole: teachingRoleSchema.optional(),
+  visualTeachingRequirement: z.string().max(300).optional(),
+  narrationText: z.string().max(600).optional(),
+  antiCommercialNote: z.string().max(200).optional(),
 });
 
 export type DirectedScene = z.infer<typeof directedSceneSchema>;
@@ -83,6 +132,20 @@ export type DirectScenesInput = {
   sceneCount: number;
   characterContext: string;
   existingSceneHints?: Array<{ title: string; description: string; locationType?: string; mood?: string }>;
+  educationalContract?: EducationalContract | null;
+};
+
+export type ClassifyContentInput = {
+  idea: string;
+  answers: Array<{ questionText: string; selectedAnswer: string }>;
+  audienceMode: StoryAudienceMode;
+};
+
+export type PlanEducationInput = {
+  idea: string;
+  answers: Array<{ questionText: string; selectedAnswer: string }>;
+  audienceMode: StoryAudienceMode;
+  sceneCount: number;
 };
 
 export interface StoryIntelligenceProvider {
@@ -90,6 +153,8 @@ export interface StoryIntelligenceProvider {
   planStory(input: PlanStoryInput): Promise<StoryBlueprint>;
   enhanceNarrative(input: EnhanceNarrativeInput): Promise<string>;
   directScenes(input: DirectScenesInput): Promise<DirectedScene[]>;
+  classifyContent(input: ClassifyContentInput): Promise<ContentType>;
+  planEducation(input: PlanEducationInput): Promise<EducationalContract>;
 }
 
 // ─── Typed Failures ──────────────────────────────────────────────────────────

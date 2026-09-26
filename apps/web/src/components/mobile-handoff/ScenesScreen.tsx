@@ -6,6 +6,7 @@ import { Pill, Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useR16 } from '@/lib/r16';
 import { useTrackTab } from './useTrackTab';
 import { useState } from 'react';
 
@@ -46,6 +47,7 @@ function castNames(scene: any): string[] {
 
 export function ScenesScreen({ projectId }: { projectId: string }) {
   const { isLoaded, isSignedIn } = useUser();
+  const isR16 = useR16();
   useTrackTab(projectId, 'scenes');
 
   const workspaceQuery = trpc.story.getWorkspace.useQuery(
@@ -56,14 +58,21 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
   const utils = trpc.useUtils();
   const addScene = trpc.story.addScene.useMutation({ onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }) });
+  // Phase C: R16 users use the educational narration path (no Sequence/Film-tab required);
+  // non-R16 users use the full generateSceneNarration path.
   const generateSceneNarration = trpc.story.generateSceneNarration.useMutation();
+  const generateEducationalNarration = trpc.story.generateEducationalNarration.useMutation();
   const [narrationBusy, setNarrationBusy] = useState(false);
 
   const runNarration = async () => {
     setNarrationBusy(true);
     try {
       for (const scene of scenes) {
-        await generateSceneNarration.mutateAsync({ projectId, sceneId: scene.id });
+        if (isR16) {
+          await generateEducationalNarration.mutateAsync({ projectId, sceneId: scene.id });
+        } else {
+          await generateSceneNarration.mutateAsync({ projectId, sceneId: scene.id });
+        }
       }
       utils.story.getWorkspace.invalidate({ projectId });
     } finally {
@@ -102,6 +111,7 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
             const status = sceneStatus(scene);
             const cast = castNames(scene);
             const cover = scene.imageUrl ?? scene.assets?.find((a: any) => a.status === 'READY')?.thumbnailUrl ?? null;
+            const narrationAudio: string | null = scene.narrationAudioUrl ?? null;
             return (
               <Link
                 key={scene.id}
@@ -116,6 +126,14 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
                 }}
               >
                 <div style={{ aspectRatio: '16 / 9', background: cover ? `url(${cover}) center/cover` : gradientPlaceholder(scene.id) }} />
+                {narrationAudio && (
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+                  <div onClick={(e) => e.preventDefault()} style={{ padding: '6px 14px 0' }}>
+                    {/* Phase C: educational narration audio player (R16-safe, no Film-tab required) */}
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <audio controls src={narrationAudio} style={{ width: '100%', height: 32 }} />
+                  </div>
+                )}
                 <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--noc-t6)' }}>

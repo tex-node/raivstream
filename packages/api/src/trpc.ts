@@ -102,11 +102,22 @@ const isNotR16 = t.middleware(({ ctx, next }) => {
   return next();
 });
 
+// Middleware for R16-only endpoints (e.g. R16 story video export).
+// Complements isNotR16: that blocks R16 users from the 5.0 studio;
+// requireR16 blocks non-R16 users from R16-specific procedures.
+const requireR16 = t.middleware(({ ctx, next }) => {
+  if (!ctx.isR16) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'This endpoint is only available in R16 mode.' });
+  }
+  return next();
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(isAuthed);
 export const creativeProcedure = t.procedure.use(isAuthed).use(isNotR16);
+export const r16Procedure = t.procedure.use(isAuthed).use(requireR16);
 export const adminProcedure = t.procedure.use(isAdmin);
 export const moderatorProcedure = t.procedure.use(isAdminOrModerator);
 export const middleware = t.middleware;

@@ -146,6 +146,14 @@ export type SceneInput = {
   directorMetadata?: unknown;  // Phase A DirectedScene (stored as JSON)
 };
 
+// Phase C educational context fields (passed alongside VpcComposerInput when detected)
+export type EducationalSceneContext = {
+  learningObjective: string;
+  teachingConcept: string;
+  visualTeachingRequirement?: string;
+  antiCommercialNote?: string;
+};
+
 export type ProjectInput = {
   title: string;
   originalIdea?: string | null;
@@ -173,6 +181,8 @@ export type VpcComposerInput = {
   // Parsed Phase A structures (pre-validated by caller or null)
   directedScene?: DirectedScene | null;
   blueprint?: StoryBlueprint | null;
+  // Phase C — educational scene context (derived from directedScene fields by caller)
+  educationalContext?: EducationalSceneContext | null;
 };
 
 // ─── Composer Output ──────────────────────────────────────────────────────────

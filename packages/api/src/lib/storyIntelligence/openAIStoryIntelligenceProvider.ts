@@ -4,11 +4,17 @@ import {
   type PlanStoryInput,
   type EnhanceNarrativeInput,
   type DirectScenesInput,
+  type ClassifyContentInput,
+  type PlanEducationInput,
   type StoryBlueprint,
   type DirectedScene,
+  type ContentType,
+  type EducationalContract,
   StoryIntelligenceError,
   storyBlueprintSchema,
   directedSceneSchema,
+  contentTypeSchema,
+  educationalContractSchema,
 } from './types';
 import {
   buildBlueprintSystemPrompt,
@@ -22,6 +28,18 @@ import {
   buildSceneDirectorSystemPrompt,
   buildSceneDirectorUserPrompt,
 } from './prompts/sceneDirectorPrompt';
+import {
+  buildEducationalSceneDirectorSystem,
+  buildEducationalSceneDirectorUser,
+} from './prompts/educationalSceneDirectorPrompt';
+import {
+  buildContentClassifierSystem,
+  buildContentClassifierUser,
+} from './prompts/contentClassifierPrompt';
+import {
+  buildEducationContractSystem,
+  buildEducationContractUser,
+} from './prompts/educationContractPrompt';
 
 const TIMEOUT_MS = 45_000;
 
@@ -148,10 +166,18 @@ export class OpenAIStoryIntelligenceProvider implements StoryIntelligenceProvide
   }
 
   async directScenes(input: DirectScenesInput): Promise<DirectedScene[]> {
+    const isEducational = input.educationalContract != null;
+    const systemPrompt = isEducational
+      ? buildEducationalSceneDirectorSystem(input.audienceMode, input.educationalContract!)
+      : buildSceneDirectorSystemPrompt(input.audienceMode);
+    const userPrompt = isEducational
+      ? buildEducationalSceneDirectorUser(input, input.educationalContract!)
+      : buildSceneDirectorUserPrompt(input);
+
     const content = await this.complete(
-      buildSceneDirectorSystemPrompt(input.audienceMode),
-      buildSceneDirectorUserPrompt(input),
-      { temperature: 0.6, responseFormat: 'json_object' },
+      systemPrompt,
+      userPrompt,
+      { temperature: isEducational ? 0.45 : 0.6, responseFormat: 'json_object' },
     );
 
     let rawArray: unknown;
@@ -184,5 +210,55 @@ export class OpenAIStoryIntelligenceProvider implements StoryIntelligenceProvide
     }
 
     return scenes.slice(0, input.sceneCount).sort((a, b) => a.ordinal - b.ordinal);
+  }
+
+  async classifyContent(input: ClassifyContentInput): Promise<ContentType> {
+    const content = await this.complete(
+      buildContentClassifierSystem(),
+      buildContentClassifierUser(input),
+      { temperature: 0.1, responseFormat: 'json_object' },
+    );
+
+    let parsed: unknown;
+    try {
+      parsed = parseJsonObject(content);
+    } catch {
+      throw new StoryIntelligenceError('STORY_BLUEPRINT_PROVIDER_FAILED', 'Content classifier returned non-JSON');
+    }
+
+    const raw = (parsed as Record<string, unknown>)?.contentType;
+    const result = contentTypeSchema.safeParse(raw);
+    if (!result.success) {
+      throw new StoryIntelligenceError('STORY_BLUEPRINT_INVALID', `Content type invalid: ${String(raw)}`);
+    }
+    return result.data;
+  }
+
+  async planEducation(input: PlanEducationInput): Promise<EducationalContract> {
+    const content = await this.complete(
+      buildEducationContractSystem(),
+      buildEducationContractUser(input),
+      { temperature: 0.4, responseFormat: 'json_object' },
+    );
+
+    let parsed: unknown;
+    try {
+      parsed = parseJsonObject(content);
+    } catch (error) {
+      throw new StoryIntelligenceError('STORY_BLUEPRINT_PROVIDER_FAILED', 'Education contract returned non-JSON', error);
+    }
+
+    const withVersion = typeof parsed === 'object' && parsed !== null
+      ? { ...parsed as Record<string, unknown>, version: 'education_contract_v1' }
+      : parsed;
+
+    const result = educationalContractSchema.safeParse(withVersion);
+    if (!result.success) {
+      throw new StoryIntelligenceError(
+        'STORY_BLUEPRINT_INVALID',
+        `Education contract schema failed: ${result.error.issues.map((i) => i.message).join(', ')}`,
+      );
+    }
+    return result.data;
   }
 }

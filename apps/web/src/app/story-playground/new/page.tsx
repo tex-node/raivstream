@@ -583,6 +583,18 @@ export default function StoryPlaygroundPage() {
     onError: (error) => setMessage(error.message),
   });
 
+  // R16-only: story video export
+  const storyVideoExport = trpc.story.getStoryVideoExport.useQuery(
+    { projectId: projectId! },
+    { enabled: isR16 && !!projectId },
+  );
+  const requestStoryVideoExport = trpc.story.requestStoryVideoExport.useMutation({
+    onSuccess: async () => {
+      await storyVideoExport.refetch();
+    },
+    onError: (error) => setMessage(error.message),
+  });
+
   const generateCharacterBible = trpc.story.generateCharacterBible.useMutation({
     onSuccess: async (_characters, variables) => {
       await generateScenes.mutateAsync({ projectId: variables.projectId, replaceExisting: true });
@@ -921,6 +933,9 @@ export default function StoryPlaygroundPage() {
     const action = hasVideo ? regenerateSceneVideo : generateSceneVideo;
     action.mutate({ projectId, sceneId: scene.id, model: 'H3_MAX' });
   };
+
+  const allScenesHaveReadyVideo =
+    isR16 && scenes.length > 0 && scenes.every((s) => Boolean(latestVideoAsset(s)));
 
   const toggleDirectorPanel = (sceneId: string) => {
     setOpenDirectorSceneIds((current) =>
@@ -1503,6 +1518,58 @@ export default function StoryPlaygroundPage() {
                     {isR16 ? 'Read Story' : 'Read Storybook'}
                   </Link>
                 )}
+                {isR16 && projectId && scenes.length > 0 && (
+                  <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-5 py-4">
+                    {storyVideoExport.data?.status === 'READY' ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-cyan)]">Your story is ready!</p>
+                        <a
+                          href={storyVideoExport.data.assetUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 text-center font-black text-white"
+                        >
+                          Watch Story
+                        </a>
+                      </div>
+                    ) : requestStoryVideoExport.isPending || storyVideoExport.data?.status === 'GENERATING' ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">Assembling your story…</p>
+                        <div className="h-2 w-full animate-pulse rounded-full bg-[var(--noc-purple)] opacity-60" />
+                      </div>
+                    ) : storyVideoExport.data?.status === 'FAILED' ? (
+                      <div className="flex flex-col gap-3">
+                        <p className="text-sm font-semibold text-[var(--noc-t4)]">Something went wrong. You can try again.</p>
+                        <button
+                          onClick={() => requestStoryVideoExport.mutate({ projectId })}
+                          disabled={!allScenesHaveReadyVideo || requestStoryVideoExport.isPending}
+                          className="w-full rounded-xl bg-[var(--noc-purple)] px-5 py-3 font-black text-white disabled:opacity-50"
+                        >
+                          Try Again
+                        </button>
+                      </div>
+                    ) : allScenesHaveReadyVideo ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">All scenes ready!</p>
+                        <button
+                          onClick={() => requestStoryVideoExport.mutate({ projectId })}
+                          disabled={requestStoryVideoExport.isPending}
+                          className="w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-4 font-black text-white disabled:opacity-50"
+                        >
+                          Export Story
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t5)]">Story Video</p>
+                        <p className="mt-1 text-sm font-semibold text-[var(--noc-t4)]">
+                          {scenes.filter((s) => Boolean(latestVideoAsset(s))).length} of {scenes.length} scenes have video
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--noc-t5)]">Bring all scenes to life to export your story.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </aside>
             </section>
 
@@ -1716,7 +1783,7 @@ export default function StoryPlaygroundPage() {
                             {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <ImagePlus size={16} />}
                             {isGenerating ? (isR16 ? 'Making...' : 'Generating...') : hasFailed ? (isR16 ? 'Try Again' : 'Try Again') : scene.imageUrl ? (isR16 ? 'Make New Picture' : 'Regenerate') : (isR16 ? 'Make Picture' : 'Generate Image')}
                           </button>
-                          {!isR16 && scene.imageUrl && (
+                          {scene.imageUrl && (
                             <button
                               type="button"
                               onClick={() => makeSceneVideo(scene)}
@@ -1724,7 +1791,9 @@ export default function StoryPlaygroundPage() {
                               className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(79,139,214,0.30)] bg-[rgba(79,139,214,0.10)] px-3 py-2 text-sm font-black text-[var(--noc-blue)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {generateSceneVideo.isPending || regenerateSceneVideo.isPending ? <Loader2 className="animate-spin" size={16} /> : <Clapperboard size={16} />}
-                              {latestVideoAsset(scene) ? 'Regenerate Video' : 'Animate to Video'}
+                              {isR16
+                                ? (latestVideoAsset(scene) ? 'Bring to life again' : 'Bring this scene to life')
+                                : (latestVideoAsset(scene) ? 'Regenerate Video' : 'Animate to Video')}
                             </button>
                           )}
                           {!isR16 && (scene.assets?.length ?? 0) > 0 && (

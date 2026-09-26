@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, router } from '../trpc';
+import { protectedProcedure, r16Procedure, router } from '../trpc';
 import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
@@ -65,6 +65,7 @@ import {
   VpcError,
 } from '../lib/visualPromptComposer';
 import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntelligence/types';
+import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -474,7 +475,7 @@ async function runSceneShotClipChain(
   }
 }
 
-function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryAudienceMode): StoryAudienceMode {
+export function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryAudienceMode): StoryAudienceMode {
   if (ctx.isR16) return 'KIDS';
   return requested ?? 'GENERAL';
 }
@@ -499,7 +500,7 @@ async function trackStoryAnalytics(
   });
 }
 
-function assertSequenceAllowed(ctx: { isR16?: boolean }) {
+export function assertSequenceAllowed(ctx: { isR16?: boolean }) {
   if (ctx.isR16) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Sequence editing is not available in R16 mode.' });
   }
@@ -1017,7 +1018,7 @@ function versionSnapshotScenes(snapshot: any) {
     .filter((scene: any) => scene.storySceneId);
 }
 
-function assertKidsSafeIdea(idea: string, audienceMode: StoryAudienceMode) {
+export function assertKidsSafeIdea(idea: string, audienceMode: StoryAudienceMode) {
   if (audienceMode !== 'KIDS') return;
   const unsafe = /\b(kill|murder|blood|gore|sex|sexy|drugs|suicide|horror|demon|weapon|gun|knife)\b/i;
   if (unsafe.test(idea)) {
@@ -1134,7 +1135,7 @@ type ScenePromptContext = {
   scenePace?: string | null;
   characters?: unknown;
   directorMetadata?: unknown;  // Phase A DirectedScene stored as JSON
-  chapter?: { blueprint?: unknown } | null;  // Phase A StoryBlueprint stored as JSON on StoryChapter
+  chapter?: { blueprint?: unknown; educationalContract?: unknown } | null;  // Phase A blueprint + Phase B educational contract
   project: {
     title: string;
     originalIdea?: string | null;
@@ -1525,8 +1526,19 @@ export function composeScenePromptText(input: {
   const compositionAspect = 'mobile-first 9:16 framing';
   const director = directorSettingsFromScene(input.scene);
 
+  // Phase C: extract educational fields from directorMetadata when present
+  const dsRaw = input.scene.directorMetadata as Record<string, unknown> | null | undefined;
+  const learningObjective = typeof dsRaw?.learningObjective === 'string' ? dsRaw.learningObjective : null;
+  const teachingConcept = typeof dsRaw?.teachingConcept === 'string' ? dsRaw.teachingConcept : null;
+  const visualTeachingReq = typeof dsRaw?.visualTeachingRequirement === 'string' ? dsRaw.visualTeachingRequirement : null;
+  const antiCommercialNote = typeof dsRaw?.antiCommercialNote === 'string' ? dsRaw.antiCommercialNote : null;
+  const isEducational = Boolean(learningObjective || teachingConcept);
+
   const prompt = [
     `${outputTypeLabel(input.outputType)} for "${input.scene.project.title}"`,
+    isEducational ? `EDUCATIONAL VIDEO — topic: ${teachingConcept ?? learningObjective}` : undefined,
+    isEducational ? `learning objective: ${learningObjective}` : undefined,
+    isEducational ? `visual teaching requirement: ${visualTeachingReq ?? 'show the concept clearly'}` : undefined,
     `scene: ${input.scene.title}`,
     `action: ${input.scene.description}`,
     settingText || undefined,
@@ -1543,6 +1555,7 @@ export function composeScenePromptText(input: {
     `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
     input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
     `safety: ${r16Rules}`,
+    isEducational && antiCommercialNote ? `anti-commercial: ${antiCommercialNote}` : undefined,
     `provider guidance: ${providerHint}`,
     `composition: ${compositionAspect}, clear foreground subject, uncluttered background`,
   ].filter(Boolean).join('. ');
@@ -3135,6 +3148,30 @@ export const storyRouter = router({
           selectedAnswer: question.selectedAnswer!,
         }));
 
+      // Phase B: content classification + educational contract (when enabled)
+      let detectedContentType: string | null = null;
+      let educationalContract: import('../lib/storyIntelligence/types').EducationalContract | null = null;
+      if (isStoryIntelligenceEnabled()) {
+        try {
+          detectedContentType = await storyIntelligenceProvider.classifyContent({ idea, answers, audienceMode });
+          await ctx.prisma.storyProject.update({
+            where: { id: project.id },
+            data: { contentType: detectedContentType },
+          });
+        } catch (error) {
+          console.warn('[story.generateStory] content classification failed — continuing without:', error instanceof Error ? error.message : error);
+        }
+
+        if (detectedContentType === 'EDUCATIONAL') {
+          try {
+            const sceneCount = project.questions.length > 0 ? Math.min(project.questions.length + 2, 6) : 4;
+            educationalContract = await storyIntelligenceProvider.planEducation({ idea, answers, audienceMode, sceneCount });
+          } catch (error) {
+            console.warn('[story.generateStory] education contract failed — continuing without:', error instanceof Error ? error.message : error);
+          }
+        }
+      }
+
       // Story Blueprint — Phase A: plan before drafting when enabled
       let blueprint: StoryBlueprint | null = null;
       if (isStoryIntelligenceEnabled()) {
@@ -3144,7 +3181,7 @@ export const storyRouter = router({
             event: 'story_playground_opened' as StoryAnalyticsEventName,
             projectId: project.id,
             audienceMode,
-            properties: { stage: 'blueprint', provider: storyIntelligenceProvider.name },
+            properties: { stage: 'blueprint', provider: storyIntelligenceProvider.name, contentType: detectedContentType ?? 'unknown' },
           });
         } catch (error) {
           console.warn('[story.generateStory] blueprint failed — continuing without:', error instanceof StoryIntelligenceError ? error.code : error);
@@ -3168,6 +3205,7 @@ export const storyRouter = router({
             generationPrompt: idea,
             providerMetadata: story.providerMetadata ?? {},
             ...(blueprint ? { blueprint: blueprint as object } : {}),
+            ...(educationalContract ? { educationalContract: educationalContract as object } : {}),
           },
         });
 
@@ -3687,6 +3725,17 @@ export const storyRouter = router({
             mood: s.mood ?? undefined,
           }));
           const storyBody = chapter.enhancedBody ?? chapter.body ?? '';
+          // Phase C: read educational contract from chapter when available
+          let educationalContractForScenes: import('../lib/storyIntelligence/types').EducationalContract | null = null;
+          if (chapter?.educationalContract) {
+            const { educationalContractSchema } = await import('../lib/storyIntelligence/types');
+            const parsed = educationalContractSchema.safeParse(chapter.educationalContract);
+            if (parsed.success) {
+              educationalContractForScenes = parsed.data;
+            } else {
+              console.warn('[story.generateScenes] educationalContract present but invalid — generating without educational context');
+            }
+          }
           try {
             const directedScenes = await storyIntelligenceProvider.directScenes({
               blueprint,
@@ -3696,6 +3745,7 @@ export const storyRouter = router({
               sceneCount: Math.max(blueprint.beats.length, 6),
               characterContext,
               existingSceneHints: existingSceneHints.length > 0 ? existingSceneHints : undefined,
+              educationalContract: educationalContractForScenes,
             });
             sceneRecords = directedScenes.map((ds) => ({
               title: ds.title,
@@ -6691,7 +6741,11 @@ export const storyRouter = router({
       });
       if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
 
-      const narration = input.text?.trim() || `${scene.title}. ${scene.description ?? ''}`.trim();
+      // Phase C: prefer educational narration from directorMetadata, then user text, then generic title+description
+      const educationalNarration = typeof (scene.directorMetadata as Record<string, unknown> | null)?.narrationText === 'string'
+        ? (scene.directorMetadata as Record<string, unknown>).narrationText as string
+        : null;
+      const narration = input.text?.trim() || educationalNarration || `${scene.title}. ${scene.description ?? ''}`.trim();
       if (!narration) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No narration text for this scene.' });
 
       const { sequence } = await getOrCreateSequence(ctx, input.projectId);
@@ -6749,6 +6803,83 @@ export const storyRouter = router({
         properties: { sceneId: scene.id, cueId: cue.id, assetId: result.asset.id, voiceModel: elevenLabsModelId() },
       });
       return { cue: result.cue, asset: result.asset, narration };
+    }),
+
+  /**
+   * Phase C — R16-safe educational narration.
+   * Generates TTS audio from the scene's educational `narrationText` WITHOUT using the
+   * Sequence/AudioCue/AudioTrack Film-tab pipeline (which is blocked for R16 users).
+   * Only available for R16 users on EDUCATIONAL content.
+   * Stores the audio URL directly on `StorySceneSeed.narrationAudioUrl`.
+   */
+  generateEducationalNarration: r16Procedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      voiceId: z.string().max(80).optional(),
+      modelId: z.string().max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // ctx.isR16 guaranteed by r16Procedure
+      await ensureProject(ctx, input.projectId);
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+      }
+      const scene = await ctx.prisma.storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+        include: { project: { select: { contentType: true } } },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      if (scene.project?.contentType !== 'EDUCATIONAL') {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Educational narration is only available for educational stories.' });
+      }
+      const narrationText = typeof (scene.directorMetadata as Record<string, unknown> | null)?.narrationText === 'string'
+        ? (scene.directorMetadata as Record<string, unknown>).narrationText as string
+        : null;
+      if (!narrationText) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No educational narration text for this scene. Re-generate scenes first.' });
+      }
+      const moderation = await moderatePrompt(narrationText);
+      if (!moderation.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Narration text violates content guidelines.') });
+      }
+      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
+      if (!rate.configured) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
+      }
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Educational narration');
+      try {
+        const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
+        const audio = await synthesizeSpeech({ text: narrationText, voiceId, modelId: input.modelId });
+        const storageKey = `story-projects/${input.projectId}/narration/${input.sceneId}-${Date.now()}.mp3`;
+        const publicUrl = await uploadBufferToR2(audio, storageKey, 'audio/mpeg');
+        if (!publicUrl) throw new Error('R2 storage is not configured for narration.');
+        await ctx.prisma.audioAsset.create({
+          data: {
+            projectId: input.projectId,
+            userId: ctx.user.id,
+            storageProvider: 'R2',
+            storageKey,
+            publicUrl,
+            mimeType: 'audio/mpeg',
+            fileSizeBytes: audio.length,
+            sourceKind: 'GENERATED_SPEECH',
+          },
+        });
+        await ctx.prisma.storySceneSeed.update({
+          where: { id: input.sceneId },
+          data: { narrationAudioUrl: publicUrl },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'educational_narration_generated',
+          projectId: input.projectId,
+          properties: { sceneId: input.sceneId, voiceModel: elevenLabsModelId() },
+        });
+        return { audioUrl: publicUrl, narration: narrationText };
+      } catch (error) {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed').catch(() => {});
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
+      }
     }),
 
   /** Background music / ambience generation for a MUSIC or AMBIENCE cue (Lyria). */
@@ -7026,4 +7157,38 @@ export const storyRouter = router({
       });
       return duplicate;
     }),
+
+  // ── R16 story video export ─────────────────────────────────────────────────
+  // Both procedures use r16Procedure (ctx.isR16 required at middleware level).
+  // The service also enforces ctx.isR16 as defense-in-depth.
+
+  requestStoryVideoExport: r16Procedure
+    .input(z.object({
+      projectId: z.string(),
+    }))
+    .mutation(({ ctx, input }) =>
+      storyVideoExportService.requestExport(ctx.prisma, {
+        userId: ctx.user.id,
+        projectId: input.projectId,
+        isR16: ctx.isR16 ?? false,
+      }),
+    ),
+
+  getStoryVideoExport: r16Procedure
+    .input(z.object({
+      projectId: z.string(),
+      exportId: z.string().optional(),
+    }))
+    .query(({ ctx, input }) =>
+      input.exportId
+        ? storyVideoExportService.getExport(ctx.prisma, {
+            userId: ctx.user.id,
+            projectId: input.projectId,
+            exportId: input.exportId,
+          })
+        : storyVideoExportService.getLatestExport(ctx.prisma, {
+            userId: ctx.user.id,
+            projectId: input.projectId,
+          }),
+    ),
 });
