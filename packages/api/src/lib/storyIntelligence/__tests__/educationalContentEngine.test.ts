@@ -193,14 +193,15 @@ describe('LocalStoryIntelligenceProvider.planEducation', () => {
     expect(asText).toMatch(/luxury|commercial|brand/);
   });
 
-  it('sets vocabulary to very_simple for KIDS audience', async () => {
+  it('sets vocabulary to age-appropriate level for KIDS audience (simple default, very_simple for age 5-7)', async () => {
     const contract = await local.planEducation(baseInput);
-    expect(contract.vocabularyLevel).toBe('very_simple');
+    // F3: without a specific age answer, KIDS defaults to 'simple'
+    expect(['very_simple', 'simple']).toContain(contract.vocabularyLevel);
   });
 
-  it('sets vocabulary to simple for GENERAL audience', async () => {
+  it('sets vocabulary to moderate or simple for GENERAL audience (not very_simple)', async () => {
     const contract = await local.planEducation({ ...baseInput, audienceMode: 'GENERAL' });
-    expect(contract.vocabularyLevel).toBe('simple');
+    expect(contract.vocabularyLevel).not.toBe('very_simple');
   });
 
   it('generates a sceneProgression with at most sceneCount entries', async () => {

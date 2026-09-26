@@ -68,6 +68,7 @@ export type StoryBlueprint = z.infer<typeof storyBlueprintSchema>;
 // ─── Directed Scene ─────────────────────────────────────────────────────────
 
 export const teachingRoleSchema = z.enum([
+  'HOOK',
   'INTRODUCTION',
   'EXPLANATION',
   'EXAMPLE',

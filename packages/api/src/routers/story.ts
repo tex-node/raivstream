@@ -2748,6 +2748,22 @@ function inferSceneCharacters(project: {
   return sceneCharacterReferences([inferred]);
 }
 
+// Creates a minimal StoryBlueprint from an educational contract so directScenes can run
+// when no story blueprint was generated (e.g. flag was off at generateStory time).
+function buildMinimalEducationalBlueprint(
+  contract: import('../lib/storyIntelligence/types').EducationalContract,
+): StoryBlueprint {
+  return {
+    version: 'story_blueprint_v1',
+    premise: contract.learningObjective,
+    protagonist: { name: 'Learner', goal: contract.learningObjective },
+    supportingCharacters: [],
+    conflict: `Understanding ${contract.topic}`,
+    beats: contract.sceneProgression.map((purpose) => ({ label: purpose, description: purpose })),
+    continuityRules: [`Teach ${contract.topic} consistently throughout all scenes.`],
+  };
+}
+
 function buildSimpleScenes(project: {
   title: string;
   originalIdea?: string | null;
@@ -3756,7 +3772,25 @@ export const storyRouter = router({
       if (isStoryIntelligenceEnabled()) {
         const chapter = project.chapters[0];
         const blueprint = chapter?.blueprint ? (chapter.blueprint as unknown as StoryBlueprint) : null;
-        if (blueprint) {
+        // Phase C: read educational contract from chapter when available
+        let educationalContractForScenes: import('../lib/storyIntelligence/types').EducationalContract | null = null;
+        if (chapter?.educationalContract) {
+          const { educationalContractSchema } = await import('../lib/storyIntelligence/types');
+          const parsed = educationalContractSchema.safeParse(chapter.educationalContract);
+          if (parsed.success) {
+            educationalContractForScenes = parsed.data;
+          } else {
+            console.warn('[story.generateScenes] educationalContract present but invalid — generating without educational context');
+          }
+        }
+        // Educational content can produce directed scenes even without a story blueprint —
+        // the educational contract is sufficient. Build a minimal blueprint from the contract.
+        const effectiveBlueprint: StoryBlueprint | null = blueprint ?? (
+          educationalContractForScenes
+            ? buildMinimalEducationalBlueprint(educationalContractForScenes)
+            : null
+        );
+        if (effectiveBlueprint) {
           const characterContext = project.characterMemory
             .map((c) => `${c.name}${c.role ? ` (${c.role})` : ''}${c.visualDescription ? `: ${c.visualDescription}` : ''}`)
             .join('\n');
@@ -3766,25 +3800,17 @@ export const storyRouter = router({
             locationType: s.locationType ?? undefined,
             mood: s.mood ?? undefined,
           }));
-          const storyBody = chapter.enhancedBody ?? chapter.body ?? '';
-          // Phase C: read educational contract from chapter when available
-          let educationalContractForScenes: import('../lib/storyIntelligence/types').EducationalContract | null = null;
-          if (chapter?.educationalContract) {
-            const { educationalContractSchema } = await import('../lib/storyIntelligence/types');
-            const parsed = educationalContractSchema.safeParse(chapter.educationalContract);
-            if (parsed.success) {
-              educationalContractForScenes = parsed.data;
-            } else {
-              console.warn('[story.generateScenes] educationalContract present but invalid — generating without educational context');
-            }
-          }
+          const storyBody = chapter?.enhancedBody ?? chapter?.body ?? '';
+          const sceneCount = educationalContractForScenes
+            ? educationalContractForScenes.sceneProgression.length
+            : Math.max(effectiveBlueprint.beats.length, 6);
           try {
             const directedScenes = await storyIntelligenceProvider.directScenes({
-              blueprint,
+              blueprint: effectiveBlueprint,
               storyTitle: project.title ?? 'Untitled',
               storyBody,
               audienceMode: project.audienceMode as 'KIDS' | 'GENERAL',
-              sceneCount: Math.max(blueprint.beats.length, 6),
+              sceneCount,
               characterContext,
               existingSceneHints: existingSceneHints.length > 0 ? existingSceneHints : undefined,
               educationalContract: educationalContractForScenes,

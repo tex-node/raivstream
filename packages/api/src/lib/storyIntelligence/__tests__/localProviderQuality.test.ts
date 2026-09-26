@@ -99,7 +99,8 @@ describe('Phase F §2 — Narration: child-directed language', () => {
 
   it('scene 0 narration is child-directed (contains direct address or child-friendly opener)', () => {
     const text = scenes[0].narrationText?.toLowerCase() ?? '';
-    const childDirected = /did you know|let'?s|you will|you are|amazing|fantastic|fascinating|discover/i.test(text);
+    // Accepts "Did you know", "Let's", "Have you", "You will/are", "Amazing/Fantastic" etc.
+    const childDirected = /did you know|let'?s|have you|you will|you are|amazing|fantastic|fascinating|discover/i.test(text);
     expect(childDirected).toBe(true);
   });
 

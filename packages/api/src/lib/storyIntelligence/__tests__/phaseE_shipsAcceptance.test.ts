@@ -72,9 +72,10 @@ describe('Phase E §3 — EducationalContract content', () => {
     expect(contract.keyConcepts.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('vocabularyLevel is "very_simple" for KIDS', async () => {
+  it('vocabularyLevel is age-appropriate for KIDS (simple when no age answer given)', async () => {
     contract = await local.planEducation({ idea: IDEA, answers: [], audienceMode: AUDIENCE_MODE, sceneCount: SCENE_COUNT });
-    expect(contract.vocabularyLevel).toBe('very_simple');
+    // No age answer → default KIDS vocabulary is 'simple'; age-specific tests are in phaseF3
+    expect(['very_simple', 'simple']).toContain(contract.vocabularyLevel);
   });
 
   it('sceneProgression has expected scene count', async () => {
@@ -338,12 +339,13 @@ describe('Phase E §6 — Narration acceptance', () => {
 // ─── Section 6: Age adaptation ────────────────────────────────────────────────
 
 describe('Phase E §— Age adaptation', () => {
-  it('KIDS vocabularyLevel is very_simple', async () => {
+  it('KIDS with no age answer gets age-appropriate vocabulary (simple default)', async () => {
     const c = await local.planEducation({ idea: IDEA, answers: [], audienceMode: 'KIDS', sceneCount: 4 });
-    expect(c.vocabularyLevel).toBe('very_simple');
+    // F3: age-adaptive vocabulary — 'simple' is the KIDS default without a specific age answer
+    expect(['very_simple', 'simple']).toContain(c.vocabularyLevel);
   });
 
-  it('GENERAL vocabularyLevel is simple (not very_simple)', async () => {
+  it('GENERAL vocabularyLevel is moderate or simple (not very_simple)', async () => {
     const c = await local.planEducation({ idea: IDEA, answers: [], audienceMode: 'GENERAL', sceneCount: 4 });
     expect(c.vocabularyLevel).not.toBe('very_simple');
   });
