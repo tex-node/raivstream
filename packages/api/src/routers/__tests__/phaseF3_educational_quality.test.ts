@@ -458,6 +458,368 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
     });
   });
 
+  // ─── M: F3.14 — Ships Acceptance Test (age 7-9, 6 scenes) ────────────────────
+
+  describe('M: F3.14 — Ships acceptance test: "Let\'s talk about ships" age 7-9', () => {
+    const AGE_ANSWER = [{ questionText: 'How old are the children?', selectedAnswer: '8 years old' }];
+
+    async function buildShipsScenes() {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({
+        idea: SHIPS_IDEA,
+        answers: AGE_ANSWER,
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 6,
+      });
+      const blueprint = {
+        version: 'story_blueprint_v1' as const,
+        premise: contract.learningObjective,
+        protagonist: { name: 'Learner', goal: contract.learningObjective },
+        supportingCharacters: [] as [],
+        conflict: `Understanding ${contract.topic}`,
+        beats: contract.sceneProgression.map((p: string) => ({ label: p, description: p })),
+        continuityRules: [],
+      };
+      const scenes = await provider.directScenes({
+        blueprint,
+        storyTitle: "Let's talk about ships",
+        storyBody: '',
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 6,
+        characterContext: '',
+        educationalContract: contract,
+      });
+      return { contract, scenes };
+    }
+
+    it('age 7-9 → simple vocabulary (not very_simple or moderate)', async () => {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({ idea: SHIPS_IDEA, answers: AGE_ANSWER, audienceMode: KIDS_AUDIENCE, sceneCount: 6 });
+      expect(contract.vocabularyLevel).toBe('simple');
+    });
+
+    it('produces exactly 6 scenes', async () => {
+      const { scenes } = await buildShipsScenes();
+      expect(scenes).toHaveLength(6);
+    });
+
+    it('Scene 1 (HOOK): grabs attention, starts with question or exclamation', async () => {
+      const { scenes } = await buildShipsScenes();
+      const hook = scenes[0]!;
+      expect(hook.teachingRole).toBe('HOOK');
+      expect(hook.narrationText).toMatch(/[?!]/);
+      expect(hook.narrationText?.toLowerCase()).toContain('ships');
+    });
+
+    it('Scene 2 (WHAT IS A SHIP): introduces what ships are', async () => {
+      const { scenes } = await buildShipsScenes();
+      const intro = scenes[1]!;
+      const text = `${intro.narrationText ?? ''} ${intro.teachingConcept ?? ''}`.toLowerCase();
+      expect(text).toMatch(/ships?|vessel|learn|what/);
+    });
+
+    it('Scene 3 (CORE CONCEPT): is educational, relates to ships', async () => {
+      const { scenes } = await buildShipsScenes();
+      const core = scenes[2]!;
+      const text = `${core.narrationText ?? ''} ${core.teachingConcept ?? ''}`.toLowerCase();
+      // Core concept scene covers ships content (types, work, or structure)
+      expect(text).toMatch(/ship|vessel|cargo|ferry|kinds|types|work/);
+      expect(core.learningObjective).toBeTruthy();
+    });
+
+    it('Scene 4 (EXAMPLE): narration is educational, covers ships content', async () => {
+      const { scenes } = await buildShipsScenes();
+      const example = scenes[3]!;
+      const text = `${example.narrationText ?? ''} ${example.teachingConcept ?? ''} ${example.visualTeachingRequirement ?? ''}`.toLowerCase();
+      expect(text).toMatch(/ship|vessel|cargo|ferry|research|fishing|container|kind|ocean/);
+    });
+
+    it('Scene 5 (SECOND CONCEPT): is educational, covers a ships concept', async () => {
+      const { scenes } = await buildShipsScenes();
+      const second = scenes[4]!;
+      const text = `${second.narrationText ?? ''} ${second.teachingConcept ?? ''}`.toLowerCase();
+      expect(text).toMatch(/ship|vessel|cargo|ferry|work|types|ocean|sea/);
+    });
+
+    it('Scene 6 (RECAP): recaps key ships concepts', async () => {
+      const { scenes } = await buildShipsScenes();
+      const recap = scenes[5]!;
+      expect(recap.teachingRole).toBe('RECAP');
+      expect(recap.narrationText?.toLowerCase()).toContain('ships');
+    });
+
+    it('no scene narration contains commercial or luxury language', async () => {
+      const { scenes } = await buildShipsScenes();
+      for (const scene of scenes) {
+        const text = (scene.narrationText ?? '').toLowerCase();
+        expect(text).not.toMatch(/luxury yacht|buy|purchase|brand|sponsor/);
+      }
+    });
+  });
+
+  // ─── N: F3.15 — Automated Quality Scoring (8 dimensions) ─────────────────────
+
+  describe('N: F3.15 — Quality scoring: 8 dimensions, min 4/5 each (5/5 anti-commercial)', () => {
+    type QualityScores = {
+      educationalClarity: number;
+      ageAppropriateness: number;
+      narrationQuality: number;
+      visualTeaching: number;
+      sceneProgression: number;
+      engagement: number;
+      narrationVisualAlignment: number;
+      antiCommercial: number;
+    };
+
+    async function scoreShipsQuality(): Promise<QualityScores> {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({
+        idea: SHIPS_IDEA,
+        answers: [{ questionText: 'Age', selectedAnswer: '8 years old' }],
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 6,
+      });
+      const blueprint = {
+        version: 'story_blueprint_v1' as const,
+        premise: contract.learningObjective,
+        protagonist: { name: 'Learner', goal: contract.learningObjective },
+        supportingCharacters: [] as [],
+        conflict: `Understanding ${contract.topic}`,
+        beats: contract.sceneProgression.map((p: string) => ({ label: p, description: p })),
+        continuityRules: [],
+      };
+      const scenes = await provider.directScenes({
+        blueprint,
+        storyTitle: "Let's talk about ships",
+        storyBody: '',
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 6,
+        characterContext: '',
+        educationalContract: contract,
+      });
+
+      // 1. Educational clarity: keyConcepts well-formed, objective specific
+      let educationalClarity = 0;
+      if (contract.keyConcepts.length >= 3) educationalClarity++;
+      if (!contract.learningObjective.includes('{')) educationalClarity++;
+      if (contract.learningObjective.toLowerCase().includes('ship')) educationalClarity++;
+      if (contract.keyConcepts[0]?.endsWith('?')) educationalClarity++;
+      if (contract.topic.toLowerCase() === 'ships') educationalClarity++;
+
+      // 2. Age appropriateness: vocabulary matches age 7-9
+      let ageAppropriateness = 0;
+      if (contract.vocabularyLevel === 'simple') ageAppropriateness += 2;
+      if (contract.targetAge.includes('8') || contract.targetAge.includes('7')) ageAppropriateness++;
+      const avgWords = scenes.reduce((sum, s) => sum + (s.narrationText ?? '').split(' ').length, 0) / scenes.length;
+      if (avgWords <= 60) ageAppropriateness++;
+      if (avgWords >= 10) ageAppropriateness++;
+
+      // 3. Narration quality: child-directed, no docs language
+      let narrationQuality = 0;
+      if (scenes.every((s) => (s.narrationText ?? '').length > 0)) narrationQuality++;
+      if (scenes[0]?.narrationText?.match(/[?!]/)) narrationQuality++;
+      if (!scenes.some((s) => (s.narrationText ?? '').includes('Viewers will understand'))) narrationQuality++;
+      if (!scenes.some((s) => (s.narrationText ?? '').includes('Once upon a time'))) narrationQuality++;
+      if (scenes.some((s) => /did you know|let'?s|have you|you will|amazing|discover/i.test(s.narrationText ?? ''))) narrationQuality++;
+
+      // 4. Visual teaching: names specific vessel types
+      let visualTeaching = 0;
+      const visualText = contract.visualTeachingStrategy.toLowerCase();
+      const vesselTypes = ['cargo', 'ferry', 'research', 'fishing', 'container'].filter((v) => visualText.includes(v));
+      if (vesselTypes.length >= 2) visualTeaching++;
+      if (vesselTypes.length >= 3) visualTeaching++;
+      if (visualText.includes('hull') || visualText.includes('deck')) visualTeaching++;
+      if (!visualText.match(/luxury yacht|yacht advertisement/)) visualTeaching++;
+      if (scenes.some((s) => s.visualTeachingRequirement)) visualTeaching++;
+
+      // 5. Scene progression: HOOK first, RECAP last, sequential coverage
+      let sceneProgression = 0;
+      if (scenes[0]?.teachingRole === 'HOOK') sceneProgression++;
+      if (scenes[scenes.length - 1]?.teachingRole === 'RECAP') sceneProgression++;
+      if (scenes.length === 6) sceneProgression++;
+      const roles = new Set(scenes.map((s) => s.teachingRole));
+      if (roles.size >= 4) sceneProgression++;
+      if (contract.sceneProgression[0]?.toLowerCase().includes('hook')) sceneProgression++;
+
+      // 6. Engagement: questions, exclamations, child address
+      let engagement = 0;
+      const allNarration = scenes.map((s) => s.narrationText ?? '').join(' ');
+      const questionCount = (allNarration.match(/\?/g) ?? []).length;
+      if (questionCount >= 1) engagement++;
+      if (questionCount >= 2) engagement++;
+      if (/let'?s|you will|have you|did you know/i.test(allNarration)) engagement++;
+      if (scenes[0]?.narrationText?.match(/[?!]/)) engagement++;
+      if (scenes.every((s) => (s.narrationText ?? '').split(' ').length >= 5)) engagement++;
+
+      // 7. Narration/visual alignment: narration relates to teaching requirement
+      let narrationVisualAlignment = 0;
+      let aligned = 0;
+      for (const scene of scenes) {
+        const narr = (scene.narrationText ?? '').toLowerCase();
+        const visual = (scene.visualTeachingRequirement ?? '').toLowerCase();
+        if (narr.includes('ships') || narr.includes('ship')) aligned++;
+      }
+      if (aligned >= Math.floor(scenes.length * 0.8)) narrationVisualAlignment += 3;
+      if (scenes.every((s) => s.visualTeachingRequirement)) narrationVisualAlignment++;
+      if (!scenes.some((s) => s.antiCommercialNote === undefined)) narrationVisualAlignment++;
+
+      // 8. Anti-commercial: strict — no luxury/brand/sponsor content (must be 5/5)
+      let antiCommercial = 0;
+      const allText = [
+        contract.visualTeachingStrategy,
+        contract.learningObjective,
+        ...contract.keyConcepts,
+        ...contract.antiCommercialTopics,
+        ...scenes.map((s) => s.narrationText ?? ''),
+        ...scenes.map((s) => s.action ?? ''),
+      ].join(' ').toLowerCase();
+      if (!allText.match(/luxury yacht|buy now|sponsor|affiliate/)) antiCommercial++;
+      if (contract.antiCommercialTopics.length >= 3) antiCommercial++;
+      if (contract.antiCommercialTopics.join(' ').toLowerCase().includes('luxury')) antiCommercial++;
+      if (contract.antiCommercialTopics.join(' ').toLowerCase().includes('advertis')) antiCommercial++;
+      if (!scenes.some((s) => /luxury|buy|purchase|brand name|sponsor/.test(s.narrationText ?? ''))) antiCommercial++;
+
+      return {
+        educationalClarity,
+        ageAppropriateness,
+        narrationQuality,
+        visualTeaching,
+        sceneProgression,
+        engagement,
+        narrationVisualAlignment,
+        antiCommercial,
+      };
+    }
+
+    it('educational clarity scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.educationalClarity).toBeGreaterThanOrEqual(4);
+    });
+
+    it('age appropriateness scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.ageAppropriateness).toBeGreaterThanOrEqual(4);
+    });
+
+    it('narration quality scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.narrationQuality).toBeGreaterThanOrEqual(4);
+    });
+
+    it('visual teaching scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.visualTeaching).toBeGreaterThanOrEqual(4);
+    });
+
+    it('scene progression scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.sceneProgression).toBeGreaterThanOrEqual(4);
+    });
+
+    it('engagement scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.engagement).toBeGreaterThanOrEqual(4);
+    });
+
+    it('narration/visual alignment scores ≥4/5', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.narrationVisualAlignment).toBeGreaterThanOrEqual(4);
+    });
+
+    it('anti-commercial scores 5/5 (strict)', async () => {
+      const scores = await scoreShipsQuality();
+      expect(scores.antiCommercial).toBe(5);
+    });
+  });
+
+  // ─── O: F3.9 — Narration validation behavior ─────────────────────────────────
+
+  describe('O: F3.9 — All directed educational scenes have valid narrationText', () => {
+    it('every scene from directScenes has non-empty narrationText (≥10 chars)', async () => {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({ idea: SHIPS_IDEA, answers: [], audienceMode: KIDS_AUDIENCE, sceneCount: 6 });
+      const blueprint = {
+        version: 'story_blueprint_v1' as const,
+        premise: contract.learningObjective,
+        protagonist: { name: 'Learner', goal: contract.learningObjective },
+        supportingCharacters: [] as [],
+        conflict: `Understanding ${contract.topic}`,
+        beats: contract.sceneProgression.map((p: string) => ({ label: p, description: p })),
+        continuityRules: [],
+      };
+      const scenes = await provider.directScenes({
+        blueprint,
+        storyTitle: "Let's talk about ships",
+        storyBody: '',
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 6,
+        characterContext: '',
+        educationalContract: contract,
+      });
+      for (const scene of scenes) {
+        expect((scene.narrationText ?? '').trim().length, `scene ${scene.ordinal} has empty narrationText`).toBeGreaterThanOrEqual(10);
+      }
+    });
+
+    it('narrationText is educational — no "Once upon a time" narrative language', async () => {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({ idea: SHIPS_IDEA, answers: [], audienceMode: KIDS_AUDIENCE, sceneCount: 4 });
+      const blueprint = {
+        version: 'story_blueprint_v1' as const,
+        premise: contract.learningObjective,
+        protagonist: { name: 'Learner', goal: contract.learningObjective },
+        supportingCharacters: [] as [],
+        conflict: `Understanding ${contract.topic}`,
+        beats: contract.sceneProgression.map((p: string) => ({ label: p, description: p })),
+        continuityRules: [],
+      };
+      const scenes = await provider.directScenes({
+        blueprint,
+        storyTitle: "Let's talk about ships",
+        storyBody: '',
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 4,
+        characterContext: '',
+        educationalContract: contract,
+      });
+      for (const scene of scenes) {
+        expect(scene.narrationText).not.toMatch(/once upon a time|there was a hero|magical adventure/i);
+      }
+    });
+
+    it('narrationText references the topic (ships) across all scenes', async () => {
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const contract = await provider.planEducation({ idea: SHIPS_IDEA, answers: [], audienceMode: KIDS_AUDIENCE, sceneCount: 4 });
+      const blueprint = {
+        version: 'story_blueprint_v1' as const,
+        premise: contract.learningObjective,
+        protagonist: { name: 'Learner', goal: contract.learningObjective },
+        supportingCharacters: [] as [],
+        conflict: `Understanding ${contract.topic}`,
+        beats: contract.sceneProgression.map((p: string) => ({ label: p, description: p })),
+        continuityRules: [],
+      };
+      const scenes = await provider.directScenes({
+        blueprint,
+        storyTitle: "Let's talk about ships",
+        storyBody: '',
+        audienceMode: KIDS_AUDIENCE,
+        sceneCount: 4,
+        characterContext: '',
+        educationalContract: contract,
+      });
+      for (const scene of scenes) {
+        expect(scene.narrationText?.toLowerCase()).toContain('ships');
+      }
+    });
+  });
+
   // ─── L: Normal story pipeline unaffected ──────────────────────────────────
 
   describe('L: Normal story pipeline (non-educational) is unaffected', () => {

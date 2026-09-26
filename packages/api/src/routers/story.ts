@@ -2764,6 +2764,57 @@ function buildMinimalEducationalBlueprint(
   };
 }
 
+// F3.10: Builds a GeneratedStory-shaped lesson body for EDUCATIONAL content,
+// bypassing storyTextService which would produce a narrative ("Once upon a time...").
+function buildEducationalLessonBody(
+  idea: string,
+  contract: import('../lib/storyIntelligence/types').EducationalContract,
+): import('../lib/storyTextService').GeneratedStory {
+  const title = `Learning About ${contract.topic}`;
+  const body = [
+    `Topic: ${contract.topic}`,
+    `Goal: ${contract.learningObjective}`,
+    '',
+    contract.sceneProgression.map((step, i) => `${i + 1}. ${step}`).join('\n'),
+  ].join('\n');
+  return {
+    title,
+    summary: contract.learningObjective,
+    body,
+    ageRange: contract.targetAge,
+    mainCharacterName: '',
+    supportingCharacters: [],
+    theme: 'educational',
+    sceneHints: contract.sceneProgression.map((step) => ({
+      title: step,
+      description: `Teach: ${step}`,
+      mood: 'informative',
+    })),
+    characterMemory: [],
+    providerMetadata: { source: 'educational_lesson_body', topic: contract.topic },
+  };
+}
+
+// F3.9: After directScenes(), ensure every educational scene has non-empty narrationText.
+// If narrationText is missing or empty, fills a deterministic fallback based on concept + vocabulary.
+function validateAndFillEducationalNarration(
+  scenes: import('../lib/storyIntelligence/types').DirectedScene[],
+  contract: import('../lib/storyIntelligence/types').EducationalContract,
+): import('../lib/storyIntelligence/types').DirectedScene[] {
+  const topic = contract.topic;
+  const isSimple = contract.vocabularyLevel === 'very_simple' || contract.vocabularyLevel === 'simple';
+  return scenes.map((scene, i) => {
+    const narration = scene.narrationText?.trim();
+    if (narration && narration.length >= 10) return scene;
+    const concept = scene.teachingConcept ?? scene.title ?? contract.sceneProgression[i] ?? topic;
+    const fallback = isSimple
+      ? `Let's learn about ${concept}. ${concept} is an important part of understanding ${topic}.`
+      : `In this section we explore ${concept} and its role in understanding ${topic}.`;
+    console.warn(`[F3.9] Scene ${i} "${scene.title}" missing narrationText — using fallback`);
+    return { ...scene, narrationText: fallback };
+  });
+}
+
 function buildSimpleScenes(project: {
   title: string;
   originalIdea?: string | null;
@@ -3200,7 +3251,7 @@ export const storyRouter = router({
           selectedAnswer: question.selectedAnswer!,
         }));
 
-      // Phase B: content classification + educational contract (when enabled)
+      // Phase B: content classification + educational contract
       // Explicit intent (set by createSpark when storyType=EDUCATIONAL) is never overridden.
       let detectedContentType: string | null = project.contentType ?? null;
       let educationalContract: import('../lib/storyIntelligence/types').EducationalContract | null = null;
@@ -3219,14 +3270,15 @@ export const storyRouter = router({
             console.warn('[story.generateStory] content classification failed — continuing without:', error instanceof Error ? error.message : error);
           }
         }
-
-        if (detectedContentType === 'EDUCATIONAL') {
-          try {
-            const sceneCount = project.questions.length > 0 ? Math.min(project.questions.length + 2, 6) : 4;
-            educationalContract = await storyIntelligenceProvider.planEducation({ idea, answers, audienceMode, sceneCount });
-          } catch (error) {
-            console.warn('[story.generateStory] education contract failed — continuing without:', error instanceof Error ? error.message : error);
-          }
+      }
+      // F3.10: planEducation runs for all EDUCATIONAL content regardless of flag —
+      // the local provider is deterministic and requires no AI/network.
+      if (detectedContentType === 'EDUCATIONAL') {
+        try {
+          const sceneCount = project.questions.length > 0 ? Math.min(project.questions.length + 2, 6) : 4;
+          educationalContract = await storyIntelligenceProvider.planEducation({ idea, answers, audienceMode, sceneCount });
+        } catch (error) {
+          console.warn('[story.generateStory] education contract failed — continuing without:', error instanceof Error ? error.message : error);
         }
       }
 
@@ -3246,7 +3298,10 @@ export const storyRouter = router({
         }
       }
 
-      const story = await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id });
+      // F3.10: EDUCATIONAL content generates a lesson script, not a narrative.
+      const story = (detectedContentType === 'EDUCATIONAL' && educationalContract)
+        ? buildEducationalLessonBody(idea, educationalContract)
+        : await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id });
       const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         await tx.storyChapter.deleteMany({ where: { projectId: project.id } });
@@ -3805,7 +3860,7 @@ export const storyRouter = router({
             ? educationalContractForScenes.sceneProgression.length
             : Math.max(effectiveBlueprint.beats.length, 6);
           try {
-            const directedScenes = await storyIntelligenceProvider.directScenes({
+            let directedScenes = await storyIntelligenceProvider.directScenes({
               blueprint: effectiveBlueprint,
               storyTitle: project.title ?? 'Untitled',
               storyBody,
@@ -3815,6 +3870,10 @@ export const storyRouter = router({
               existingSceneHints: existingSceneHints.length > 0 ? existingSceneHints : undefined,
               educationalContract: educationalContractForScenes,
             });
+            // F3.9: Validate narration quality; fill deterministic fallback for any missing narrationText
+            if (educationalContractForScenes) {
+              directedScenes = validateAndFillEducationalNarration(directedScenes, educationalContractForScenes);
+            }
             sceneRecords = directedScenes.map((ds) => ({
               title: ds.title,
               description: ds.action,

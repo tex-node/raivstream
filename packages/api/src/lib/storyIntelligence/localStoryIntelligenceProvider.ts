@@ -362,9 +362,9 @@ export class LocalStoryIntelligenceProvider implements StoryIntelligenceProvider
       ];
       return contract.sceneProgression.slice(0, count).map((purpose, i) => {
         const concept = contract.keyConcepts[i] ?? contract.keyConcepts[contract.keyConcepts.length - 1] ?? topic;
-        const role = teachingRoles[Math.min(i, teachingRoles.length - 1)];
         const isFirst = i === 0;
         const isLast = i === count - 1;
+        const role = isLast ? 'RECAP' : teachingRoles[Math.min(i, teachingRoles.length - 1)];
         let narrationText: string;
         if (isFirst) {
           narrationText = hookNarrationFor(topic, vocabLevel);
