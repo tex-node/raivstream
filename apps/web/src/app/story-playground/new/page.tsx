@@ -1084,13 +1084,15 @@ export default function StoryPlaygroundPage() {
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[rgba(79,139,214,0.12)] px-4 py-2 text-sm font-semibold text-[var(--noc-blue)]">
               <Sparkles size={16} />
-              {isR16 ? 'R16 Story Playground' : 'Story Playground'}
+              {isEducationalMode ? 'R16 Learning Studio' : isR16 ? 'R16 Story Playground' : 'Story Playground'}
             </div>
             <h1 className="max-w-3xl text-4xl font-black leading-tight text-[var(--noc-t1)] md:text-6xl">
-              What story should we create?
+              {isEducationalMode ? 'What would you like to learn about?' : 'What story should we create?'}
             </h1>
             <p className="mt-4 max-w-2xl text-lg text-[var(--noc-t4)]">
-              Start with a tiny idea. We will ask a few easy questions, then turn it into a short story you can keep building.
+              {isEducationalMode
+                ? "Enter a topic. We'll ask a couple of questions, then create a personalised learning video."
+                : 'Start with a tiny idea. We will ask a few easy questions, then turn it into a short story you can keep building.'}
             </p>
           </div>
 
@@ -1135,7 +1137,7 @@ export default function StoryPlaygroundPage() {
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-blue)]">{isR16 ? 'Choose a look' : 'Visual Style'}</p>
-                <h2 className="text-2xl font-black">{isR16 ? 'What should your story look like?' : 'Choose a generation look'}</h2>
+                <h2 className="text-2xl font-black">{isEducationalMode ? 'Choose a look for your learning video' : isR16 ? 'What should your story look like?' : 'Choose a generation look'}</h2>
               </div>
               {project?.visualStyle && (
                 <p className="rounded-full bg-[rgba(79,139,214,0.10)] px-3 py-2 text-xs font-black text-[var(--noc-purple)]">

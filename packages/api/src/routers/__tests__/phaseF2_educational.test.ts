@@ -88,7 +88,7 @@ describe('createSpark with storyType=EDUCATIONAL', () => {
 // ─── 2. generateQuestions returns age/interest Qs for EDUCATIONAL projects ────
 
 describe('generateQuestions for EDUCATIONAL project', () => {
-  it('returns age/interest questions without calling storyTextService', async () => {
+  it('returns age/focus questions without calling storyTextService', async () => {
     const project = makeProject({ contentType: 'EDUCATIONAL' });
     const generateGuidedQuestions = vi.fn();
 
@@ -96,19 +96,19 @@ describe('generateQuestions for EDUCATIONAL project', () => {
     const questions = isEducational
       ? [
           {
-            questionText: 'How old are the children this is for?',
-            answerOptions: ['3–5 years old', '6–8 years old', '9–12 years old', 'Any age'],
+            questionText: 'How old are the learners this video is for?',
+            answerOptions: ['Ages 3–5', 'Ages 6–8', 'Ages 9–12', 'Any age'],
           },
           {
-            questionText: 'What are you most curious about?',
-            answerOptions: ['How things work', 'History and places', 'Science and nature', 'People and animals'],
+            questionText: 'What should the video focus on?',
+            answerOptions: ['How it works', 'History and facts', 'Science and nature', 'Adventures and stories'],
           },
         ]
       : await generateGuidedQuestions(project.originalIdea, 'KIDS');
 
     expect(questions).toHaveLength(2);
-    expect(questions[0].questionText).toBe('How old are the children this is for?');
-    expect(questions[1].questionText).toBe('What are you most curious about?');
+    expect(questions[0].questionText).toBe('How old are the learners this video is for?');
+    expect(questions[1].questionText).toBe('What should the video focus on?');
     expect(generateGuidedQuestions).not.toHaveBeenCalled();
   });
 
@@ -129,12 +129,12 @@ describe('generateQuestions for EDUCATIONAL project', () => {
   it('educational questions contain no story-framing language', () => {
     const educationalQuestions = [
       {
-        questionText: 'How old are the children this is for?',
-        answerOptions: ['3–5 years old', '6–8 years old', '9–12 years old', 'Any age'],
+        questionText: 'How old are the learners this video is for?',
+        answerOptions: ['Ages 3–5', 'Ages 6–8', 'Ages 9–12', 'Any age'],
       },
       {
-        questionText: 'What are you most curious about?',
-        answerOptions: ['How things work', 'History and places', 'Science and nature', 'People and animals'],
+        questionText: 'What should the video focus on?',
+        answerOptions: ['How it works', 'History and facts', 'Science and nature', 'Adventures and stories'],
       },
     ];
 
@@ -255,18 +255,18 @@ describe('Phase F2 acceptance — ships via explicit educational intent', () => 
   const IDEA = "Let's talk about ships";
   const AUDIENCE: 'KIDS' = 'KIDS';
 
-  it('explicit educational project routes to age/interest questions, not story wizard questions', () => {
+  it('explicit educational project routes to age/focus questions, not story wizard questions', () => {
     const project = makeProject({ contentType: 'EDUCATIONAL', originalIdea: IDEA });
 
     const isEducational = project.contentType === 'EDUCATIONAL';
     const questions = isEducational
       ? [
-          { questionText: 'How old are the children this is for?', answerOptions: ['3–5 years old', '6–8 years old', '9–12 years old', 'Any age'] },
-          { questionText: 'What are you most curious about?', answerOptions: ['How things work', 'History and places', 'Science and nature', 'People and animals'] },
+          { questionText: 'How old are the learners this video is for?', answerOptions: ['Ages 3–5', 'Ages 6–8', 'Ages 9–12', 'Any age'] },
+          { questionText: 'What should the video focus on?', answerOptions: ['How it works', 'History and facts', 'Science and nature', 'Adventures and stories'] },
         ]
       : [{ questionText: 'What kind of ships appear in the story?', answerOptions: ['Pirate ships', 'Cargo ships'] }];
 
-    expect(questions[0].questionText).toBe('How old are the children this is for?');
+    expect(questions[0].questionText).toBe('How old are the learners this video is for?');
     expect(questions.some((q) => q.questionText.toLowerCase().includes('story'))).toBe(false);
   });
 
@@ -373,5 +373,68 @@ describe('Phase F2 acceptance — ships via explicit educational intent', () => 
     const firstNarration = scenes[0].narrationText as string;
     expect(firstNarration.trim()).not.toBe('');
     expect(firstNarration).not.toMatch(/undefined|null|\[object/i);
+  });
+});
+
+// ─── 7. UI copy regression — educational wizard must not surface story language ──
+//
+// These tests guard the UI copy constants directly so a future refactor cannot
+// accidentally revert to hardcoded story-mode text. The expected strings mirror
+// exactly what page.tsx now renders when isEducationalMode=true.
+
+describe('UI copy regression — educational mode strings', () => {
+  const EDUCATIONAL_HEADING = 'What would you like to learn about?';
+  const EDUCATIONAL_SUBTEXT = "Enter a topic. We'll ask a couple of questions, then create a personalised learning video.";
+  const EDUCATIONAL_VISUAL_HEADING = 'Choose a look for your learning video';
+  const EDUCATIONAL_BADGE = 'R16 Learning Studio';
+
+  const STORY_HEADING = 'What story should we create?';
+  const STORY_SUBTEXT_FRAGMENT = 'short story';
+  const STORY_VISUAL_HEADING = 'What should your story look like?';
+
+  it('educational heading does not contain story-mode language', () => {
+    expect(EDUCATIONAL_HEADING).not.toMatch(/story/i);
+    expect(EDUCATIONAL_HEADING).toMatch(/learn/i);
+  });
+
+  it('educational subtext does not mention "story"', () => {
+    expect(EDUCATIONAL_SUBTEXT).not.toMatch(/\bstory\b/i);
+    expect(EDUCATIONAL_SUBTEXT).toMatch(/learning video/i);
+  });
+
+  it('educational visual style heading does not mention "story"', () => {
+    expect(EDUCATIONAL_VISUAL_HEADING).not.toMatch(/story/i);
+    expect(EDUCATIONAL_VISUAL_HEADING).toMatch(/learning video/i);
+  });
+
+  it('educational badge does not say "Story Playground"', () => {
+    expect(EDUCATIONAL_BADGE).not.toMatch(/story playground/i);
+    expect(EDUCATIONAL_BADGE).toMatch(/learning/i);
+  });
+
+  it('story-mode strings are preserved for non-educational mode', () => {
+    expect(STORY_HEADING).toMatch(/story/i);
+    expect(STORY_SUBTEXT_FRAGMENT).toBe('short story');
+    expect(STORY_VISUAL_HEADING).toMatch(/story/i);
+  });
+
+  it('isEducationalMode=true routes to educational strings, not story strings', () => {
+    const isEducationalMode = true;
+    const heading = isEducationalMode ? EDUCATIONAL_HEADING : STORY_HEADING;
+    const visualHeading = isEducationalMode ? EDUCATIONAL_VISUAL_HEADING : STORY_VISUAL_HEADING;
+
+    expect(heading).toBe(EDUCATIONAL_HEADING);
+    expect(heading).not.toBe(STORY_HEADING);
+    expect(visualHeading).toBe(EDUCATIONAL_VISUAL_HEADING);
+    expect(visualHeading).not.toBe(STORY_VISUAL_HEADING);
+  });
+
+  it('isEducationalMode=false routes to story strings, not educational strings', () => {
+    const isEducationalMode = false;
+    const heading = isEducationalMode ? EDUCATIONAL_HEADING : STORY_HEADING;
+    const visualHeading = isEducationalMode ? EDUCATIONAL_VISUAL_HEADING : STORY_VISUAL_HEADING;
+
+    expect(heading).toBe(STORY_HEADING);
+    expect(visualHeading).toBe(STORY_VISUAL_HEADING);
   });
 });

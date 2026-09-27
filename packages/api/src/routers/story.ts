@@ -3123,17 +3123,17 @@ export const storyRouter = router({
       const idea = project.originalIdea ?? project.logline ?? project.title;
       assertKidsSafeIdea(idea, audienceMode);
 
-      // Educational projects get age/interest questions — not story wizard questions.
+      // Educational projects get age/focus questions — not story wizard questions.
       const isEducational = project.contentType === 'EDUCATIONAL';
       const questions = isEducational
         ? [
             {
-              questionText: 'How old are the children this is for?',
-              answerOptions: ['3–5 years old', '6–8 years old', '9–12 years old', 'Any age'],
+              questionText: 'How old are the learners this video is for?',
+              answerOptions: ['Ages 3–5', 'Ages 6–8', 'Ages 9–12', 'Any age'],
             },
             {
-              questionText: 'What are you most curious about?',
-              answerOptions: ['How things work', 'History and places', 'Science and nature', 'People and animals'],
+              questionText: 'What should the video focus on?',
+              answerOptions: ['How it works', 'History and facts', 'Science and nature', 'Adventures and stories'],
             },
           ]
         : await storyTextService.generateGuidedQuestions(idea, audienceMode);
