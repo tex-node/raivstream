@@ -8,14 +8,26 @@
  *   requestStoryVideoExport → ffprobe binary validation
  *
  * Run from the VPS:
- *   SESSION_TOKEN="$(cat /root/.f5token)" REFRESH_TOKEN="$(cat /root/.f5refresh)" \
- *     node /root/raivstream/scripts/f5_acceptance.mjs
+ *   REFRESH_TOKEN="$(cat /root/.f5refresh)" node /root/raivstream/scripts/f5_acceptance.mjs
  *
- * SESSION_TOKEN — the raiv_at access token (15-min JWT) copied from the browser.
- * REFRESH_TOKEN — the raiv_rt refresh token (30-day JWT) copied from the browser.
- *   Both are httpOnly cookies; extract them from DevTools → Application → Cookies
- *   on r16.raivstream.com.  REFRESH_TOKEN is optional but required for runs > 15 min.
- *   Neither value must appear in output, logs, or reports.
+ * REFRESH_TOKEN — the raiv_rt cookie (30-day JWT) from r16.raivstream.com.
+ *
+ * How to get raiv_rt from Chrome DevTools:
+ *   1. Visit r16.raivstream.com while signed in
+ *   2. F12 → Application → Cookies → https://r16.raivstream.com
+ *   3. Find the row where Name = "raiv_rt"  (Path column shows "/api/auth/refresh")
+ *      DO NOT use raiv_at (Path = "/") or raiv_user (not a token)
+ *   4. Double-click the Value cell → Ctrl+A → Ctrl+C
+ *   5. On VPS: echo -n 'eyJ...' > /root/.f5refresh && chmod 600 /root/.f5refresh
+ *
+ * The script uses REFRESH_TOKEN to obtain a fresh raiv_at at startup and
+ * re-rotates it automatically on any 401.  The 15-min access token is never
+ * stored on disk; REFRESH_TOKEN is the only credential required.
+ *
+ * SESSION_TOKEN is accepted for backwards compatibility but ignored —
+ * the script derives a fresh access token from REFRESH_TOKEN at startup.
+ *
+ * Neither value must appear in output, logs, or reports.
  *
  * Exit 0 = all checks passed.
  * Exit 1 = at least one check failed.
@@ -38,33 +50,38 @@ const POLL_INTERVAL_MS  = 10_000;  // 10s between polls
 const POLL_TIMEOUT_MS   = 600_000; // 10 min per asset
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
+//
+// The application issues:
+//   raiv_at  — httpOnly access JWT, path "/",                  15-min expiry
+//   raiv_rt  — httpOnly refresh JWT, path "/api/auth/refresh", 30-day expiry
+//   raiv_user — non-httpOnly JSON user blob, NOT a token
+//
+// The F5 script uses raiv_rt (REFRESH_TOKEN) to obtain a fresh raiv_at at
+// startup, then auto-rotates it on any 401.  SESSION_TOKEN (raiv_at) is
+// accepted for backwards-compatibility but ignored — it will be stale.
 
-// Strip any leading "name=" prefix and whitespace/newlines from a token value.
-// DevTools sometimes copies cookies as "name=value" or with trailing newlines.
 function sanitizeToken(raw) {
   if (!raw) return null;
-  const stripped = raw.trim();
-  // If it contains a newline, take the last non-empty segment (the JWT itself)
-  const lines = stripped.split(/\s+/).filter(Boolean);
-  // Pick the segment that looks like a JWT (contains two dots)
-  const jwt = lines.find(s => s.includes('.')) ?? lines[lines.length - 1] ?? stripped;
-  // Strip any "name=" prefix before the JWT
-  const eq = jwt.indexOf('=');
-  return eq !== -1 && !jwt.startsWith('ey') ? jwt.slice(eq + 1) : jwt;
+  // Find the JWT segment: three base64url parts separated by dots
+  const jwt = raw
+    .split(/[\r\n\s]+/)
+    .map(s => s.replace(/^[^=]+=/, '').trim())  // strip any "name=" prefix
+    .find(s => /^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s));
+  return jwt ?? null;
 }
 
-const SESSION_TOKEN = sanitizeToken(process.env.SESSION_TOKEN);
-if (!SESSION_TOKEN) {
-  console.error('ERROR: SESSION_TOKEN env var is required.');
-  console.error('  SESSION_TOKEN="$(cat /root/.f5token)" ... node f5_acceptance.mjs');
+const REFRESH_TOKEN = sanitizeToken(process.env.REFRESH_TOKEN);
+if (!REFRESH_TOKEN) {
+  console.error('ERROR: REFRESH_TOKEN is required (the raiv_rt cookie from r16.raivstream.com).');
+  console.error('  DevTools → Application → Cookies → Name "raiv_rt" (Path: /api/auth/refresh)');
+  console.error('  REFRESH_TOKEN="$(cat /root/.f5refresh)" node f5_acceptance.mjs');
   process.exit(1);
 }
 
-const REFRESH_TOKEN = sanitizeToken(process.env.REFRESH_TOKEN) ?? null;
-
+// Mutable — updated on every successful refresh
 const HEADERS = {
   'Content-Type':  'application/json',
-  'Authorization': `Bearer ${SESSION_TOKEN}`,
+  'Authorization': 'Bearer placeholder',   // replaced before first call
   'x-r16-mode':   '1',
   'Origin':        BASE_URL,
 };
@@ -72,34 +89,35 @@ const HEADERS = {
 // ─── Token refresh ────────────────────────────────────────────────────────────
 
 async function refreshAccessToken() {
-  if (!REFRESH_TOKEN) {
-    throw new Error('Access token expired and no REFRESH_TOKEN provided. ' +
-      'Set REFRESH_TOKEN="$(cat /root/.f5refresh)" and re-run.');
-  }
   const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie':       `raiv_rt=${REFRESH_TOKEN}`,
-      'Origin':       BASE_URL,
+      'Cookie':        `raiv_rt=${REFRESH_TOKEN}`,
+      'Origin':        BASE_URL,
     },
   });
   if (!res.ok) {
-    throw new Error(`Token refresh failed: HTTP ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(
+      `Token refresh failed: HTTP ${res.status}. ` +
+      'Ensure REFRESH_TOKEN is the raiv_rt cookie (Path: /api/auth/refresh), ' +
+      `not raiv_at (Path: /). Server said: ${body.slice(0, 120)}`
+    );
   }
-  // Parse new raiv_at from Set-Cookie headers (Node 18+: getSetCookie returns array)
-  const cookies = typeof res.headers.getSetCookie === 'function'
+  // Parse new raiv_at from Set-Cookie (Node 18+: getSetCookie() returns array)
+  const setCookies = typeof res.headers.getSetCookie === 'function'
     ? res.headers.getSetCookie()
     : [res.headers.get('set-cookie') ?? ''];
-  for (const c of cookies) {
+  for (const c of setCookies) {
     const m = c.match(/^raiv_at=([^;]+)/);
     if (m) {
       HEADERS['Authorization'] = `Bearer ${decodeURIComponent(m[1])}`;
-      console.log('  [auth] Access token refreshed.');
+      console.log('  [auth] Access token refreshed successfully.');
       return;
     }
   }
-  throw new Error('Token refresh response did not include a new raiv_at cookie.');
+  throw new Error('Refresh response did not include a raiv_at Set-Cookie. Check server logs.');
 }
 
 // ─── tRPC helpers ─────────────────────────────────────────────────────────────
@@ -196,6 +214,10 @@ function fail(label, reason) { evidence.checks.push({ label, result: 'FAIL', rea
   let exitCode = 0;
 
   try {
+    // ── Auth: obtain fresh access token via raiv_rt ───────────────────────────
+    console.log('\n── Auth: obtaining fresh access token');
+    await refreshAccessToken();
+
     // ── F5.1: Health gate ──────────────────────────────────────────────────────
     console.log('\n── F5.1: Health gate');
     const health = await fetch(`${BASE_URL}/api/health`).then((r) => r.json());
