@@ -40,6 +40,8 @@ export interface RenderScene {
   sceneId: string;
   videoUrl?: string | null;
   stillUrl?: string | null;
+  /** Narration audio URL for educational mux (R2-hosted MP3). Server-side only — never accepted from client input. */
+  audioUrl?: string | null;
 }
 
 export async function renderOutputDerivative(
@@ -50,8 +52,83 @@ export async function renderOutputDerivative(
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
 
+  const { targetWidth: W, targetHeight: H } = input.derivation;
   const dir = await mkdtemp(path.join(os.tmpdir(), 'raivstream-output-'));
   try {
+    const hasAudio = input.scenes.some((s) => s.audioUrl);
+
+    // ── Audio mux path (educational: per-scene loop+mux then concat) ──────────
+    if (hasAudio) {
+      // All scenes must have audio when any do — validated upstream but checked here.
+      const missingAudio = input.scenes.filter((s) => !s.audioUrl).map((s) => s.sceneId);
+      if (missingAudio.length > 0) {
+        throw new Error(`Audio mux mode requires all scenes to have audioUrl. Missing: ${missingAudio.join(', ')}`);
+      }
+
+      const sceneParts: string[] = [];
+      for (let i = 0; i < input.scenes.length; i++) {
+        const scene = input.scenes[i]!;
+        const videoSrc = scene.videoUrl ?? scene.stillUrl;
+        if (!videoSrc) throw new Error(`Scene ${scene.sceneId} has no video source for audio mux.`);
+
+        // Download video
+        const vFile = path.join(dir, `v-${i}.bin`);
+        const vResp = await doFetch(videoSrc);
+        if (!vResp.ok) throw new Error(`Failed to fetch video for scene ${scene.sceneId} (${vResp.status})`);
+        await writeFile(vFile, Buffer.from(await vResp.arrayBuffer()));
+
+        // Download narration audio
+        const aFile = path.join(dir, `a-${i}.bin`);
+        const aResp = await doFetch(scene.audioUrl!);
+        if (!aResp.ok) throw new Error(`Failed to fetch narration audio for scene ${scene.sceneId} (${aResp.status})`);
+        await writeFile(aFile, Buffer.from(await aResp.arrayBuffer()));
+
+        // Per-scene mux: loop video infinitely, end when narration audio ends (-shortest).
+        // This handles narration longer than the clip (the common case for educational content)
+        // and adds silence if narration is shorter than the clip.
+        const sceneOut = path.join(dir, `scene-${i}.mp4`);
+        await doFfmpeg([
+          '-stream_loop', '-1',
+          '-i', vFile,
+          '-i', aFile,
+          '-filter_complex', `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
+          '-map', '[v]',
+          '-map', '1:a',
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-shortest',
+          sceneOut,
+        ]);
+        sceneParts.push(sceneOut);
+      }
+
+      // Concat all per-scene muxed clips into the final export.
+      const out = path.join(dir, 'out.mp4');
+      const n = sceneParts.length;
+      const segLabels = sceneParts.map((_, i) => `[${i}:v][${i}:a]`).join('');
+      await doFfmpeg([
+        ...sceneParts.flatMap((f) => ['-i', f]),
+        '-filter_complex', `${segLabels}concat=n=${n}:v=1:a=1[vout][aout]`,
+        '-map', '[vout]',
+        '-map', '[aout]',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        out,
+      ]);
+
+      const buffer = await readFile(out);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
+      return { assetUrl };
+    }
+
+    // ── Video-only path (non-educational, existing behavior unchanged) ─────────
     const inputs: string[] = [];
     for (const scene of input.scenes) {
       const url = scene.videoUrl ?? scene.stillUrl;
@@ -64,7 +141,6 @@ export async function renderOutputDerivative(
     }
     if (inputs.length === 0) throw new Error('No source media available to derive an output.');
 
-    const { targetWidth: W, targetHeight: H } = input.derivation;
     const parts = inputs.map(
       (_, index) => `[${index}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v${index}]`,
     );

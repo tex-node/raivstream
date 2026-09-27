@@ -59,9 +59,10 @@ export interface StoryVideoExportState {
   completedAt: Date | null;
 }
 
-function computeSourceHash(pairs: Array<{ sceneId: string; assetId: string }>): string {
+function computeSourceHash(pairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }>): string {
   const sorted = [...pairs].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
-  const payload = sorted.map((p) => `${p.sceneId}:${p.assetId}`).join(',');
+  // Include audioUrl suffix only when present — preserves backward-compat hash for video-only exports.
+  const payload = sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
   return createHash('sha256').update(payload).digest('hex');
 }
 
@@ -146,6 +147,7 @@ export class StoryVideoExportService {
     }
 
     // ── 4. Load canonical scene set — all scenes in deterministic order ──────
+    const isEducational = project.contentType === 'EDUCATIONAL';
     const allScenes = await prisma.storySceneSeed.findMany({
       where: { projectId: input.projectId },
       orderBy: { orderIndex: 'asc' },
@@ -154,6 +156,19 @@ export class StoryVideoExportService {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'This story has no scenes.' });
     }
     const sceneIdList = allScenes.map((s) => s.id);
+
+    // ── 4a. Educational: every scene must have narration audio ───────────────
+    //        narrationAudioUrl is read from the DB row — never from client input.
+    if (isEducational) {
+      const missingSpeech = allScenes.filter((s) => !s.narrationAudioUrl);
+      if (missingSpeech.length > 0) {
+        const labels = missingSpeech.map((s) => s.title ?? s.id).slice(0, 3);
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Educational scene(s) have no narration audio: ${labels.join(', ')}. Generate narration before exporting.`,
+        });
+      }
+    }
 
     // ── 5–10. Verify every scene has a READY VIDEO asset owned by this project.
     //          Ownership invariant: projectId + sceneId + assetType=VIDEO +
@@ -194,9 +209,15 @@ export class StoryVideoExportService {
     }
 
     // ── 6. Idempotency — compute sourceHash ──────────────────────────────────
+    // narrationAudioUrl is included in the hash so that adding audio after a
+    // video-only export produces a distinct export row (not a stale cache hit).
+    const audioByScene = new Map<string, string | null>(
+      allScenes.map((s) => [s.id, s.narrationAudioUrl ?? null]),
+    );
     const pairs = sceneIdList.map((sceneId) => ({
       sceneId,
       assetId: readyByScene.get(sceneId)!.id,
+      audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : null,
     }));
     const sourceHash = computeSourceHash(pairs);
 
@@ -242,9 +263,11 @@ export class StoryVideoExportService {
 
     // ── 8. Assemble via renderOutputDerivative ───────────────────────────────
     try {
+      // audioUrl is derived from the validated DB row — never from client input.
       const scenes: RenderScene[] = sceneIdList.map((sceneId) => ({
         sceneId,
         videoUrl: readyByScene.get(sceneId)!.assetUrl,
+        audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : undefined,
       }));
 
       const totalRuntimeSeconds = sceneIdList.reduce(
