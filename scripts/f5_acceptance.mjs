@@ -207,33 +207,36 @@ function fail(label, reason) { evidence.checks.push({ label, result: 'FAIL', rea
       const sceneEntry = { sceneId: scene.id, title: scene.title, imageAssetId: null, videoAssetId: null, narrationAudioUrl: null };
 
       // Image generation
+      // generateSceneImage is synchronous — waits for FAL inline, returns { scene, asset, criticRun }.
+      // The asset is already READY (or FAILED) when the mutation returns; no polling needed.
       console.log('  Generating scene image...');
-      const imgAsset = await mutation('story.generateSceneImage', {
+      const imgResult = await mutation('story.generateSceneImage', {
         projectId: project.id,
         sceneId:   scene.id,
         model:     'FLUX2',
       });
+      const imgAsset = imgResult.asset;
       sceneEntry.imageAssetId = imgAsset.id;
-      const readyImg = await pollSceneAsset(project.id, imgAsset.id, `image[${i}]`);
-      if (readyImg.status === 'READY' && readyImg.assetUrl) {
+      if (imgAsset.status === 'READY' && imgAsset.assetUrl) {
         pass(`scene ${i + 1}: image READY`);
       } else {
-        fail(`scene ${i + 1}: image`, `status=${readyImg.status}`);
+        fail(`scene ${i + 1}: image`, `status=${imgAsset.status} errorMessage=${imgAsset.errorMessage ?? 'none'}`);
       }
 
       // Video generation (image-to-video via H3_MAX)
+      // generateSceneVideo is also synchronous — returns { scene, asset }.
       console.log('  Generating scene video (H3_MAX image-to-video)...');
-      const vidAsset = await mutation('story.generateSceneVideo', {
+      const vidResult = await mutation('story.generateSceneVideo', {
         projectId: project.id,
         sceneId:   scene.id,
         model:     'H3_MAX',
       });
+      const vidAsset = vidResult.asset;
       sceneEntry.videoAssetId = vidAsset.id;
-      const readyVid = await pollSceneAsset(project.id, vidAsset.id, `video[${i}]`);
-      if (readyVid.status === 'READY' && readyVid.assetUrl) {
+      if (vidAsset.status === 'READY' && vidAsset.assetUrl) {
         pass(`scene ${i + 1}: video READY`);
       } else {
-        fail(`scene ${i + 1}: video`, `status=${readyVid.status}`);
+        fail(`scene ${i + 1}: video`, `status=${vidAsset.status} errorMessage=${vidAsset.errorMessage ?? 'none'}`);
       }
 
       // Educational narration (ElevenLabs)

@@ -1062,6 +1062,7 @@ function chapterSelect() {
     summary: true,
     body: true,
     createdAt: true,
+    educationalContract: true,
   } as const;
 }
 
