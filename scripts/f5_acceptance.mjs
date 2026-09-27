@@ -8,10 +8,14 @@
  *   requestStoryVideoExport → ffprobe binary validation
  *
  * Run from the VPS:
- *   SESSION_TOKEN=<jwt> node /root/raivstream/scripts/f5_acceptance.mjs
+ *   SESSION_TOKEN="$(cat /root/.f5token)" REFRESH_TOKEN="$(cat /root/.f5refresh)" \
+ *     node /root/raivstream/scripts/f5_acceptance.mjs
  *
- * The SESSION_TOKEN is a valid JWT for a real R16-enabled user account.
- * It is read from the environment — never passed on the command line.
+ * SESSION_TOKEN — the raiv_at access token (15-min JWT) copied from the browser.
+ * REFRESH_TOKEN — the raiv_rt refresh token (30-day JWT) copied from the browser.
+ *   Both are httpOnly cookies; extract them from DevTools → Application → Cookies
+ *   on r16.raivstream.com.  REFRESH_TOKEN is optional but required for runs > 15 min.
+ *   Neither value must appear in output, logs, or reports.
  *
  * Exit 0 = all checks passed.
  * Exit 1 = at least one check failed.
@@ -38,9 +42,11 @@ const POLL_TIMEOUT_MS   = 600_000; // 10 min per asset
 const SESSION_TOKEN = process.env.SESSION_TOKEN;
 if (!SESSION_TOKEN) {
   console.error('ERROR: SESSION_TOKEN env var is required.');
-  console.error('  SESSION_TOKEN=<jwt> node f5_acceptance.mjs');
+  console.error('  SESSION_TOKEN="$(cat /root/.f5token)" ... node f5_acceptance.mjs');
   process.exit(1);
 }
+
+const REFRESH_TOKEN = process.env.REFRESH_TOKEN ?? null;
 
 const HEADERS = {
   'Content-Type':  'application/json',
@@ -49,9 +55,42 @@ const HEADERS = {
   'Origin':        BASE_URL,
 };
 
+// ─── Token refresh ────────────────────────────────────────────────────────────
+
+async function refreshAccessToken() {
+  if (!REFRESH_TOKEN) {
+    throw new Error('Access token expired and no REFRESH_TOKEN provided. ' +
+      'Set REFRESH_TOKEN="$(cat /root/.f5refresh)" and re-run.');
+  }
+  const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie':       `raiv_rt=${REFRESH_TOKEN}`,
+      'Origin':       BASE_URL,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Token refresh failed: HTTP ${res.status}`);
+  }
+  // Parse new raiv_at from Set-Cookie headers (Node 18+: getSetCookie returns array)
+  const cookies = typeof res.headers.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
+    : [res.headers.get('set-cookie') ?? ''];
+  for (const c of cookies) {
+    const m = c.match(/^raiv_at=([^;]+)/);
+    if (m) {
+      HEADERS['Authorization'] = `Bearer ${decodeURIComponent(m[1])}`;
+      console.log('  [auth] Access token refreshed.');
+      return;
+    }
+  }
+  throw new Error('Token refresh response did not include a new raiv_at cookie.');
+}
+
 // ─── tRPC helpers ─────────────────────────────────────────────────────────────
 
-async function mutation(procedure, input) {
+async function mutation(procedure, input, _isRetry = false) {
   const url = `${TRPC_BASE}/${procedure}`;
   const res = await fetch(url, {
     method:  'POST',
@@ -59,6 +98,11 @@ async function mutation(procedure, input) {
     body:    JSON.stringify({ json: input }),
   });
   const raw = await res.json();
+  // Auto-refresh once on 401 then retry
+  if (res.status === 401 && !_isRetry) {
+    await refreshAccessToken();
+    return mutation(procedure, input, true);
+  }
   if (!res.ok || raw.error) {
     const msg = raw.error?.message ?? raw.error?.json?.message ?? JSON.stringify(raw);
     throw new Error(`[${procedure}] HTTP ${res.status}: ${msg}`);
@@ -67,11 +111,15 @@ async function mutation(procedure, input) {
   return raw.result?.data?.json ?? raw.result?.data ?? raw;
 }
 
-async function query(procedure, input) {
+async function query(procedure, input, _isRetry = false) {
   const encoded = encodeURIComponent(JSON.stringify({ json: input }));
   const url     = `${TRPC_BASE}/${procedure}?input=${encoded}`;
   const res = await fetch(url, { method: 'GET', headers: HEADERS });
   const raw = await res.json();
+  if (res.status === 401 && !_isRetry) {
+    await refreshAccessToken();
+    return query(procedure, input, true);
+  }
   if (!res.ok || raw.error) {
     const msg = raw.error?.message ?? raw.error?.json?.message ?? JSON.stringify(raw);
     throw new Error(`[${procedure}] HTTP ${res.status}: ${msg}`);
