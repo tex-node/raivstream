@@ -39,14 +39,28 @@ const POLL_TIMEOUT_MS   = 600_000; // 10 min per asset
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-const SESSION_TOKEN = process.env.SESSION_TOKEN;
+// Strip any leading "name=" prefix and whitespace/newlines from a token value.
+// DevTools sometimes copies cookies as "name=value" or with trailing newlines.
+function sanitizeToken(raw) {
+  if (!raw) return null;
+  const stripped = raw.trim();
+  // If it contains a newline, take the last non-empty segment (the JWT itself)
+  const lines = stripped.split(/\s+/).filter(Boolean);
+  // Pick the segment that looks like a JWT (contains two dots)
+  const jwt = lines.find(s => s.includes('.')) ?? lines[lines.length - 1] ?? stripped;
+  // Strip any "name=" prefix before the JWT
+  const eq = jwt.indexOf('=');
+  return eq !== -1 && !jwt.startsWith('ey') ? jwt.slice(eq + 1) : jwt;
+}
+
+const SESSION_TOKEN = sanitizeToken(process.env.SESSION_TOKEN);
 if (!SESSION_TOKEN) {
   console.error('ERROR: SESSION_TOKEN env var is required.');
   console.error('  SESSION_TOKEN="$(cat /root/.f5token)" ... node f5_acceptance.mjs');
   process.exit(1);
 }
 
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN ?? null;
+const REFRESH_TOKEN = sanitizeToken(process.env.REFRESH_TOKEN) ?? null;
 
 const HEADERS = {
   'Content-Type':  'application/json',
