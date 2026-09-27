@@ -88,23 +88,28 @@ if (!RAW_REFRESH_TOKEN) {
   process.exit(1);
 }
 
-// Validate token type before making any HTTP call.
+// Classify the token type locally — never print claims, only the classification.
 // raiv_rt payload has "family" field; raiv_at has "email"/"role" fields.
-const _rtPayload = decodeJwtPayload(RAW_REFRESH_TOKEN);
-if (!_rtPayload) {
-  console.error('ERROR: REFRESH_TOKEN is not a valid JWT.');
-  process.exit(1);
+function classifyRefreshToken(raw) {
+  const payload = decodeJwtPayload(raw);
+  if (!payload) return 'INVALID_JWT';
+  if (payload.email || payload.role) return 'WRONG_TOKEN_TYPE_IS_ACCESS';
+  if (payload.family) return 'VALID_REFRESH_TOKEN';
+  return 'UNKNOWN_PAYLOAD';
 }
-if (_rtPayload.email || _rtPayload.role) {
-  console.error('ERROR: REFRESH_TOKEN appears to be a raiv_at ACCESS token (contains email/role fields).');
-  console.error('       You need the raiv_rt REFRESH token instead:');
-  console.error('       DevTools → Application → Cookies → r16.raivstream.com');
-  console.error('       Find "raiv_rt" — its Path column shows "/api/auth/refresh"');
-  console.error('       (raiv_at has Path "/", raiv_user is not a token)');
-  process.exit(1);
-}
-if (!_rtPayload.family) {
-  console.error('ERROR: REFRESH_TOKEN payload is missing "family" field — not a valid raiv_rt.');
+
+const tokenClass = classifyRefreshToken(RAW_REFRESH_TOKEN);
+console.log(`[auth] Refresh token type: ${tokenClass}`);
+
+if (tokenClass !== 'VALID_REFRESH_TOKEN') {
+  if (tokenClass === 'WRONG_TOKEN_TYPE_IS_ACCESS') {
+    console.error('ERROR: REFRESH_TOKEN is a raiv_at ACCESS token (15-min, Path: /).');
+    console.error('       Required: raiv_rt REFRESH token (30-day, Path: /api/auth/refresh).');
+    console.error('       DevTools → Application → Cookies → r16.raivstream.com');
+    console.error('       Find "raiv_rt" — Path column shows "/api/auth/refresh".');
+  } else {
+    console.error(`ERROR: REFRESH_TOKEN classification: ${tokenClass}`);
+  }
   process.exit(1);
 }
 
