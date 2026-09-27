@@ -70,13 +70,47 @@ function sanitizeToken(raw) {
   return jwt ?? null;
 }
 
-const REFRESH_TOKEN = sanitizeToken(process.env.REFRESH_TOKEN);
-if (!REFRESH_TOKEN) {
+// Decode the JWT payload (middle segment) WITHOUT verifying the signature.
+// Used only to detect token type — never prints the raw value.
+function decodeJwtPayload(jwt) {
+  try {
+    return JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString());
+  } catch {
+    return null;
+  }
+}
+
+const RAW_REFRESH_TOKEN = sanitizeToken(process.env.REFRESH_TOKEN);
+if (!RAW_REFRESH_TOKEN) {
   console.error('ERROR: REFRESH_TOKEN is required (the raiv_rt cookie from r16.raivstream.com).');
   console.error('  DevTools → Application → Cookies → Name "raiv_rt" (Path: /api/auth/refresh)');
   console.error('  REFRESH_TOKEN="$(cat /root/.f5refresh)" node f5_acceptance.mjs');
   process.exit(1);
 }
+
+// Validate token type before making any HTTP call.
+// raiv_rt payload has "family" field; raiv_at has "email"/"role" fields.
+const _rtPayload = decodeJwtPayload(RAW_REFRESH_TOKEN);
+if (!_rtPayload) {
+  console.error('ERROR: REFRESH_TOKEN is not a valid JWT.');
+  process.exit(1);
+}
+if (_rtPayload.email || _rtPayload.role) {
+  console.error('ERROR: REFRESH_TOKEN appears to be a raiv_at ACCESS token (contains email/role fields).');
+  console.error('       You need the raiv_rt REFRESH token instead:');
+  console.error('       DevTools → Application → Cookies → r16.raivstream.com');
+  console.error('       Find "raiv_rt" — its Path column shows "/api/auth/refresh"');
+  console.error('       (raiv_at has Path "/", raiv_user is not a token)');
+  process.exit(1);
+}
+if (!_rtPayload.family) {
+  console.error('ERROR: REFRESH_TOKEN payload is missing "family" field — not a valid raiv_rt.');
+  process.exit(1);
+}
+
+// Mutable — currentRefreshToken is rotated on every successful refresh.
+// The server uses refresh-token rotation (bcrypt-verified, single-use per rotation).
+let currentRefreshToken = RAW_REFRESH_TOKEN;
 
 // Mutable — updated on every successful refresh
 const HEADERS = {
@@ -93,7 +127,7 @@ async function refreshAccessToken() {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie':        `raiv_rt=${REFRESH_TOKEN}`,
+      'Cookie':        `raiv_rt=${currentRefreshToken}`,
       'Origin':        BASE_URL,
     },
   });
@@ -105,19 +139,28 @@ async function refreshAccessToken() {
       `not raiv_at (Path: /). Server said: ${body.slice(0, 120)}`
     );
   }
-  // Parse new raiv_at from Set-Cookie (Node 18+: getSetCookie() returns array)
+  // Parse new raiv_at AND new raiv_rt from Set-Cookie.
+  // The server rotates both tokens on every refresh (single-use raiv_rt).
   const setCookies = typeof res.headers.getSetCookie === 'function'
     ? res.headers.getSetCookie()
     : [res.headers.get('set-cookie') ?? ''];
+  let gotAccess = false;
   for (const c of setCookies) {
-    const m = c.match(/^raiv_at=([^;]+)/);
-    if (m) {
-      HEADERS['Authorization'] = `Bearer ${decodeURIComponent(m[1])}`;
-      console.log('  [auth] Access token refreshed successfully.');
-      return;
+    const accessMatch  = c.match(/^raiv_at=([^;]+)/);
+    const refreshMatch = c.match(/^raiv_rt=([^;]+)/);
+    if (accessMatch) {
+      HEADERS['Authorization'] = `Bearer ${decodeURIComponent(accessMatch[1])}`;
+      gotAccess = true;
+    }
+    if (refreshMatch) {
+      // Update stored refresh token to the newly rotated one
+      currentRefreshToken = decodeURIComponent(refreshMatch[1]);
     }
   }
-  throw new Error('Refresh response did not include a raiv_at Set-Cookie. Check server logs.');
+  if (!gotAccess) {
+    throw new Error('Refresh response did not include a raiv_at Set-Cookie. Check server logs.');
+  }
+  console.log('  [auth] Access token refreshed successfully.');
 }
 
 // ─── tRPC helpers ─────────────────────────────────────────────────────────────
