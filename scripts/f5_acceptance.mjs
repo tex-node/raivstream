@@ -160,6 +160,8 @@ async function refreshAccessToken() {
     if (refreshMatch) {
       // Update stored refresh token to the newly rotated one
       currentRefreshToken = decodeURIComponent(refreshMatch[1]);
+      // Persist rotated token so re-runs work without manual token renewal
+      try { writeFileSync('/root/.f5refresh', currentRefreshToken, { mode: 0o600 }); } catch { /* non-fatal */ }
     }
   }
   if (!gotAccess) {
