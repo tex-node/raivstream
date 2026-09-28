@@ -284,7 +284,7 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
   }
 
   const safetyText = kidsSafetyText(audienceMode);
-  const negativePromptParts = buildNegativePromptParts(audienceMode, medium);
+  const negativePromptParts = buildNegativePromptParts(audienceMode, medium, [], educationalCtx !== null);
 
   // Conflict detection
   const characterDescriptions = characterLocks.map((ch) => ch.physicalDescription ?? '');
@@ -441,10 +441,16 @@ export function compose(input: VpcComposerInput): VpcComposerOutput {
       ].filter(Boolean).join('. '),
       required: true,
     } : null,
-    educationalCtx?.antiCommercialNote ? {
+    educationalCtx ? {
       priority: 12.7,
       label: 'anti_commercial',
-      text: `Anti-commercial constraint: ${educationalCtx.antiCommercialNote}. Do not frame the subject as a product, luxury item, or advertisement.`,
+      text: [
+        'EDUCATIONAL GUARD: Do not frame subject as product, advertisement, luxury item, or brand showcase.',
+        'No product-hero framing, no aspirational commercial aesthetics, no promotional composition.',
+        educationalCtx.antiCommercialNote
+          ? `Scene-specific: ${educationalCtx.antiCommercialNote}`
+          : undefined,
+      ].filter(Boolean).join(' '),
       required: true,
     } : null,
     {

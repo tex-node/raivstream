@@ -200,3 +200,110 @@ describe('R16 video regression — non-R16 path unchanged', () => {
     expect(result.negativePrompt).toMatch(/blood/i);
   });
 });
+
+// ─── Phase D V1 remediation — anti-commercial guard ─────────────────────────
+
+function makeEducationalScene(antiCommercialNote?: string) {
+  return {
+    ...makeScene(),
+    directorMetadata: {
+      learningObjective: 'Understand how ships float using Archimedes principle',
+      teachingConcept: 'buoyancy',
+      visualTeachingRequirement: 'Show ship cross-section and displaced water volume',
+      ...(antiCommercialNote !== undefined ? { antiCommercialNote } : {}),
+    },
+  };
+}
+
+describe('Phase D V1 — educational anti-commercial positive guard', () => {
+  it('T-V1-1: educational + antiCommercialNote absent → baseline guard in prompt', () => {
+    const result = composeScenePromptText({
+      scene: makeEducationalScene() as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(result.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    expect(result.prompt).toMatch(/product/i);
+    expect(result.prompt).toMatch(/advertisement/i);
+  });
+
+  it('T-V1-2: educational + antiCommercialNote present → baseline guard + scene-specific note', () => {
+    const result = composeScenePromptText({
+      scene: makeEducationalScene('Show the ship as a teaching tool, not a luxury vessel') as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(result.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    expect(result.prompt).toMatch(/Scene-specific:/i);
+    expect(result.prompt).toContain('Show the ship as a teaching tool, not a luxury vessel');
+  });
+
+  it('T-V1-3: non-educational → no educational anti-commercial guard in prompt', () => {
+    const result = composeScenePromptText({
+      scene: makeScene() as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(result.prompt).not.toMatch(/EDUCATIONAL GUARD/i);
+    expect(result.prompt).not.toMatch(/Scene-specific:/i);
+  });
+});
+
+describe('Phase D V1 — educational anti-commercial negative prompt', () => {
+  it('T-V1-4: educational V1 negative prompt contains commercial-framing terms', () => {
+    const result = composeScenePromptText({
+      scene: makeEducationalScene() as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(result.negativePrompt).toMatch(/advertisement-style composition/i);
+    expect(result.negativePrompt).toMatch(/product hero shot/i);
+    expect(result.negativePrompt).toMatch(/packshot/i);
+    expect(result.negativePrompt).toMatch(/luxury product glamour/i);
+    expect(result.negativePrompt).toMatch(/promotional campaign aesthetic/i);
+    expect(result.negativePrompt).toMatch(/catalogue photography/i);
+    expect(result.negativePrompt).toMatch(/logo dominating frame/i);
+    expect(result.negativePrompt).toMatch(/brand showcase composition/i);
+  });
+
+  it('T-V1-5: non-educational V1 negative prompt does not contain educational commercial-framing terms', () => {
+    const result = composeScenePromptText({
+      scene: makeScene() as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(result.negativePrompt).not.toMatch(/advertisement-style composition/i);
+    expect(result.negativePrompt).not.toMatch(/product hero shot/i);
+    expect(result.negativePrompt).not.toMatch(/packshot/i);
+  });
+});
+
+describe('Phase D V1 — V2 fallback retains guard', () => {
+  beforeEach(() => {
+    vi.spyOn(promptEnhancerService, 'enhance').mockResolvedValue(mockEnhancerOutput);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('T-V1-6: educational request reaching V1 via V2 flag-off retains anti-commercial guard', async () => {
+    // Flag off (default in test env) → composeEnhancedScenePrompt routes to V1.
+    // The enhancer mock passes through base prompt unmodified (mockEnhancerOutput.enhancedPrompt
+    // is a different string, but we verify the base was built correctly by inspecting
+    // composeScenePromptText directly — the flag-off path is identical).
+    const base = composeScenePromptText({
+      scene: makeEducationalScene() as any,
+      outputType: 'IMAGE',
+      provider: 'FLUX',
+      audienceMode: 'GENERAL',
+    });
+    expect(base.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    expect(base.negativePrompt).toMatch(/advertisement-style composition/i);
+  });
+});

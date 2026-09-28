@@ -22,9 +22,19 @@ export function buildEducationalSceneDirectorSystem(
   audienceMode: StoryAudienceMode,
   contract: EducationalContract,
 ): string {
-  const antiCommercial = contract.antiCommercialTopics.length > 0
-    ? `\nANTI-COMMERCIAL REQUIREMENT:\nThis is an educational video, not an advertisement.\nDo NOT use: ${contract.antiCommercialTopics.join(', ')}.\nDo not frame ${contract.topic} as a product to admire, purchase, promote, or aspire to.\nDo not introduce luxury, premium, advertising, brand, sales, or promotional framing unless the educational objective explicitly requires it.`
+  const topicSpecific = contract.antiCommercialTopics.length > 0
+    ? `\nDo NOT use or reference: ${contract.antiCommercialTopics.join(', ')}.`
     : '';
+  const antiCommercial = [
+    '\nANTI-COMMERCIAL REQUIREMENT:',
+    'This is an educational video, NOT an advertisement.',
+    `Do not frame ${contract.topic} as a product to admire, purchase, promote, or aspire to.`,
+    'Do not use luxury, premium, advertising, brand, sales, or promotional framing',
+    'unless the educational objective explicitly requires it.',
+    'For each scene, populate the "antiCommercialNote" field with one sentence',
+    'describing how this scene avoids commercial framing.',
+    topicSpecific,
+  ].filter(Boolean).join('\n');
 
   return [
     'You are an educational scene director for short educational videos.',

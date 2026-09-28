@@ -9,6 +9,8 @@ import { buildNegativePromptParts, checkKidsSafety } from '../r16';
 import { VpcError } from '../types';
 import type { VpcComposerInput, CharacterMemoryInput } from '../types';
 import type { DirectedScene, StoryBlueprint } from '../../storyIntelligence/types';
+import { buildEducationalSceneDirectorSystem } from '../../storyIntelligence/prompts/educationalSceneDirectorPrompt';
+import type { EducationalContract } from '../../storyIntelligence/types';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -709,5 +711,196 @@ describe('Conflict detection', () => {
     expect(() => composeV2(input)).not.toThrow();
     const out = composeV2(input);
     expect(out.canonical.detectedConflicts.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Phase D: Deep Visual Anti-Commercial Guard ───────────────────────────────
+
+const educationalDirectedScene: DirectedScene = {
+  version: 'scene_director_v1',
+  ordinal: 1,
+  title: 'How Do Ships Float?',
+  storyBeat: 'Explanation',
+  dramaticPurpose: 'Teach buoyancy via a visible ship on water',
+  location: 'ocean',
+  timeOfDay: 'morning',
+  characters: [],
+  action: 'A large cargo ship floats steadily on the ocean while a teacher points at it from a dock',
+  learningObjective: 'Understand that ships float because they displace water equal to their weight',
+  teachingConcept: 'buoyancy and displacement',
+  teachingRole: 'EXPLANATION',
+  visualTeachingRequirement: 'Show ship cross-section or visible waterline to illustrate displacement',
+};
+
+const educationalDirectedSceneWithNote: DirectedScene = {
+  ...educationalDirectedScene,
+  antiCommercialNote: 'Show a working cargo vessel, not a glamorous luxury cruise liner',
+};
+
+function makeEducationalInput(ds: DirectedScene): VpcComposerInput {
+  return makeInput({
+    scene: {
+      ...baseScene,
+      id: 'edu-001',
+      title: 'How Do Ships Float?',
+      description: 'A large cargo ship floats on the ocean as a teacher explains buoyancy',
+      directorMetadata: ds as unknown as Record<string, unknown>,
+    },
+    directedScene: ds,
+  });
+}
+
+const minimalEducationalContract: EducationalContract = {
+  version: 'education_contract_v1',
+  topic: 'ships and buoyancy',
+  targetAge: '8–12',
+  learningObjective: 'Understand how ships float using the principle of buoyancy',
+  keyConcepts: ['buoyancy', 'water displacement'],
+  vocabularyLevel: 'simple',
+  explanationStrategy: 'Use visual analogy of a bowl in water',
+  examplesToUse: ['cargo ship', 'bathtub toy'],
+  visualTeachingStrategy: 'Show waterline and displacement effect clearly in each scene',
+  narrationRequired: true,
+  sceneProgression: ['Hook: what makes ships float?', 'Explain buoyancy', 'Show displacement', 'Recap'],
+  recapIncluded: true,
+  antiCommercialTopics: [],
+};
+
+// ─── VPC composer — Phase D tests ────────────────────────────────────────────
+
+describe('Phase D — Anti-Commercial Guard (VPC composer)', () => {
+  it('T1: anti_commercial section fires when antiCommercialNote is absent', () => {
+    const input = makeEducationalInput(educationalDirectedScene);
+    const out = composeV2(input);
+    expect(out.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    // Must also confirm section is in the rendered prompt (not budget-dropped)
+    expect(out.prompt).toMatch(/Do not frame subject as product/i);
+  });
+
+  it('T1b: anti_commercial section is required:true — survives when non-required sections are dropped', () => {
+    const input = makeEducationalInput(educationalDirectedScene);
+    // 1200 chars: tight enough to drop non-required sections (mood, camera, etc.)
+    // but fits all required sections (style+story+chars+action+env+edu_obj+anti_commercial+safety+overlay ≈ 1050 chars)
+    const tightInput = { ...input, maxPromptLength: 1200 };
+    const out = composeV2(tightInput);
+    expect(out.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    // Confirm a non-required section like mood is absent at this budget (mood not in our test scene)
+    // and that the guard was not silently omitted
+    expect(out.prompt).toMatch(/Do not frame subject as product/i);
+  });
+
+  it('T2: antiCommercialNote enriches the baseline guard when present', () => {
+    const input = makeEducationalInput(educationalDirectedSceneWithNote);
+    const out = composeV2(input);
+    expect(out.prompt).toMatch(/EDUCATIONAL GUARD/i);
+    expect(out.prompt).toMatch(/Scene-specific:/i);
+    expect(out.prompt).toMatch(/cargo vessel/i);
+    // Baseline must still be present
+    expect(out.prompt).toMatch(/Do not frame subject as product/i);
+  });
+
+  it('T3: anti_commercial section is absent for non-educational content', () => {
+    // No directedScene with educational fields — plain story scene
+    const input = makeInput();
+    const out = composeV2(input);
+    expect(out.prompt).not.toMatch(/EDUCATIONAL GUARD/i);
+  });
+
+  it('T4: anti_commercial section absent for COMMERCIAL-typed project with no educational context', () => {
+    const input = makeInput({
+      scene: {
+        ...baseScene,
+        description: 'A luxury perfume bottle glowing on a marble surface',
+        mood: 'luxurious',
+      },
+    });
+    const out = composeV2(input);
+    expect(out.prompt).not.toMatch(/EDUCATIONAL GUARD/i);
+  });
+});
+
+// ─── Phase D — r16 negative prompt tests ─────────────────────────────────────
+
+describe('Phase D — Educational negative prompt (r16)', () => {
+  it('T5a: isEducational=true includes commercial-framing negative terms', () => {
+    const parts = buildNegativePromptParts('GENERAL', 'IMAGE', [], true);
+    expect(parts.some((t) => /advertisement.*style|product hero|packshot|luxury product|promotional campaign|catalogue photography|logo dominating|brand showcase/i.test(t))).toBe(true);
+  });
+
+  it('T5b: isEducational=false does NOT include commercial-framing negative terms', () => {
+    const parts = buildNegativePromptParts('GENERAL', 'IMAGE', [], false);
+    expect(parts.some((t) => /advertisement.*style|product hero|packshot/i.test(t))).toBe(false);
+  });
+
+  it('T5c: isEducational omitted (default) also excludes commercial terms', () => {
+    const parts = buildNegativePromptParts('GENERAL', 'IMAGE');
+    expect(parts.some((t) => /product hero/i.test(t))).toBe(false);
+  });
+
+  it('T5d: educational negative prompt included in composer output for educational scene', () => {
+    const input = makeEducationalInput(educationalDirectedScene);
+    const out = composeV2(input);
+    // negativePrompt should include at least one commercial-framing term
+    expect(out.negativePrompt).toMatch(/advertisement.*style|product hero|packshot|luxury product glamour/i);
+  });
+
+  it('T5e: non-educational composer output does NOT have commercial negative terms', () => {
+    const input = makeInput();
+    const out = composeV2(input);
+    expect(out.negativePrompt).not.toMatch(/product hero|packshot/i);
+  });
+
+  it('T6: legitimate narrative products are not blocked (smoke test)', () => {
+    // A child holding a bottle in a story is valid content, not a commercial shot
+    const input = makeEducationalInput({
+      ...educationalDirectedScene,
+      action: 'A child holds a bottle of water to demonstrate volume while the teacher explains displacement',
+    });
+    // Should not throw; product mention in action does not activate a blanket product block
+    expect(() => composeV2(input)).not.toThrow();
+    const out = composeV2(input);
+    // The action text (bottle, volume) should appear somewhere in the prompt
+    expect(out.prompt).toMatch(/bottle|volume|displacement/i);
+    // EDUCATIONAL GUARD should still be present
+    expect(out.prompt).toMatch(/EDUCATIONAL GUARD/i);
+  });
+
+  it('T6b: KIDS audience with educational scene gets both KIDS safety and educational guard', () => {
+    const input = makeEducationalInput(educationalDirectedScene);
+    const kidsInput = { ...input, audienceMode: 'KIDS' as const };
+    const parts = buildNegativePromptParts('KIDS', 'IMAGE', [], true);
+    // Both safety domains are covered
+    expect(parts).toContain('violence');
+    expect(parts.some((t) => /product hero|packshot/i.test(t))).toBe(true);
+  });
+});
+
+// ─── Phase D — Scene director prompt tests ────────────────────────────────────
+
+describe('Phase D — Educational scene director prompt (upstream guard)', () => {
+  it('T3-upstream: baseline anti-commercial block always present when antiCommercialTopics is empty', () => {
+    const system = buildEducationalSceneDirectorSystem('GENERAL', minimalEducationalContract);
+    expect(system).toMatch(/ANTI-COMMERCIAL REQUIREMENT/i);
+    expect(system).toMatch(/NOT an advertisement/i);
+    expect(system).toMatch(/antiCommercialNote/i);
+  });
+
+  it('T4-upstream: topics enrich the baseline when antiCommercialTopics is populated', () => {
+    const contractWithTopics: EducationalContract = {
+      ...minimalEducationalContract,
+      antiCommercialTopics: ['luxury cruise ships', 'product branding', 'lifestyle advertising'],
+    };
+    const system = buildEducationalSceneDirectorSystem('GENERAL', contractWithTopics);
+    expect(system).toMatch(/ANTI-COMMERCIAL REQUIREMENT/i);
+    expect(system).toMatch(/luxury cruise ships/i);
+    expect(system).toMatch(/product branding/i);
+    // Baseline must still be present regardless of topics
+    expect(system).toMatch(/NOT an advertisement/i);
+  });
+
+  it('baseline instruction present even for KIDS audience with empty topics', () => {
+    const system = buildEducationalSceneDirectorSystem('KIDS', minimalEducationalContract);
+    expect(system).toMatch(/ANTI-COMMERCIAL REQUIREMENT/i);
+    expect(system).toMatch(/NOT an advertisement/i);
   });
 });

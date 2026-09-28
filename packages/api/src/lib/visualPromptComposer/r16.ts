@@ -52,15 +52,31 @@ const IMAGE_NEGATIVE_TERMS = [
   'cropped subject',
 ];
 
+// Suppress advertisement-style visual treatment for educational content.
+// Does NOT suppress ordinary products, branded objects, shops, or packaging
+// when they appear naturally in a story or educational setting.
+const EDUCATIONAL_ANTI_COMMERCIAL_NEGATIVE_TERMS = [
+  'advertisement-style composition',
+  'product hero shot',
+  'packshot',
+  'luxury product glamour',
+  'promotional campaign aesthetic',
+  'catalogue photography',
+  'logo dominating frame',
+  'brand showcase composition',
+];
+
 export function buildNegativePromptParts(
   audienceMode: StoryAudienceMode,
   medium: 'IMAGE' | 'VIDEO',
   userExclusions: string[] = [],
+  isEducational = false,
 ): string[] {
   const base = [
     ...SHARED_NEGATIVE_TERMS,
     ...(audienceMode === 'KIDS' ? KIDS_REQUIRED_NEGATIVE_TERMS : GENERAL_REQUIRED_NEGATIVE_TERMS),
     ...(medium === 'VIDEO' ? VIDEO_NEGATIVE_TERMS : IMAGE_NEGATIVE_TERMS),
+    ...(isEducational ? EDUCATIONAL_ANTI_COMMERCIAL_NEGATIVE_TERMS : []),
     ...userExclusions,
   ];
   // Deduplicate

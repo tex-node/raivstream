@@ -1414,7 +1414,7 @@ function outputTypeLabel(outputType: PromptOutputType) {
   return 'short vertical animated video scene';
 }
 
-function automaticNegativePrompt(audienceMode: StoryAudienceMode, outputType: PromptOutputType) {
+function automaticNegativePrompt(audienceMode: StoryAudienceMode, outputType: PromptOutputType, isEducational = false) {
   const base = [
     'text overlays',
     'watermark',
@@ -1439,7 +1439,17 @@ function automaticNegativePrompt(audienceMode: StoryAudienceMode, outputType: Pr
     ? ['violence', 'blood', 'weapons', 'adult themes', 'dark horror', 'sexual content', 'unsafe behavior']
     : ['graphic violence', 'sexual content'];
   const media = outputType === 'SHORT_VIDEO' ? ['flicker', 'warped motion', 'jump cuts'] : ['cropped subject'];
-  return [...base, ...kids, ...media].join(', ');
+  const educational = isEducational ? [
+    'advertisement-style composition',
+    'product hero shot',
+    'packshot',
+    'luxury product glamour',
+    'promotional campaign aesthetic',
+    'catalogue photography',
+    'logo dominating frame',
+    'brand showcase composition',
+  ] : [];
+  return [...base, ...kids, ...media, ...educational].join(', ');
 }
 
 function effectiveVisualStyle(project: { visualStyle?: string | null; audienceMode?: string | null }, audienceMode: StoryAudienceMode) {
@@ -1556,14 +1566,18 @@ export function composeScenePromptText(input: {
     `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
     input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
     `safety: ${r16Rules}`,
-    isEducational && antiCommercialNote ? `anti-commercial: ${antiCommercialNote}` : undefined,
+    isEducational ? [
+      'EDUCATIONAL GUARD: Do not frame subject as product, advertisement, luxury item, or brand showcase.',
+      'No product-hero framing, no promotional composition.',
+      antiCommercialNote ? `Scene-specific: ${antiCommercialNote}` : undefined,
+    ].filter(Boolean).join(' ') : undefined,
     `provider guidance: ${providerHint}`,
     `composition: ${compositionAspect}, clear foreground subject, uncluttered background`,
   ].filter(Boolean).join('. ');
 
   return {
     prompt: limitText(prompt, meta.maxPromptLength),
-    negativePrompt: limitText(automaticNegativePrompt(input.audienceMode, input.outputType), meta.maxNegativePromptLength),
+    negativePrompt: limitText(automaticNegativePrompt(input.audienceMode, input.outputType, isEducational), meta.maxNegativePromptLength),
     aspectRatio: meta.defaultAspectRatio,
     duration: input.outputType === 'SHORT_VIDEO' ? meta.defaultDuration ?? 5 : undefined,
     maxPromptLength: meta.maxPromptLength,
