@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Clapperboard, Loader2, Play, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useR16 } from '@/lib/r16';
@@ -23,7 +23,7 @@ function latestReadyVideo(scene: SceneLike) {
   return scene.assets?.find((asset) => asset.assetType === 'VIDEO' && asset.status === 'READY') ?? null;
 }
 
-export default function StoryPlaygroundProjectLayout({ children }: { children: React.ReactNode }) {
+export default function StoryPlaygroundProjectLayout({ children }: { children: ReactNode }) {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
   const isR16 = useR16();
