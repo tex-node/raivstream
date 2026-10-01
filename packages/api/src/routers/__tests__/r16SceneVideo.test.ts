@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   resolveAudienceMode,
+  resolveSceneVideoResolution,
   assertKidsSafeIdea,
   composeScenePromptText,
   composeEnhancedScenePrompt,
@@ -305,5 +306,35 @@ describe('Phase D V1 — V2 fallback retains guard', () => {
     });
     expect(base.prompt).toMatch(/EDUCATIONAL GUARD/i);
     expect(base.negativePrompt).toMatch(/advertisement-style composition/i);
+  });
+});
+
+// ─── R16 480P resolution contract ────────────────────────────────────────────
+
+describe('resolveSceneVideoResolution — R16 480P contract', () => {
+  it('T-R16-RES-1: KIDS audienceMode always returns 480P', () => {
+    expect(resolveSceneVideoResolution('KIDS')).toBe('480P');
+    expect(resolveSceneVideoResolution('KIDS', undefined, undefined)).toBe('480P');
+  });
+
+  it('T-R16-RES-2: KIDS cannot be overridden to 1080P — server enforces 480P', () => {
+    expect(resolveSceneVideoResolution('KIDS', '1080P', '1080P')).toBe('480P');
+    expect(resolveSceneVideoResolution('KIDS', '768P')).toBe('480P');
+    expect(resolveSceneVideoResolution('KIDS', '1080P')).toBe('480P');
+  });
+
+  it('T-R16-RES-3: GENERAL falls through to explicit requested resolution', () => {
+    expect(resolveSceneVideoResolution('GENERAL', '1080P')).toBe('1080P');
+    expect(resolveSceneVideoResolution('GENERAL', '768P')).toBe('768P');
+  });
+
+  it('T-R16-RES-4: GENERAL with no explicit resolution falls through to manifest value', () => {
+    expect(resolveSceneVideoResolution('GENERAL', undefined, '1080P')).toBe('1080P');
+    expect(resolveSceneVideoResolution('GENERAL', undefined, '768P')).toBe('768P');
+  });
+
+  it('T-R16-RES-5: GENERAL with no resolution and no manifest returns undefined (provider default)', () => {
+    expect(resolveSceneVideoResolution('GENERAL', undefined, undefined)).toBeUndefined();
+    expect(resolveSceneVideoResolution('GENERAL')).toBeUndefined();
   });
 });
