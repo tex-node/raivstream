@@ -596,7 +596,11 @@ export default function StoryPlaygroundPage() {
   // R16-only: story video export
   const storyVideoExport = trpc.story.getStoryVideoExport.useQuery(
     { projectId: projectId! },
-    { enabled: isR16 && !!projectId },
+    {
+      enabled: isR16 && !!projectId,
+      refetchInterval: (query) =>
+        query.state.data?.status === 'GENERATING' ? 3000 : false,
+    },
   );
   const requestStoryVideoExport = trpc.story.requestStoryVideoExport.useMutation({
     onSuccess: async () => {
@@ -934,6 +938,8 @@ export default function StoryPlaygroundPage() {
   };
 
   const [sceneImageModel, setSceneImageModel] = useState<SceneImageModel>(DEFAULT_SCENE_IMAGE_MODEL);
+  const [batchVideoProgress, setBatchVideoProgress] = useState<{ current: number; total: number } | null>(null);
+  const isBatchGeneratingVideos = batchVideoProgress !== null;
 
   const makeSceneImage = (scene: StoryScene) => {
     if (!projectId) return;
@@ -953,6 +959,34 @@ export default function StoryPlaygroundPage() {
 
   const allScenesHaveReadyVideo =
     isR16 && scenes.length > 0 && scenes.every((s) => Boolean(latestVideoAsset(s)));
+
+  const allScenesHaveStills =
+    isR16 && scenes.length > 0 && scenes.every((s) => Boolean(s.imageUrl));
+
+  const generateAllSceneVideos = async () => {
+    if (!projectId || isBatchGeneratingVideos) return;
+    const scenesNeedingVideo = scenes.filter((s) => s.imageUrl && !latestVideoAsset(s));
+    if (scenesNeedingVideo.length === 0) {
+      requestStoryVideoExport.mutate({ projectId });
+      return;
+    }
+    setBatchVideoProgress({ current: 0, total: scenesNeedingVideo.length });
+    try {
+      for (let i = 0; i < scenesNeedingVideo.length; i++) {
+        setBatchVideoProgress({ current: i + 1, total: scenesNeedingVideo.length });
+        await generateSceneVideo.mutateAsync({
+          projectId,
+          sceneId: scenesNeedingVideo[i]!.id,
+          model: 'H3_MAX',
+        });
+      }
+      requestStoryVideoExport.mutate({ projectId });
+    } catch (err) {
+      setMessage((err as Error).message);
+    } finally {
+      setBatchVideoProgress(null);
+    }
+  };
 
   const toggleDirectorPanel = (sceneId: string) => {
     setOpenDirectorSceneIds((current) =>
@@ -1596,6 +1630,13 @@ export default function StoryPlaygroundPage() {
                           Try Again
                         </button>
                       </div>
+                    ) : isBatchGeneratingVideos ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">
+                          Generating Video…{batchVideoProgress ? ` (${batchVideoProgress.current}/${batchVideoProgress.total})` : ''}
+                        </p>
+                        <div className="h-2 w-full animate-pulse rounded-full bg-[var(--noc-purple)] opacity-60" />
+                      </div>
                     ) : allScenesHaveReadyVideo ? (
                       <div className="flex flex-col gap-2">
                         <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">All scenes ready!</p>
@@ -1607,13 +1648,24 @@ export default function StoryPlaygroundPage() {
                           Export Story
                         </button>
                       </div>
+                    ) : allScenesHaveStills ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t5)]">Story Video</p>
+                        <button
+                          onClick={generateAllSceneVideos}
+                          disabled={isBatchGeneratingVideos}
+                          className="w-full rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-4 font-black text-white disabled:opacity-50"
+                        >
+                          Generate Video
+                        </button>
+                      </div>
                     ) : (
                       <div>
                         <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t5)]">Story Video</p>
                         <p className="mt-1 text-sm font-semibold text-[var(--noc-t4)]">
                           {scenes.filter((s) => Boolean(latestVideoAsset(s))).length} of {scenes.length} scenes have video
                         </p>
-                        <p className="mt-1 text-xs text-[var(--noc-t5)]">Bring all scenes to life to export your story.</p>
+                        <p className="mt-1 text-xs text-[var(--noc-t5)]">Generate images for all scenes to unlock video.</p>
                       </div>
                     )}
                   </div>

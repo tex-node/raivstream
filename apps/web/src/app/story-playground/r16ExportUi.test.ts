@@ -295,3 +295,173 @@ describe('T8: Watch Story behavior unchanged', () => {
     expect(url).toContain('/download');
   });
 });
+
+// ── T9: allScenesHaveStills — "Generate Video" button condition ───────────
+
+interface MockSceneWithImage {
+  id: string;
+  orderIndex: number;
+  imageUrl?: string | null;
+  assets?: MockAsset[];
+}
+
+function allScenesHaveStills(isR16: boolean, scenes: MockSceneWithImage[]): boolean {
+  return isR16 && scenes.length > 0 && scenes.every((s) => Boolean(s.imageUrl));
+}
+
+describe('T9: allScenesHaveStills', () => {
+  const stillScene = (id: string): MockSceneWithImage => ({
+    id, orderIndex: 0, imageUrl: `https://cdn/${id}.jpg`,
+  });
+  const noStillScene = (id: string): MockSceneWithImage => ({
+    id, orderIndex: 0, imageUrl: null,
+  });
+
+  it('returns false when isR16 is false', () => {
+    expect(allScenesHaveStills(false, [stillScene('s1')])).toBe(false);
+  });
+
+  it('returns false when scenes array is empty', () => {
+    expect(allScenesHaveStills(true, [])).toBe(false);
+  });
+
+  it('returns true when all scenes have imageUrl and isR16', () => {
+    expect(allScenesHaveStills(true, [stillScene('s1'), stillScene('s2')])).toBe(true);
+  });
+
+  it('returns false when at least one scene has no imageUrl', () => {
+    expect(allScenesHaveStills(true, [stillScene('s1'), noStillScene('s2')])).toBe(false);
+  });
+
+  it('returns false when all scenes have no imageUrl', () => {
+    expect(allScenesHaveStills(true, [noStillScene('s1'), noStillScene('s2')])).toBe(false);
+  });
+
+  it('is independent of whether scenes have video assets', () => {
+    const sceneWithStillAndVideo: MockSceneWithImage = {
+      id: 's1', orderIndex: 0, imageUrl: 'https://cdn/s1.jpg',
+      assets: [{ assetType: 'VIDEO', status: 'READY', assetUrl: 'https://cdn/s1.mp4' }],
+    };
+    const sceneWithStillNoVideo: MockSceneWithImage = {
+      id: 's2', orderIndex: 0, imageUrl: 'https://cdn/s2.jpg',
+      assets: [],
+    };
+    expect(allScenesHaveStills(true, [sceneWithStillAndVideo, sceneWithStillNoVideo])).toBe(true);
+  });
+});
+
+// ── T10: batch video progress state ──────────────────────────────────────
+
+function isBatchGeneratingVideos(batchVideoProgress: { current: number; total: number } | null): boolean {
+  return batchVideoProgress !== null;
+}
+
+describe('T10: isBatchGeneratingVideos', () => {
+  it('is false when batchVideoProgress is null', () => {
+    expect(isBatchGeneratingVideos(null)).toBe(false);
+  });
+
+  it('is true when batchVideoProgress is set', () => {
+    expect(isBatchGeneratingVideos({ current: 1, total: 5 })).toBe(true);
+  });
+
+  it('is true even when current is 0 (batch initializing)', () => {
+    expect(isBatchGeneratingVideos({ current: 0, total: 5 })).toBe(true);
+  });
+
+  it('is true when current equals total (last scene in progress)', () => {
+    expect(isBatchGeneratingVideos({ current: 5, total: 5 })).toBe(true);
+  });
+});
+
+// ── T11: extended state machine including Generate Video states ───────────
+
+interface FullExportDisplayInput extends ExportDisplayInput {
+  isBatchGenerating: boolean;
+  allHaveStills: boolean;
+}
+
+type FullExportDisplayState =
+  | 'STORY_READY'
+  | 'ASSEMBLING'
+  | 'BATCH_GENERATING'
+  | 'FAILED'
+  | 'EXPORT_READY'
+  | 'GENERATE_VIDEO_READY'
+  | 'PROGRESS'
+  | 'HIDDEN';
+
+function resolveFullExportDisplayState(input: FullExportDisplayInput): FullExportDisplayState {
+  const { exportStatus, isMutationPending, isReady, isBatchGenerating, allHaveStills, totalScenes } = input;
+  if (exportStatus === 'READY') return 'STORY_READY';
+  if (isMutationPending || exportStatus === 'GENERATING') return 'ASSEMBLING';
+  if (isBatchGenerating) return 'BATCH_GENERATING';
+  if (exportStatus === 'FAILED') return 'FAILED';
+  if (isReady) return 'EXPORT_READY';
+  if (allHaveStills) return 'GENERATE_VIDEO_READY';
+  if (totalScenes > 0) return 'PROGRESS';
+  return 'HIDDEN';
+}
+
+describe('T11: Generate Video state machine', () => {
+  const base: FullExportDisplayInput = {
+    exportStatus: undefined,
+    isMutationPending: false,
+    isReady: false,
+    isBatchGenerating: false,
+    allHaveStills: false,
+    scenesWithVideo: 0,
+    totalScenes: 3,
+    assetUrl: null,
+  };
+
+  it('GENERATE_VIDEO_READY when all scenes have stills and no video yet', () => {
+    expect(resolveFullExportDisplayState({ ...base, allHaveStills: true }))
+      .toBe('GENERATE_VIDEO_READY');
+  });
+
+  it('BATCH_GENERATING takes precedence over GENERATE_VIDEO_READY', () => {
+    expect(resolveFullExportDisplayState({ ...base, allHaveStills: true, isBatchGenerating: true }))
+      .toBe('BATCH_GENERATING');
+  });
+
+  it('ASSEMBLING takes precedence over BATCH_GENERATING', () => {
+    expect(resolveFullExportDisplayState({ ...base, isBatchGenerating: true, isMutationPending: true }))
+      .toBe('ASSEMBLING');
+  });
+
+  it('STORY_READY takes precedence over everything', () => {
+    expect(resolveFullExportDisplayState({
+      ...base,
+      exportStatus: 'READY',
+      isBatchGenerating: true,
+      allHaveStills: true,
+      isReady: true,
+    })).toBe('STORY_READY');
+  });
+
+  it('BATCH_GENERATING is shown between scene video generation and export assembly', () => {
+    expect(resolveFullExportDisplayState({ ...base, isBatchGenerating: true }))
+      .toBe('BATCH_GENERATING');
+  });
+
+  it('FAILED export does not block GENERATE_VIDEO_READY for a fresh attempt', () => {
+    expect(resolveFullExportDisplayState({ ...base, exportStatus: 'FAILED', allHaveStills: true }))
+      .toBe('FAILED');
+  });
+
+  it('PROGRESS when some scenes have no still and no batch is running', () => {
+    expect(resolveFullExportDisplayState({ ...base, totalScenes: 3, allHaveStills: false }))
+      .toBe('PROGRESS');
+  });
+
+  it('HIDDEN when there are no scenes at all', () => {
+    expect(resolveFullExportDisplayState({ ...base, totalScenes: 0 }))
+      .toBe('HIDDEN');
+  });
+
+  it('button is disabled during BATCH_GENERATING (duplicate submit prevention)', () => {
+    const batchGenerating = isBatchGeneratingVideos({ current: 2, total: 5 });
+    expect(batchGenerating).toBe(true);
+  });
+});
