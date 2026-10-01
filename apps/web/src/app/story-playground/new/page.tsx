@@ -978,6 +978,7 @@ export default function StoryPlaygroundPage() {
           projectId,
           sceneId: scenesNeedingVideo[i]!.id,
           model: 'H3_MAX',
+          resolution: '480P',
         });
       }
       requestStoryVideoExport.mutate({ projectId });

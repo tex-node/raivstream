@@ -480,6 +480,18 @@ export function resolveAudienceMode(ctx: { isR16?: boolean }, requested?: StoryA
   return requested ?? 'GENERAL';
 }
 
+// R16 product contract: KIDS stories are always generated at 480P.
+// Non-R16 stories fall through to the caller's explicit resolution, then the
+// manifest value, then undefined (provider default, currently 1080P).
+export function resolveSceneVideoResolution(
+  audienceMode: StoryAudienceMode,
+  requested?: string,
+  manifest?: string,
+): string | undefined {
+  if (audienceMode === 'KIDS') return '480P';
+  return requested ?? manifest;
+}
+
 async function trackStoryAnalytics(
   ctx: { prisma: any; user?: { id: string } | null; isR16?: boolean },
   input: {
@@ -2492,6 +2504,8 @@ async function generateSceneVideoAsset(
   const manifest = project.productionManifest as unknown as ProductionManifest | null;
   const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
   const duration = Math.min(15, Math.max(4, manifestScene?.duration_sec ?? input.duration ?? 5));
+  // R16 contract: KIDS stories always generate at 480P; non-R16 uses caller or manifest value.
+  const effectiveResolution = resolveSceneVideoResolution(audienceMode, input.resolution, manifestScene?.resolution);
   // Phase 17 — I2V chain continuity: prefer the manifest's first frame, then the
   // LAST frame of the previous scene's clip (extracted via ffmpeg), then the
   // scene's own still as the opening frame.
@@ -2618,7 +2632,7 @@ async function generateSceneVideoAsset(
         duration,
         aspectRatio: composed.aspectRatio ?? '9:16',
         seedImageUrl,
-        resolution: manifestScene?.resolution,
+        resolution: effectiveResolution,
         status: 'QUEUED',
         creditsUsed: creditsUsed || 0,
         metadata: {
@@ -2642,7 +2656,7 @@ async function generateSceneVideoAsset(
       duration,
       aspectRatio: composed.aspectRatio,
       seedImageUrl,
-      resolution: input.resolution ?? manifestScene?.resolution,
+      resolution: effectiveResolution,
     });
     const providerJobId = submitted.providerJobId;
 
