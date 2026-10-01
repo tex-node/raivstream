@@ -1572,6 +1572,13 @@ export default function StoryPlaygroundPage() {
                         >
                           Watch Story
                         </a>
+                        <a
+                          href={`/api/story/export/${storyVideoExport.data.id}/download`}
+                          download="my-story.mp4"
+                          className="block w-full rounded-xl bg-[var(--noc-purple)] px-5 py-3 text-center font-black text-white"
+                        >
+                          Save Video
+                        </a>
                       </div>
                     ) : requestStoryVideoExport.isPending || storyVideoExport.data?.status === 'GENERATING' ? (
                       <div className="flex flex-col gap-2">

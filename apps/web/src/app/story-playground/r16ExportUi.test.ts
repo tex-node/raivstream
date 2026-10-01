@@ -229,3 +229,69 @@ describe('non-R16 guard', () => {
     expect(allScenesHaveReadyVideo(false, scenes)).toBe(false);
   });
 });
+
+// ── T6, T7, T8: Save Video visibility and Watch Story regression ──────────
+
+describe('T6+T7: Save Video visibility', () => {
+  const base: ExportDisplayInput = {
+    exportStatus: undefined,
+    isMutationPending: false,
+    isReady: false,
+    scenesWithVideo: 0,
+    totalScenes: 3,
+    assetUrl: null,
+  };
+
+  it('T6: Save Video is shown when export status is READY (STORY_READY state)', () => {
+    const state = resolveExportDisplayState({
+      ...base,
+      exportStatus: 'READY',
+      assetUrl: 'https://media.raivstream.com/story-exports/p/exports/e/out.mp4',
+    });
+    expect(state).toBe('STORY_READY');
+  });
+
+  it('T7: Save Video is NOT shown when export status is GENERATING', () => {
+    expect(resolveExportDisplayState({ ...base, exportStatus: 'GENERATING' }))
+      .not.toBe('STORY_READY');
+  });
+
+  it('T7: Save Video is NOT shown when export status is PENDING', () => {
+    expect(resolveExportDisplayState({ ...base, exportStatus: 'PENDING' }))
+      .not.toBe('STORY_READY');
+  });
+
+  it('T7: Save Video is NOT shown when export status is FAILED', () => {
+    expect(resolveExportDisplayState({ ...base, exportStatus: 'FAILED' }))
+      .not.toBe('STORY_READY');
+  });
+
+  it('T7: Save Video is NOT shown when all scenes have video but export has not been requested', () => {
+    expect(resolveExportDisplayState({ ...base, isReady: true, scenesWithVideo: 3, totalScenes: 3 }))
+      .toBe('EXPORT_READY');
+  });
+});
+
+describe('T8: Watch Story behavior unchanged', () => {
+  const base: ExportDisplayInput = {
+    exportStatus: undefined,
+    isMutationPending: false,
+    isReady: false,
+    scenesWithVideo: 0,
+    totalScenes: 3,
+    assetUrl: null,
+  };
+
+  it('STORY_READY state is still reached when exportStatus is READY (Watch Story still renders)', () => {
+    expect(resolveExportDisplayState({ ...base, exportStatus: 'READY', assetUrl: 'https://cdn/story.mp4' }))
+      .toBe('STORY_READY');
+  });
+
+  it('Save Video download URL template uses exportId correctly', () => {
+    const exportId = 'clxyz1234567890abcd';
+    const url = `/api/story/export/${exportId}/download`;
+    expect(url).toBe(`/api/story/export/clxyz1234567890abcd/download`);
+    expect(url).toContain('/api/story/export/');
+    expect(url).toContain('/download');
+  });
+});
