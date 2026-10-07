@@ -237,6 +237,13 @@ enum NotificationType {
   ACADEMY_COMMENT_ADDED
 }
 
+enum AnimaticFrameStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
 enum AcademyCourseStatus {
   DRAFT
   ACTIVE
@@ -2223,6 +2230,45 @@ model CreativeMemory {
 
   @@index([projectId])
   @@map("creative_memories")
+}
+
+// Phase 3 — Homer First-Frame Animatic.
+// Ephemeral per-user animatic state, keyed by userId + storyHash.
+// Not tied to a CreativeProject — generated before project creation.
+model HomerAnimatic {
+  id        String               @id @default(cuid())
+  userId    String
+  storyHash String               // deterministic hash of HomerStoryState + directingDecisions
+  scenes    Json                 // HomerAnimaticScene[]
+  status    AnimaticFrameStatus  @default(PENDING)
+  frames    HomerAnimaticFrame[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@unique([userId, storyHash])
+  @@index([userId])
+  @@map("homer_animatics")
+}
+
+model HomerAnimaticFrame {
+  id           String              @id @default(cuid())
+  animaticId   String
+  animatic     HomerAnimatic       @relation(fields: [animaticId], references: [id], onDelete: Cascade)
+  sceneIndex   Int
+  sceneId      String
+  sceneLabel   String
+  beatId       String?
+  visualPrompt String
+  status       AnimaticFrameStatus @default(PENDING)
+  falJobId     String?
+  imageUrl     String?
+  directorNote String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([animaticId])
+  @@index([animaticId, sceneIndex])
+  @@map("homer_animatic_frames")
 }
 
 model CreativeProductionPlan {

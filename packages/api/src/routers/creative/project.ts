@@ -8,6 +8,9 @@ import { memoryService } from '../../lib/creative/memory/service';
 import { isCreativeEnabled } from '../../lib/creative/featureFlags';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { CREATIVE_MEMORY_KINDS, CREATIVE_PROJECT_STATUSES, CREATIVE_PROJECT_TYPES } from '../../lib/creative/shared/types';
+import { saveHomerState, saveDirectingDecisions } from '../../lib/homer/repository';
+import type { HomerStoryState } from '../../lib/homer/types';
+import type { HomerCreativeDecision } from '../../lib/homer/directingTypes';
 
 function getR2Client() {
   return new S3Client({
@@ -34,10 +37,20 @@ export const creativeProjectRouter = router({
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
       legacyStoryProjectId: z.string().nullable().optional(),
       attachments: z.array(z.string().min(1).max(200)).max(20).optional(),
+      /**
+       * Approved HomerStoryState from the conversational Create flow.
+       * When provided, written to CreativeBible.story after project creation.
+       */
+      homerStoryState: z.record(z.unknown()).optional(),
+      /**
+       * Approved directing decisions from the Homer Directing flow (Phase 2).
+       * When provided, written to CreativeBible.visualLanguage.directingDecisions.
+       */
+      directingDecisions: z.array(z.record(z.unknown())).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       try {
-        return await projectService.createFromIntent(ctx.prisma, {
+        const project = await projectService.createFromIntent(ctx.prisma, {
           userId: ctx.user.id,
           text: input.text,
           legacyStoryProjectId: input.legacyStoryProjectId,
@@ -46,6 +59,17 @@ export const creativeProjectRouter = router({
             ? (await import('../../lib/creative/intent/service')).intentService.interpret(input.text, input.projectType)
             : undefined,
         });
+        if (input.homerStoryState) {
+          await saveHomerState(ctx.prisma, project.id, input.homerStoryState as unknown as HomerStoryState);
+        }
+        if (input.directingDecisions && input.directingDecisions.length > 0) {
+          await saveDirectingDecisions(
+            ctx.prisma,
+            project.id,
+            input.directingDecisions as unknown as HomerCreativeDecision[],
+          );
+        }
+        return project;
       } catch (error) {
         throw toTrpcError(error, 'Project creation failed.');
       }

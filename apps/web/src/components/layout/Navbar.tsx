@@ -63,6 +63,7 @@ export function Navbar() {
             { href: '/create',   label: 'Create'    },
             { href: '/pricing',  label: 'Pricing'   },
             { href: '/story-playground', label: 'Story Playground' },
+            { href: '/director', label: 'Director' },
             { href: '/academy', label: 'Academy' },
             { href: '/credits',  label: 'Credits'   },
           ].map(({ href, label }) => (
@@ -175,6 +176,7 @@ export function Navbar() {
                       : { href: '/create', label: '✦ Create' },
                     ...(!isR16 ? [
                       { href: '/story-playground', label: 'Story Playground' },
+                      { href: '/director', label: '🎬 Director' },
                       { href: '/academy', label: 'Academy' },
                     ] : []),
                     ...(!isR16 ? [

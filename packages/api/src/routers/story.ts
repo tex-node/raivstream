@@ -1523,6 +1523,438 @@ async function refreshStoryDna(ctx: any, projectId: string) {
   return storyDna;
 }
 
+// Maps camera style enum → degree-based lens descriptor (moviedirector.md lens system).
+// MEDIUM_CLOSE_UP must be tested before CLOSE_UP to prevent misclassification (29deg not 18deg).
+function cameraStyleToLensDescriptor(cameraStyle: string | null | undefined): string {
+  if (!cameraStyle) return '47-degree field, natural documentary framing';
+  const style = cameraStyle.toLowerCase().replace(/_/g, ' ');
+  if (/extreme.?close/.test(style)) return '18-degree field, tight emotional close-up';
+  if (/medium.?close/.test(style)) return '29-degree field, medium portrait framing';
+  if (/close.?up/.test(style)) return '18-degree field, classic telephoto close-up';
+  if (/over.?shoulder/.test(style)) return '47-degree field, over-shoulder framing';
+  if (/wide|establish/.test(style)) return '84-degree field, intimate face with environment visible';
+  if (/aerial|bird|overhead/.test(style)) return '107-degree field, environmental geography framing';
+  return '47-degree field, natural documentary framing';
+}
+
+// Derives one specific, purposeful world detail from the scene location.
+function mdWorldDetail(scene: Pick<ScenePromptContext, 'locationType' | 'indoorOutdoor' | 'description'>): string {
+  const loc = (scene.locationType ?? '').toLowerCase();
+  if (loc.includes('garden')) return 'a low stone edging 3 meters behind the subject, damp soil holding the day\'s warmth';
+  if (loc.includes('harbor') || loc.includes('dock') || loc.includes('port')) return 'a rusted iron bollard at the dock edge, rope coiled at its base';
+  if (loc.includes('classroom') || loc.includes('school')) return 'a row of worn wooden desks behind, afternoon light cutting across the floor';
+  if (loc.includes('forest') || loc.includes('wood')) return 'a fallen log 3 meters to the right, moss dark on its upper side';
+  if (loc.includes('kitchen')) return 'a window above the counter, light cutting across the worktop at a low angle';
+  if (loc.includes('bedroom')) return 'a window at the far wall, curtains half-drawn against the morning light';
+  if (loc.includes('street') || loc.includes('road')) return 'a low concrete kerb at the scene edge, shadow line sharp across the pavement';
+  if (loc.includes('park')) return 'an iron bench 5 meters behind the subject, tree shadow crossing its seat';
+  if (loc.includes('beach') || loc.includes('shore')) return 'the waterline 8 meters behind, small waves arriving then retreating';
+  if (loc.includes('library')) return 'rows of shelves receding behind the subject, one lamp lit at the far end';
+  if (loc.includes('field') || loc.includes('meadow')) return 'a wooden fence post 4 meters to the left, ground shadow long beside it';
+  if (loc.includes('cave') || loc.includes('tunnel')) return 'rock wall 2 meters behind, water trace running down its face';
+  if (scene.indoorOutdoor === 'indoor') return 'a window at the far wall, natural light cutting through at an angle';
+  if (scene.indoorOutdoor === 'outdoor') return 'the open sky above, light arriving from one clear direction';
+  return 'the background holds still, defined by one geometric element';
+}
+
+// Derives LIGHTING PRIORITY key from director settings and scene.
+function mdLightingKey(director: ReturnType<typeof directorSettingsFromScene>, scene: Pick<ScenePromptContext, 'indoorOutdoor'>): string {
+  if (director.lighting) {
+    const l = director.lighting.toLowerCase().replace(/_/g, ' ');
+    if (/dramatic/.test(l)) return 'hard key camera-left, shadow side right';
+    if (/warm/.test(l)) return 'warm soft key camera-left, fill low';
+    if (/cool|moonlight/.test(l)) return 'cool key from scene source, no fill';
+    if (/bright/.test(l)) return 'bright key above-left, ground bounce';
+    return `${l} key camera-left`;
+  }
+  const tod = (director.timeOfDay ?? '').toLowerCase();
+  if (/morning|sunrise/.test(tod)) return 'warm low-angle key camera-right, long shadow';
+  if (/midday|noon/.test(tod)) return 'overhead hard key, shadow directly below';
+  if (/golden|afternoon/.test(tod)) return 'warm low-angle key camera-left';
+  if (/evening|sunset/.test(tod)) return 'orange low-angle key camera-left, long shadows';
+  if (/night|dark/.test(tod)) return 'cool ambient, single practical source';
+  if (scene.indoorOutdoor === 'indoor') return 'warm practical key from scene source';
+  return 'warm key camera-left';
+}
+
+// Derives camera movement instruction from description and director settings.
+function mdCameraMovement(descLower: string, pace?: string | null): string {
+  if (/\brun|\bsprint|\bdash/.test(descLower))
+    return 'track laterally, preserving body rhythm and frame direction.';
+  if (/\benter\b|\barrive\b/.test(descLower))
+    return 'hold wide; frame holds as subject crosses threshold.';
+  if (/find|discover|spot|notice/.test(descLower))
+    return 'slow push-in as recognition develops; tighten on subject.';
+  // Hand-contact scenes: hold stable so the subject and object stay in frame.
+  // Must follow the discovery check (discovery may also involve holding).
+  if (/\bholds?\b|\bplace[sd]?\b/.test(descLower))
+    return 'hold stable; subject and object in frame throughout.';
+  if (/approach|walk|step|move/.test(descLower))
+    return 'slow push-in as character crosses ground; hold when pace drops.';
+  if (/turn|look|face|glance/.test(descLower))
+    return 'hold stable; complete the turn before any reframe.';
+  if (/rise|stand|jump|leap/.test(descLower))
+    return 'slow tilt-up with the rise; hold at apex for two beats.';
+  if (/fall|drop|throw/.test(descLower))
+    return 'hold stable; impact readable in frame, no camera drift.';
+  if (pace && /fast|energetic/.test(pace.toLowerCase()))
+    return 'hold wide; track only to keep subject in frame.';
+  return 'hold stable; no camera movement unless subject moves.';
+}
+
+// Derives physics block from description keywords.
+// Hand-contact check precedes movement to avoid false-match when "move" appears as
+// an object verb ("watches them move") in hand-contact scenes.
+function mdPhysics(descLower: string): string {
+  if (/\bpick\b|\blift\b|\btake\b|\bgrab\b|\bholds?\b|\bopen\b|\bplace[sd]?\b|\btouch\b|\breach\b/.test(descLower))
+    return 'PHYSICS: arm carries object mass. Fingers contact before grip closes. Follow-through absorbs the lift. No weightless objects.';
+  if (/walk|approach|run|sprint|dash|step|move/.test(descLower))
+    return 'PHYSICS: weight transfers heel-to-toe. Deceleration natural before stop. Clothing lags the body. No floating, no frictionless feet.';
+  if (/fall|drop|throw/.test(descLower))
+    return 'PHYSICS: gravity pulls through the arc. Impact absorbs with follow-through. Ground does not bounce.';
+  return 'PHYSICS: gravity and mass active through all movement. Inertia and follow-through on every action. No floating, no teleportation.';
+}
+
+// Derives physical SOUND DESIGN block from scene (no musical score).
+function mdSoundDesign(scene: Pick<ScenePromptContext, 'locationType' | 'indoorOutdoor' | 'description' | 'weather'>): string {
+  const parts: string[] = [];
+  const loc = (scene.locationType ?? '').toLowerCase();
+  const desc = scene.description.toLowerCase();
+  if (loc) parts.push(`${loc} ambient`);
+  else if (scene.indoorOutdoor === 'outdoor') parts.push('outdoor ambient, wind low');
+  else if (scene.indoorOutdoor === 'indoor') parts.push('interior room tone');
+  if ((scene as any).weather) parts.push(`${((scene as any).weather as string).toLowerCase().replace(/_/g, ' ')} layer`);
+  if (/\bwalk\b|\bstep\b|\bsprints?\b|\bdash\b|\bruns?\b/.test(desc) || /\bmove[s]\b|\bmoves?\s+(?:toward|across|through|into|over|away|ahead|back\b)/.test(desc)) parts.push('footsteps match surface material');
+  if (/\b(?:touch|grab|pick|place)\b|\bopen\s+(?:the|a|an|it)\b|\bopens\b/.test(desc)) parts.push('handling sounds follow contact');
+  if (/water|river|fountain|rain/.test(loc + desc)) parts.push('water sound present');
+  if (/wind|breeze/.test(loc + desc)) parts.push('wind through the environment');
+  parts.push('physical character sounds follow action. No musical score');
+  return `SOUND DESIGN: ${parts.join('. ')}.`;
+}
+
+// Extracts the primary object/target from description, falling back to locationType.
+// Used for "eyes fix on X" lines in discovery and movement CUTs.
+function extractSceneTarget(desc: string, locationType: string | null | undefined): string {
+  const d = desc.toLowerCase();
+  const toward = d.match(/(?:toward|towards) (?:the |a |an )?(\w+(?:\s+(?!in|at|on|of|from|to|into|by|and|or|for|with|the)\w+)?)/);
+  if (toward) return toward[1];
+  const discovery = d.match(/(?:discover|find|notice|spot|see)s? (?:a |the |an )?(\w+(?:\s+(?!in|at|on|of|from|to|into|by|and|or|for|with|the)\w+)?)/);
+  if (discovery) return discovery[1];
+  const objAction = d.match(/(?:pick(?:s)? up|grab(?:s)?|lift(?:s)?|open(?:s)?) (?:a |the |an )?(\w+(?:\s+(?!in|at|on|of|from|to|into|by|and|or|for|with|the)\w+)?)/);
+  if (objAction) return objAction[1];
+  return locationType ?? 'target';
+}
+
+type EduCutActions = {
+  cut1ActionEye: string;
+  cut2ActionEye: string;
+  cut3ActionEye: string;
+  cut2Consequence: string;
+  cut3Consequence: string;
+};
+
+// Returns concept-specific observable cause→effect CUT actions from the teaching concept keyword.
+function buildEducationalCuts(
+  concept: string | null,
+  desc: string,
+  visualReq: string | null,
+): EduCutActions {
+  const c = ((concept ?? '') + ' ' + desc + ' ' + (visualReq ?? '')).toLowerCase();
+  if (/\bgravit|fall\b|drop\b/.test(c)) return {
+    cut1ActionEye: 'object held at height; grip firm, release point aligned',
+    cut2ActionEye: 'fingers open; object drops, fall begins',
+    cut3ActionEye: 'object reaches surface; impact visible, result noted',
+    cut2Consequence: 'fall begins at release',
+    cut3Consequence: 'object at rest; surface holds it',
+  };
+  if (/buoyan|float\b|sink\b|displac/.test(c)) return {
+    cut1ActionEye: 'object held above water; hands withdraw',
+    cut2ActionEye: 'object enters water; water rises around it',
+    cut3ActionEye: 'object at rest; floating or sinking confirmed',
+    cut2Consequence: 'water displaced on entry',
+    cut3Consequence: 'buoyancy visible',
+  };
+  if (/magnet|attract\b|repel\b/.test(c)) return {
+    cut1ActionEye: 'magnet and object placed apart; hands withdraw',
+    cut2ActionEye: 'magnet approaches; object moves without contact',
+    cut3ActionEye: 'object held or drawn in; force visible',
+    cut2Consequence: 'attraction before touch',
+    cut3Consequence: 'gap closed',
+  };
+  if (/evaporat|vapor|steam/.test(c)) return {
+    cut1ActionEye: 'water surface open to heat; hands withdraw',
+    cut2ActionEye: 'vapor rises from surface; level begins to fall',
+    cut3ActionEye: 'level reading taken; decrease visible',
+    cut2Consequence: 'vapor rises visibly',
+    cut3Consequence: 'level lower; vessel edge exposed',
+  };
+  if (/\bgrow|germinat|seed\b|sprout|plant\b/.test(c)) return {
+    cut1ActionEye: 'seed placed in soil; hands press earth closed',
+    cut2ActionEye: 'sprout breaks surface; stem rises toward light',
+    cut3ActionEye: 'seedling established; leaves orient to light',
+    cut2Consequence: 'germination visible',
+    cut3Consequence: 'growth confirmed',
+  };
+  if (/\blight\b|refract|reflect|prism|spectrum/.test(c)) return {
+    cut1ActionEye: 'light source and prism aligned; hands withdraw',
+    cut2ActionEye: 'light enters prism; spectrum spreads, angles clear',
+    cut3ActionEye: 'projected bands visible; refraction confirmed',
+    cut2Consequence: 'spectrum appears',
+    cut3Consequence: 'refraction confirmed',
+  };
+  const conceptWord = concept ? concept.toLowerCase().split(/\s+/)[0] ?? 'concept' : 'concept';
+  return {
+    cut1ActionEye: 'materials arranged; hands prepare setup, eyes on target',
+    cut2ActionEye: 'action executes; physical change begins, cause visible',
+    cut3ActionEye: 'result arrives; observable change held in frame',
+    cut2Consequence: `${conceptWord} in evidence`,
+    cut3Consequence: 'demonstration complete',
+  };
+}
+
+// Generates the CUT list for a SHORT_VIDEO prompt.
+// Each CUT: "CUT - [shot] [@ref] [staging], [speed] - [action+eye life] - [consequence] - [cut type]"
+function mdCutList(
+  scene: Pick<ScenePromptContext, 'description' | 'locationType' | 'indoorOutdoor' | 'mood'>,
+  director: ReturnType<typeof directorSettingsFromScene>,
+  primaryRef: string,
+  char2Ref: string | null,
+  cutCount: number,
+  charsPerCut: number,
+  eduOpts?: { teachingConcept?: string | null; visualTeachingReq?: string | null },
+): string[] {
+  const desc = scene.description;
+  const descL = desc.toLowerCase();
+
+  const hasMovement = /walk|approach|run|sprint|dash|step|move|enter|come/.test(descL);
+  const hasDiscovery = /find|discover|see|notice|spot|look|observe/.test(descL);
+  const hasHandAction = /pick|lift|take|grab|hold|open|place|touch|reach/.test(descL);
+  const isTwoChar = char2Ref !== null;
+  const isEd = eduOpts !== undefined;
+  const target = extractSceneTarget(scene.description, scene.locationType);
+  const emotionL = director.emotion ? director.emotion.toLowerCase().replace(/_/g, ' ') : null;
+
+  // Compact CUT format: action and eye life fused inline.
+  // Each line is designed to be ~150-190 chars without truncation.
+  type CutLine = { shot: string; staging: string; actionEye: string; consequence: string; cutType: string };
+  let defs: CutLine[];
+
+  if (isTwoChar) {
+    // Two-char: spatial relationship established once in CUT 1.
+    // CUT 1 actionEye names only @c1 — avoids budget fragmentation on long names.
+    // CUT 2 and CUT 3 inherit the spatial read; c2 implied by eyeline.
+    const c1 = primaryRef;
+    const c2 = char2Ref!;
+    defs = [
+      {
+        shot: 'medium wide',
+        staging: `${c1} left, ${c2} right midground`,
+        // c1 not repeated in actionEye — already named in staging; saves budget for long names.
+        actionEye: `settles; gap holds`,
+        consequence: 'in frame',
+        cutType: 'HARD CUT',
+      },
+      {
+        // c2 position inherited from CUT 1; not restated to keep budget clean.
+        shot: 'medium',
+        staging: `${c1} center-left`,
+        actionEye: `exchange lands; eyes hold right, blink shifts`,
+        consequence: 'weight shifts forward',
+        cutType: 'HARD CUT',
+      },
+      {
+        // c2 in staging satisfies T-MD-33 both-@refs requirement.
+        shot: 'close-up',
+        staging: `${c2} center frame`,
+        actionEye: `reaction settles${emotionL ? `, ${emotionL}` : ''}; micro-saccades still, catchlights live`,
+        consequence: 'posture holds decision',
+        cutType: '',
+      },
+    ];
+  } else if (isEd) {
+    // Educational: concept-derived physical cause→effect via buildEducationalCuts.
+    const eduActions = buildEducationalCuts(
+      eduOpts?.teachingConcept ?? null,
+      scene.description,
+      eduOpts?.visualTeachingReq ?? null,
+    );
+    defs = [
+      {
+        shot: 'medium wide',
+        staging: `${primaryRef} center background`,
+        actionEye: eduActions.cut1ActionEye,
+        consequence: 'arranged',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'medium',
+        staging: `${primaryRef} left foreground`,
+        actionEye: eduActions.cut2ActionEye,
+        consequence: eduActions.cut2Consequence,
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'close-up',
+        staging: `${primaryRef} center frame`,
+        actionEye: eduActions.cut3ActionEye,
+        consequence: eduActions.cut3Consequence,
+        cutType: '',
+      },
+    ];
+  } else if (hasDiscovery) {
+    // Discovery: character approaches and identifies a specific target object.
+    defs = [
+      {
+        shot: 'medium wide',
+        staging: `${primaryRef} center background`,
+        actionEye: `${primaryRef} approaches, heel-to-toe; eyes scan, blink as pace drops`,
+        consequence: `near stop before ${target}`,
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'medium',
+        staging: `${primaryRef} left foreground`,
+        actionEye: `eyes fix on ${target}, blink on recognition; right hand rises, fingers spread toward contact`,
+        consequence: 'hand holds, breath held',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'close-up',
+        staging: `${primaryRef} center frame`,
+        actionEye: `recognition lands; catchlights live, micro-saccades still; posture holds`,
+        consequence: `grip closes; ${target}`,
+        cutType: '',
+      },
+      {
+        shot: 'insert close-up',
+        staging: `${target} center frame`,
+        actionEye: `fingers make contact; texture, weight in detail, no character eyes needed`,
+        consequence: 'cuts back to face on contact',
+        cutType: 'INSERT CUT',
+      },
+    ];
+  } else if (hasMovement) {
+    const hasRun = /\brun|\bsprint|\bdash/.test(descL);
+    if (hasRun) {
+      // Running: full-pace stride mechanics, arrival as hard physical stop.
+      defs = [
+        {
+          shot: 'medium wide',
+          staging: `${primaryRef} center background`,
+          actionEye: `${primaryRef} enters at pace; stride full, arms drive, eyes fixed ahead`,
+          consequence: 'pace builds into the shot',
+          cutType: 'HARD CUT',
+        },
+        {
+          shot: 'medium',
+          staging: `${primaryRef} left foreground`,
+          actionEye: `stride extends; arms drive at pace, heel-strike to toe-push, blink with breath`,
+          consequence: 'body at full effort in frame',
+          cutType: 'HARD CUT',
+        },
+        {
+          shot: 'close-up',
+          staging: `${primaryRef} center frame`,
+          actionEye: `effort in the face; jaw set, blink with breath, micro-saccades track ahead, catchlights active`,
+          consequence: 'arrival; foot plants, stop completes',
+          cutType: '',
+        },
+      ];
+    } else {
+      // Walking/approach: steady pace, purposeful arrival.
+      defs = [
+        {
+          shot: 'medium wide',
+          staging: `${primaryRef} center background`,
+          actionEye: `${primaryRef} moves into frame; stride settles, eyes ahead, blink as pace drops`,
+          consequence: `pace holds into ${target}`,
+          cutType: 'HARD CUT',
+        },
+        {
+          shot: 'medium',
+          staging: `${primaryRef} left foreground`,
+          actionEye: `momentum commits; arms drive the rhythm, weight through each step, eyes forward`,
+          consequence: 'body commits, ground holds',
+          cutType: 'HARD CUT',
+        },
+        {
+          shot: 'close-up',
+          staging: `${primaryRef} center frame`,
+          actionEye: `effort registers in the face; micro-saccades track, blink on each breath, catchlights active`,
+          consequence: 'arrival; foot plants, stop completes',
+          cutType: '',
+        },
+      ];
+    }
+  } else if (hasHandAction) {
+    defs = [
+      {
+        shot: 'medium',
+        staging: `${primaryRef} center frame`,
+        actionEye: `${primaryRef} approaches object; eyes on target, blink as hands rise`,
+        consequence: 'hands arrive before body stops',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'medium close-up',
+        staging: `${primaryRef} center-left, object right foreground`,
+        actionEye: `fingers contact surface before grip closes; mass felt before lift, eyes hold the task`,
+        consequence: 'object displaced',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'close-up',
+        staging: `hands and object center frame`,
+        actionEye: `action completes; follow-through absorbs final movement${emotionL ? `, ${emotionL}` : ''}`,
+        consequence: 'object clear of surface',
+        cutType: '',
+      },
+    ];
+  } else {
+    defs = [
+      {
+        shot: 'medium wide',
+        staging: `${primaryRef} left midground`,
+        actionEye: `scene opens; ${primaryRef} present, intent established; eyes scan, natural blink`,
+        consequence: 'pace clear before main action',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'medium',
+        staging: `${primaryRef} center frame`,
+        actionEye: `main action lands; weight shifts with it${emotionL ? `, ${emotionL} in the posture` : ''}; natural blink, micro-saccades active`,
+        consequence: 'weight tips forward',
+        cutType: 'HARD CUT',
+      },
+      {
+        shot: 'close-up',
+        staging: `${primaryRef} center frame`,
+        actionEye: `reaction earned${emotionL ? `, ${emotionL}` : ''}; micro-saccades settle, live catchlights hold`,
+        consequence: 'weight settles; posture holds',
+        cutType: '',
+      },
+    ];
+  }
+
+  return defs.slice(0, cutCount).map((d) => {
+    const line = `CUT - ${d.shot} ${d.staging}, normal - ${d.actionEye} - ${d.consequence}${d.cutType ? ` - ${d.cutType}` : ''}`;
+    if (line.length <= charsPerCut) return line;
+    // Trim to budget: clip actionEye then consequence at word boundaries.
+    const prefix = `CUT - ${d.shot} ${d.staging}, normal - `;
+    const suffix = d.cutType ? ` - ${d.cutType}` : '';
+    const budget = charsPerCut - prefix.length - suffix.length - 3; // 3 for " - "
+    const aeMax = Math.max(20, Math.ceil(budget * 0.70));
+    const coMax = Math.max(8, budget - aeMax);
+    const ae = d.actionEye.length > aeMax
+      ? d.actionEye.slice(0, aeMax).replace(/[\s;,]+\S*$/, '')
+      : d.actionEye;
+    const co = d.consequence.length > coMax
+      ? d.consequence.slice(0, coMax).replace(/[\s;,]+\S*$/, '')
+      : d.consequence;
+    return `${prefix}${ae} - ${co}${suffix}`;
+  });
+}
+
 export function composeScenePromptText(input: {
   scene: ScenePromptContext;
   outputType: PromptOutputType;
@@ -1531,22 +1963,9 @@ export function composeScenePromptText(input: {
 }) {
   const meta = PROMPT_PROVIDER_META[input.provider];
   const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
-  const characterText = characters.length
-    ? characters.map((character) => character.promptIngredient).join('; ')
-    : 'use the established main character design from the story';
-  const settingText = [
-    input.scene.locationType ? `setting: ${input.scene.locationType}` : undefined,
-    input.scene.indoorOutdoor ? `${input.scene.indoorOutdoor}` : undefined,
-  ].filter(Boolean).join(', ');
   const r16Rules = input.audienceMode === 'KIDS'
     ? 'child-safe, warm, friendly, no fear, no violence, no adult themes'
     : 'safe, polished, emotionally clear';
-  const providerHint = input.provider === 'FLUX'
-    ? 'crisp still image, expressive character, readable silhouette'
-    : input.provider.startsWith('KLING')
-      ? 'smooth natural motion, stable character identity, clear subject continuity'
-      : 'cinematic but gentle movement, stable character identity, simple action';
-  const compositionAspect = 'mobile-first 9:16 framing';
   const director = directorSettingsFromScene(input.scene);
 
   // Phase C: extract educational fields from directorMetadata when present
@@ -1557,38 +1976,136 @@ export function composeScenePromptText(input: {
   const antiCommercialNote = typeof dsRaw?.antiCommercialNote === 'string' ? dsRaw.antiCommercialNote : null;
   const isEducational = Boolean(learningObjective || teachingConcept);
 
-  const prompt = [
-    `${outputTypeLabel(input.outputType)} for "${input.scene.project.title}"`,
-    isEducational ? `EDUCATIONAL VIDEO — topic: ${teachingConcept ?? learningObjective}` : undefined,
-    isEducational ? `learning objective: ${learningObjective}` : undefined,
-    isEducational ? `visual teaching requirement: ${visualTeachingReq ?? 'show the concept clearly'}` : undefined,
-    `scene: ${input.scene.title}`,
-    `action: ${input.scene.description}`,
-    settingText || undefined,
-    input.scene.mood ? `mood: ${input.scene.mood}` : undefined,
-    director.emotion ? `directed emotion: ${director.emotion}` : undefined,
-    director.cameraStyle ? `camera style: ${director.cameraStyle}` : undefined,
-    director.timeOfDay ? `time of day: ${director.timeOfDay}` : undefined,
-    director.weather ? `weather: ${director.weather}` : undefined,
-    director.environmentMood ? `environment feeling: ${director.environmentMood}` : undefined,
-    director.lighting ? `lighting: ${director.lighting}` : undefined,
-    director.scenePace ? `scene pace for future video: ${director.scenePace}` : undefined,
-    `characters, keep exact identity: ${characterText}`,
-    input.scene.project.storyDna ? `story DNA: ${storyDnaPromptText(input.scene.project.storyDna)}` : undefined,
-    `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
-    input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
-    `safety: ${r16Rules}`,
-    isEducational ? [
-      'EDUCATIONAL GUARD: Do not frame subject as product, advertisement, luxury item, or brand showcase.',
-      'No product-hero framing, no promotional composition.',
-      antiCommercialNote ? `Scene-specific: ${antiCommercialNote}` : undefined,
-    ].filter(Boolean).join(' ') : undefined,
-    `provider guidance: ${providerHint}`,
-    `composition: ${compositionAspect}, clear foreground subject, uncluttered background`,
-  ].filter(Boolean).join('. ');
+  let prompt: string;
+
+  if (input.outputType === 'SHORT_VIDEO') {
+    // moviedirector.md full compliance: character ref → world detail → scene context →
+    // tech spec → CUT list (budget-aware, min 3) → physics → sound design → educational.
+    // Hard rules: no em dashes; 4,000-char skill ceiling; provider ceiling may be stricter.
+
+    // === CHARACTER REFERENCE BLOCKS ===
+    // Fixed voice written once, quoted. Never re-derived per cut.
+    const voiceFixed = input.audienceMode === 'KIDS'
+      ? '"warm, gentle. Unhurried; rises with surprise, softens with wonder."'
+      : '"clear, measured. Calm under pressure; edge sharpens when certain."';
+    const charBlock = characters.length > 0
+      ? characters.slice(0, 3)
+          .map((ch) => `@${ch.name}: Already image referenced. Voice: ${voiceFixed} Voice only.`)
+          .join('\n')
+      : `@CHAR: Already image referenced. Voice: ${voiceFixed} Voice only.`;
+
+    // === SCENE CONTEXT PARAGRAPH ===
+    const primaryRef = characters.length > 0 ? `@${characters[0].name}` : '@CHAR';
+    const char2Ref = characters.length > 1 ? `@${characters[1].name}` : null;
+    const worldDetail = mdWorldDetail(input.scene);
+    const csKey = (director.cameraStyle ?? input.scene.cameraStyle ?? '').toLowerCase().replace(/_/g, ' ');
+    const primaryPos = char2Ref
+      ? 'left foreground, facing frame-right'
+      : /extreme|close.?up/.test(csKey) ? 'center frame, face filling upper half'
+      : /wide|establish/.test(csKey) ? 'left midground, full body visible'
+      : /over.?shoulder/.test(csKey) ? 'right midground, over left shoulder of foreground subject'
+      : 'center foreground, facing frame-right';
+    const secondaryClause = char2Ref
+      ? `. ${char2Ref} right midground facing frame-left, 2 meters separation`
+      : '';
+    const todClause = director.timeOfDay
+      ? ` ${director.timeOfDay.toLowerCase().replace(/_/g, ' ')} light.` : '';
+    const sceneContext = `${input.scene.project.title}. Scene: ${input.scene.title}. ${input.scene.description} World: ${worldDetail}.${todClause} ${primaryRef} at ${primaryPos}${secondaryClause}.`;
+
+    // === TECH SPEC ===
+    const lensDescriptor = cameraStyleToLensDescriptor(director.cameraStyle ?? input.scene.cameraStyle);
+    const lightingKey = mdLightingKey(director, input.scene);
+    const cameraMovementStr = mdCameraMovement(input.scene.description.toLowerCase(), director.scenePace);
+    const styleStr = styleLabel(effectiveVisualStyle(input.scene.project, input.audienceMode));
+    const safetyClause = input.audienceMode === 'KIDS' ? ' Child-safe, no fear, no adult themes.' : '';
+    const techSpec = `TECH SPEC: Style: ${styleStr}. LENS: ${lensDescriptor}. Camera: ${cameraMovementStr} LIGHTING PRIORITY: Key direction: ${lightingKey}. No flat frontal fill. Separation maintained. 9:16 vertical.${safetyClause}`;
+
+    // === EDUCATIONAL BLOCK (pre-computed for budget) ===
+    const educationalBlock = isEducational ? [
+      `EDUCATIONAL: ${teachingConcept ?? learningObjective}.`,
+      visualTeachingReq ? `Visual: ${visualTeachingReq.replace(/\.$/, '')}.` : undefined,
+      'No product framing, no advertisement, no brand showcase.',
+      antiCommercialNote ? `Scene note: ${antiCommercialNote}.` : undefined,
+    ].filter(Boolean).join(' ') : undefined;
+
+    // === PHYSICS + SOUND (pre-computed for budget) ===
+    const physicsBlock = mdPhysics(input.scene.description.toLowerCase());
+    const soundBlock = `*${mdSoundDesign(input.scene)}*`;
+
+    // === BUDGET-AWARE CUT ALLOCATION (moviedirector.md §16) ===
+    const effectiveCeiling = Math.min(4000, meta.maxPromptLength);
+    const numSections = 4 + (educationalBlock ? 1 : 0); // char+scene+tech+physics+sound+edu
+    const separatorCost = (numSections + 2) * 4; // \n\n between sections
+    const fixedCost = charBlock.length + sceneContext.length + techSpec.length
+      + physicsBlock.length + soundBlock.length + (educationalBlock?.length ?? 0) + separatorCost;
+    const minCutChars = 100; // minimum chars per CUT for real content (trimming allowed)
+    const cutBudget = Math.max(300, effectiveCeiling - fixedCost);
+    const maxPossibleCuts = Math.max(3, Math.min(5, Math.floor(cutBudget / minCutChars)));
+    const cutCount = Math.min(maxPossibleCuts, 3);
+    const charsPerCut = Math.floor(cutBudget / cutCount);
+
+    // === CUT LIST (min 3, each with staging + action + eye life + consequence) ===
+    const cuts = mdCutList(
+      input.scene, director, primaryRef, char2Ref, cutCount, charsPerCut,
+      isEducational ? { teachingConcept, visualTeachingReq: visualTeachingReq ?? null } : undefined,
+    );
+
+    // === ASSEMBLE: priority order per §16 ===
+    // char identity → scene context → tech spec → cuts → physics → sound → educational
+    const sections = [charBlock, sceneContext, techSpec, ...cuts, physicsBlock, soundBlock, educationalBlock];
+    const raw = sections.filter(Boolean).join('\n\n').replace(/—/g, '-').replace(/–/g, '-');
+
+    // Final character count assertion per §16.1-4
+    prompt = raw.length <= effectiveCeiling ? raw : limitText(raw, effectiveCeiling);
+  } else {
+    // IMAGE / COMIC_PANEL path — unchanged
+    const characterText = characters.length
+      ? characters.map((character) => character.promptIngredient).join('; ')
+      : 'use the established main character design from the story';
+    const settingText = [
+      input.scene.locationType ? `setting: ${input.scene.locationType}` : undefined,
+      input.scene.indoorOutdoor ? `${input.scene.indoorOutdoor}` : undefined,
+    ].filter(Boolean).join(', ');
+    const providerHint = input.provider === 'FLUX'
+      ? 'crisp still image, expressive character, readable silhouette'
+      : input.provider.startsWith('KLING')
+        ? 'smooth natural motion, stable character identity, clear subject continuity'
+        : 'cinematic but gentle movement, stable character identity, simple action';
+    const compositionAspect = 'mobile-first 9:16 framing';
+    const imagePrompt = [
+      `${outputTypeLabel(input.outputType)} for "${input.scene.project.title}"`,
+      isEducational ? `EDUCATIONAL VIDEO — topic: ${teachingConcept ?? learningObjective}` : undefined,
+      isEducational ? `learning objective: ${learningObjective}` : undefined,
+      isEducational ? `visual teaching requirement: ${visualTeachingReq ?? 'show the concept clearly'}` : undefined,
+      `scene: ${input.scene.title}`,
+      `action: ${input.scene.description}`,
+      settingText || undefined,
+      input.scene.mood ? `mood: ${input.scene.mood}` : undefined,
+      director.emotion ? `directed emotion: ${director.emotion}` : undefined,
+      director.cameraStyle ? `camera style: ${director.cameraStyle}` : undefined,
+      director.timeOfDay ? `time of day: ${director.timeOfDay}` : undefined,
+      director.weather ? `weather: ${director.weather}` : undefined,
+      director.environmentMood ? `environment feeling: ${director.environmentMood}` : undefined,
+      director.lighting ? `lighting: ${director.lighting}` : undefined,
+      director.scenePace ? `scene pace for future video: ${director.scenePace}` : undefined,
+      `characters, keep exact identity: ${characterText}`,
+      input.scene.project.storyDna ? `story DNA: ${storyDnaPromptText(input.scene.project.storyDna)}` : undefined,
+      `visual style: ${stylePromptBlock(effectiveVisualStyle(input.scene.project, input.audienceMode))}`,
+      input.scene.project.theme ? `theme: ${input.scene.project.theme}` : undefined,
+      `safety: ${r16Rules}`,
+      isEducational ? [
+        'EDUCATIONAL GUARD: Do not frame subject as product, advertisement, luxury item, or brand showcase.',
+        'No product-hero framing, no promotional composition.',
+        antiCommercialNote ? `Scene-specific: ${antiCommercialNote}` : undefined,
+      ].filter(Boolean).join(' ') : undefined,
+      `provider guidance: ${providerHint}`,
+      `composition: ${compositionAspect}, clear foreground subject, uncluttered background`,
+    ].filter(Boolean).join('. ');
+    prompt = limitText(imagePrompt, meta.maxPromptLength);
+  }
 
   return {
-    prompt: limitText(prompt, meta.maxPromptLength),
+    prompt,
     negativePrompt: limitText(automaticNegativePrompt(input.audienceMode, input.outputType, isEducational), meta.maxNegativePromptLength),
     aspectRatio: meta.defaultAspectRatio,
     duration: input.outputType === 'SHORT_VIDEO' ? meta.defaultDuration ?? 5 : undefined,
@@ -1671,11 +2188,13 @@ export async function composeEnhancedScenePrompt(
 ) {
   const meta = PROMPT_PROVIDER_META[input.provider];
 
-  // V2 path: parse Phase A structures and use structured composer
+  // SHORT_VIDEO always uses the shared MovieDirector composer (composeScenePromptText).
+  // V2 applies to IMAGE / COMIC_PANEL only — it produces a structured key-value format
+  // that does not meet the moviedirector.md CUT-list contract.
   let base: ReturnType<typeof composeScenePromptText> & { isV2?: boolean; v2Canonical?: unknown };
   let characterIdentity: string;
 
-  if (isVisualPromptComposerV2Enabled()) {
+  if (input.outputType !== 'SHORT_VIDEO' && isVisualPromptComposerV2Enabled()) {
     const ds = safeParseDirectedScene(input.scene.directorMetadata);
     try {
       const v2 = composeV2BasePrompt(input, ds);

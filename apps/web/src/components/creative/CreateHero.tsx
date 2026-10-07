@@ -5,10 +5,13 @@ export function CreateHero() {
   return (
     <div className="mb-8 text-center">
       <h1 className="text-4xl font-extrabold tracking-tight md:text-5xl">
-        What are you <span className="bg-gradient-to-r from-[var(--noc-magenta)] via-[var(--noc-purple)] to-[var(--noc-blue)] bg-clip-text text-transparent">creating?</span>
+        What are you{' '}
+        <span className="bg-gradient-to-r from-[var(--noc-magenta)] via-[var(--noc-purple)] to-[var(--noc-blue)] bg-clip-text text-transparent">
+          thinking about?
+        </span>
       </h1>
       <p className="mx-auto mt-3 max-w-xl text-[var(--noc-t4)]">
-        Tell Raivstream what you&apos;re imagining. It figures out how to make it.
+        Tell Raivstream what you&apos;re imagining. Homer figures out how to make it.
       </p>
     </div>
   );

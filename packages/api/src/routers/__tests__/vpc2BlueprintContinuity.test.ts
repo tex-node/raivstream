@@ -213,3 +213,70 @@ describe('VPC-2 blueprint continuity threading', () => {
     expect(creditTransaction.create).not.toHaveBeenCalled();
   });
 });
+
+// ─── SHORT_VIDEO routing: shared MovieDirector composer ───────────────────────
+
+describe('VPC-2 short video routing — MovieDirector shared framework', () => {
+  function makeVideoInput(audienceMode: 'GENERAL' | 'KIDS' = 'GENERAL'): PromptInput {
+    return {
+      scene: {
+        id: 'scene-video-1',
+        title: 'The School Gate',
+        description: 'Amadi walks toward the school gate.',
+        locationType: 'school gate',
+        indoorOutdoor: 'outdoor',
+        cameraStyle: 'MEDIUM_SHOT',
+        chapter: { blueprint: null },
+        project: {
+          title: 'Amadi Goes to School',
+          audienceMode,
+          visualStyle: 'STORYBOOK_ILLUSTRATION',
+          theme: 'courage',
+          characterMemory: [],
+        },
+      } as any,
+      outputType: 'SHORT_VIDEO',
+      provider: 'H3_MAX',
+      audienceMode,
+      projectId: 'project-1',
+      analyticsSource: 'generation' as const,
+    };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(promptEnhancerService, 'enhance').mockResolvedValue(enhancerOutput);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env[FLAG];
+  });
+
+  it('SHORT_VIDEO bypasses V2 flag — isV2 is not set even when V2 flag is on', async () => {
+    process.env[FLAG] = 'true';
+    const out = await composeEnhancedScenePrompt(makeCtx(), makeVideoInput('GENERAL'));
+    expect(out.isV2).toBeUndefined();
+  });
+
+  it('GENERAL SHORT_VIDEO uses MovieDirector CUT format regardless of V2 flag', async () => {
+    process.env[FLAG] = 'true';
+    const out = await composeEnhancedScenePrompt(makeCtx(), makeVideoInput('GENERAL'));
+    expect(out.deterministicPrompt).toMatch(/^CUT - /m);
+    expect(out.deterministicPrompt).toMatch(/TECH SPEC:/i);
+    expect(out.deterministicPrompt).toMatch(/PHYSICS:/i);
+    expect(out.deterministicPrompt).toMatch(/SOUND DESIGN:/i);
+  });
+
+  it('KIDS SHORT_VIDEO uses MovieDirector CUT format with KIDS safety clause', async () => {
+    process.env[FLAG] = 'true';
+    const out = await composeEnhancedScenePrompt(makeCtx(), makeVideoInput('KIDS'));
+    expect(out.deterministicPrompt).toMatch(/^CUT - /m);
+    expect(out.deterministicPrompt).toMatch(/Child-safe/i);
+  });
+
+  it('IMAGE with V2 flag still uses V2 — MovieDirector routing does not affect IMAGE', async () => {
+    process.env[FLAG] = 'true';
+    const out = await composeEnhancedScenePrompt(makeCtx(), makeInput({ blueprint: null }));
+    expect(out.isV2).toBe(true);
+  });
+});

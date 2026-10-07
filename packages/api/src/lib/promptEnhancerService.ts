@@ -184,7 +184,21 @@ class PromptEnhancerService {
           messages: [
             {
               role: 'system',
-              content: [
+              content: input.generationType === 'VIDEO' ? [
+                'You write finished, production-ready scene-specific video generation prompts for Raivstream Story Playground.',
+                'Return structured JSON only. Do not include markdown.',
+                'You are the director, cinematographer and animation director. The prompt must answer: WHO is there, WHERE is everyone (measured distances: "2 meters from", "foreground left", "center background"), WHAT does each character want, WHAT physically happens step by step, HOW does each character perform it (physical behavior not emotion labels), WHERE are they looking, HOW does the camera see it (lens degrees and movement), WHAT lens relationship, HOW does the camera move (direction, distance, speed), HOW does light behave (direction, quality, key/fill), HOW does physics affect movement, WHAT remains continuous, WHERE does the scene end, WHAT should be heard.',
+                'Five required blocks:',
+                '(1) CHARACTER: @TAG blocks. Image-referenced characters: "@NAME: Already image referenced. Voice: [descriptor]. Voice only." Spend character budget on action and staging, not appearance.',
+                '(2) SCENE CONTEXT: STAGING: with measured spatial positions. ACTION: translated into step-by-step physical sequence. EYE LIFE: blink rate tied to state, micro-saccades, live catchlights, gaze target named.',
+                '(3) CAMERA: lens in degrees (84deg intimate wide, 47deg documentary, 29deg medium portrait, 18deg close-up). Camera position relative to subject. Movement: push/pull/hold with distance and speed. 9:16 vertical. LIGHTING PRIORITY: Key direction, key quality, subject/background relationship, continuity requirement. Never flat frontal fill.',
+                '(4) PHYSICS: all movement has gravity, mass, inertia, weight transfer, follow-through. Cloth and hair lag. No floating, no teleportation, no frictionless feet, no rubbery motion. Every object carries appropriate mass.',
+                '(5) PERFORMANCE + SOUND: character objective, obstacle, physical response, gaze response, tactic change expressed in behavior. Then physical sound design: environmental ambience, character sounds tied to action. No invented score.',
+                'Hard rules: no em dash (use hyphen). Maximum 4,000 characters. No fabricated continuity from missing adjacent scenes. Single continuous take unless action demands cuts.',
+                'Preserve character identity exactly. Preserve scene intent.',
+                'Do not add new characters. Do not add text overlays, UI, phone screens, gallery framing, watermarks.',
+                'Keep child-safe tone for KIDS audience.',
+              ].join(' ') : [
                 'You improve internal AI media generation prompts for Raivstream Story Playground.',
                 'Return structured JSON only. Do not include markdown.',
                 'Preserve character identity exactly and preserve scene intent.',

@@ -10,6 +10,17 @@
  * (Brief/Bible/Plan/Assets/Versions/Approvals/Outputs) — no second store.
  */
 
+/** Minimal directing decision shape for draft persistence — avoids cross-package imports. */
+export interface DirectingDecisionDraft {
+  id: string;
+  category: string;
+  label: string;
+  value: string;
+  rationale: string;
+  provenance: string;
+  createdAt: string;
+}
+
 export interface CreateDraft {
   version: 1;
   text: string;
@@ -17,6 +28,12 @@ export interface CreateDraft {
   sourceSupplied: boolean;
   interpreted: boolean;
   updatedAt: string;
+  /** Conversational stage for the STORY branch. story_directing is restored as-is. */
+  convStage?: 'story_branch' | 'story_input' | 'story_directing';
+  /** The creator's submitted story text (STORY branch). */
+  storyText?: string;
+  /** Approved directing decisions for the Homer Directing flow (Phase 2). */
+  directingDecisions?: DirectingDecisionDraft[];
 }
 
 export interface DraftStorage {
@@ -46,6 +63,22 @@ export function parseDraft(raw: string | null): CreateDraft | null {
   try {
     const parsed = JSON.parse(raw) as Partial<CreateDraft>;
     if (parsed?.version !== CREATE_DRAFT_VERSION) return null;
+    const convStageRaw = parsed.convStage;
+    const validStages = ['story_branch', 'story_input', 'story_directing'] as const;
+    const convStage = validStages.includes(convStageRaw as (typeof validStages)[number])
+      ? (convStageRaw as (typeof validStages)[number])
+      : undefined;
+    const rawDecisions = parsed.directingDecisions;
+    const directingDecisions: DirectingDecisionDraft[] | undefined =
+      Array.isArray(rawDecisions)
+        ? rawDecisions.filter(
+            (item): item is DirectingDecisionDraft =>
+              typeof item === 'object' && item !== null &&
+              typeof (item as DirectingDecisionDraft).id === 'string' &&
+              typeof (item as DirectingDecisionDraft).category === 'string' &&
+              typeof (item as DirectingDecisionDraft).value === 'string',
+          )
+        : undefined;
     return {
       version: CREATE_DRAFT_VERSION,
       text: typeof parsed.text === 'string' ? parsed.text : '',
@@ -53,6 +86,9 @@ export function parseDraft(raw: string | null): CreateDraft | null {
       sourceSupplied: Boolean(parsed.sourceSupplied),
       interpreted: Boolean(parsed.interpreted),
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date(0).toISOString(),
+      convStage,
+      storyText: typeof parsed.storyText === 'string' ? parsed.storyText : undefined,
+      directingDecisions: directingDecisions && directingDecisions.length > 0 ? directingDecisions : undefined,
     };
   } catch {
     return null;

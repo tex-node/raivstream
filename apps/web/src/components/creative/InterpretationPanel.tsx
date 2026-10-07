@@ -77,7 +77,7 @@ export function InterpretationPanel({
           <span className="rounded-full bg-[var(--noc-purple)]/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--noc-purple)]">
             {interpretation.projectType}
           </span>
-          <span className="text-xs text-[var(--noc-t6)]">Raivstream decided this</span>
+          <span className="text-xs text-[var(--noc-t6)]">Homer decided this</span>
         </div>
         <p className="mt-3 text-lg font-semibold leading-relaxed text-[var(--noc-t1)]">{interpretation.summary}</p>
 
@@ -97,7 +97,7 @@ export function InterpretationPanel({
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-[var(--noc-t5)]">Let Raivstream decide — describe any change in your own words.</p>
+          <p className="mt-2 text-xs text-[var(--noc-t5)]">Let Homer decide — describe any change in your own words.</p>
         </details>
 
         {interpretation.questions.length > 0 && (
@@ -141,7 +141,7 @@ export function InterpretationPanel({
                             decided ? 'border-[var(--noc-blue)] bg-[var(--noc-blue)]/15 text-[var(--noc-t1)]' : 'border-dashed border-[rgba(233,233,237,0.2)] text-[var(--noc-t5)]'
                           }`}
                         >
-                          Let Raivstream decide
+                          Let Homer decide
                         </button>
                       )}
                     </div>
