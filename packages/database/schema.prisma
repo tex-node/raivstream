@@ -2299,11 +2299,14 @@ model CreativeProducedAsset {
   thumbnailUrl  String?
   errorMessage  String?
   provider      String?
+  versionId     String?
+  version       CreativeVersion?              @relation(fields: [versionId], references: [id], onDelete: SetNull)
   createdAt     DateTime                      @default(now())
   updatedAt     DateTime                      @updatedAt
 
   @@index([projectId, sceneId])
   @@index([projectId, status])
+  @@index([versionId])
   @@map("creative_produced_assets")
 }
 
@@ -2339,8 +2342,9 @@ model CreativeVersion {
   snapshot      Json
   createdAt     DateTime        @default(now())
 
-  approvals CreativeApproval[]
-  outputs   CreativeOutput[]
+  approvals      CreativeApproval[]
+  outputs        CreativeOutput[]
+  producedAssets CreativeProducedAsset[]
 
   @@unique([projectId, versionNumber])
   @@index([projectId])

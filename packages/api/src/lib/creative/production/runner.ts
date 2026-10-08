@@ -143,7 +143,7 @@ export async function runCreativeProduction(
       // never create a duplicate for the same scene+kind.
       const asset = prior
         ? await prisma.creativeProducedAsset.update({ where: { id: prior.id }, data: { status: 'GENERATING' as never } })
-        : await prisma.creativeProducedAsset.create({ data: { projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, status: 'GENERATING' } });
+        : await prisma.creativeProducedAsset.create({ data: { projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, status: 'GENERATING', versionId: project.currentVersionId ?? null } as never });
 
       let seedImageUrl: string | undefined;
       if (spec.kind === 'VIDEO') {
