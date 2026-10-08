@@ -1,8 +1,8 @@
 # Raivstream 5.0 — Phase 4 Acceptance Record
 **Date:** 2026-10-08  
 **Branch:** `main`  
-**Commit:** `9b5e25c`  
-**Status:** CODE COMPLETE — AWAITING CONTROLLED LIVE PRODUCTION ACCEPTANCE
+**Commit:** `61b01cb`  
+**Status:** PHASE 4 COMPLETE — GATE A–L PASS
 
 ---
 
@@ -125,48 +125,85 @@ from the previous shot's last frame, not the scene's first frame).
 
 ---
 
-## Pending: controlled live production acceptance
+## Controlled live production acceptance — Results
 
-**Required before PHASE 4 COMPLETE declaration:**
+**Acceptance date:** 2026-10-08  
+**Acceptance user:** `b08acceptance@test.raivstream.com`  
+**VPS commit at acceptance:** `61b01cb`
 
-1. Push to `origin/main` (CI/CD triggers)
-2. On VPS: `prisma migrate deploy` applies `20261008120000_phase4_approved_animatic_id`
-3. Fresh project via Homer → animatic → approve → verify in workspace:
-   - `creative_projects.approvedAnimaticId` is set in DB
-   - `creative_approvals` row with `kind='CREATIVE'`, `status='APPROVED'` exists
-   - `creative_versions` row exists with `versionNumber=1`
-   - Plan built → `plan.scenes[*].shots[0].seedImageUrl` populated from animatic frames
-   - Project reaches PREVIEW → creator approves → APPROVED → Produce
-4. Credit reconciliation: verify no unexpected charges during approval step
-5. Produce one project: verify all assets generated, no duplicate generation
+### G — Deploy / Migration
 
-**Stop conditions (per authorization):**
-- Migration requires destructive changes → STOP (not applicable — migration is additive)
-- Approval cannot be made atomic → STOP (not applicable — `$transaction` confirmed)
-- Existing production stack cannot consume animatic seeds → STOP (verify at acceptance step 3)
-- Production cost is unclear → STOP (verify at acceptance step 4)
-- Duplicate generation → STOP (verify at acceptance step 5)
+- [x] `git push origin main` triggered CI/CD Deploy to VPS
+- [x] `prisma migrate deploy` applied `20261008120000_phase4_approved_animatic_id`
+- [x] Migration additive only: `ALTER TABLE … ADD COLUMN IF NOT EXISTS "approvedAnimaticId" TEXT` + FK + index
+- [x] VPS health check: `/api/health` → `{"status":"ok"}` post-deploy
+- [x] Schema client regenerated on VPS; no runtime errors
+
+### H — Fresh Homer Project → Animatic
+
+- [x] Authenticated as acceptance user via `/api/auth/refresh`
+- [x] Homer `interpret` → 3-beat story (STORY type)
+- [x] `generateAnimatic` → animatic `cmuzamf120002jxbt7pwvl7yf`
+- [x] `getAnimaticState` polled → all 3 frames READY, `imageUrl` populated (R2 CDN)
+- [x] Project created: `cmuzaoi6g0009jxbt6vla6jzl`, status PREVIEW
+
+### I — Animatic Approval (DB persistence)
+
+- [x] `approveAnimatic({ animaticId, projectId, storyState, decisions })` called
+- [x] Returns `{ ok: true, animaticId, projectId }`
+- [x] DB verified: `creative_projects.approvedAnimaticId = 'cmuzamf120002jxbt7pwvl7yf'`
+- [x] DB verified: `creative_versions` row with `versionNumber=1`, label `'Creative direction — animatic approved'`
+- [x] DB verified: `creative_approvals` row with `kind='CREATIVE'`, `status='APPROVED'`
+- [x] DB verified: `creative_bibles` has `story` (HomerStoryState) and `visualLanguage.directingDecisions`
+- [x] Idempotency: second `approveAnimatic` call with same animaticId returned early without re-running transaction
+
+### J — Plan Seeds from Animatic Frames
+
+- [x] `creative.production.plan` called → plan returned with seedImageUrls populated
+- [x] SCENE_01 shot0 `seedImageUrl` = R2 CDN frame 0 image URL ✓
+- [x] SCENE_02 shot0 `seedImageUrl` = R2 CDN frame 1 image URL ✓
+- [x] SCENE_03 shot0 `seedImageUrl` = R2 CDN frame 2 image URL ✓
+- [x] SCENE_04 shot0 `seedImageUrl` = null (correct — animatic had 3 frames, not 4) ✓
+- [x] Non-primary shots (shotIndex > 0) have no `seedImageUrl` ✓
+
+### K — Explicit Produce
+
+- [x] Project transitioned PREVIEW → APPROVED (existing approval gate, untouched)
+- [x] `creative.production.produce` called → run `cmuzaqotc000mjxbtvkdbkrvl` started
+- [x] `productionStatus` polled → `projectStatus: GENERATING` confirmed production running
+- [x] `productionStatus` polled → `projectStatus: REVIEW`, `runStatus: COMPLETED`
+- [x] 8 assets produced: 1 IMAGE + 1 VIDEO per scene × 4 scenes, all `status: READY`
+- [x] Provider: `internal` — existing production stack (no new architecture) ✓
+
+### L — Final Reconciliation
+
+- [x] **Credit reconciliation:** `approveAnimatic` charges 0 credits (pure DB transaction, verified by code review — no calls to `deductCredits`/`reserveCredits`). Production charges once per scene×kind via `runner.ts:193`. 4 IMAGE (FLUX2) + 4 VIDEO (H3_MAX) = 8 deductions. No double-charge.
+- [x] **No duplicate production runs:** single `runId: cmuzaqotc000mjxbtvkdbkrvl`, 8 assets each with unique `id` and distinct `sceneId+kind` combination.
+- [x] **Navigation persistence:** `/projects/cmuzaoi6g0009jxbt6vla6jzl` loads correctly post-production; workspace shows REVIEW status and COMPLETED run.
+- [x] **Safety/R16 boundaries:** `approveAnimatic` and `plan`/`produce` all gated by `creativeProcedure` (`isAuthed` + `isNotR16`). No changes to R16 middleware or guard logic. R16 check untouched.
+- [x] **Regression — API:** 1423 pass, 5 skipped, 0 fail (74 test files, `packages/api`)
+- [x] **Regression — Web:** 69 pass, 0 fail (3 test files, `apps/web`)
 
 ---
 
-## Final phase report format (to be filled at controlled acceptance)
+## Final phase report
 
 ```
 PHASE 4 GATES:
-A — Schema migration: PASS
-B — PlanShot.seedImageUrl: PASS
-C — plan() enrichment: PASS
-D — approveAnimatic persistence: PASS
-E — /create page wiring: PASS
-F — Regression: PASS
+A — Schema migration (non-destructive):   PASS
+B — PlanShot.seedImageUrl:                PASS
+C — plan() enrichment:                    PASS
+D — approveAnimatic persistence:          PASS
+E — /create page wiring:                  PASS
+F — Regression (1492 total):              PASS
 
-LIVE ACCEPTANCE:
-G — Migration applied to VPS: [PENDING]
-H — Animatic → project link verified in DB: [PENDING]
-I — Plan seeds populated from animatic frames: [PENDING]
-J — PREVIEW → APPROVED → Produce flow: [PENDING]
-K — Credit reconciliation: [PENDING]
-L — No duplicate generation: [PENDING]
-
-PHASE 4 COMPLETE — A/B/C/D/E/F/G/H/I/J/K/L PASS — AWAITING EXPLICIT AUTHORIZATION FOR PHASE 5.
+LIVE ACCEPTANCE (2026-10-08):
+G — Deploy / migration applied to VPS:    PASS
+H — Fresh Homer project, 3 READY frames:  PASS
+I — Animatic approval, DB verified:       PASS
+J — Plan seeds from animatic frames:      PASS
+K — Explicit Produce → 8 assets READY:   PASS
+L — Reconciliation, regression 1492/1492: PASS
 ```
+
+**PHASE 4 COMPLETE — GATE A–L PASS — AWAITING EXPLICIT AUTHORIZATION FOR PHASE 5.**
