@@ -4,7 +4,7 @@ import { creativeProcedure, router } from '../../trpc';
 import { homerService } from '../../lib/homer/service';
 import { isHomerInterpreterEnabled } from '../../lib/homer/interpreter';
 import { claudeApiKey, CLAUDE_ANTHROPIC_VERSION, CLAUDE_DEFAULT_MODEL } from '../../lib/narrativeEngine';
-import { saveHomerState } from '../../lib/homer/repository';
+import { saveHomerState, saveDirectingDecisions } from '../../lib/homer/repository';
 import {
   selectNextDirectingQuestion,
   proposeDirectingDecision,
@@ -337,20 +337,87 @@ export const creativeHomerRouter = router({
     }),
 
   /**
-   * Approve the animatic — mark it as creator-approved.
-   * Project creation happens client-side after this returns ok.
+   * Approve the animatic — Phase 4 real persistence.
+   *
+   * Atomically links an approved HomerAnimatic to the existing CreativeProject,
+   * writes the final HomerStoryState + directing decisions to CreativeBible,
+   * creates a CreativeVersion snapshot, and records a CREATIVE approval.
+   *
+   * Idempotent: if the project already has this animatic approved, returns
+   * the existing result without re-running the transaction.
    */
   approveAnimatic: creativeProcedure
-    .input(z.object({ animaticId: z.string() }))
+    .input(z.object({
+      animaticId: z.string(),
+      projectId: z.string(),
+      storyState: z.record(z.unknown()),
+      decisions: z.array(z.record(z.unknown())).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
+      // Verify animatic ownership.
       const animatic = await ctx.prisma.homerAnimatic.findFirst({
         where: { id: input.animaticId, userId: ctx.user.id },
       });
       if (!animatic) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Animatic not found.' });
       }
-      // Approval is a client gate — no DB state change needed for MVP.
-      // Director notes on frames are already persisted per-frame.
-      return { ok: true as const, animaticId: input.animaticId };
+
+      // Verify project ownership.
+      const project = await ctx.prisma.creativeProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        select: { id: true, approvedAnimaticId: true },
+      });
+      if (!project) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found.' });
+      }
+
+      // Idempotency: already approved with the same animatic → return early.
+      if ((project as { id: string; approvedAnimaticId?: string | null }).approvedAnimaticId === input.animaticId) {
+        return { ok: true as const, animaticId: input.animaticId, projectId: input.projectId };
+      }
+
+      // Atomic approval: version + approval + bible state + animaticId link.
+      await ctx.prisma.$transaction(async (tx) => {
+        const txClient = tx as unknown as import('@raivstream/database').PrismaClient;
+
+        // 1. Persist final Homer state + directing decisions into the bible.
+        await saveHomerState(txClient, input.projectId, input.storyState as unknown as HomerStoryState);
+        if (input.decisions && input.decisions.length > 0) {
+          await saveDirectingDecisions(
+            txClient,
+            input.projectId,
+            input.decisions as unknown as HomerCreativeDecision[],
+          );
+        }
+
+        // 2. Link the approved animatic on the project.
+        await txClient.creativeProject.update({
+          where: { id: input.projectId },
+          data: { approvedAnimaticId: input.animaticId } as never,
+        });
+
+        // 3. Create a version snapshot for the approval record.
+        const version = await txClient.creativeVersion.create({
+          data: {
+            projectId: input.projectId,
+            versionNumber: 1,
+            label: 'Creative direction — animatic approved',
+            snapshot: { animaticId: input.animaticId, approvedAt: new Date().toISOString() } as never,
+          },
+        });
+
+        // 4. Record the CREATIVE approval (links this animatic as the creative gate).
+        await txClient.creativeApproval.create({
+          data: {
+            projectId: input.projectId,
+            versionId: version.id,
+            kind: 'CREATIVE' as never,
+            status: 'APPROVED' as never,
+            decidedById: ctx.user.id,
+          },
+        });
+      });
+
+      return { ok: true as const, animaticId: input.animaticId, projectId: input.projectId };
     }),
 });

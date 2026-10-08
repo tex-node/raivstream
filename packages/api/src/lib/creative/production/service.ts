@@ -197,6 +197,19 @@ export class ProductionPlanService {
 
     const sourceRefs = sourceReferencesFromBrief(project.brief);
     const sourceImageUrl = sourceRefs.find((r) => Boolean(r.url))?.url;
+
+    // Phase 4: if this project has an approved animatic, seed shot anchor frames.
+    const approvedAnimaticId = (project as unknown as { approvedAnimaticId?: string | null }).approvedAnimaticId;
+    let animaticSeeds: Array<{ sceneIndex: number; imageUrl: string | null }> | undefined;
+    if (approvedAnimaticId) {
+      const frames = await prisma.homerAnimaticFrame.findMany({
+        where: { animaticId: approvedAnimaticId },
+        orderBy: { sceneIndex: 'asc' },
+        select: { sceneIndex: true, imageUrl: true },
+      });
+      if (frames.length > 0) animaticSeeds = frames;
+    }
+
     let basePlan = buildCreativePlan({
       projectType: project.projectType as CreativeProjectType,
       brief,
@@ -204,6 +217,7 @@ export class ProductionPlanService {
       version: (project.productionPlan?.version ?? 0) + 1,
       context: buildProductionContext({ brief, bible }),
       sourceReferences: sourceRefs,
+      animaticSeeds,
     });
 
     // Re-plan persistence: Director-applied creativeDirection values must survive

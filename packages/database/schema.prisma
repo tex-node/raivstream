@@ -2169,6 +2169,8 @@ model CreativeProject {
   reviewRuns           CreativeReviewRun[]
   approvals            CreativeApproval[]
   outputs              CreativeOutput[]
+  approvedAnimaticId   String?
+  approvedAnimatic     HomerAnimatic?        @relation("ProjectApprovedAnimatic", fields: [approvedAnimaticId], references: [id], onDelete: SetNull)
   currentVersionId     String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -2241,9 +2243,10 @@ model HomerAnimatic {
   storyHash String               // deterministic hash of HomerStoryState + directingDecisions
   scenes    Json                 // HomerAnimaticScene[]
   status    AnimaticFrameStatus  @default(PENDING)
-  frames    HomerAnimaticFrame[]
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  frames             HomerAnimaticFrame[]
+  approvedByProjects CreativeProject[]    @relation("ProjectApprovedAnimatic")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   @@unique([userId, storyHash])
   @@index([userId])

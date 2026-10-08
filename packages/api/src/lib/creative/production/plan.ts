@@ -19,6 +19,8 @@ export interface PlanShot {
   durationSeconds: number;
   visualDirection?: string;
   audioDirection?: string;
+  /** Approved animatic frame image URL seeded as the anchor frame for I2V generation. */
+  seedImageUrl?: string;
 }
 
 export interface PlanScene {
@@ -242,6 +244,8 @@ export function buildCreativePlan(input: {
   version?: number;
   context?: ProductionContext;
   sourceReferences?: CreativeSourceReference[];
+  /** Approved animatic frames, keyed by sceneIndex, for seeding I2V anchor frames. */
+  animaticSeeds?: Array<{ sceneIndex: number; imageUrl: string | null }>;
 }): CreativeProductionPlanState {
   const structure = structureFor(input.projectType);
   const characters = characterNames(input.bible);
@@ -249,8 +253,22 @@ export function buildCreativePlan(input: {
   // For commercial projects, substitute the actual product noun into scene
   // descriptions so prompts name the thing being promoted rather than "product".
   const productNoun = input.projectType === 'COMMERCIAL' ? extractProductNoun(input.brief) : 'product';
+
+  // Build a sceneIndex → imageUrl lookup from animatic seeds.
+  const seedByIndex = new Map<number, string>();
+  if (input.animaticSeeds) {
+    for (const seed of input.animaticSeeds) {
+      if (seed.imageUrl) seedByIndex.set(seed.sceneIndex, seed.imageUrl);
+    }
+  }
+
   const scenes: PlanScene[] = structure.scenes.map((template, index) => {
-    const shots = buildShots(index, template);
+    const seedImageUrl = seedByIndex.get(index);
+    const shots = buildShots(index, template).map((shot, shotIndex) => ({
+      ...shot,
+      // Seed only the primary shot (shotIndex 0) — the I2V anchor frame.
+      ...(seedImageUrl && shotIndex === 0 ? { seedImageUrl } : {}),
+    }));
     const estimatedDurationSeconds = shots.reduce((sum, shot) => sum + shot.durationSeconds, 0);
     const description = productNoun !== 'product'
       ? template.description.replace(/\bthe product\b/gi, `the ${productNoun}`).replace(/\bproduct\b/gi, productNoun)

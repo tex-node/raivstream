@@ -65,6 +65,11 @@ export default function CreatePage() {
   const [authPendingFor, setAuthPendingFor] = useState<'continue' | 'start' | null>(null);
   const hydratedRef = useRef(false);
   const pendingSourceRef = useRef<PendingSource | null>(null);
+  const pendingAnimaticApprovalRef = useRef<{
+    animaticId: string;
+    storyState: Record<string, unknown>;
+    decisions: Record<string, unknown>[];
+  } | null>(null);
 
   // ─── STORY branch state ───────────────────────────────────────────────────
   const [convStage, setConvStage] = useState<ConvStage>('idle');
@@ -215,17 +220,11 @@ export default function CreatePage() {
   });
 
   const approveAnimaticMutation = trpc.creative.homer.approveAnimatic.useMutation({
-    onSuccess: () => {
-      // Animatic approved — now create the project
-      createProject.mutate({
-        text: storyText.trim() || text,
-        attachments,
-        projectType: 'STORY',
-        homerStoryState: homerState as unknown as Record<string, unknown>,
-        directingDecisions: directingDecisions.length > 0
-          ? (directingDecisions as unknown as Record<string, unknown>[])
-          : undefined,
-      });
+    onSuccess: (data) => {
+      // Phase 4: project already created — navigate directly to the workspace.
+      const storage = browserStorage();
+      if (storage) clearDraft(storage, userId);
+      router.push(`/projects/${data.projectId}`);
     },
   });
 
@@ -281,6 +280,19 @@ export default function CreatePage() {
   const confirmUpload = trpc.creative.project.confirmAttachment.useMutation();
   const createProject = trpc.creative.project.create.useMutation({
     onSuccess: async (project) => {
+      // Phase 4: if animatic approval is pending, hand off to approveAnimatic.
+      const pendingApproval = pendingAnimaticApprovalRef.current;
+      if (pendingApproval) {
+        pendingAnimaticApprovalRef.current = null;
+        approveAnimaticMutation.mutate({
+          animaticId: pendingApproval.animaticId,
+          projectId: project.id,
+          storyState: pendingApproval.storyState,
+          decisions: pendingApproval.decisions,
+        });
+        return; // navigation handled in approveAnimaticMutation.onSuccess
+      }
+
       const storage = browserStorage();
       if (storage) clearDraft(storage, userId);
 
@@ -462,20 +474,30 @@ export default function CreatePage() {
   };
 
   const handleAnimaticApprove = () => {
+    const projectPayload = {
+      text: storyText.trim() || text,
+      attachments,
+      projectType: 'STORY' as const,
+      homerStoryState: homerState as unknown as Record<string, unknown>,
+      directingDecisions: directingDecisions.length > 0
+        ? (directingDecisions as unknown as Record<string, unknown>[])
+        : undefined,
+    };
     if (!animaticId) {
-      // No animatic — create project directly
-      createProject.mutate({
-        text: storyText.trim() || text,
-        attachments,
-        projectType: 'STORY',
-        homerStoryState: homerState as unknown as Record<string, unknown>,
-        directingDecisions: directingDecisions.length > 0
-          ? (directingDecisions as unknown as Record<string, unknown>[])
-          : undefined,
-      });
+      // No animatic — create project directly (original flow).
+      createProject.mutate(projectPayload);
       return;
     }
-    approveAnimaticMutation.mutate({ animaticId });
+    // Phase 4: store animatic approval data, then create project.
+    // createProject.onSuccess will call approveAnimaticMutation automatically.
+    pendingAnimaticApprovalRef.current = {
+      animaticId,
+      storyState: homerState as unknown as Record<string, unknown>,
+      decisions: directingDecisions.length > 0
+        ? (directingDecisions as unknown as Record<string, unknown>[])
+        : [],
+    };
+    createProject.mutate(projectPayload);
   };
 
   // ─── Directing handlers (Phase 2) ─────────────────────────────────────────
