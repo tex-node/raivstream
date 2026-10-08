@@ -1833,10 +1833,14 @@ enum AudioTrackType {
 
 model AudioPerformancePlan {
   id                   String                 @id @default(cuid())
-  projectId            String
-  project              StoryProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sequenceId           String
-  sequence             StorySequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  // Story domain: both fields required for legacy rows; null for Creative 5.0 rows.
+  projectId            String?
+  project              StoryProject?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sequenceId           String?
+  sequence             StorySequence?         @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  // Creative 5.0 bridge (Phase 6A Approach A): set for 5.0 audio plans.
+  creativeVersionId    String?
+  creativeVersion      CreativeVersion?       @relation(fields: [creativeVersionId], references: [id], onDelete: SetNull)
 
   status               AudioPlanStatus        @default(DRAFT)
   currentVersionNumber Int                    @default(0)
@@ -1850,6 +1854,7 @@ model AudioPerformancePlan {
   @@index([projectId])
   @@index([sequenceId])
   @@index([sequenceId, status])
+  @@index([creativeVersionId])
   @@map("audio_performance_plans")
 }
 
@@ -1981,6 +1986,9 @@ model AudioAsset {
   project         StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId          String
   user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Creative 5.0 bridge (Phase 6C): set when asset is generated for a 5.0 version.
+  creativeVersionId String?
+  creativeVersion   CreativeVersion? @relation(fields: [creativeVersionId], references: [id], onDelete: SetNull)
 
   storageProvider String       @default("R2")
   storageKey      String
@@ -1992,6 +2000,9 @@ model AudioAsset {
   sampleRateHz    Int?
   channels        Int?
   sourceKind      String?      // free text, e.g. "UPLOAD" | "SYNTHETIC_TEST" — not a rigid enum
+  // Generation traceability (Phase 6C).
+  promptText      String?
+  providerJobId   String?
 
   cues            AudioCue[]
 
@@ -2000,6 +2011,7 @@ model AudioAsset {
 
   @@index([projectId])
   @@index([userId])
+  @@index([creativeVersionId])
   @@map("audio_assets")
 }
 
@@ -2345,6 +2357,8 @@ model CreativeVersion {
   approvals      CreativeApproval[]
   outputs        CreativeOutput[]
   producedAssets CreativeProducedAsset[]
+  audioPlan      AudioPerformancePlan[]
+  audioAssets    AudioAsset[]
 
   @@unique([projectId, versionNumber])
   @@index([projectId])

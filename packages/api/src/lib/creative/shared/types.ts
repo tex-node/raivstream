@@ -127,13 +127,31 @@ export interface CreativeBriefState {
   attachments?: Record<string, unknown>[];
 }
 
+/** Typed audio language spec produced by Homer and carried through the Bible. */
+export interface AudioLanguageSpec {
+  /** Overall audio style (e.g. "intimate, natural"). */
+  style?: string;
+  /** Music/score direction (e.g. "understated luxury", "afro-futurist"). */
+  score?: string;
+  /** Sound design direction (e.g. "natural environmental"). */
+  sound?: string;
+  /** Emotional mood for the piece (e.g. "warm, hopeful"). */
+  mood?: string;
+  /** Pacing/tempo descriptor (e.g. "slow-burn", "urgent"). */
+  tempo?: string;
+  /** Narration voice character (e.g. "warm authority", "intimate whisper"). */
+  voiceStyle?: string;
+  /** Primary spoken language for TTS (BCP-47 tag, e.g. "en", "fr", "yo"). */
+  primaryLanguage?: string;
+}
+
 export interface CreativeBibleState {
   version: number;
   story?: Record<string, unknown>;
   characters?: Record<string, unknown>[];
   worlds?: Record<string, unknown>[];
   visualLanguage?: Record<string, unknown>;
-  audioLanguage?: Record<string, unknown>;
+  audioLanguage?: AudioLanguageSpec;
   audience?: Record<string, unknown>;
   brand?: Record<string, unknown>;
   constraints?: Record<string, unknown>;

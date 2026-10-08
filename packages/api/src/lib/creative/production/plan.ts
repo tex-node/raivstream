@@ -8,7 +8,7 @@
  * can enrich it via the existing structurer/sequence planning later.
  */
 
-import type { CreativeBibleState, CreativeBriefState, CreativeProjectType } from '../shared/types';
+import type { AudioLanguageSpec, CreativeBibleState, CreativeBriefState, CreativeProjectType } from '../shared/types';
 import type { ProductionContext } from './contextAdapter';
 
 export interface PlanShot {
@@ -225,7 +225,15 @@ function creativeDirectionFor(type: CreativeProjectType, productNoun: string, be
   }
 }
 
-function buildShots(sceneIndex: number, scene: SceneTemplate): PlanShot[] {
+function audioDirectionFor(shotIndex: number, audioLanguage: AudioLanguageSpec | undefined): string {
+  const base = audioLanguage?.style ?? audioLanguage?.score ?? audioLanguage?.mood;
+  if (base) {
+    return shotIndex === 0 ? `${base} — establish the atmosphere` : `continue ${base}`;
+  }
+  return shotIndex === 0 ? 'atmosphere first' : 'layered in as the shot builds';
+}
+
+function buildShots(sceneIndex: number, scene: SceneTemplate, audioLanguage?: AudioLanguageSpec): PlanShot[] {
   return scene.shotIdeas.map((idea, shotIndex) => ({
     shotId: `SCENE_${String(sceneIndex + 1).padStart(2, '0')}_SHOT_${String(shotIndex + 1).padStart(2, '0')}`,
     title: idea,
@@ -233,7 +241,7 @@ function buildShots(sceneIndex: number, scene: SceneTemplate): PlanShot[] {
     camera: shotIndex === 0 ? 'Slow push-in' : shotIndex === 1 ? 'Close-up' : 'Wide, steady',
     durationSeconds: SHOT_DURATIONS[shotIndex % SHOT_DURATIONS.length],
     visualDirection: 'cinematic, consistent with the visual language',
-    audioDirection: shotIndex === 0 ? 'atmosphere first' : 'layered in as the shot builds',
+    audioDirection: audioDirectionFor(shotIndex, audioLanguage),
   }));
 }
 
@@ -262,9 +270,10 @@ export function buildCreativePlan(input: {
     }
   }
 
+  const audioLanguage = input.bible?.audioLanguage;
   const scenes: PlanScene[] = structure.scenes.map((template, index) => {
     const seedImageUrl = seedByIndex.get(index);
-    const shots = buildShots(index, template).map((shot, shotIndex) => ({
+    const shots = buildShots(index, template, audioLanguage).map((shot, shotIndex) => ({
       ...shot,
       // Seed only the primary shot (shotIndex 0) — the I2V anchor frame.
       ...(seedImageUrl && shotIndex === 0 ? { seedImageUrl } : {}),

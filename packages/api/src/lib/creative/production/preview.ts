@@ -7,7 +7,7 @@
  * text + references, no media generation.
  */
 
-import type { CreativeBibleState } from '../shared/types';
+import type { AudioLanguageSpec, CreativeBibleState } from '../shared/types';
 import type { CreativeProductionPlanState } from './plan';
 
 export interface PreviewState {
@@ -28,7 +28,7 @@ export interface PreviewState {
   characters: Array<Record<string, unknown>>;
   worlds: Array<Record<string, unknown>>;
   visualLanguage?: Record<string, unknown>;
-  audioLanguage?: Record<string, unknown>;
+  audioLanguage?: AudioLanguageSpec;
   notes: string[];
 }
 

@@ -12,6 +12,7 @@
  *   Stage 4 — DIRECTOR
  *   Stage 5 — REVIEW
  *   Stage 6 — STUDIO
+ *   Stage 7 — AUDIO (Phase 6)
  */
 
 export const CREATIVE_FLAGS = {
@@ -39,6 +40,8 @@ export const CREATIVE_FLAGS = {
   SERIES_ENABLED: 'RAIVSTREAM_5_SERIES_ENABLED',
   /** Studio (brands/products/campaigns). */
   STUDIO_ENABLED: 'RAIVSTREAM_5_STUDIO_ENABLED',
+  /** Audio, music & final output pipeline (Phase 6). */
+  AUDIO_ENABLED: 'RAIVSTREAM_5_AUDIO_ENABLED',
 } as const;
 
 export type CreativeFlagKey = keyof typeof CREATIVE_FLAGS;
@@ -95,4 +98,9 @@ export function isCreativeSeriesEnabled(env: NodeJS.ProcessEnv = process.env): b
 
 export function isCreativeStudioEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return isCreativeEnabled(env) && flagOn('STUDIO_ENABLED', env);
+}
+
+/** Audio, music & final output pipeline (Phase 6). */
+export function isCreativeAudioEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isCreativeEnabled(env) && flagOn('AUDIO_ENABLED', env);
 }
