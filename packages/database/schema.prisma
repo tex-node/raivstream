@@ -1296,6 +1296,7 @@ model StorySceneSeed {
   imageStatus    StorySceneAssetStatus?
   imageUrl       String?
   narrationAudioUrl String?
+  narrationScript   String?
 
   createdAt      DateTime      @default(now())
 
