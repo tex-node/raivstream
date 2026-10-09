@@ -64,6 +64,7 @@ export async function resolveMovieRenderCreditRate(
 // must reject the operation rather than silently proceed for free.
 export const STORY_SPEECH_GENERATION_FEATURE_KEY = 'story:speech_generation';
 export const STORY_AUDIO_GENERATION_FEATURE_KEY = 'story:audio_generation';
+export const STORY_BACKGROUND_MUSIC_FEATURE_KEY = 'story:background_music';
 
 export type FeatureCreditRateResult =
   | { configured: true;  cost: number; errorCode: null }
