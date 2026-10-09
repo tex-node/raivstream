@@ -1981,12 +1981,13 @@ model AudioPlanVersion {
 }
 
 model AudioAsset {
-  id              String       @id @default(cuid())
-  projectId       String
-  project         StoryProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  // Nullable for Creative 5.0 assets (Phase 6B): those set creativeVersionId instead.
+  projectId       String?
+  project         StoryProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId          String
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // Creative 5.0 bridge (Phase 6C): set when asset is generated for a 5.0 version.
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Creative 5.0 bridge (Phase 6B): set when asset is generated for a 5.0 version.
   creativeVersionId String?
   creativeVersion   CreativeVersion? @relation(fields: [creativeVersionId], references: [id], onDelete: SetNull)
 
