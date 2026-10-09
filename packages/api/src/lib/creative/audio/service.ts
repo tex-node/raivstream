@@ -20,6 +20,7 @@ import {
   deductCredits,
   refundCredits,
   STORY_SPEECH_GENERATION_FEATURE_KEY,
+  STORY_AUDIO_GENERATION_FEATURE_KEY,
 } from '../../credits';
 import {
   synthesizeSpeech,
@@ -27,6 +28,13 @@ import {
   elevenLabsDefaultVoiceId,
   type ElevenLabsSpeechDeps,
 } from '../../generators/elevenLabsTts';
+import {
+  generateMusic,
+  isLyriaMusicEnabled,
+  lyriaModelId,
+  type LyriaMusicInput,
+  type LyriaMusicDeps,
+} from '../../generators/lyriaMusic';
 import { uploadBufferToR2 } from '../../r2';
 import { moderatePrompt } from '../../promptModeration';
 
@@ -366,6 +374,229 @@ export async function generateNarrationForCue(
   }
 }
 
+// ─── Phase 6C — Music brief + final-stage Lyria generation ──────────────────
+
+export interface MusicBrief {
+  prompt: string;
+  negativePrompt: string;
+  /** Resolved duration used to inform Lyria of the desired track length. */
+  durationSeconds: number;
+}
+
+/**
+ * Pure function: derive a Google Lyria music brief from the approved creative
+ * state and the bible's audio language spec.
+ *
+ * Creator instructions always take precedence over inferred preferences.
+ * All fields in AudioLanguageSpec are optional; sensible defaults apply.
+ */
+export function buildMusicBrief(
+  bible: CreativeBibleState | null | undefined,
+  plan: CreativeProductionPlanState,
+  creatorInstructions?: string,
+): MusicBrief {
+  const duration = Math.max(1, Math.round(plan.totalRuntimeSeconds));
+  const negativePrompt = 'vocals, singing, lyrics, speech, talking, sound effects, noise';
+
+  if (creatorInstructions?.trim()) {
+    return {
+      prompt: `Instrumental background score. ${creatorInstructions.trim()}. Approximately ${duration} seconds. No vocals, no lyrics.`,
+      negativePrompt,
+      durationSeconds: duration,
+    };
+  }
+
+  const audio = bible?.audioLanguage;
+  const parts: string[] = ['Instrumental background score.'];
+  if (audio?.score) parts.push(audio.score);
+  else if (audio?.style) parts.push(audio.style);
+  if (audio?.mood) parts.push(`${audio.mood} mood`);
+  if (audio?.tempo) parts.push(`${audio.tempo} pacing`);
+  if (audio?.sound) parts.push(audio.sound);
+  parts.push(`Approximately ${duration} seconds.`);
+  parts.push('No vocals, no lyrics.');
+
+  return { prompt: parts.join(' '), negativePrompt, durationSeconds: duration };
+}
+
+export interface GenerateMusicInput {
+  creativeVersionId: string;
+  creativeProjectId: string;
+  userId: string;
+  /** Creator-supplied text instructions override inferred music brief. */
+  creatorInstructions?: string;
+  deps?: LyriaMusicDeps;
+}
+
+export interface GenerateMusicResult {
+  assetId: string;
+  storageKey: string;
+  creditsUsed: number;
+  /** true when an existing materialised track was returned without a new charge. */
+  reused: boolean;
+}
+
+/**
+ * Final-stage music generation for an approved Creative 5.0 version.
+ *
+ * Authorization gate: the CreativeVersion must have an APPROVED CREATIVE
+ * approval record — music generation is only permitted in the final-output
+ * workflow, never during scene production, preview, or review.
+ *
+ * Idempotent: if the MUSIC track already has a materialised AudioCue (audioAssetId
+ * set), the existing asset is returned with creditsUsed=0 and reused=true.
+ *
+ * Fail-closed: throws PRECONDITION_FAILED when:
+ *   - Lyria is disabled (isLyriaMusicEnabled() = false)
+ *   - The version is not CREATIVE-approved
+ *   - The audio plan or MUSIC track is absent
+ *   - The story:audio_generation credit rate is not configured
+ *
+ * Returns null when isCreativeAudioEnabled() is false (silent no-op).
+ */
+export async function generateMusicForVersion(
+  prisma: PrismaClient,
+  input: GenerateMusicInput,
+): Promise<GenerateMusicResult | null> {
+  if (!isCreativeAudioEnabled()) return null;
+
+  if (!isLyriaMusicEnabled(input.deps?.env)) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Lyria music generation is not enabled on this server.' });
+  }
+
+  // Authorization — version must carry a CREATIVE approval.
+  const approval = await prisma.creativeApproval.findUnique({
+    where: { versionId_kind: { versionId: input.creativeVersionId, kind: 'CREATIVE' as never } },
+    select: { status: true },
+  });
+  if (approval?.status !== 'APPROVED') {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Creative version must be approved before generating the soundtrack.' });
+  }
+
+  const db = prisma as unknown as PrismaClientWithAudio;
+
+  // Find the AudioPerformancePlan for this version.
+  const audioPlan = await db.audioPerformancePlan.findFirst({
+    where: { creativeVersionId: input.creativeVersionId },
+    select: { id: true },
+  });
+  if (!audioPlan) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No audio plan found. Run seedAudioPlanFromBible first.' });
+  }
+
+  const musicTrack = await db.audioTrack.findFirst({
+    where: { planId: audioPlan.id, type: 'MUSIC' },
+    select: { id: true },
+  });
+  if (!musicTrack) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No MUSIC track found on the audio plan.' });
+  }
+
+  // Idempotency — return the existing materialised track without a new charge.
+  const existingCue = await db.audioCue.findFirst({
+    where: { trackId: musicTrack.id, audioAssetId: { not: null } },
+    select: { id: true, audioAssetId: true },
+  });
+  if (existingCue?.audioAssetId) {
+    const existingAsset = await db.audioAsset.findUnique({
+      where: { id: existingCue.audioAssetId },
+      select: { id: true, storageKey: true },
+    });
+    if (existingAsset) {
+      return { assetId: existingAsset.id, storageKey: existingAsset.storageKey, creditsUsed: 0, reused: true };
+    }
+  }
+
+  // Credit gate — rate must be configured (seeded in Phase 6C).
+  const creditRate = await resolveFeatureCreditRate(prisma, STORY_AUDIO_GENERATION_FEATURE_KEY);
+  if (!creditRate.configured) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: `Music credit rate not configured (${creditRate.errorCode}).` });
+  }
+
+  // Fetch version snapshot + project bible for brief construction.
+  const version = await prisma.creativeVersion.findUnique({
+    where: { id: input.creativeVersionId },
+    select: { snapshot: true },
+  });
+  const project = await prisma.creativeProject.findUnique({
+    where: { id: input.creativeProjectId },
+    select: { bible: true },
+  });
+  const plan = (version?.snapshot as { plan?: CreativeProductionPlanState } | null)?.plan;
+  if (!plan) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Version has no production plan.' });
+  const bible = project?.bible as CreativeBibleState | null | undefined;
+
+  const brief = buildMusicBrief(bible, plan, input.creatorInstructions);
+
+  // Deduct credits BEFORE provider call (refund on any failure after this point).
+  const creditsUsed = await deductCredits(
+    prisma,
+    input.userId,
+    STORY_AUDIO_GENERATION_FEATURE_KEY,
+    input.creativeVersionId,
+    `Creative music track — version ${input.creativeVersionId}`,
+  );
+
+  // Create an unmaterialised cue as the intent record.
+  const newCue = await db.audioCue.create({
+    data: {
+      trackId: musicTrack.id,
+      startTimeSeconds: 0,
+      durationSeconds: brief.durationSeconds,
+      order: 0,
+      enabled: true,
+      volume: 0.4,
+      metadata: { kind: 'MUSIC_TRACK', creativeVersionId: input.creativeVersionId },
+    },
+  });
+
+  const storageKeyBase = `creative/${input.creativeProjectId}/music/${newCue.id}-${Date.now()}`;
+
+  try {
+    const musicResult = await generateMusic(
+      { prompt: brief.prompt, negativePrompt: brief.negativePrompt } satisfies LyriaMusicInput,
+      input.deps ?? {},
+    );
+    const ext = musicResult.mimeType.includes('wav') ? 'wav' : 'mp3';
+    const storageKey = `${storageKeyBase}.${ext}`;
+
+    const publicUrl = await uploadBufferToR2(musicResult.audio, storageKey, musicResult.mimeType);
+    if (!publicUrl) throw new Error('R2 storage is not configured for music.');
+
+    const asset = await db.audioAsset.create({
+      data: {
+        userId: input.userId,
+        creativeVersionId: input.creativeVersionId,
+        storageProvider: 'R2',
+        storageKey,
+        publicUrl,
+        mimeType: musicResult.mimeType,
+        sourceKind: 'SYNTHETIC_MUSIC',
+        promptText: brief.prompt,
+        providerJobId: `lyria:${lyriaModelId(input.deps?.env)}`,
+      },
+      select: { id: true },
+    });
+
+    await db.audioCue.update({
+      where: { id: newCue.id },
+      data: { audioAssetId: asset.id },
+    });
+
+    return { assetId: asset.id, storageKey, creditsUsed, reused: false };
+  } catch (err) {
+    await refundCredits(
+      prisma,
+      input.userId,
+      creditsUsed,
+      STORY_AUDIO_GENERATION_FEATURE_KEY,
+      input.creativeVersionId,
+      `Refund — Creative music generation failure version ${input.creativeVersionId}`,
+    );
+    throw err;
+  }
+}
+
 // ─── Typed accessors ──────────────────────────────────────────────────────────
 // The Prisma client gained audioPerformancePlan via the Phase 6A migration.
 // The cast keeps the service compilable before prisma generate runs.
@@ -379,11 +610,13 @@ type PrismaClientWithAudio = {
   };
   audioCue: {
     findMany: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<Array<{ metadata: unknown }>>;
+    findFirst: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string; audioAssetId: string | null } | null>;
     findUnique: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string; text: string | null; voiceProfileId: string | null; voiceProfile: { voiceRef: string | null } | null } | null>;
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
     update: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<{ id: string }>;
   };
   audioAsset: {
     create: (args: { data: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string }>;
+    findUnique: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string; storageKey: string } | null>;
   };
 };

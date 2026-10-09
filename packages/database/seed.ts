@@ -201,6 +201,13 @@ async function main() {
       unitLabel:      'request',
       description:    'AI video upscaling / enhancement (₦100/video)',
     },
+    // ── Creative 5.0 audio pipeline (Phase 6C) ─────────────────────────────
+    {
+      featureKey:     'story:audio_generation',
+      creditsPerUnit: 100,
+      unitLabel:      'track',
+      description:    'Creative 5.0 — AI music generation via Google Lyria (₦100/track)',
+    },
   ];
 
   for (const rate of creditRates) {
