@@ -492,9 +492,13 @@ export async function generateMusicForVersion(
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No MUSIC track found on the audio plan.' });
   }
 
-  // Idempotency — return the existing materialised track without a new charge.
+  // Idempotency — check for any existing cue (materialised OR unmaterialised).
+  // An unmaterialised cue means a previous attempt failed after cue creation and
+  // cue cleanup also failed, leaving an orphaned intent record. Surface CONFLICT
+  // with the cue ID so an admin can delete it to unblock retries without duplicate
+  // charges. A materialised cue means success; return it without a new charge.
   const existingCue = await db.audioCue.findFirst({
-    where: { trackId: musicTrack.id, audioAssetId: { not: null } },
+    where: { trackId: musicTrack.id },
     select: { id: true, audioAssetId: true },
   });
   if (existingCue?.audioAssetId) {
@@ -505,6 +509,12 @@ export async function generateMusicForVersion(
     if (existingAsset) {
       return { assetId: existingAsset.id, storageKey: existingAsset.storageKey, creditsUsed: 0, reused: true };
     }
+  }
+  if (existingCue && !existingCue.audioAssetId) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `Music generation is already in progress for this version. If a previous attempt failed, delete cue ${existingCue.id} to reset.`,
+    });
   }
 
   // Credit gate — rate must be configured (seeded in Phase 6C).

@@ -310,6 +310,14 @@ describe('generateMusicForVersion', () => {
     expect(mocks.deductCredits).not.toHaveBeenCalled();
   });
 
+  it('throws PRECONDITION_FAILED when version approval is INVALIDATED', async () => {
+    const prisma = makePrisma({ approvalStatus: 'INVALIDATED' });
+    await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(mocks.deductCredits).not.toHaveBeenCalled();
+  });
+
   // ── Gate: audio plan ────────────────────────────────────────────────────
 
   it('throws PRECONDITION_FAILED when no AudioPerformancePlan found', async () => {

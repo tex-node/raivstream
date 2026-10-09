@@ -70,8 +70,15 @@ existing audio-mixing/output path for the Lyria music generation bridge.
 - [x] No change needed to `output/service.ts` for Phase 6D. Phase 6E will read materialised `AudioCue` rows and mix them into the output.
 - [x] Phase 6D does not trigger music generation from `output/service.ts` — constraint preserved.
 
-### H — Tests (17 new tests, 0 fail)
+### H — Tests (21 new Phase 6D tests, 0 fail; +1 new Phase 6C test = 48 total across both files)
 
+- [x] **Part 0 — Orphaned unmaterialised cue detection (3 tests)**:
+  - Unmaterialised cue found → CONFLICT *before* deductCredits called (no duplicate charge)
+  - CONFLICT message includes cue ID (admin can `DELETE FROM audio_cues WHERE id=<id>` to recover)
+  - Sequential simulation: first request fails (Lyria + delete both fail) → orphaned cue blocks second request at idempotency check → CONFLICT before deduct (second request nets zero charge)
+- [x] **Part 0b — Concurrent two-request race (1 test)**:
+  - Two simultaneous requests: request A succeeds (holds index lock), request B gets P2002 → refunds → CONFLICT
+  - Net: exactly 1 Lyria call, 2 deducts, 1 refund → 1 permanent charge
 - [x] **Part 1 — TOCTOU guard (5 tests)**:
   - P2002 → CONFLICT with "already in progress" message
   - P2002 → credits refunded before CONFLICT thrown
@@ -92,13 +99,18 @@ existing audio-mixing/output path for the Lyria music generation bridge.
   - Happy path end-to-end → correct result shape
   - P2002 → CONFLICT surfaced through router
   - creatorInstructions passed to Lyria prompt
+- [x] **Phase 6C regression +1 (INVALIDATED approval)**:
+  - `approvalStatus: 'INVALIDATED'` → PRECONDITION_FAILED + deductCredits not called
 
-### I — Regression
+### I — Regression (re-run on final candidate 2026-10-09, working tree vs HEAD 6b3989f)
 
-- [x] API tests: **1518 pass, 5 skipped, 0 fail** (78 test files — 17 new Phase 6D tests included)
+- [x] API tests: **1527 pass, 5 skipped, 0 fail** (79 test files)
+  - Includes 4 new integration tests (`phase6d.integration.test.ts`) that ran against the live disposable cluster
+  - Prior unit-only count was 1523/78; the +4/+1 are entirely the new integration test
 - [x] TypeScript — API: **0 errors**
 - [x] TypeScript — Web: **0 errors**
-- [x] Phase 6C acceptance gates unchanged (26/26 Phase 6C tests still pass)
+- [x] Phase 6C acceptance gates: **27/27** (26 original + 1 INVALIDATED) all pass
+- [x] Phase 6D unit + integration: **48/48 + 4/4 = 52 total** for this scope
 
 ---
 
@@ -149,18 +161,245 @@ ready for that integration without premature coupling.
 
 ---
 
+---
+
+## Verification pass (2026-10-09)
+
+Required by Phase 6D provisional acceptance before deployment.
+
+### 1 — Migration integrity
+
+- [x] Table: `audio_cues` (confirmed in migration `20260827120000_audio_performance_phase9b2`)
+- [x] Column: `"trackId"` — camelCase (Prisma preserves field names; confirmed in Phase 9B.2 DDL)
+- [x] Type: `metadata JSONB` — `->>'kind'` operator valid
+- [x] Predicate: `WHERE (("metadata"->>'kind') = 'MUSIC_TRACK')` — correct
+- [x] Pre-cleanup step added: `DELETE FROM "audio_cues" WHERE kind='MUSIC_TRACK' AND "audioAssetId" IS NULL` — removes any dev/test orphans before index creation; safe in production (router was never wired; credit rate was never seeded — zero MUSIC_TRACK rows exist)
+- [x] `IF NOT EXISTS` guard preserved — idempotent on re-run
+
+### 2 — Concurrent requests proof
+
+- [x] Two concurrent requests, same track: request A holds index lock via `audioCue.create`; request B gets Prisma P2002 → refunds → CONFLICT
+- [x] Net: **1 Lyria call, 2 deducts, 1 refund → 1 permanent charge**
+- [x] Test: `Phase 6D — Concurrent two-request race` (Part 0b, 1 test) — PASS
+- [x] Partial unique index is the DB-level serialization mechanism; mocked P2002 test faithfully represents this because Prisma's error code (P2002) is the only observable signal from the unique constraint — no raw SQL path exists
+
+### 3 — Cleanup failure observability and recovery
+
+- [x] **Root gap fixed**: idempotency check now detects any cue (materialised OR unmaterialised) via `audioCue.findFirst({ where: { trackId } })` — no longer `audioAssetId: { not: null }` only
+- [x] Unmaterialised cue found → CONFLICT thrown **before** `deductCredits` — zero duplicate charge
+- [x] CONFLICT message includes the cue ID: `"delete cue ${existingCue.id} to reset"` — observable
+- [x] Recovery path: admin deletes the orphaned cue row by ID → subsequent retries proceed normally
+- [x] Tests: Part 0 (3 tests) — PASS
+
+### 4 — INVALIDATED approval test
+
+- [x] Added to `phase6c.test.ts`: `approvalStatus: 'INVALIDATED'` → PRECONDITION_FAILED + `deductCredits` not called
+- [x] Test passes — Phase 6C approval gate correctly rejects all non-APPROVED statuses
+
+### 5 — Release scope
+
+- [x] Commit `6b3989f` contains exactly 6 files: migration, service.ts, audio.ts, index.ts, phase6d.test.ts, PHASE-6D-ACCEPTANCE.md
+- [x] Verification-pass changes (this record update + 4 new tests + service idempotency fix + migration pre-cleanup) to be committed separately
+- [x] Unrelated local files (`.claude/settings.local.json`, `SESSION.md`) not staged
+- [x] No Phase 6E work included; no live Lyria calls; production credit rates unseeded
+
+---
+
 ## Phase 6D Final Report
 
 ```
-A — Migration (partial unique index for MUSIC_TRACK concurrency):    PASS
-B — TOCTOU guard (P2002 → CONFLICT + refund):                        PASS
-C — Cue cleanup on failure (retry-safe track unlock):                PASS
-D — TypeScript (API: 0 errors, Web: 0 errors):                       PASS
-E — Router wiring (ownership + approval-gated + idempotent):         PASS
-F — Router registration (creative.audio.generateMusic):              PASS
-G — Output integration assessment (Phase 6E deferred):               PASS
-H — Tests (17/17):                                                    PASS
-I — Regression (1518 pass, 0 fail):                                   PASS
+A — Migration (partial unique index + pre-cleanup for MUSIC_TRACK):   PASS
+B — TOCTOU guard (P2002 → CONFLICT + refund):                         PASS
+C — Cue cleanup on failure (retry-safe track unlock):                 PASS
+D — TypeScript (API: 0 errors, Web: 0 errors):                        PASS
+E — Router wiring (ownership + approval-gated + idempotent):          PASS
+F — Router registration (creative.audio.generateMusic):               PASS
+G — Output integration assessment (Phase 6E deferred):                PASS
+H — Tests (48 unit + 4 integration = 52/52):                          PASS
+I — Regression (1527 pass, 5 skipped, 0 fail — 79 files):             PASS
 ```
 
-**PHASE 6D COMPLETE — ROUTER WIRED, RACE PROTECTED, RETRY-SAFE.**
+**Technical evidence: ALL PASS.**  
+**Release status: HOLD — awaiting final human review.**
+
+---
+
+## Release hold — active constraints
+
+Confirmed by reviewer (2026-10-09). Do not act on any of the following without explicit authorization:
+
+- [ ] Stage, commit, push, or merge the verification-pass working-tree changes
+- [ ] Deploy the Phase 6D migration to any non-disposable database
+- [ ] Seed the `story:audio_generation` credit rate in production or staging
+- [ ] Enable live Lyria generation (`LYRIA_MUSIC_ENABLED=true` in any deployed env)
+- [ ] Begin Phase 6E
+- [ ] Combine Phase 6D with the `feat/ui-redesign` branch or any other in-flight branch
+
+The verification-pass diff (6 files vs HEAD `6b3989f`) is the exact candidate for final review. Nothing has been staged or pushed.
+
+---
+
+## Pre-release review evidence (2026-10-09)
+
+### Check 1 — Integration test setup: real DB + real index, no cue-creation mock
+
+**File:** `packages/api/src/lib/creative/__tests__/phase6d.integration.test.ts`  
+**Database:** `postgresql://postgres@localhost:5433/raivstream_phase6d_test`  
+— disposable PostgreSQL 17.11 cluster, trust auth, `prisma db push`, never the VPS  
+**Mocks:** ONLY `generateMusic` (Lyria API) and `uploadBufferToR2` (R2 storage)  
+**Real:** `PrismaClient.$connect()`, `audioCue.create`, `audioCue.findMany`,
+`deductCredits`, `refundCredits`, `featureCreditRate.findFirst`, `creditTransaction.findMany`,
+`creditBalance.findUnique`, `audioAsset.create`, `audioCue.update`
+
+`audioCue.create` is **not mocked** — it executes against the live PostgreSQL partial unique
+index, which is what triggers the real P2002 under concurrent inserts.
+
+Schema confirmation from `\d audio_cues` in the test DB:
+```
+"audio_cues_music_track_unique" UNIQUE, btree ("trackId")
+    WHERE (metadata ->> 'kind'::text) = 'MUSIC_TRACK'::text
+```
+(`pg_indexes` catalog query result:
+`CREATE UNIQUE INDEX audio_cues_music_track_unique ON public.audio_cues USING btree ("trackId") WHERE ((metadata ->> 'kind'::text) = 'MUSIC_TRACK'::text)`)
+
+### Check 2 — Persisted accounting: race and reuse paths verified
+
+#### Race/conflict path (19 of 20 iterations)
+
+| Assertion | What it proves |
+|---|---|
+| `cues.length === 1` | index serialised the race; exactly 1 cue row |
+| `cues[0].audioAssetId !== null` | winning request materialised the cue |
+| `mocks.generateMusic.toHaveBeenCalledTimes(1)` | Lyria called exactly once |
+| `generated.length === 1` (reused=false) | exactly one new generation |
+| `conflicted.length === 1` (code=CONFLICT) | losing request got index violation |
+| `deducts.length - refunds.length === 1` | 2 USAGE txns, 1 REFUND txn, net 1 charge |
+
+#### Reuse/sequential path (1 of 20 iterations)
+
+| Assertion | What it proves |
+|---|---|
+| `cues.length === 1` | same invariant; no duplicate cue |
+| `cues[0].audioAssetId !== null` | cue was materialised |
+| `mocks.generateMusic.toHaveBeenCalledTimes(1)` | Lyria still called exactly once |
+| `generated.length === 1` (reused=false) | first request generated |
+| `reused.length === 1` (reused=true) | second request took idempotency path |
+| `deducts.length - refunds.length === 1` | 1 USAGE txn, 0 REFUND txns, net 1 charge |
+
+The reuse path is proven genuinely idempotent by the **idempotency test** (dedicated):
+- `r2.reused === true`
+- `r2.creditsUsed === 0`
+- `r2.assetId === r1.assetId` (same asset returned)
+- `mocks.generateMusic` NOT called on r2 (no second provider job)
+
+**Aggregate assertion (both paths):** `totalNetCharges === 20` (one per iteration)  
+**Final balance assertion:** `balance === 3000 - 2000` (started at 60 × 100; used 20 × 100)
+
+### Check 3 — Migration and recovery behaviour
+
+**Partial unique index catalog definition (live PostgreSQL query):**
+```sql
+CREATE UNIQUE INDEX audio_cues_music_track_unique
+  ON public.audio_cues USING btree ("trackId")
+  WHERE ((metadata ->> 'kind'::text) = 'MUSIC_TRACK'::text)
+```
+Index type: UNIQUE btree — enforced at the storage level by PostgreSQL 17.11.
+
+**Unmaterialised orphan blocks retry BEFORE deduction (orphan recovery test):**
+```
+1. Plant orphan cue (metadata.kind='MUSIC_TRACK', audioAssetId=null) directly via Prisma
+2. Call generateMusicForVersion → expect CONFLICT with message containing orphan.id
+3. Assert: creditTransaction.findMany({ referenceId: version.id }).length === 0
+   → zero charge attempted; deductCredits was never called
+4. Assert: mocks.generateMusic NOT called
+5. Delete orphan
+6. Retry succeeds: reused=false, creditsUsed=100, cue materialised
+```
+
+The idempotency check detects ANY cue for the track (materialised or unmaterialised),
+so a failed-cleanup orphan blocks all subsequent requests with zero credit exposure,
+and the cue ID in the CONFLICT message is the exact row an admin must delete to recover.
+
+### Check 4 — Release commit reconciliation (independently inspected this turn)
+
+**Tested HEAD:** `6b3989f`  
+`feat(creative): Phase 6D — secure router wiring + TOCTOU-safe music idempotency`
+
+**Migration state in test DB:** applied via `prisma db push` (no `_prisma_migrations` table;
+80 public tables present; `audio_cues_music_track_unique` index confirmed present — see Check 1).
+
+**Full regression (re-run this turn on working-tree candidate):**  
+API test suite: **1527 pass, 5 skipped, 0 fail** (79 test files, 28.53s)  
+TypeScript API: **0 errors** | TypeScript Web: **0 errors**  
+*(+4/+1 vs prior 1523/78 are the integration test's 4 tests running against the live cluster)*
+
+**Six-file diff (independently read this turn via `git diff HEAD`):**
+
+`packages/api/src/lib/creative/audio/service.ts` — 14-line change:
+- Idempotency `findFirst` expanded: `{ trackId }` (was `{ trackId, audioAssetId: { not: null } }`)
+- New CONFLICT branch: if `existingCue && !existingCue.audioAssetId` → throw CONFLICT with cue ID
+
+`packages/database/migrations/20261009110000_phase6d_music_cue_lock/migration.sql` — 21-line addition:
+- Table/column/type comments added
+- Pre-cleanup `DELETE FROM "audio_cues" WHERE kind='MUSIC_TRACK' AND audioAssetId IS NULL` (before index)
+- `CREATE UNIQUE INDEX IF NOT EXISTS` unchanged
+
+`packages/api/src/lib/creative/__tests__/phase6c.test.ts` — 8-line addition:
+- One new test: `INVALIDATED` approval status → PRECONDITION_FAILED + deductCredits not called
+
+`packages/api/src/lib/creative/__tests__/phase6d.test.ts` — 97-line addition:
+- Part 0 (3 tests): orphan detection, cue ID in message, sequential cleanup-failure simulation
+- Part 0b (1 test): concurrent P2002 race → 1 Lyria call, 2 deducts, 1 refund
+
+`packages/api/src/lib/creative/__tests__/phase6d.integration.test.ts` — new file (untracked):
+- Hardcoded `TEST_DB_URL = 'postgresql://postgres@localhost:5433/raivstream_phase6d_test'`
+- No VPS URL referenced anywhere in the file
+- Only `generateMusic` and `uploadBufferToR2` mocked; `audioCue.create` real
+- 4 tests: race (20 iterations), control, orphan recovery, idempotency
+
+`docs/phase-6/PHASE-6D-ACCEPTANCE.md` — this record
+
+**Working-tree status vs HEAD=6b3989f (do not push):**
+```
+M  docs/phase-6/PHASE-6D-ACCEPTANCE.md
+M  packages/api/src/lib/creative/__tests__/phase6c.test.ts
+M  packages/api/src/lib/creative/__tests__/phase6d.test.ts
+M  packages/api/src/lib/creative/audio/service.ts
+M  packages/database/migrations/20261009110000_phase6d_music_cue_lock/migration.sql
+?? packages/api/src/lib/creative/__tests__/phase6d.integration.test.ts
+```
+Nothing staged, pushed, or deployed.
+
+**Scope confirmation:**
+- Production `story:audio_generation` credit rate: **NOT seeded**
+- Live Lyria generation: **not triggered** (mocked in all tests)
+- `story:speech_generation` rate: **NOT seeded** (Phase 6B contract preserved)
+- Phase 6E: **not started**
+
+---
+
+### Integration test run — 4/4 PASS
+
+```
+ ✓ Race test — same track, concurrent requests
+   two concurrent requests produce exactly 1 cue, 1 Lyria call, 1 net charge
+   — across 20 iterations  819ms
+   [phase6d] race=19/20 reuse=1/20
+
+ ✓ Control test — different tracks, concurrent requests
+   two concurrent requests for different tracks both succeed
+
+ ✓ Orphan recovery test
+   unmaterialised cue blocks retry with CONFLICT before deduct; delete unlocks
+
+ ✓ Idempotency test — materialised cue is returned without charge
+   second call returns existing asset with creditsUsed=0 and reused=true
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Duration  3.90s
+```
+
+**INTEGRATION TEST: PASS — awaiting human release review**
+
+All four checks independently verified this turn (2026-10-09). No changes staged, pushed, or deployed.

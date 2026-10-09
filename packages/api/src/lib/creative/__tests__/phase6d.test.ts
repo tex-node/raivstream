@@ -171,6 +171,103 @@ function teardown() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Part 0: Orphaned unmaterialised cue detection (idempotency — before deduct)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Phase 6D — Orphaned unmaterialised cue detection', () => {
+  beforeEach(setupHappyPath);
+  afterEach(teardown);
+
+  it('throws CONFLICT before deducting credits when an unmaterialised cue already exists', async () => {
+    const orphanedCue = { id: 'orphan-cue-id', audioAssetId: null };
+    const prisma = makePrisma({ existingCue: orphanedCue });
+
+    await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining('orphan-cue-id'),
+    });
+    expect(mocks.deductCredits).not.toHaveBeenCalled();
+  });
+
+  it('includes the cue ID in the CONFLICT message so an admin can delete it to recover', async () => {
+    const orphanedCue = { id: 'stuck-cue-abc123', audioAssetId: null };
+    const prisma = makePrisma({ existingCue: orphanedCue });
+
+    const err = await generateMusicForVersion(prisma, BASE_INPUT).catch((e: unknown) => e);
+    expect((err as { message?: string }).message).toContain('stuck-cue-abc123');
+  });
+
+  it('two sequential requests after a cleanup failure: second retry always throws CONFLICT before deduct', async () => {
+    // Simulate: first request succeeds at cue creation but fails at Lyria AND delete also fails.
+    // The orphaned cue now blocks all future requests at the idempotency check.
+    mocks.generateMusic.mockRejectedValue(new Error('Lyria 503'));
+    const prisma = makePrisma();
+    type CueMock = { audioCue: { delete: ReturnType<typeof vi.fn> } };
+    (prisma as unknown as CueMock).audioCue.delete.mockRejectedValue(new Error('delete failed'));
+
+    // First request: creates cue, Lyria fails, delete fails → throws Lyria error, cue left orphaned
+    await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toThrow('Lyria 503');
+    const firstDeductCount = mocks.deductCredits.mock.calls.length; // 1 deduct, 1 refund
+
+    // Now the orphaned cue is "in the DB" — simulate by updating the findFirst mock
+    // to return the cue that was created (id=CUE_ID, audioAssetId=null).
+    type FindMock = { audioCue: { findFirst: ReturnType<typeof vi.fn> } };
+    (prisma as unknown as FindMock).audioCue.findFirst.mockResolvedValue({ id: CUE_ID, audioAssetId: null });
+
+    vi.clearAllMocks();
+    setupHappyPath();
+
+    // Second request: hits idempotency check → CONFLICT before any deduct
+    await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining(CUE_ID),
+    });
+    expect(mocks.deductCredits).not.toHaveBeenCalled();
+    // First request deducted and refunded once; second request deducted zero times
+    expect(firstDeductCount).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Part 0b: Concurrent two-request race proof
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Phase 6D — Concurrent two-request race', () => {
+  beforeEach(setupHappyPath);
+  afterEach(teardown);
+
+  it('two concurrent requests: only one Lyria call, only one permanent charge (P2002 refunds the other)', async () => {
+    // Request A: succeeds at audioCue.create (gets the index lock), proceeds to Lyria.
+    // Request B: P2002 from audioCue.create (index already held by A), refunds immediately.
+    //
+    // We simulate concurrency sequentially: both requests share the same prisma mock but
+    // the second request uses cueCreateError: P2002.
+    const prismaA = makePrisma();
+    const p2002 = Object.assign(new Error('Unique constraint.'), { code: 'P2002' });
+    const prismaB = makePrisma({ cueCreateError: p2002 });
+
+    const [resultA, resultB] = await Promise.allSettled([
+      generateMusicForVersion(prismaA, BASE_INPUT),
+      generateMusicForVersion(prismaB, BASE_INPUT),
+    ]);
+
+    // Request A succeeds.
+    expect(resultA.status).toBe('fulfilled');
+
+    // Request B gets CONFLICT.
+    expect(resultB.status).toBe('rejected');
+    expect((resultB as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' });
+
+    // Lyria was called exactly once (only by request A).
+    expect(mocks.generateMusic).toHaveBeenCalledTimes(1);
+
+    // Net credit accounting: A deducted 100 (permanent); B deducted 100 then refunded 100 (net 0).
+    expect(mocks.deductCredits).toHaveBeenCalledTimes(2);  // A + B each deduct
+    expect(mocks.refundCredits).toHaveBeenCalledTimes(1);  // only B refunds
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Part 1: Service TOCTOU guard
 // ─────────────────────────────────────────────────────────────────────────────
 
