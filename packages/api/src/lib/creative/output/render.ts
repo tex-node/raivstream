@@ -9,7 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, rename } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { uploadBufferToR2 } from '../../r2';
@@ -45,7 +45,7 @@ export interface RenderScene {
 }
 
 export async function renderOutputDerivative(
-  input: { scenes: RenderScene[]; derivation: OutputDerivation; r2Prefix: string },
+  input: { scenes: RenderScene[]; derivation: OutputDerivation; r2Prefix: string; backgroundMusicUrl?: string | null },
   deps: OutputRenderDeps = {},
 ): Promise<{ assetUrl: string }> {
   const doFetch = deps.fetch ?? fetch;
@@ -106,7 +106,7 @@ export async function renderOutputDerivative(
       }
 
       // Concat all per-scene muxed clips into the final export.
-      const out = path.join(dir, 'out.mp4');
+      const concat = path.join(dir, 'concat.mp4');
       const n = sceneParts.length;
       const segLabels = sceneParts.map((_, i) => `[${i}:v][${i}:a]`).join('');
       await doFfmpeg([
@@ -120,8 +120,39 @@ export async function renderOutputDerivative(
         '-c:a', 'aac',
         '-b:a', '128k',
         '-movflags', '+faststart',
-        out,
+        concat,
       ]);
+
+      const out = path.join(dir, 'out.mp4');
+      if (input.backgroundMusicUrl) {
+        // Mux background music under narration: loop music to full video length,
+        // mix at 0.3 weight (narration 1.0), fade in/out 1 s each end.
+        const mFile = path.join(dir, 'bg.bin');
+        const mResp = await doFetch(input.backgroundMusicUrl);
+        if (!mResp.ok) throw new Error(`Failed to fetch background music (${mResp.status})`);
+        await writeFile(mFile, Buffer.from(await mResp.arrayBuffer()));
+        await doFfmpeg([
+          '-i', concat,
+          '-stream_loop', '-1', '-i', mFile,
+          '-filter_complex',
+            // Narration: fade in 1 s only (duration unknown at build time; let -shortest cut it).
+            '[0:a]afade=t=in:ss=0:d=1[narr];' +
+            // Music: fade in 1 s, reduce to 30% volume.
+            '[1:a]afade=t=in:ss=0:d=1,volume=0.3[bgm];' +
+            '[narr][bgm]amix=inputs=2:duration=first:dropout_transition=2[amixed]',
+          '-map', '0:v',
+          '-map', '[amixed]',
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-shortest',
+          '-movflags', '+faststart',
+          out,
+        ]);
+      } else {
+        // No background music — rename concat output as final.
+        await rename(concat, out);
+      }
 
       const buffer = await readFile(out);
       const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
@@ -147,6 +178,46 @@ export async function renderOutputDerivative(
     const labels = inputs.map((_, index) => `[v${index}]`).join('');
     const concat = `${labels}concat=n=${inputs.length}:v=1:a=0[vout]`;
     const filter = [...parts, concat].join(';');
+
+    if (input.backgroundMusicUrl) {
+      // Video-only path + background music: produce a video+audio output.
+      const videoOnly = path.join(dir, 'video-only.mp4');
+      await doFfmpeg([
+        ...inputs.flatMap((file) => ['-i', file]),
+        '-filter_complex', filter,
+        '-map', '[vout]',
+        '-t', String(input.derivation.effectiveDurationSeconds),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        videoOnly,
+      ]);
+      const mFile = path.join(dir, 'bg.bin');
+      const mResp = await doFetch(input.backgroundMusicUrl);
+      if (!mResp.ok) throw new Error(`Failed to fetch background music (${mResp.status})`);
+      await writeFile(mFile, Buffer.from(await mResp.arrayBuffer()));
+      const out = path.join(dir, 'out.mp4');
+      const totalDur = input.derivation.effectiveDurationSeconds;
+      const fadeOutStart = Math.max(0, totalDur - 1);
+      await doFfmpeg([
+        '-i', videoOnly,
+        '-stream_loop', '-1', '-i', mFile,
+        '-filter_complex',
+          `[1:a]afade=t=in:ss=0:d=1,afade=t=out:st=${fadeOutStart}:d=1,volume=0.3,atrim=duration=${totalDur}[bgmt]`,
+        '-map', '0:v',
+        '-map', '[bgmt]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-shortest',
+        '-movflags', '+faststart',
+        out,
+      ]);
+      const buffer = await readFile(out);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
+      return { assetUrl };
+    }
 
     const out = path.join(dir, 'out.mp4');
     const args = [
