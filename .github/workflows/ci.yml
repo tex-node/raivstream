@@ -99,7 +99,7 @@ jobs:
       - name: Run integration suite (fail-closed; exact counts, zero skips)
         run: |
           set -euo pipefail
-          pnpm --filter @raivstream/api test:integration -- --reporter=default --reporter=json --outputFile=/tmp/integration.json | tee /tmp/integration.log
+          pnpm --filter @raivstream/api test:integration --reporter=default --reporter=json --outputFile=/tmp/integration.json | tee /tmp/integration.log
           if grep -q "Test database not reachable" /tmp/integration.log; then
             echo "::error::Integration suite took the database-unreachable skip path — failing the job."
             exit 1
