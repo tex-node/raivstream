@@ -9,8 +9,101 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ── Mandatory gate 1: API unit suite ────────────────────────────────────────
+  # Fails the run on any test failure, timeout, or command error. The five
+  # intentional skips (homer integration + Gate Q real-AI) are unchanged.
+  test-unit:
+    name: API unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # prisma generate needs a datasource URL but does not connect; the unit
+      # suite never touches a database (real-DB tests are excluded from this config).
+      DATABASE_URL: postgresql://postgres@localhost:5432/ci_placeholder
+      DIRECT_URL: postgresql://postgres@localhost:5432/ci_placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @raivstream/database exec prisma generate --schema schema.prisma
+      - name: API unit tests
+        run: pnpm --filter @raivstream/api test
+
+  # ── Mandatory gate 2: real-PostgreSQL integration suite ─────────────────────
+  # Disposable, isolated PostgreSQL 17 service on :5433 (non-production, trust
+  # auth, dedicated DB). The suite MUST NOT be allowed to pass via its
+  # database-unreachable skip path, so a fail-closed preflight runs first and the
+  # test output is rejected if it contains the skip marker.
+  test-integration:
+    name: API integration tests (real PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: raivstream_phase6d_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d raivstream_phase6d_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5433/raivstream_phase6d_test
+      DIRECT_URL: postgresql://postgres@localhost:5433/raivstream_phase6d_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @raivstream/database exec prisma generate --schema schema.prisma
+      - name: Initialize disposable schema (prisma db push)
+        run: pnpm --filter @raivstream/database exec prisma db push --schema schema.prisma --skip-generate
+      - name: Apply Phase 6D partial unique index (20261009110000)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/migrations/20261009110000_phase6d_music_cue_lock/migration.sql
+      - name: Fail-closed preflight (database reachable + intended index predicate)
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc "SELECT 1" >/dev/null
+          idx="$(psql "$DATABASE_URL" -tAc "SELECT indexdef FROM pg_indexes WHERE indexname='audio_cues_music_track_unique'")"
+          if ! printf '%s' "$idx" | grep -qiE 'UNIQUE .*"trackId".*MUSIC_TRACK'; then
+            echo "::error::audio_cues_music_track_unique missing or predicate wrong: ${idx:-<absent>}"
+            exit 1
+          fi
+          echo "verified index: $idx"
+      - name: Run integration suite (fail-closed; exact counts, zero skips)
+        run: |
+          set -euo pipefail
+          pnpm --filter @raivstream/api test:integration -- --reporter=default --reporter=json --outputFile=/tmp/integration.json | tee /tmp/integration.log
+          if grep -q "Test database not reachable" /tmp/integration.log; then
+            echo "::error::Integration suite took the database-unreachable skip path — failing the job."
+            exit 1
+          fi
+          node -e 'const r=require("/tmp/integration.json");const ok=r.numTotalTests===4&&r.numPassedTests===4&&r.numFailedTests===0&&r.numPendingTests===0&&r.numTodoTests===0;console.log("integration counts: total="+r.numTotalTests+" passed="+r.numPassedTests+" failed="+r.numFailedTests+" pending="+r.numPendingTests+" todo="+r.numTodoTests);if(!ok){console.error("::error:: integration suite did not run exactly 4 passing tests with zero failures/skips");process.exit(1);}'
+
+  # ── Deployment — gated on BOTH test jobs ────────────────────────────────────
   deploy:
     name: Build & deploy web
+    needs: [test-unit, test-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
