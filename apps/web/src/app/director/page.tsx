@@ -77,6 +77,9 @@ export default function DirectorPage() {
       setResult({ scenes: data.scenes, warnings: data.warnings, creditsUsed: data.creditsUsed, ceiling });
       setNote('');
     },
+    // Retry after failure must be a NEW logical request (so it legitimately
+    // charges); a duplicate click on success must dedupe. Rotate only on error.
+    onError: () => idempotencyKey.rotate(),
   });
 
   const maxScenes = status.data?.maxScenes ?? 6;

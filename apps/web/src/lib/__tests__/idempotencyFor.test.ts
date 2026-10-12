@@ -49,4 +49,14 @@ describe('resolveIdempotencyId', () => {
     expect(c.id).not.toBe(a.id);
     expect(c.id).not.toBe(b.id);
   });
+
+  it('a cleared store (rotate) re-mints a fresh id for identical inputs', () => {
+    const gen = counter();
+    const a = resolveIdempotencyId(null, { x: 1 }, gen);
+    const reused = resolveIdempotencyId(a.store, { x: 1 }, gen);
+    expect(reused.id).toBe(a.id); // unchanged inputs still dedupe
+    // `rotate()` clears the stored id + hash, so the next call cannot reuse it:
+    const rotated = resolveIdempotencyId(null, { x: 1 }, gen);
+    expect(rotated.id).not.toBe(a.id); // retry after failure is a NEW logical request
+  });
 });
