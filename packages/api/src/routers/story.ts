@@ -26,6 +26,7 @@ import {
 } from '../lib/creativeCritic';
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
+import { createBatchRun, runBatch, recoverStuckBatchRuns, type BatchDeps } from '../lib/story/batchGeneration';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -256,6 +257,20 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
   });
   if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
   return project;
+}
+
+/** R16-04 — batch worker deps built from a request context (real scene-image path). */
+async function batchDepsFor(ctx: any): Promise<BatchDeps> {
+  const featureKey = MODEL_FEATURE_KEY['FLUX2' as SupportedModel];
+  return {
+    perItemCost: featureKey ? await getFeatureCreditCost(ctx.prisma, featureKey) : 0,
+    generateScene: async (run, sceneId) => {
+      const result: any = await generateSceneImageAsset(ctx, { projectId: run.projectId, sceneId, model: 'FLUX2' as SceneImageModel });
+      const asset = result?.asset;
+      if (!asset?.id || asset.status === 'FAILED') throw new Error(asset?.errorMessage ?? 'Scene picture failed.');
+      return { assetId: asset.id as string };
+    },
+  };
 }
 
 /** R16-03 — character-only prompt for a canonical reference portrait. */
@@ -5021,6 +5036,71 @@ export const storyRouter = router({
         approvedReferenceAssetId: character.approvedReferenceAssetId,
         references: rows.map((r) => ({ ...r, isApproved: r.id === character.approvedReferenceAssetId })),
       };
+    }),
+
+  // ── Phase 2 (R16-04) — batch scene generation ──────────────────────────────
+
+  startBatchGeneration: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneIds: z.array(z.string()).min(1), costCapCredits: z.number().int().positive().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const deps = await batchDepsFor(ctx);
+      const run = await createBatchRun(
+        ctx.prisma,
+        { projectId: input.projectId, userId: ctx.user.id, sceneIds: input.sceneIds, costCapCredits: input.costCapCredits },
+        deps,
+      );
+      const started = await ctx.prisma.batchGenerationRun.update({ where: { id: run.id }, data: { status: 'RUNNING' } });
+      // Fire-and-forget, mirroring runSceneShotClipChain (story.ts:386 kicked void at :5379).
+      void runBatch(ctx.prisma, run.id, deps);
+      return started;
+    }),
+
+  getBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      const items = await ctx.prisma.batchGenerationItem.findMany({ where: { runId: run.id }, orderBy: { createdAt: 'asc' } });
+      return { run, items };
+    }),
+
+  listBatchRuns: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      return ctx.prisma.batchGenerationRun.findMany({ where: { projectId: input.projectId }, orderBy: { createdAt: 'desc' }, take: 20 });
+    }),
+
+  cancelBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id }, select: { id: true } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      // Cancelled: no NEW items start; in-flight items finish (the worker re-reads status).
+      return ctx.prisma.batchGenerationRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', finishedAt: new Date() } });
+    }),
+
+  retryFailedItems: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+
+      await ctx.prisma.batchGenerationItem.updateMany({
+        where: { runId: run.id, status: 'FAILED' },
+        data: { status: 'QUEUED', errorMessage: null },
+      });
+      const nextStatus = run.status === 'COMPLETED' || run.status === 'FAILED' ? 'RUNNING' : run.status;
+      const updated = await ctx.prisma.batchGenerationRun.update({
+        where: { id: run.id },
+        data: { status: nextStatus as never, finishedAt: null },
+      });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      if (nextStatus === 'RUNNING') void runBatch(ctx.prisma, run.id, await batchDepsFor(ctx));
+      return updated;
     }),
 
   updateSceneDirector: protectedProcedure
