@@ -36,8 +36,10 @@ const feedInput = z.object({
   kidsOnly:  z.boolean().optional(), // true on r16.raivstream.com — filters isKidsSafe=true
 });
 
-// Extra where clause for kids-only mode
-const kidsFilter = { isKidsSafe: true, moderationStatus: 'APPROVED' as const };
+// Extra where clause for kids-only mode (r16): approved, kids-safe, not withdrawn.
+const kidsFilter = { isKidsSafe: true, moderationStatus: 'APPROVED' as const, withdrawnAt: null };
+// Non-kids feed: everything except rejected. Withdrawn content never appears in any feed.
+const nonKidsFilter = { moderationStatus: { not: 'REJECTED' as const }, withdrawnAt: null };
 
 export const feedRouter = router({
   // For You — recent public ready videos (MVP: ordered by publishedAt)
@@ -46,7 +48,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
-        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
+        ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
         ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -76,7 +78,7 @@ export const feedRouter = router({
         creatorId: { in: followingIds },
         status: 'READY',
         isPublic: true,
-        moderationStatus: { not: 'REJECTED' },
+        ...nonKidsFilter,
         ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
       },
       orderBy: { publishedAt: 'desc' },
@@ -99,7 +101,7 @@ export const feedRouter = router({
       where: {
         status: 'READY',
         isPublic: true,
-        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
+        ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
         ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -123,7 +125,7 @@ export const feedRouter = router({
         status: 'READY',
         isPublic: true,
         starRatingCount: { gte: 3 },
-        ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }),
+        ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
         ...(input.cursor ? { avgStarRating: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ avgStarRating: 'desc' }, { starRatingCount: 'desc' }],
@@ -166,7 +168,7 @@ export const feedRouter = router({
           creatorId: input.creatorId,
           status: 'READY',
           isPublic: true,
-          moderationStatus: { not: 'REJECTED' },
+          ...nonKidsFilter,
           ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
         },
         orderBy: { publishedAt: 'desc' },

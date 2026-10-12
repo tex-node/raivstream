@@ -483,6 +483,11 @@ model Video {
   contentRating     String?          // "G" | "PG" | "PG-13" | "R"
   moderationStatus  ModerationStatus @default(PENDING)
 
+  // Publication lifecycle (Phase 4a, R16-only)
+  submittedForPublicationAt DateTime?  // set by the creator on submit; null = never submitted
+  moderationReason          String?    // latest reject/flag reason (mirrors ModerationLog for fast reads)
+  withdrawnAt               DateTime?  // set on creator withdrawal; null = live
+
   // Relations
   interactions      VideoInteraction[]
   watchHistory      WatchHistory[]
