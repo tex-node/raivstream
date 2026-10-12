@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/lib/auth';
 import { AdminSpinner, AdminError } from '../AdminShell';
-import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
+import { newAdjustmentId, shouldSubmitAdjustment } from '@/lib/adminAdjustmentId';
 
 const FEATURE_KEY_LABELS: Record<string, string> = {
   'generate:nano_banana': 'Nano Banana',
@@ -250,12 +250,15 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [error,       setError]       = useState<string | null>(null);
   const [result, setResult] = useState<{ before: number; after: number; delta: number } | null>(null);
   const utils = trpc.useUtils();
-  const idempotencyKey = useIdempotencyKey();
 
   const adjust = trpc.admin.adjustCredits.useMutation({
     onSuccess: (data) => {
       setResult(data);
       setError(null);
+      // Reset the per-action fields so the next adjustment starts clean; the next
+      // submit mints a fresh id.
+      setReason('');
+      setReferenceId('');
       utils.admin.getOverview.invalidate();
       utils.admin.listUsers.invalidate();
     },
@@ -268,13 +271,13 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) { setError('Admin access required'); return; }
+    if (!shouldSubmitAdjustment(adjust.isPending)) return; // in-flight double-click guard
     if (!lookup.trim()) { setError('Enter a user email, username, or ID'); return; }
     if (!parsedAmount) { setError('Enter a positive credit amount'); return; }
     if (!reason.trim()) { setError('Reason is required for the ledger'); return; }
-    const fields = { lookup: lookup.trim(), amount: signedAmount, action, description: reason.trim(), referenceId: referenceId.trim() || undefined };
-    // One id per DISTINCT adjustment: a double-click (same fields) dedupes via the
-    // server's unique key; changing any field is a new, separately-applied action.
-    adjust.mutate({ ...fields, idempotencyId: idempotencyKey(fields) });
+    // Each submit is a distinct admin intent: mint a FRESH id (never input-coupled)
+    // so two identical grants both apply; the disabled button blocks double-clicks.
+    adjust.mutate({ lookup: lookup.trim(), amount: signedAmount, action, description: reason.trim(), referenceId: referenceId.trim() || undefined, idempotencyId: newAdjustmentId() });
   };
 
   return (

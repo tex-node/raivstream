@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/lib/auth';
 import { AdminSpinner, AdminError } from '../AdminShell';
-import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
+import { newAdjustmentId, shouldSubmitAdjustment } from '@/lib/adminAdjustmentId';
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN:     '#ef4444',
@@ -36,7 +36,6 @@ function AdjustCreditsModal({
   const [reason, setReason] = useState('');
   const [error, setError]   = useState<string | null>(null);
   const utils = trpc.useUtils();
-  const idempotencyKey = useIdempotencyKey();
 
   const adjust = trpc.admin.adjustCredits.useMutation({
     onSuccess: () => { utils.admin.listUsers.invalidate(); onClose(); },
@@ -45,12 +44,12 @@ function AdjustCreditsModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!shouldSubmitAdjustment(adjust.isPending)) return; // in-flight double-click guard
     const n = parseInt(amount, 10);
     if (isNaN(n) || n === 0) { setError('Enter a non-zero integer'); return; }
     if (!reason.trim()) { setError('Reason is required'); return; }
-    const fields = { userId, amount: n, description: reason };
-    // Same-fields resubmit dedupes (safe); a new adjustment changes a field.
-    adjust.mutate({ ...fields, idempotencyId: idempotencyKey(fields) });
+    // Fresh id per submit: an identical second adjustment is a new action, not a replay.
+    adjust.mutate({ userId, amount: n, description: reason, idempotencyId: newAdjustmentId() });
   };
 
   return (
