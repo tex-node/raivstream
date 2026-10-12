@@ -236,7 +236,7 @@ describe('Phase 6D — Concurrent two-request race', () => {
   beforeEach(setupHappyPath);
   afterEach(teardown);
 
-  it('two concurrent requests: only one Lyria call, only one permanent charge (P2002 refunds the other)', async () => {
+  it('two concurrent requests: only one Lyria call, only one permanent charge (the P2002 loser never charges or refunds)', async () => {
     // Request A: succeeds at audioCue.create (gets the index lock), proceeds to Lyria.
     // Request B: P2002 from audioCue.create (index already held by A), refunds immediately.
     //
@@ -261,9 +261,10 @@ describe('Phase 6D — Concurrent two-request race', () => {
     // Lyria was called exactly once (only by request A).
     expect(mocks.generateMusic).toHaveBeenCalledTimes(1);
 
-    // Net credit accounting: A deducted 100 (permanent); B deducted 100 then refunded 100 (net 0).
-    expect(mocks.deductCredits).toHaveBeenCalledTimes(2);  // A + B each deduct
-    expect(mocks.refundCredits).toHaveBeenCalledTimes(1);  // only B refunds
+    // Net credit accounting: only A reaches the charge site (per-cue key); B fails the
+    // cue create with P2002 BEFORE charging, so B neither charges nor refunds.
+    expect(mocks.deductCredits).toHaveBeenCalledTimes(1);  // only A charges
+    expect(mocks.refundCredits).not.toHaveBeenCalled();    // B never charged → no refund
   });
 });
 
@@ -285,25 +286,25 @@ describe('Phase 6D — Service TOCTOU guard', () => {
     });
   });
 
-  it('refunds credits before throwing CONFLICT on P2002', async () => {
+  it('throws CONFLICT on P2002 without charging or refunding', async () => {
     const p2002 = Object.assign(new Error('Unique constraint.'), { code: 'P2002' });
     const prisma = makePrisma({ cueCreateError: p2002 });
 
     await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toMatchObject({
       code: 'CONFLICT',
     });
-    expect(mocks.refundCredits).toHaveBeenCalledWith(
-      prisma, USER_ID, 100, 'story:audio_generation', VERSION_ID, expect.any(String),
-      `music:refund:story:audio_generation:${VERSION_ID}`,
-    );
+    // The cue create failed before the charge site: nothing was charged, so nothing refunds.
+    expect(mocks.deductCredits).not.toHaveBeenCalled();
+    expect(mocks.refundCredits).not.toHaveBeenCalled();
   });
 
-  it('rethrows non-P2002 cue create errors (with refund)', async () => {
+  it('rethrows non-P2002 cue create errors (no charge yet, no refund)', async () => {
     const dbErr = Object.assign(new Error('DB connection lost'), { code: 'P1001' });
     const prisma = makePrisma({ cueCreateError: dbErr });
 
     await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toThrow('DB connection lost');
-    expect(mocks.refundCredits).toHaveBeenCalled();
+    expect(mocks.deductCredits).not.toHaveBeenCalled();
+    expect(mocks.refundCredits).not.toHaveBeenCalled();
   });
 
   it('rethrows P2003 as-is, NOT as CONFLICT', async () => {
@@ -375,7 +376,7 @@ describe('Phase 6D — Service cue cleanup on provider failure', () => {
     await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toThrow();
     expect(mocks.refundCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 100, 'story:audio_generation', VERSION_ID, expect.any(String),
-      `music:refund:story:audio_generation:${VERSION_ID}`,
+      `music:refund:story:audio_generation:${CUE_ID}`,
     );
   });
 
