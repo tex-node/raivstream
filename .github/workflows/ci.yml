@@ -96,7 +96,7 @@ jobs:
             exit 1
           fi
           echo "verified index: $idx"
-      - name: Run integration suite (fail-closed; complete run, zero skips)
+      - name: Run integration suite (fail-closed; exact counts, zero skips)
         run: |
           set -euo pipefail
           pnpm --filter @raivstream/api test:integration --reporter=default --reporter=json --outputFile=/tmp/integration.json | tee /tmp/integration.log
@@ -104,4 +104,4 @@ jobs:
             echo "::error::Integration suite took the database-unreachable skip path — failing the job."
             exit 1
           fi
-          node -e 'const fs=require("fs"),p="/tmp/integration.json";if(!fs.existsSync(p)){console.error("::error:: missing integration JSON report");process.exit(1)}let r;try{r=JSON.parse(fs.readFileSync(p,"utf8"))}catch(e){console.error("::error:: unparseable integration JSON: "+e.message);process.exit(1)}const ok=typeof r.numTotalTests==="number"&&r.numTotalTests>0&&r.numPassedTests===r.numTotalTests&&r.numFailedTests===0&&r.numPendingTests===0&&r.numTodoTests===0;console.log("integration counts: total="+r.numTotalTests+" passed="+r.numPassedTests+" failed="+r.numFailedTests+" pending="+r.numPendingTests+" todo="+r.numTodoTests);if(!ok){console.error("::error:: integration suite incomplete or failing (need >=1 test, all passing, zero failures/skips)");process.exit(1)}'
+          node -e 'const fs=require("fs"),p="/tmp/integration.json";if(!fs.existsSync(p)){console.error("::error:: missing integration JSON report");process.exit(1)}let r;try{r=JSON.parse(fs.readFileSync(p,"utf8"))}catch(e){console.error("::error:: unparseable integration JSON: "+e.message);process.exit(1)}const ok=r.numTotalTests===4&&r.numPassedTests===4&&r.numFailedTests===0&&r.numPendingTests===0&&r.numTodoTests===0;console.log("integration counts: total="+r.numTotalTests+" passed="+r.numPassedTests+" failed="+r.numFailedTests+" pending="+r.numPendingTests+" todo="+r.numTodoTests);if(!ok){console.error("::error:: integration suite did not run exactly 4 passing tests with zero failures/skips (packages/api/src/lib/creative/__tests__/phase6d.integration.test.ts)");process.exit(1)}'
