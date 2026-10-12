@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@raivstream/database';
 import { verifyTransaction, VIEWER_PLAN, CREDIT_PACKAGES } from '@/lib/paystack';
+import { creditKeys } from '@raivstream/api/src/lib/credits/idempotencyKeys';
 
 export async function GET(req: NextRequest) {
   const reference = req.nextUrl.searchParams.get('reference');
@@ -90,6 +91,12 @@ export async function GET(req: NextRequest) {
           type:         'PURCHASE',
           description:  pkg?.label ?? `${creditAmount} credits`,
           referenceId:  reference,
+          // Keyed by the Paystack reference: the success page can be reloaded or
+          // retried, and the balance increment is unguarded, so the unique key is
+          // what prevents a replayed verify from double-granting credits (the
+          // second insert collides, rolling the whole transaction — increment and
+          // ledger row — back).
+          idempotencyKey: creditKeys.purchase.charge(reference),
           balanceBefore: balance.balance - creditAmount,
           balanceAfter:  balance.balance,
         },

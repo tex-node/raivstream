@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/lib/auth';
 import { AdminSpinner, AdminError } from '../AdminShell';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
 const FEATURE_KEY_LABELS: Record<string, string> = {
   'generate:nano_banana': 'Nano Banana',
@@ -249,6 +250,7 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [error,       setError]       = useState<string | null>(null);
   const [result, setResult] = useState<{ before: number; after: number; delta: number } | null>(null);
   const utils = trpc.useUtils();
+  const idempotencyKey = useIdempotencyKey();
 
   const adjust = trpc.admin.adjustCredits.useMutation({
     onSuccess: (data) => {
@@ -269,7 +271,10 @@ function ManualCreditsPanel({ isAdmin }: { isAdmin: boolean }) {
     if (!lookup.trim()) { setError('Enter a user email, username, or ID'); return; }
     if (!parsedAmount) { setError('Enter a positive credit amount'); return; }
     if (!reason.trim()) { setError('Reason is required for the ledger'); return; }
-    adjust.mutate({ lookup: lookup.trim(), amount: signedAmount, action, description: reason.trim(), referenceId: referenceId.trim() || undefined });
+    const fields = { lookup: lookup.trim(), amount: signedAmount, action, description: reason.trim(), referenceId: referenceId.trim() || undefined };
+    // One id per DISTINCT adjustment: a double-click (same fields) dedupes via the
+    // server's unique key; changing any field is a new, separately-applied action.
+    adjust.mutate({ ...fields, idempotencyId: idempotencyKey(fields) });
   };
 
   return (

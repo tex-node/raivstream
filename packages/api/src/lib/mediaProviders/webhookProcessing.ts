@@ -192,6 +192,10 @@ export async function executeRefundOperation(
           featureKey: op.featureKey,
           description: 'Refund: fal generation failed',
           referenceId: op.referenceId ?? idempotencyKey,
+          // Stable across provider webhook redelivery and post-crash retry: the
+          // outbox owns exactly one refund intent per `fal-refund:<jobId>`, and its
+          // atomic claim permits only one execution, so this ledger row is written once.
+          idempotencyKey,
           balanceBefore,
           balanceAfter,
         },

@@ -10,6 +10,7 @@ import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
+import { creditKeys } from '../lib/credits/idempotencyKeys';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -954,6 +955,10 @@ export const adminRouter = router({
       action:      z.enum(['gift', 'refund', 'deduct']).optional(),
       description: z.string().min(1, 'Reason required'),
       referenceId: z.string().max(120).optional(),
+      // Client-supplied, required: mints a deterministic idempotency key so a
+      // double-click or network retry of ONE admin action cannot double-apply,
+      // while a fresh id makes each distinct action charge again.
+      idempotencyId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { amount, description } = input;
@@ -1036,6 +1041,7 @@ export const adminRouter = router({
             type:          action === 'refund' ? 'REFUND' : amount > 0 ? 'BONUS' : 'USAGE',
             description:   `[Admin: ${ctx.user.username}] ${description}`,
             referenceId:   input.referenceId,
+            idempotencyKey: creditKeys.adminAdjust.charge(input.idempotencyId),
             balanceBefore: before,
             balanceAfter:  after,
           },

@@ -175,7 +175,7 @@ describe('Phase 1 — credit ledger idempotency & concurrency (real DB)', () => 
 
     await Promise.all(
       Array.from({ length: RACE }, (_, i) =>
-        caller.adjustCredits({ userId: adminId, amount: 250, action: 'gift', description: `parallel gift ${i}` }),
+        caller.adjustCredits({ userId: adminId, amount: 250, action: 'gift', description: `parallel gift ${i}`, idempotencyId: crypto.randomUUID() }),
       ),
     );
 
@@ -187,7 +187,7 @@ describe('Phase 1 — credit ledger idempotency & concurrency (real DB)', () => 
     const caller = adminRouter.createCaller({ prisma: db, user: ADMIN_USER, userId: adminId, isR16: false } as never);
 
     await expect(
-      caller.adjustCredits({ userId: adminId, amount: -500, action: 'deduct', description: 'over-deduct' }),
+      caller.adjustCredits({ userId: adminId, amount: -500, action: 'deduct', description: 'over-deduct', idempotencyId: crypto.randomUUID() }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     expect(await balanceOf(adminId)).toBe(300);

@@ -67,9 +67,18 @@ export const creditKeys = {
     charge: (idempotencyId: string) => build('director', 'charge', [idempotencyId]),
     refund: (idempotencyId: string) => build('director', 'refund', [idempotencyId]),
   },
-  /** Admin manual adjustment. RESERVED — admin uses a separate adjustment path. */
+  /**
+   * One admin manual adjustment (gift / coupon / refund / deduct), identified by
+   * the client-supplied idempotency id. A one-off action — not a charge/refund
+   * pair — so the key carries no op token: `admin:adjust:<id>`.
+   */
   adminAdjust: {
-    charge: (refId: string) => build('admin', 'charge', [refId]),
-    refund: (refId: string) => build('admin', 'refund', [refId]),
+    charge: (idempotencyId: string) => `admin:adjust:${idempotencyId}`,
+    refund: (idempotencyId: string) => `admin:adjust:refund:${idempotencyId}`,
+  },
+  /** One credit purchase per provider payment reference (Paystack). */
+  purchase: {
+    charge: (reference: string) => build('purchase', 'charge', [reference]),
+    refund: (reference: string) => build('purchase', 'refund', [reference]),
   },
 } as const;
