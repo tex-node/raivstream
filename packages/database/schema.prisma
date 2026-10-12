@@ -1231,6 +1231,7 @@ model StoryChapter {
   educationalContract  Json?
 
   sceneSeeds       StorySceneSeed[]
+  versions         StoryChapterVersion[]
 
   createdAt        DateTime     @default(now())
 
@@ -1238,6 +1239,26 @@ model StoryChapter {
   @@index([projectId])
   @@index([projectId, chapterNumber])
   @@map("story_chapters")
+}
+
+model StoryChapterVersion {
+  id              String       @id @default(cuid())
+  chapterId       String
+  chapter         StoryChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  versionNumber   Int
+  title           String?
+  summary         String?
+  body            String
+  createdByUserId String
+  source          String       // 'EDIT' | 'REWRITE_PARAGRAPH' | 'REGENERATE' | 'MANUAL'
+  sourceMetadata  Json?
+
+  createdAt       DateTime     @default(now())
+
+  @@unique([chapterId, versionNumber])
+  @@index([chapterId, createdAt])
+  @@map("story_chapter_versions")
 }
 
 model StoryCharacterMemory {

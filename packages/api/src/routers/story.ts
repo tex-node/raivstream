@@ -25,6 +25,7 @@ import {
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
+import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -4249,6 +4250,15 @@ export const storyRouter = router({
         orderBy: { chapterNumber: 'asc' },
       });
       if (firstChapter) {
+        // Snapshot the PRIOR chapter state before regenerating (undoable history).
+        await snapshotChapterVersion(ctx.prisma, {
+          chapterId: firstChapter.id,
+          title: firstChapter.title,
+          summary: firstChapter.summary,
+          body: firstChapter.body,
+          createdByUserId: ctx.user.id,
+          source: 'REGENERATE',
+        });
         await ctx.prisma.storyChapter.update({
           where: { id: firstChapter.id },
           data: { title, summary, body, generationPrompt: idea },
@@ -4629,6 +4639,16 @@ export const storyRouter = router({
         }
       }
 
+      // Snapshot the PRIOR state before applying the edit (undoable history).
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'EDIT',
+      });
+
       const updated = await ctx.prisma.storyChapter.update({
         where: { id: chapter.id },
         data: {
@@ -4703,6 +4723,18 @@ export const storyRouter = router({
 
       paragraphs[input.paragraphIndex] = rewritten.trim();
       const body = paragraphs.join('\n\n');
+
+      // Snapshot the PRIOR state before applying the paragraph rewrite.
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'REWRITE_PARAGRAPH',
+        sourceMetadata: { paragraphIndex: input.paragraphIndex, directive: input.directive },
+      });
+
       const updated = await ctx.prisma.storyChapter.update({
         where: { id: chapter.id },
         data: { body, enhancedBody: null },
@@ -4712,6 +4744,72 @@ export const storyRouter = router({
         projectId: input.projectId,
         audienceMode,
         properties: { chapterId: chapter.id, chapterNumber: chapter.chapterNumber, paragraphIndex: input.paragraphIndex, directive: input.directive },
+      });
+      return updated;
+    }),
+
+  // ── Phase 2 (R16-05) — chapter version history ──────────────────────────────
+
+  /** List a chapter's version summaries (newest first). Body is NOT returned. */
+  listChapterVersions: protectedProcedure
+    .input(z.object({ projectId: z.string(), chapterId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const chapter = await ctx.prisma.storyChapter.findFirst({
+        where: { id: input.chapterId, projectId: input.projectId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      const versions = await ctx.prisma.storyChapterVersion.findMany({
+        where: { chapterId: chapter.id },
+        orderBy: { versionNumber: 'desc' },
+        select: { id: true, versionNumber: true, title: true, source: true, createdAt: true },
+      });
+      return { versions };
+    }),
+
+  /** Full version record including the body. */
+  getChapterVersion: protectedProcedure
+    .input(z.object({ versionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const version = await ctx.prisma.storyChapterVersion.findFirst({
+        where: { id: input.versionId, chapter: { project: { userId: ctx.user.id } } },
+      });
+      if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Version not found' });
+      return version;
+    }),
+
+  /** Restore a version: snapshot the current state first, then apply the target. */
+  restoreChapterVersion: protectedProcedure
+    .input(z.object({ versionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.prisma.storyChapterVersion.findFirst({
+        where: { id: input.versionId, chapter: { project: { userId: ctx.user.id } } },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Version not found' });
+
+      const chapter = await ctx.prisma.storyChapter.findFirst({ where: { id: target.chapterId } });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      // Snapshot the CURRENT state so the restore itself can be undone.
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'MANUAL',
+        sourceMetadata: { restoredFromVersion: target.versionNumber },
+      });
+
+      const updated = await ctx.prisma.storyChapter.update({
+        where: { id: chapter.id },
+        data: {
+          title: target.title ?? chapter.title,
+          summary: target.summary ?? chapter.summary,
+          body: target.body,
+          enhancedBody: null,
+        },
       });
       return updated;
     }),
