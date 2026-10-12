@@ -1332,6 +1332,62 @@ model CharacterReferenceAsset {
   @@map("character_reference_assets")
 }
 
+enum BatchGenerationRunStatus {
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BatchGenerationItemStatus {
+  QUEUED
+  RUNNING
+  READY
+  FAILED
+  SKIPPED
+}
+
+model BatchGenerationRun {
+  id              String                   @id @default(cuid())
+  projectId       String
+  status          BatchGenerationRunStatus @default(QUEUED)
+  concurrency     Int                      @default(2)
+  costCapCredits  Int                      @default(10000)
+  costUsedCredits Int                      @default(0)
+  sceneIds        Json
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  lastHeartbeatAt DateTime?
+  pauseReason     String?
+  createdByUserId String
+  createdAt       DateTime                 @default(now())
+
+  items           BatchGenerationItem[]
+
+  @@index([projectId, status])
+  @@map("batch_generation_runs")
+}
+
+model BatchGenerationItem {
+  id           String                    @id @default(cuid())
+  runId        String
+  run          BatchGenerationRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sceneId      String
+  status       BatchGenerationItemStatus @default(QUEUED)
+  assetId      String?
+  errorMessage String?
+  creditsUsed  Int                       @default(0)
+  attemptCount Int                       @default(0)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([runId, sceneId])
+  @@index([runId, status])
+  @@map("batch_generation_items")
+}
+
 model StorySceneSeed {
   id             String        @id @default(cuid())
   projectId      String
