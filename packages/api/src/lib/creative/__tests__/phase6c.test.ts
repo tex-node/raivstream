@@ -372,6 +372,7 @@ describe('generateMusicForVersion', () => {
 
     expect(mocks.deductCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 'story:audio_generation', VERSION_ID, expect.any(String),
+      `music:charge:story:audio_generation:${VERSION_ID}`,
     );
     expect(mocks.generateMusic).toHaveBeenCalledWith(
       expect.objectContaining({ prompt: expect.stringContaining('Instrumental') }),
@@ -416,6 +417,7 @@ describe('generateMusicForVersion', () => {
     await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toThrow('Lyria 503');
     expect(mocks.refundCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 100, 'story:audio_generation', VERSION_ID, expect.any(String),
+      `music:refund:story:audio_generation:${VERSION_ID}`,
     );
   });
 

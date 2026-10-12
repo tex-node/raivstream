@@ -20,6 +20,7 @@
 
 import type { PrismaClient } from '@raivstream/database';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
+import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
 import { MediaProviderError } from '../../mediaProviders/types';
@@ -190,7 +191,7 @@ export async function runCreativeProduction(
       for (let attempt = 1; attempt <= maxAttempts && !ready; attempt += 1) {
         logProductionEvent({ type: 'asset_started', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt });
         const ref = `creative-produce-${asset.id}-a${attempt}`;
-        const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`).catch(() => 0) : 0;
+          const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0) : 0;
         try {
           const media = spec.kind === 'IMAGE'
             ? await deps.generateStill(spec as StillSpec, project.id, asset.id)
@@ -215,7 +216,7 @@ export async function runCreativeProduction(
           const rejected = error instanceof CreativeError && error.code === 'CONTENT_REJECTED';
           const providerFinal = error instanceof MediaProviderError && !error.retryable;
           if (creditsUsed > 0 && featureKey) {
-            await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed').catch(() => undefined);
+            await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed', creditKeys.prodAsset.refund(asset.id, attempt)).catch(() => undefined);
           }
           const isFinal = rejected || providerFinal || attempt >= maxAttempts;
           const logCategory = providerFinal ? `PROVIDER_DISABLED: ${(error as MediaProviderError).code}` : undefined;

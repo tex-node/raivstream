@@ -294,6 +294,7 @@ describe('Phase 6D — Service TOCTOU guard', () => {
     });
     expect(mocks.refundCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 100, 'story:audio_generation', VERSION_ID, expect.any(String),
+      `music:refund:story:audio_generation:${VERSION_ID}`,
     );
   });
 
@@ -374,6 +375,7 @@ describe('Phase 6D — Service cue cleanup on provider failure', () => {
     await expect(generateMusicForVersion(prisma, BASE_INPUT)).rejects.toThrow();
     expect(mocks.refundCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 100, 'story:audio_generation', VERSION_ID, expect.any(String),
+      `music:refund:story:audio_generation:${VERSION_ID}`,
     );
   });
 

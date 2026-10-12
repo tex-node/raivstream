@@ -9,6 +9,7 @@ import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
 import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
+import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -391,7 +392,7 @@ async function runSceneShotClipChain(
       const generationRef = `story-shot-clip-${asset.id}`;
       let creditsUsed = 0;
       if (featureKey) {
-        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`, creditKeys.sceneShotClip.charge(asset.id));
       }
 
       const generationJob = await (ctx.prisma as any).generationJob.create({
@@ -466,7 +467,7 @@ async function runSceneShotClipChain(
           properties: { sceneId: scene.id, model: 'H3_MAX', generationType: 'VIDEO', shotIndex: entry.shotIndex, shotGrid: true },
         });
         if (creditsUsed > 0 && featureKey) {
-          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed').catch(() => undefined);
+          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed', creditKeys.sceneShotClip.refund(asset.id)).catch(() => undefined);
         }
         break; // chain stops at the first failure — resumable on the next request
       }
@@ -2739,7 +2740,7 @@ async function generateSceneImageAsset(
 
   try {
     if (featureKey) {
-      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene image: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene image: ${scene.title}`, creditKeys.sceneImage.charge(asset.id));
     }
 
     await trackStoryAnalytics(ctx, {
@@ -2972,7 +2973,7 @@ async function generateSceneImageAsset(
     }).catch(() => {});
     await (ctx.prisma as any).storySceneSeed.update({ where: { id: scene.id }, data: { imageStatus: 'FAILED' } }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
-      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene image failed').catch(() => {});
+      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene image failed', creditKeys.sceneImage.refund(asset.id)).catch(() => {});
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
@@ -3126,7 +3127,7 @@ async function generateSceneVideoAsset(
 
   try {
     if (featureKey) {
-      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`, creditKeys.sceneVideo.charge(asset.id));
     }
 
     await trackStoryAnalytics(ctx, {
@@ -3267,7 +3268,7 @@ async function generateSceneVideoAsset(
       data: { status: 'FAILED', errorMessage: message, isLatest: false },
     }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
-      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed').catch(() => {});
+      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed', creditKeys.sceneVideo.refund(asset.id)).catch(() => {});
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
@@ -3570,7 +3571,7 @@ async function generateSpeechForCue(
     });
   }
 
-  const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Narration generation');
+  const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Narration generation', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId));
 
   try {
     const voiceId = input.voiceId || input.voiceRef || elevenLabsDefaultVoiceId();
@@ -3603,7 +3604,7 @@ async function generateSpeechForCue(
     });
     return { cue: updatedCue, asset };
   } catch (error) {
-    await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Refund: narration generation failed').catch(() => {});
+    await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Refund: narration generation failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId)).catch(() => {});
     throw new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',
       message: error instanceof Error ? error.message : 'Narration generation failed',
@@ -6110,7 +6111,7 @@ export const storyRouter = router({
 
       if (renderContext.creditCost > 0) {
         try {
-          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render');
+          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render', creditKeys.movieRender.charge(job.id));
           await (ctx.prisma as any).movieRenderJob.update({
             where: { id: job.id },
             data: { creditsCharged: charged },
@@ -6220,7 +6221,7 @@ export const storyRouter = router({
         include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
       });
       if (job.creditsCharged > 0) {
-        await refundCredits(ctx.prisma, ctx.user.id, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render cancelled');
+        await refundCredits(ctx.prisma, ctx.user.id, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render cancelled', creditKeys.movieRender.refund(job.id));
         await (ctx.prisma as any).movieRenderJob.update({ where: { id: job.id }, data: { creditsReserved: 0, creditsCharged: 0 } });
       }
       return updated;
@@ -7523,7 +7524,7 @@ export const storyRouter = router({
       if (!rate.configured) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
       }
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Educational narration');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Educational narration', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId));
       try {
         const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
         const audio = await synthesizeSpeech({ text: narrationText, voiceId, modelId: input.modelId });
@@ -7553,7 +7554,7 @@ export const storyRouter = router({
         });
         return { audioUrl: publicUrl, narration: narrationText };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
       }
     }),
@@ -7765,7 +7766,7 @@ export const storyRouter = router({
         });
       }
 
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Music generation');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Music generation', creditKeys.music.charge(STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id));
 
       try {
         const { audio, mimeType } = await generateLyriaMusic({ prompt, modelId: input.modelId });
@@ -7798,7 +7799,7 @@ export const storyRouter = router({
         });
         return { cue: updatedCue, asset };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Refund: music generation failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Refund: music generation failed', creditKeys.music.refund(STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id)).catch(() => {});
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: error instanceof Error ? error.message : 'Music generation failed',

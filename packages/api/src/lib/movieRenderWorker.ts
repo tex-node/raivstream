@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { PrismaClient } from '@raivstream/database';
 import { refundCredits } from './credits';
+import { creditKeys } from './credits/idempotencyKeys';
 import {
   MOVIE_RENDER_DURATION_TOLERANCE_SECONDS,
   MOVIE_RENDER_FEATURE_KEY,
@@ -456,7 +457,7 @@ async function failJob(prisma: PrismaClient, job: any, error: unknown, metadata?
     metadata,
   });
   if (job.creditsCharged > 0) {
-    await refundCredits(prisma, job.userId, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render failed');
+    await refundCredits(prisma, job.userId, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render failed', creditKeys.movieRender.refund(job.id));
     await (prisma as any).movieRenderJob.update({
       where: { id: job.id },
       data: { creditsReserved: 0, creditsCharged: 0 },

@@ -22,6 +22,7 @@ import {
   STORY_SPEECH_GENERATION_FEATURE_KEY,
   STORY_AUDIO_GENERATION_FEATURE_KEY,
 } from '../../credits';
+import { creditKeys } from '../../credits/idempotencyKeys';
 import {
   synthesizeSpeech,
   isElevenLabsTtsEnabled,
@@ -329,6 +330,7 @@ export async function generateNarrationForCue(
     STORY_SPEECH_GENERATION_FEATURE_KEY,
     input.cueId,
     `Creative narration TTS — cue ${input.cueId}`,
+    creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId),
   );
 
   const voiceId = (cue.voiceProfile?.voiceRef ?? null) || elevenLabsDefaultVoiceId(input.deps?.env);
@@ -369,6 +371,7 @@ export async function generateNarrationForCue(
       STORY_SPEECH_GENERATION_FEATURE_KEY,
       input.cueId,
       `Refund — Creative narration TTS failure cue ${input.cueId}`,
+      creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId),
     );
     throw err;
   }
@@ -545,6 +548,7 @@ export async function generateMusicForVersion(
     STORY_AUDIO_GENERATION_FEATURE_KEY,
     input.creativeVersionId,
     `Creative music track — version ${input.creativeVersionId}`,
+    creditKeys.music.charge(STORY_AUDIO_GENERATION_FEATURE_KEY, input.creativeVersionId),
   );
 
   // TOCTOU guard: create the unmaterialised intent cue while holding the
@@ -573,6 +577,7 @@ export async function generateMusicForVersion(
       STORY_AUDIO_GENERATION_FEATURE_KEY,
       input.creativeVersionId,
       `Refund — concurrent music generation conflict version ${input.creativeVersionId}`,
+      creditKeys.music.refund(STORY_AUDIO_GENERATION_FEATURE_KEY, input.creativeVersionId),
     );
     if (isMusicCueConcurrentError(createErr)) {
       throw new TRPCError({ code: 'CONFLICT', message: 'Music generation is already in progress for this version. Retry shortly.' });
@@ -622,6 +627,7 @@ export async function generateMusicForVersion(
       STORY_AUDIO_GENERATION_FEATURE_KEY,
       input.creativeVersionId,
       `Refund — Creative music generation failure version ${input.creativeVersionId}`,
+      creditKeys.music.refund(STORY_AUDIO_GENERATION_FEATURE_KEY, input.creativeVersionId),
     );
     // Unlock the track by deleting the unmaterialised intent cue so retries succeed.
     try {
