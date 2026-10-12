@@ -14,7 +14,7 @@
  * disposable cluster spun up).
  */
 
-import { vi, describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 import { PrismaClient } from '@raivstream/database';
 import { generateMusicForVersion, type GenerateMusicInput } from '../audio/service';
 import { STORY_AUDIO_GENERATION_FEATURE_KEY } from '../../credits';
