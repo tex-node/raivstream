@@ -27,11 +27,30 @@ const SUPPORTED_MODELS = [
 export const GENERATION_PROMPT_MAX_LENGTH = 2000;
 export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
 
+// ─── Attempt-scoped credit keys (A1/A2/A3) ───────────────────────────────────
+//
+// One logical generation attempt maps to one charge and at most one refund or
+// reservation. The keys are deterministic for a given (job, attempt) so that a
+// repeated/concurrent operation is a no-op rather than a double charge/refund.
+// `attempt` = job.retryCount (0 for the initial attempt, n for the nth retry).
+
+const chargeKey  = (jobId: string, attempt: number) => `gen:charge:${jobId}:${attempt}`;
+const refundKey  = (jobId: string, attempt: number) => `gen:refund:${jobId}:${attempt}`;
+const reserveKey = (jobId: string, attempt: number) => `reserve:${jobId}:${attempt}`;
+
+async function balanceOf(prisma: any, userId: string): Promise<number> {
+  const row = await prisma.creditBalance.findUnique({
+    where:  { userId },
+    select: { balance: true },
+  });
+  return row?.balance ?? 0;
+}
+
 /**
  * Reserve → submit → settle/release generation path (Phase §7.5). Flag-guarded
  * behind CREDIT_RESERVE_SETTLE_ENABLED; mirrors `create` but keys the credit
- * reservation by the job id, settles synchronously-completed jobs immediately,
- * and releases the reservation on submission failure.
+ * reservation by the job id + attempt, settles synchronously-completed jobs
+ * immediately, and releases the reservation on submission failure.
  */
 async function createWithReserveSettle(
   ctx: any,
@@ -60,16 +79,23 @@ async function createWithReserveSettle(
     },
   });
 
-  const reservationKey = `reserve:${job.id}`;
-  const creditsUsed = await reserveCredits(ctx.prisma, {
-    userId:         ctx.user.id,
-    featureKey,
-    amount:         rate.cost,
-    idempotencyKey: reservationKey,
-    referenceId:    job.id,
-    generationJobId: job.id,
-    description:    `${meta.label} generation`,
-  });
+  const reservationKey = reserveKey(job.id, 0);
+  let creditsUsed: number;
+  try {
+    creditsUsed = await reserveCredits(ctx.prisma, {
+      userId:         ctx.user.id,
+      featureKey,
+      amount:         rate.cost,
+      idempotencyKey: reservationKey,
+      referenceId:    job.id,
+      generationJobId: job.id,
+      description:    `${meta.label} generation`,
+    });
+  } catch (err) {
+    // Reservation failed (insufficient credits) — remove the never-charged job.
+    await ctx.prisma.generationJob.delete({ where: { id: job.id } }).catch(() => {});
+    throw err;
+  }
   await ctx.prisma.generationJob.update({ where: { id: job.id }, data: { creditsUsed } });
 
   try {
@@ -99,10 +125,10 @@ async function createWithReserveSettle(
       await settleCredits(ctx.prisma, reservationKey, creditsUsed).catch(() => {});
     }
 
-    return updated;
+    return { ...updated, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
   } catch (err) {
-    await ctx.prisma.generationJob.update({
-      where: { id: job.id },
+    await ctx.prisma.generationJob.updateMany({
+      where: { id: job.id, status: { in: ['QUEUED', 'GENERATING'] } },
       data: { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Generation failed' },
     });
     await releaseCredits(ctx.prisma, reservationKey).catch(() => {});
@@ -216,22 +242,10 @@ export const generationRouter = router({
         return createWithReserveSettle(ctx, { ...input, prompt }, meta, MODEL_FEATURE_KEY[input.model as SupportedModel]);
       }
 
-      // ── Credit gate ──────────────────────────────────────────────────────────
-      // Deduct credits BEFORE creating the job so the user sees the balance
-      // updated immediately and we never run a job for a user who can't pay.
       const featureKey  = MODEL_FEATURE_KEY[input.model as SupportedModel];
-      // We use a placeholder referenceId here — we'll update the job record after creation
-      const creditJobId = `pending-${ctx.user.id}-${Date.now()}`;
-      const creditsUsed = await deductCredits(
-        ctx.prisma,
-        ctx.user.id,
-        featureKey,
-        creditJobId,
-        `${meta.label} generation`,
-      );
-      // ─────────────────────────────────────────────────────────────────────────
 
-      // Create a QUEUED job record so the UI can show progress immediately
+      // Create a QUEUED job record first so the credit charge can be anchored to
+      // a stable reference (job.id) and an attempt-scoped idempotency key.
       const job = await ctx.prisma.generationJob.create({
         data: {
           userId:         ctx.user.id,
@@ -247,6 +261,28 @@ export const generationRouter = router({
           status:         'QUEUED',
         },
       });
+
+      // ── Credit gate ──────────────────────────────────────────────────────────
+      // Charge BEFORE submitting so the user sees the balance updated immediately
+      // and we never run a job for a user who can't pay.
+      let creditsUsed: number;
+      try {
+        creditsUsed = await deductCredits(
+          ctx.prisma,
+          ctx.user.id,
+          featureKey,
+          job.id,
+          `${meta.label} generation`,
+          chargeKey(job.id, 0),
+        );
+      } catch (err) {
+        // Insufficient credits or missing rate — remove the never-charged job and
+        // surface the (structured) error unchanged.
+        await ctx.prisma.generationJob.delete({ where: { id: job.id } }).catch(() => {});
+        throw err;
+      }
+      await ctx.prisma.generationJob.update({ where: { id: job.id }, data: { creditsUsed } });
+      // ─────────────────────────────────────────────────────────────────────────
 
       try {
         // Submit to the provider
@@ -272,18 +308,20 @@ export const generationRouter = router({
           },
         });
 
-        return updated;
+        return { ...updated, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
       } catch (err) {
-        // Mark job as failed
-        await ctx.prisma.generationJob.update({
-          where: { id: job.id },
+        // Mark job as failed (only if it did not already reach a terminal state,
+        // e.g. a concurrent cancel) — never overwrite a terminal status.
+        await ctx.prisma.generationJob.updateMany({
+          where: { id: job.id, status: { in: ['QUEUED', 'GENERATING'] } },
           data: {
             status:       'FAILED',
             errorMessage: err instanceof Error ? err.message : 'Generation failed',
           },
         });
 
-        // Refund credits — the provider rejected the submission before any GPU work ran
+        // Refund credits — idempotent by attempt key, so a racing cancel cannot
+        // double-refund. The provider rejected the submission before any GPU work ran
         await refundCredits(
           ctx.prisma,
           ctx.user.id,
@@ -291,6 +329,7 @@ export const generationRouter = router({
           featureKey,
           job.id,
           `Refund: ${meta.label} submission failed`,
+          refundKey(job.id, 0),
         ).catch(() => {
           // Log but don't swallow the original error
           console.error(`[credits] Failed to refund ${creditsUsed} credits to user ${ctx.user.id} for job ${job.id}`);
@@ -314,11 +353,11 @@ export const generationRouter = router({
 
       // Already in a terminal state — return immediately
       if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
-        return job;
+        return { ...job, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
       }
 
       // No provider job ID yet (still queued locally)
-      if (!job.providerJobId) return job;
+      if (!job.providerJobId) return { ...job, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
 
       try {
         const remote = await pollJobStatus(job.model as SupportedModel, job.providerJobId);
@@ -343,15 +382,20 @@ export const generationRouter = router({
           },
         });
 
-        // Settle the credit reservation on completion (no-op unless reserve/settle
-        // is enabled; idempotent). Actual-cost settlement awaits provider cost data.
-        if (isReserveSettleEnabled() && remote.status === 'completed') {
-          await settleCredits(ctx.prisma, `reserve:${job.id}`, job.creditsUsed).catch(() => {});
+        // Reserve/settle lifecycle on a terminal transition (flag-guarded,
+        // idempotent). Actual-cost settlement awaits provider cost data.
+        if (isReserveSettleEnabled()) {
+          const rk = reserveKey(job.id, job.retryCount);
+          if (remote.status === 'completed') {
+            await settleCredits(ctx.prisma, rk, job.creditsUsed).catch(() => {});
+          } else if (remote.status === 'failed' || remote.status === 'cancelled') {
+            await releaseCredits(ctx.prisma, rk).catch(() => {});
+          }
         }
 
-        return updated;
+        return { ...updated, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
       } catch {
-        return job; // return last known state on polling error
+        return { ...job, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) }; // last known state on polling error
       }
     }),
 
@@ -407,11 +451,36 @@ export const generationRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot cancel a finished job' });
       }
 
-      const updated = await ctx.prisma.generationJob.update({
-        where: { id: job.id },
-        data: { status: 'CANCELLED' },
-        select: { id: true, status: true },
+      // Idempotent: an already-cancelled job is a no-op (never refund twice).
+      if (job.status === 'CANCELLED') {
+        return { id: job.id, status: 'CANCELLED' as const, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
+      }
+
+      // Win the terminal transition exactly once. If a concurrent completion or
+      // failure has already moved the job out of QUEUED/GENERATING, do NOT touch
+      // credits — the other path owns the accounting outcome.
+      const won = await ctx.prisma.generationJob.updateMany({
+        where: { id: job.id, userId: ctx.user.id, status: { in: ['QUEUED', 'GENERATING'] } },
+        data:  { status: 'CANCELLED' },
       });
+
+      if (won.count > 0) {
+        const attempt = job.retryCount;
+        if (isReserveSettleEnabled()) {
+          await releaseCredits(ctx.prisma, reserveKey(job.id, attempt)).catch(() => {});
+        } else {
+          const featureKey = MODEL_FEATURE_KEY[job.model as SupportedModel];
+          await refundCredits(
+            ctx.prisma,
+            ctx.user.id,
+            job.creditsUsed,
+            featureKey,
+            job.id,
+            `Refund: ${MODEL_META[job.model as SupportedModel].label} cancelled`,
+            refundKey(job.id, attempt),
+          ).catch(() => {});
+        }
+      }
 
       // Best-effort provider-side cancel (fire-and-forget); the local status is
       // already CANCELLED regardless of whether the provider honours it.
@@ -419,7 +488,7 @@ export const generationRouter = router({
         cancelProviderJob(job.model as SupportedModel, job.providerJobId).catch(() => {});
       }
 
-      return updated;
+      return { id: job.id, status: 'CANCELLED' as const, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
     }),
 
   /** Retry a failed generation job (Phase 15 — bounded provider retries) */
@@ -439,20 +508,56 @@ export const generationRouter = router({
 
       const meta = MODEL_META[job.model as SupportedModel];
       const featureKey = MODEL_FEATURE_KEY[job.model as SupportedModel];
+      const attempt = job.retryCount + 1;
 
-      // Re-charge for the retry (the prior attempt was refunded/released).
-      const creditsUsed = await deductCredits(
-        ctx.prisma,
-        ctx.user.id,
-        featureKey,
-        `retry-${job.id}-${Date.now()}`,
-        `${meta.label} retry`,
-      );
-
-      await ctx.prisma.generationJob.update({
-        where: { id: job.id },
-        data: { status: 'QUEUED', errorMessage: null, errorCode: null, retryCount: { increment: 1 } },
+      // Claim the retry exactly once: atomically flip FAILED → QUEUED and bump
+      // retryCount only if it still equals the value we read. A concurrent retry
+      // loses this race, so retryCount can never double-increment (A3).
+      const claimed = await ctx.prisma.generationJob.updateMany({
+        where: { id: job.id, userId: ctx.user.id, status: 'FAILED', retryCount: job.retryCount },
+        data:  { status: 'QUEUED', errorMessage: null, errorCode: null, retryCount: { increment: 1 } },
       });
+      if (claimed.count === 0) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Retry already in progress for this job.' });
+      }
+
+      // Re-charge for the retry with an attempt-scoped, idempotent key (A1/A3).
+      // The prior attempt was refunded/released before the job became FAILED.
+      let creditsUsed: number;
+      try {
+        if (isReserveSettleEnabled()) {
+          const rate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
+          if (!rate.configured) {
+            throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `No active credit rate configured for feature: ${featureKey}` });
+          }
+          creditsUsed = await reserveCredits(ctx.prisma, {
+            userId:          ctx.user.id,
+            featureKey,
+            amount:          rate.cost,
+            idempotencyKey:  reserveKey(job.id, attempt),
+            referenceId:     job.id,
+            generationJobId: job.id,
+            description:     `${meta.label} retry`,
+          });
+        } else {
+          creditsUsed = await deductCredits(
+            ctx.prisma,
+            ctx.user.id,
+            featureKey,
+            job.id,
+            `${meta.label} retry`,
+            chargeKey(job.id, attempt),
+          );
+        }
+      } catch (err) {
+        // Release the claim so the user can retry once funds are available.
+        await ctx.prisma.generationJob.updateMany({
+          where: { id: job.id, retryCount: attempt, status: 'QUEUED' },
+          data:  { status: 'FAILED', retryCount: job.retryCount },
+        }).catch(() => {});
+        throw err;
+      }
+      await ctx.prisma.generationJob.update({ where: { id: job.id }, data: { creditsUsed } });
 
       try {
         const result = await submitGenerationJob({
@@ -466,7 +571,7 @@ export const generationRouter = router({
           resolution:     job.resolution ?? undefined,
         });
 
-        return ctx.prisma.generationJob.update({
+        const updated = await ctx.prisma.generationJob.update({
           where: { id: job.id },
           data: {
             providerJobId: result.providerJobId,
@@ -475,12 +580,30 @@ export const generationRouter = router({
             status:        result.outputUrl ? 'COMPLETED' : 'GENERATING',
           },
         });
+
+        if (result.outputUrl && isReserveSettleEnabled()) {
+          await settleCredits(ctx.prisma, reserveKey(job.id, attempt), creditsUsed).catch(() => {});
+        }
+
+        return { ...updated, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
       } catch (err) {
-        await ctx.prisma.generationJob.update({
-          where: { id: job.id },
-          data: { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Retry failed' },
+        await ctx.prisma.generationJob.updateMany({
+          where: { id: job.id, status: { in: ['QUEUED', 'GENERATING'] } },
+          data:  { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Retry failed' },
         });
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, job.id, `Refund: ${meta.label} retry failed`).catch(() => {});
+        if (isReserveSettleEnabled()) {
+          await releaseCredits(ctx.prisma, reserveKey(job.id, attempt)).catch(() => {});
+        } else {
+          await refundCredits(
+            ctx.prisma,
+            ctx.user.id,
+            creditsUsed,
+            featureKey,
+            job.id,
+            `Refund: ${meta.label} retry failed`,
+            refundKey(job.id, attempt),
+          ).catch(() => {});
+        }
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: err instanceof Error ? err.message : 'Retry failed',

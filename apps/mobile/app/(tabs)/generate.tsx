@@ -45,6 +45,7 @@ export default function GenerateScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const isSignedIn = useAuthStore((s) => s.isSignedIn);
+  const utils = trpc.useUtils();
 
   const [selectedModel, setSelectedModel] = useState('GROK_IMAGINE');
   const [prompt, setPrompt] = useState('');
@@ -58,10 +59,14 @@ export default function GenerateScreen() {
   const [pubTitle, setPubTitle] = useState('');
 
   const { data: models } = trpc.generation.listModels.useQuery();
+  const { data: balanceData } = trpc.user.creditBalance.useQuery(undefined, { enabled: isSignedIn });
+  const balance = balanceData?.balance ?? 0;
   const createJob = trpc.generation.create.useMutation({
     onSuccess: (job) => {
       setActiveJobId(job.id);
       setPollEnabled(job.status !== 'COMPLETED' && job.status !== 'FAILED');
+      // Authoritative post-charge balance (R16-01).
+      utils.user.creditBalance.invalidate();
     },
     onError: (err) => Alert.alert('Generation failed', err.message),
   });
@@ -79,8 +84,10 @@ export default function GenerateScreen() {
   );
 
   useEffect(() => {
-    if (jobStatus?.status === 'COMPLETED' || jobStatus?.status === 'FAILED') {
+    if (jobStatus?.status === 'COMPLETED' || jobStatus?.status === 'FAILED' || jobStatus?.status === 'CANCELLED') {
       setPollEnabled(false);
+      // Refresh balance after a refund (failure/cancel) or settlement.
+      utils.user.creditBalance.invalidate();
     }
   }, [jobStatus?.status]);
 
@@ -130,6 +137,14 @@ export default function GenerateScreen() {
     >
       <Text style={styles.heading}>✨ AI Studio</Text>
       <Text style={styles.subtitle}>Generate videos with AI</Text>
+
+      {/* Authoritative credit balance (R16-01) */}
+      <View style={styles.balanceChip}>
+        <Text style={styles.balanceText}>
+          Balance: {balance.toLocaleString()} credits
+          {currentModel?.creditCost != null ? `  ·  This generation: ${currentModel.creditCost}` : ''}
+        </Text>
+      </View>
 
       {/* Model selector */}
       <Text style={styles.sectionLabel}>Model</Text>
@@ -254,7 +269,9 @@ export default function GenerateScreen() {
         {isGenerating ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.generateBtnText}>✨ Generate</Text>
+          <Text style={styles.generateBtnText}>
+            ✨ Generate{currentModel?.creditCost != null ? ` · ${currentModel.creditCost} credits` : ''}
+          </Text>
         )}
       </TouchableOpacity>
 
@@ -366,6 +383,17 @@ const styles = StyleSheet.create({
 
   heading:  { color: '#fff', fontSize: 24, fontWeight: '800', marginBottom: 4 },
   subtitle: { color: '#6b7280', fontSize: 13, marginBottom: 20 },
+  balanceChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  balanceText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600' },
 
   sectionLabel: {
     color: 'rgba(255,255,255,0.4)',

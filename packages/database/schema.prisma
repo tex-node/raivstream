@@ -733,6 +733,10 @@ model CreditTransaction {
   featureKey  String?      // which feature was used (populated on USAGE)
   description String?
   referenceId String?      // payment ref, generation job ID, etc.
+  // Optional idempotency anchor. When set, a logical operation (a single charge
+  // or refund) can be replayed safely: the unique key prevents a duplicate
+  // balance mutation + ledger row. Null for legacy rows and non-idempotent ops.
+  idempotencyKey String?   @unique
 
   balanceBefore Int
   balanceAfter  Int
@@ -742,6 +746,7 @@ model CreditTransaction {
   @@index([userId])
   @@index([userId, createdAt])
   @@index([type])
+  @@index([featureKey, createdAt])
   @@map("credit_transactions")
 }
 

@@ -108,10 +108,12 @@ export default function GeneratePage() {
     || (pollEnabled && activeJob?.status !== 'COMPLETED' && activeJob?.status !== 'FAILED');
 
   useEffect(() => {
-    if (jobStatus?.status === 'COMPLETED' || jobStatus?.status === 'FAILED') {
+    if (jobStatus?.status === 'COMPLETED' || jobStatus?.status === 'FAILED' || jobStatus?.status === 'CANCELLED') {
       setPollEnabled(false);
+      // Refresh the authoritative balance after a refund (failure/cancel) or settlement.
+      refetchBalance();
     }
-  }, [jobStatus?.status]);
+  }, [jobStatus?.status, refetchBalance]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -440,20 +442,31 @@ export default function GeneratePage() {
                 </p>
               )}
 
-              {createJob.error && (
-                createJob.error.message.includes('Insufficient credits') ? (
-                  <div className="bg-amber-500/10 rounded-xl px-4 py-3 border border-amber-500/20 flex items-center justify-between gap-3">
-                    <p className="text-amber-300 text-xs">{createJob.error.message}</p>
-                    <a href="/credits" className="flex-shrink-0 text-xs font-semibold bg-[var(--noc-magenta)] hover:opacity-90 text-white px-3 py-1.5 rounded-lg transition-opacity">
-                      Buy Credits
-                    </a>
-                  </div>
-                ) : (
+              {createJob.error && (() => {
+                const credit = (createJob.error.data as {
+                  credit?: { required: number; balance: number; shortfall: number; featureKey: string };
+                } | undefined)?.credit;
+                const isInsufficient = credit != null || createJob.error.message.includes('Insufficient credits');
+                if (isInsufficient) {
+                  return (
+                    <div className="bg-amber-500/10 rounded-xl px-4 py-3 border border-amber-500/20 flex items-center justify-between gap-3">
+                      <p className="text-amber-300 text-xs">
+                        {credit
+                          ? `You need ${credit.required} credits but have ${credit.balance} (short ${credit.shortfall}). Top up to continue.`
+                          : createJob.error.message}
+                      </p>
+                      <a href="/credits" className="flex-shrink-0 text-xs font-semibold bg-[var(--noc-magenta)] hover:opacity-90 text-white px-3 py-1.5 rounded-lg transition-opacity">
+                        Buy Credits
+                      </a>
+                    </div>
+                  );
+                }
+                return (
                   <p className="text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-2 border border-red-500/20">
                     {createJob.error.message}
                   </p>
-                )
-              )}
+                );
+              })()}
             </div>
           </div>
 

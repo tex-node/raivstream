@@ -9,6 +9,7 @@ import { TRPCError } from '@trpc/server';
 import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
+import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -987,31 +988,63 @@ export const adminRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Deduction amount must be negative' });
       }
 
-      // Get or create balance record
-      const existing = await ctx.prisma.creditBalance.findUnique({ where: { userId } });
-      const before   = existing?.balance ?? 0;
-      const after    = Math.max(0, before + amount); // floor at 0
+      // Atomic, concurrency-safe balance mutation (A4). Positive adjustments
+      // use an atomic increment (upsert); negative adjustments use a conditional
+      // decrement guarded by `balance >= amount`, so parallel writers cannot lose
+      // updates and the balance can never go negative. The ledger row is written
+      // in the same transaction.
+      const result = await ctx.prisma.$transaction(async (tx) => {
+        let before: number;
+        let after: number;
 
-      await ctx.prisma.$transaction([
-        ctx.prisma.creditBalance.upsert({
-          where:  { userId },
-          create: { userId, balance: after },
-          update: { balance: after },
-        }),
-        ctx.prisma.creditTransaction.create({
+        if (amount >= 0) {
+          const updated = await tx.creditBalance.upsert({
+            where:  { userId },
+            create: { userId, balance: amount },
+            update: { balance: { increment: amount } },
+          });
+          after  = updated.balance;
+          before = after - amount;
+        } else {
+          const need = -amount;
+          const dec = await tx.creditBalance.updateMany({
+            where: { userId, balance: { gte: need } },
+            data:  { balance: { decrement: need } },
+          });
+          if (dec.count === 0) {
+            const current = await tx.creditBalance.findUnique({
+              where:  { userId },
+              select: { balance: true },
+            });
+            throw new TRPCError({
+              code:    'BAD_REQUEST',
+              message: `Insufficient balance for deduction — user has ${current?.balance ?? 0}, cannot deduct ${need}.`,
+            });
+          }
+          const updated = await tx.creditBalance.findUnique({
+            where:  { userId },
+            select: { balance: true },
+          });
+          after  = updated!.balance;
+          before = after + need;
+        }
+
+        await tx.creditTransaction.create({
           data: {
             userId,
-            amount:        after - before, // actual delta (may differ if floored)
+            amount:        after - before, // actual delta (positive add / negative deduct)
             type:          action === 'refund' ? 'REFUND' : amount > 0 ? 'BONUS' : 'USAGE',
             description:   `[Admin: ${ctx.user.username}] ${description}`,
             referenceId:   input.referenceId,
             balanceBefore: before,
             balanceAfter:  after,
           },
-        }),
-      ]);
+        });
 
-      return { before, after, delta: after - before };
+        return { before, after, delta: after - before };
+      });
+
+      return result;
     }),
 
   /**
@@ -1304,6 +1337,131 @@ export const adminRouter = router({
         pageSize:   input.pageSize,
         allTimeCreditsSold:   totals._sum.amount ?? 0,
         allTimeTransactions:  totals._count.id,
+      };
+    }),
+
+  // ─── Credit Usage & Reconciliation (PL-01) ─────────────────────────────────
+
+  /**
+   * Admin usage report over a rolling window. Separates purchases, grants,
+   * consumption, refunds, generation attempts, terminal outcomes and published
+   * assets. Generation/asset counts are explicitly NOT token usage.
+   */
+  usageReport: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(180).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+      const window = { createdAt: { gte: since } };
+
+      const [
+        purchases, grants, consumption, refunds, usageByFeature,
+        attempts, jobsByStatus, deadLetter, completedWithVideo,
+      ] = await Promise.all([
+        ctx.prisma.creditTransaction.aggregate({ where: { ...window, type: 'PURCHASE' }, _sum: { amount: true }, _count: { id: true } }),
+        ctx.prisma.creditTransaction.aggregate({ where: { ...window, type: 'BONUS' }, _sum: { amount: true }, _count: { id: true } }),
+        ctx.prisma.creditTransaction.aggregate({ where: { ...window, type: 'USAGE' }, _sum: { amount: true }, _count: { id: true } }),
+        ctx.prisma.creditTransaction.aggregate({ where: { ...window, type: 'REFUND' }, _sum: { amount: true }, _count: { id: true } }),
+        ctx.prisma.creditTransaction.groupBy({
+          by: ['featureKey'],
+          where: { ...window, type: 'USAGE' },
+          _sum: { amount: true },
+          _count: { id: true },
+        }),
+        ctx.prisma.generationJob.count({ where: window }),
+        ctx.prisma.generationJob.groupBy({ by: ['status'], where: window, _count: { id: true } }),
+        ctx.prisma.generationJob.count({ where: { ...window, status: 'FAILED', retryCount: { gte: MAX_JOB_RETRIES } } }),
+        ctx.prisma.generationJob.count({ where: { ...window, status: 'COMPLETED', videoId: { not: null } } }),
+      ]);
+
+      const consumptionAmount = Math.abs(consumption._sum.amount ?? 0);
+      const refundAmount      = refunds._sum.amount ?? 0;
+      const statusCounts      = Object.fromEntries(jobsByStatus.map((r) => [r.status, r._count.id]));
+
+      return {
+        window: { days: input.days, since: since.toISOString() },
+        credits: {
+          purchases:   { amount: purchases._sum.amount ?? 0, count: purchases._count.id },
+          grants:      { amount: grants._sum.amount ?? 0,    count: grants._count.id },
+          consumption: { amount: consumptionAmount,          count: consumption._count.id },
+          refunds:     { amount: refundAmount,               count: refunds._count.id },
+          netConsumption: consumptionAmount - refundAmount,
+          byFeature: usageByFeature
+            .map((r) => ({
+              featureKey: r.featureKey ?? '(none)',
+              amount:     Math.abs(r._sum.amount ?? 0),
+              count:      r._count.id,
+            }))
+            .sort((a, b) => b.amount - a.amount),
+        },
+        generations: {
+          attempts,                                  // every job = one generation attempt
+          byStatus: statusCounts,
+          completed: statusCounts.COMPLETED ?? 0,    // successful generations
+          failed:    statusCounts.FAILED ?? 0,
+          cancelled: statusCounts.CANCELLED ?? 0,
+          deadLetterExhausted: deadLetter,           // FAILED & retry budget exhausted
+          publishedAssets: completedWithVideo,       // completed jobs linked to a feed Video
+        },
+        // Asset/generation counts are asset/generation counts — NOT token usage.
+        notes: {
+          assetCountsAreNotTokenUsage:            true,
+          failedGenerationsAreSeparateFromAttempts: true,
+        },
+      };
+    }),
+
+  /**
+   * Per-user balance reconciliation against the authoritative ledger. Reads
+   * only — never mutates balances. Discrepancies are reported for an
+   * owner-approved remediation policy; opening balances or historical
+   * out-of-band adjustments against legacy rows may legitimately show here.
+   */
+  reconcileBalances: adminProcedure
+    .input(z.object({
+      page:              z.number().int().min(1).default(1),
+      pageSize:          z.number().int().min(1).max(100).default(25),
+      onlyDiscrepancies: z.boolean().default(false),
+    }))
+    .query(async ({ ctx, input }) => {
+      const balances = await ctx.prisma.creditBalance.findMany({
+        select: {
+          userId:  true,
+          balance: true,
+          user:    { select: { username: true, email: true } },
+        },
+      });
+      const sums = await ctx.prisma.creditTransaction.groupBy({
+        by:     ['userId'],
+        _sum:   { amount: true },
+        _count: { id: true },
+      });
+      const sumMap = new Map(sums.map((s) => [s.userId, s]));
+
+      const ledgerRows: BalanceLedgerRow[] = balances.map((b) => {
+        const s = sumMap.get(b.userId);
+        return {
+          userId:      b.userId,
+          username:    b.user?.username ?? null,
+          email:       b.user?.email ?? null,
+          balance:     b.balance,
+          ledgerSum:   s?._sum.amount ?? 0,
+          ledgerCount: s?._count.id ?? 0,
+        };
+      });
+
+      const { rows, summary } = reconcileRows(ledgerRows);
+      const filtered = input.onlyDiscrepancies ? rows.filter((r) => !r.inSync) : rows;
+      const start    = (input.page - 1) * input.pageSize;
+
+      return {
+        summary, // aggregate over ALL users
+        rows: filtered.slice(start, start + input.pageSize),
+        total: filtered.length,
+        page: input.page,
+        pageSize: input.pageSize,
+        totalPages: Math.ceil(filtered.length / input.pageSize),
+        invariant: 'SUM(credit_transactions.amount) === credit_balances.balance',
+        mutatesBalances: false,
       };
     }),
 });
