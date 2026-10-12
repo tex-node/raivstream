@@ -95,8 +95,9 @@ export class OutputService {
         .filter((scene) => scene.videoUrl || scene.stillUrl);
 
       const derivation = deriveOutput(row.format as OutputFormat, row.durationSeconds, plan?.totalRuntimeSeconds ?? 30);
+      const creatorHandle = await this.ownerHandle(prisma, input.projectId);
       const rendered = await renderOutputDerivative(
-        { scenes, derivation, r2Prefix: `creative/${input.projectId}/outputs/${row.id}` },
+        { scenes, derivation, r2Prefix: `creative/${input.projectId}/outputs/${row.id}`, creatorHandle },
         deps,
       );
       await prisma.creativeOutput.update({
@@ -199,8 +200,9 @@ export class OutputService {
         .filter((scene) => scene.videoUrl || scene.stillUrl);
 
       const derivation = deriveOutput('PORTRAIT', null, input.plan.totalRuntimeSeconds ?? 30);
+      const creatorHandle = await this.ownerHandle(prisma, input.projectId);
       const rendered = await renderOutputDerivative(
-        { scenes, derivation, r2Prefix: `creative/${input.projectId}/outputs/${row.id}` },
+        { scenes, derivation, r2Prefix: `creative/${input.projectId}/outputs/${row.id}`, creatorHandle },
         deps,
       );
       await prisma.creativeOutput.update({
@@ -216,6 +218,18 @@ export class OutputService {
 
     const outputId = row.id;
     return { assembled: true, blocked: false, blockedScenes: [], outputId };
+  }
+
+  /** The project owner's public handle for end-card attribution (fail-soft). */
+  private async ownerHandle(prisma: PrismaClient, projectId: string): Promise<string | null> {
+    try {
+      const project = await prisma.creativeProject.findUnique({ where: { id: projectId }, select: { userId: true } });
+      if (!project?.userId) return null;
+      const user = await prisma.user.findUnique({ where: { id: project.userId }, select: { username: true } });
+      return user?.username ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async list(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<OutputState[]> {

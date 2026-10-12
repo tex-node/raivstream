@@ -234,7 +234,7 @@ describe('auto-assembly after production', () => {
     expect(result.blockedScenes).toHaveLength(0);
     expect(prisma.__outputs[0].status).toBe('READY');
     expect(prisma.__outputs[0].format).toBe('PORTRAIT');
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
   });
 
   it('creates a version but no creativeApproval when none exist', async () => {
@@ -338,7 +338,7 @@ describe('auto-assembly after production', () => {
     await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     // The assembled film must include all 4 scenes via FFmpeg (ordered, not reversed).
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
     const args = (deps.ffmpeg as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
     // FFmpeg concat filter input: -i <scene1> -i <scene2> ... must appear in SCENE_01 → SCENE_04 order.
     // We verify by checking the -i flags appear in ascending clip order, not reversed.
@@ -362,7 +362,7 @@ describe('creative output renderer', () => {
       deps,
     );
     expect(result.assetUrl).toBe('r2://out.mp4');
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
     const args = (deps.ffmpeg as any).mock.calls[0][0] as string[];
     expect(args.join(' ')).toContain('1080:1080');
     expect(args.join(' ')).toContain('settb=AVTB');
