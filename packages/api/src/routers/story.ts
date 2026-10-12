@@ -5103,6 +5103,44 @@ export const storyRouter = router({
       return updated;
     }),
 
+  /** R16-04 — plain cost estimate for the batch confirmation dialog. */
+  batchEstimate: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneIds: z.array(z.string()).min(1) }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      const deps = await batchDepsFor(ctx);
+      return { sceneCount: input.sceneIds.length, perItemCost: deps.perItemCost, estimated: input.sceneIds.length * deps.perItemCost };
+    }),
+
+  resumeBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string(), costCapCredits: z.number().int().positive().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      if (run.status !== 'PAUSED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a paused batch can be resumed.' });
+
+      const effectiveCap = input.costCapCredits ?? run.costCapCredits;
+      if (effectiveCap <= run.costUsedCredits) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `The limit (${effectiveCap}) must be higher than what has already been used (${run.costUsedCredits}).`,
+        });
+      }
+
+      const deps = await batchDepsFor(ctx);
+      const updated = await ctx.prisma.batchGenerationRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'RUNNING',
+          pauseReason: null,
+          ...(input.costCapCredits ? { costCapCredits: input.costCapCredits } : {}),
+        },
+      });
+      void runBatch(ctx.prisma, run.id, deps);
+      return updated;
+    }),
+
   updateSceneDirector: protectedProcedure
     .input(z.object({
       projectId: z.string(),
