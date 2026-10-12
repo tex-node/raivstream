@@ -1388,6 +1388,45 @@ model BatchGenerationItem {
   @@map("batch_generation_items")
 }
 
+model ShareLink {
+  id        String    @id @default(cuid())
+  videoId   String
+  sharerId  String
+  token     String    @unique
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  attributions ShareAttribution[]
+  dailyCounts  ShareLinkDailyCount[]
+
+  @@index([videoId])
+  @@index([sharerId])
+  @@map("share_links")
+}
+
+model ShareAttribution {
+  id           String    @id @default(cuid())
+  shareLinkId  String
+  shareLink    ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  viewerUserId String?
+  createdAt    DateTime  @default(now())
+  // NO IP field — deliberate. The absence is a compliance invariant (design §8).
+
+  @@index([shareLinkId, createdAt])
+  @@map("share_attributions")
+}
+
+model ShareLinkDailyCount {
+  id          String    @id @default(cuid())
+  shareLinkId String
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  day         DateTime  @db.Date
+  count       Int
+
+  @@unique([shareLinkId, day])
+  @@map("share_link_daily_counts")
+}
+
 model StorySceneSeed {
   id             String        @id @default(cuid())
   projectId      String
