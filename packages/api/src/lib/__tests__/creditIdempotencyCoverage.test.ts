@@ -17,9 +17,7 @@ import { join, relative } from 'node:path';
 import ts from 'typescript';
 
 /** Paths (relative to `src/`, POSIX) allowed to call without a key, with reason. */
-const ALLOWLIST: Record<string, string> = {
-  'routers/director.ts': 'no stable domain id at the call site (random UUID referenceId) — flagged in Phase-0 Appendix B',
-};
+const ALLOWLIST: Record<string, string> = {};
 
 /** The idempotency key is the 6th argument (index 5). */
 const REQUIRED_ARGS = 6;

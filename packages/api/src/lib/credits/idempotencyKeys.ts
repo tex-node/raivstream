@@ -59,13 +59,13 @@ export const creditKeys = {
     refund: (assetId: string, attempt: number) => build('prod', 'refund', [assetId, attempt]),
   },
   /**
-   * Director scene-brief job. RESERVED — the call site currently has no stable
-   * domain id (`referenceId` is `director:${randomUUID()}`), so it is intentionally
-   * NOT wired (see Phase-0 baseline report, Appendix B).
+   * One Director scene-brief job, identified by the client-supplied idempotency id
+   * (regenerated whenever the form inputs change; see web `useIdempotencyKey`).
+   * Charge and refund share the same id so they bind to one logical request.
    */
   director: {
-    charge: (jobId: string, attempt = 0) => build('director', 'charge', [jobId, attempt]),
-    refund: (jobId: string, attempt = 0) => build('director', 'refund', [jobId, attempt]),
+    charge: (idempotencyId: string) => build('director', 'charge', [idempotencyId]),
+    refund: (idempotencyId: string) => build('director', 'refund', [idempotencyId]),
   },
   /** Admin manual adjustment. RESERVED — admin uses a separate adjustment path. */
   adminAdjust: {
