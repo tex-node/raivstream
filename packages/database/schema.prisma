@@ -1286,8 +1286,13 @@ model StoryCharacterMemory {
   evolutionSceneOrder Int?
   directorChangedAt DateTime?
 
+  // R16-03 — approved canonical reference (points at one CharacterReferenceAsset).
+  approvedReferenceAssetId String?
+  approvedAt               DateTime?
+
   voiceProfiles     VoiceProfile[]
   audioCues         AudioCue[]
+  referenceAssets   CharacterReferenceAsset[]
 
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
@@ -1295,6 +1300,36 @@ model StoryCharacterMemory {
   @@index([projectId])
   @@index([projectId, name])
   @@map("story_character_memory")
+}
+
+enum CharacterReferenceStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model CharacterReferenceAsset {
+  id              String                   @id @default(cuid())
+  characterId     String
+  character       StoryCharacterMemory     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  projectId       String
+
+  status          CharacterReferenceStatus @default(PENDING)
+  assetUrl        String?
+  prompt          String
+  negativePrompt  String?
+  providerModel   String                   @default("FLUX2")
+  generationJobId String?
+  errorMessage    String?
+  isLatest        Boolean                  @default(false)
+
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([characterId, isLatest])
+  @@index([projectId, status])
+  @@map("character_reference_assets")
 }
 
 model StorySceneSeed {
