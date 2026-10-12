@@ -278,3 +278,175 @@ CREATE INDEX IF NOT EXISTS "credit_transactions_featureKey_createdAt_idx"
 1. **The upgrade branch's committed history contains NO Phase-1 work.** `a9cb10f..HEAD` is exactly the CI+6D candidate (13 files); every Phase-1 change is **uncommitted** (10 M + 5 ??) and would be lost on a reset/checkout.
 2. **Phase 1's required schema change already exists locally** — `CreditTransaction.idempotencyKey @unique` + `@@index([featureKey,createdAt])` (`schema.prisma`, in-progress) and the untracked `20261012120000_credit_ledger_idempotency` migration — plus `deductCredits`/`refundCredits` idempotency, the R16-01 insufficient-credit payload (`trpc.ts`), `admin.reconcileBalances`, and an admin usage dashboard.
 3. **`feat/raivstream-upgrade` and `ci/phase6d-gates` share the same tip `0217f39`**; only `ci/r16-test-gates @ 0a7c865` (PR #2) additionally carries the R16 A/B/C commits. `7324c47` is an old main ancestor, not a branch tip.
+
+---
+
+## Appendix B — Phase 1 idempotency completion audit
+
+**Method:** read-only, in `C:\Raiv\raivstream-upgrade` at HEAD `0e29fb4` (Phase-1 work committed in `3911c14`). No commit/DB/provider call. Gate under audit: reconciliation passes for **successful / failed / refunded / retried / concurrent** generation requests.
+
+### B-A. Call-site coverage of `deductCredits` / `refundCredits`
+
+Signatures (now key-aware): `deductCredits(prisma, userId, featureKey, referenceId, description, idempotencyKey?)` (`credits.ts:180`, key param `:186`); `refundCredits(…, idempotencyKey?)` (`:284`, key param `:291`).
+
+**WIRED (passes a key) — `packages/api/src/routers/generation.ts` only:**
+| Site | Call | Key | Derivation | Deterministic? |
+|---|---|---|---|---|
+| `generation.ts:270` | deduct | `chargeKey(job.id, 0)` | `generation.ts:37` `(jobId,attempt)=>`gen:charge:${jobId}:${attempt}`` | Yes — `jobId` stable; `attempt` = retry index |
+| `generation.ts:543` | deduct | `chargeKey(job.id, attempt)` | same | Yes |
+| `generation.ts:325` | refund | `refundKey(job.id, 0)` | `generation.ts:38` `gen:refund:${jobId}:${attempt}` | Yes |
+| `generation.ts:473/480` | refund | `refundKey(job.id, attempt)` | same | Yes |
+| `generation.ts:597/604` | refund | `refundKey(job.id, attempt)` | same | Yes |
+
+**UN-WIRED — passes NOTHING (`idempotencyKey` omitted ⇒ `NULL`):**
+| File:line | Op | Notes |
+|---|---|---|
+| `packages/api/src/lib/creative/audio/service.ts:326` | deduct | keyless (multiline tail `…, description)` ) |
+| `packages/api/src/lib/creative/audio/service.ts:365` | refund | keyless |
+| `packages/api/src/lib/creative/audio/service.ts:569` | refund | keyless |
+| `packages/api/src/lib/creative/audio/service.ts:618` | refund | keyless |
+| `packages/api/src/lib/creative/production/runner.ts:193` | deduct | keyless (`…).catch(()=>0)`) |
+| `packages/api/src/lib/creative/production/runner.ts:218` | refund | keyless |
+| `packages/api/src/routers/director.ts:77` | deduct | keyless |
+| `packages/api/src/routers/director.ts:85` | refund | keyless |
+| `packages/api/src/lib/movieRenderWorker.ts:459` | refund | keyless |
+| `packages/api/src/routers/story.ts:393` | deduct (shot clip) | keyless |
+| `packages/api/src/routers/story.ts:2741` | deduct (scene image) | keyless |
+| `packages/api/src/routers/story.ts:3128` | deduct (scene video) | keyless |
+| `packages/api/src/routers/story.ts:3572` | deduct (narration) | keyless |
+| `packages/api/src/routers/story.ts:6112` | deduct (movie render) | keyless |
+| `packages/api/src/routers/story.ts:7525` | deduct (educational narration) | keyless |
+| `packages/api/src/routers/story.ts:7602` | deduct (music) | keyless |
+| `packages/api/src/routers/story.ts:468` | refund (shot clip) | keyless |
+| `packages/api/src/routers/story.ts:2974` | refund (scene image) | keyless |
+| `packages/api/src/routers/story.ts:3269` | refund (scene video) | keyless |
+| `packages/api/src/routers/story.ts:3605` | refund (narration) | keyless |
+| `packages/api/src/routers/story.ts:6222` | refund (movie cancel) | keyless |
+| `packages/api/src/routers/story.ts:7555` | refund (educational narration) | keyless |
+| `packages/api/src/routers/story.ts:7635` | refund (music) | keyless |
+
+(Test-only sites in `lib/__tests__/creditLedger.integration.test.ts` pass keys.)
+
+**Finding (flagged):** the idempotency key is wired into **exactly one module** (`generation.ts`). Every other production path — story scene image/video/shot-clips, R16 + educational narration, music, movie render + cancel, Director, 5.0 creative production, and creative-audio TTS/music — passes **nothing**, writing `idempotencyKey = NULL`. The reconciliation gate **cannot pass** on those paths.
+
+### B-B. NULL-permitting unique — verbatim
+
+**Model (`packages/database/schema.prisma`, upgrade):**
+```prisma
+model CreditTransaction {
+  id     String       @id @default(cuid())
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount      Int          // positive = credit in, negative = credit out
+  type        CreditTxType
+  featureKey  String?      // which feature was used (populated on USAGE)
+  description String?
+  referenceId String?      // payment ref, generation job ID, etc.
+  // Optional idempotency anchor. When set, a logical operation (a single charge
+  // or refund) can be replayed safely: the unique key prevents a duplicate
+  // balance mutation + ledger row. Null for legacy rows and non-idempotent ops.
+  idempotencyKey String?   @unique
+
+  balanceBefore Int
+  balanceAfter  Int
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@index([featureKey, createdAt])
+```
+**Migration (`20261012120000_credit_ledger_idempotency/migration.sql`) — verbatim:**
+```sql
+ALTER TABLE "credit_transactions" ADD COLUMN IF NOT EXISTS "idempotencyKey" TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS "credit_transactions_idempotencyKey_key"
+  ON "credit_transactions"("idempotencyKey");
+CREATE INDEX IF NOT EXISTS "credit_transactions_featureKey_createdAt_idx"
+  ON "credit_transactions"("featureKey", "createdAt");
+```
+**Assessment:**
+- Postgres `UNIQUE` treats `NULL`s as **distinct**, so multiple `idempotencyKey = NULL` rows are permitted → legacy/non-idempotent rows stay valid (confirmed by the integration test "legacy rows with a NULL key remain valid").
+- **No other uniqueness** on `(referenceId, type)` or similar — only `idempotencyKey @unique` plus the four plain indexes.
+- **Future caller passing `null`:** the insert always succeeds → **no protection**; duplicate charges/refunds remain possible on any keyless path.
+- **Recommendation (finding, not a change):** (1) a **partial** index (`… WHERE "idempotencyKey" IS NOT NULL`) is functionally equivalent to the current plain unique (NULLs are already distinct) — it is only a size optimization; the substantive fix is **backfill + `NOT NULL`** once every caller supplies a key. (2) `@@unique([referenceId, type])` as defense-in-depth is **unsafe as stated**: `referenceId` is nullable **and reused across features** (e.g. a cue id is used for both `story:speech_generation` narration and `story:audio_generation` music), so a `(referenceId, type)` unique would reject legitimate rows; if added it must be `(referenceId, type, featureKey)` and only after nullable-`referenceId` rows are handled.
+
+### B-C. Existing-row backfill
+- **Count of rows that would be `NULL` after migration:** **NOT DETERMINED** — requires a DB read (no `psql`/Prisma query permitted in this read-only audit); all pre-existing `credit_transactions` rows are `NULL` by construction.
+- **Backfill script:** **NONE.** `git grep -i "backfill|back-fill"` across `packages/api`, `scripts`, `packages/database` → **zero** matches; no `scripts/*backfill*`, `*ledger*`, or `*reconcil*` file exists.
+- **Derivable key from `(referenceId, type)`?** Only partially. `referenceId` is **nullable** and **not unique across featureKeys** (narration and music share a cue id), so a `(referenceId,type)` key would collide for legitimate historical pairs → **lossy/unsafe**. A collision-free derivation is `legacy:${row.id}` (always unique) — but that provides **no cross-row dedup**; it only satisfies a future `NOT NULL` constraint.
+
+### B-D. Reconciliation test coverage
+Present test files:
+- `packages/api/src/lib/__tests__/creditLedger.integration.test.ts` (real DB) — cases: concurrent deduct same key → once (`:98`); concurrent refund same key → once (`:114`); conflicting key reuse fails safely (`:129`); legacy NULL key valid (`:145`); insufficient-credit race never negative (`:156`); parallel admin adjustments no lost updates (`:172`); overdraft rejected (`:185`); **PL-01 mixed-op reconciliation invariant** (`:196`); retry parity reserve/settle/release per attempt key (`:215`); cancel-vs-failure shared refund key refunds once (`:232`).
+- `packages/api/src/lib/__tests__/creditReporting.test.ts` (unit).
+- Pre-existing: `creditReserveSettle.test.ts`, `audioCreditGate.test.ts`, `movieRenderCreditGate.test.ts`.
+
+**Finding:** these tests exercise `deductCredits`/`refundCredits` **directly with keys** — proving the *function* is replay-safe — but **no test asserts that the app's call sites pass keys**. The un-wired paths in B-A are therefore **untested**; the reconciliation gate's coverage exists at the function layer, not at the integration/call-site layer.
+
+### Three most consequential gaps
+1. **Call-site wiring is 1-of-N.** Only `generation.ts` supplies keys; ~14 `story.ts` sites + `creative/audio/service.ts` + `creative/production/runner.ts` + `director.ts` + `movieRenderWorker.ts` pass **nothing** ⇒ `idempotencyKey = NULL` ⇒ no dedup ⇒ the reconciliation gate fails for story images/videos/shot-clips/narration/music, movie render, Director, creative production, and creative audio.
+2. **Nullable key + no backfill.** `UNIQUE(idempotencyKey)` permits unlimited `NULL`s, every existing row is `NULL`, and **no backfill script exists**, so even the wired path leaves the historical ledger un-reconcilable and keyless callers stay non-idempotent until `NOT NULL` is enforced.
+3. **Tests prove the function, not the wiring.** `creditLedger.integration.test.ts` covers concurrent/refund/retry idempotency at the function layer only; nothing verifies call-site key coverage, so the gate can appear green while most production charge/refund paths remain un-protected.
+
+---
+
+## Appendix C — Phase 2 decision-support audit
+
+**Question.** For each Phase 2 surface (the five listed in §7), what already exists, what is the *smallest* change to ship it, what does it depend on, and what must the owner decide?
+
+**Method.** READ-ONLY at `feat/raivstream-upgrade @ 74b05d5`. No DB query, no provider call, no commit. Every claim cites code or schema. Effort/risk labels are qualitative (no runtime profiling).
+
+### C1. R16-02 — restrict visual styles
+- **Today:** allowlist `STORY_VISUAL_STYLE_BLOCKS` has 9 styles (`storyVisualStyles.ts:1`) with a `label` + `prompt` each; server normalizer `normaliseStoryVisualStyle` in the same file. Storage is `StoryProject.visualStyle String?` (`schema.prisma:908`) — **not an enum**. Of the three target names, **`ANIME`** and **`THREE_D_ANIMATED`** exist verbatim; **there is no `Cartoon`** (`STORYBOOK_ILLUSTRATION` / `COMIC_BOOK` are the closest, differently named).
+- **Verdict:** **CODE ONLY** (allowlist + normalizer). DB enforcement is optional.
+- **Smallest change:** trim the allowlist to the 3 target styles, add alias/normalizer entries (e.g. map the desired `Cartoon` → a chosen implementation), reject or alias unknown values on write. **A data pass is mandatory first** — existing rows hold out-of-set strings (no DB read permitted here, so the count is unknown).
+- **Dependencies:** none. **Risk:** restricting before backfilling breaks existing projects. **Decision:** enforce in DB (String→enum migration + backfill) or keep `String?` + code validation; and which implementation `Cartoon` maps to.
+
+### C2. R16-03 — character continuity / approved canonical references
+- **Today:** continuity layer **exists** — `visualBible.ts` (`applyMasterVisualBible`, `VisualBibleSource`, side-effect free, unit-tested), `model StoryCharacterMemory` (`schema.prisma:1233`), manifest `master_style` + `characters: Record<string,string>` (`productionStructurer.ts:50/54`, zod `:81/:83`). **No approval step** (`git grep "character.*approv|approveCharacter|referenceApproval"` → only a literal string at `director/interpreter.ts:75`).
+- **Verdict:** continuity = REUSE; an approval/review workflow = **GREENFIELD**.
+- **Smallest change:** persist per-character canonical reference images + a status (`pending|approved|rejected`), an approval proc + UI, and gate generation on "approved" (or fall back to the text anchors). Almost certainly a new model → **SCHEMA CHANGE**.
+- **Dependencies:** image storage/host. **Risk:** approving *after* generation spends credits on rejected art; blocking generation on approval changes UX. **Decision:** approve-before-generate vs generate-then-approve; who approves; reference storage schema.
+
+### C3. R16-04 — batch generation
+- **Today:** per-scene pieces exist — `story.generateSceneShotClips` (`story.ts:5029`), `story.completeUnfinishedStory` (`:5086`), pure clip planner `shotClipEngine.ts` (H3 I2V chain; pure helpers, loop in router). **No batch controller / durable job-state / bounded concurrency / per-scene idempotency** (`git grep "batch|BoundedConcurrency|runInBatches|pLimit|concurrency"` across `story.ts` + `shotClipEngine.ts` → **zero**).
+- **Verdict:** **GREENFIELD** (sequential chains exist; a durable batched driver does not).
+- **Smallest change:** a durable job table + a runner (the app already has `movieRenderWorker.ts` as a worker precedent) + bounded concurrency + per-scene idempotency, reusing the Phase 1 `idempotencyKey` pattern and `StoryVideoExport @@unique([projectId, sourceHash])` (`schema:1398`) for resume.
+- **Dependencies:** **Phase 1 idempotency (done)** + the refund path for partial failures. **Risk:** partial-failure cost blow-ups — needs per-scene idempotency + refund keys. **Decision:** in-process worker vs external queue; max concurrency; per-run cost cap.
+
+### C4. R16-05 — story edit versioning
+- **Today:** edit procs exist — `story.regenerateStoryText` (`:4188`), `story.updateChapter` (`:4587`), `story.rewriteParagraph` (`:4635`). `model SequenceVersion` (`schema:1465`) and `model CreativeVersion` (`:2351`) exist but cover **sequences / creative projects**, not chapters. **No `StoryChapterVersion`** (`git grep "chapter.*version|StoryChapterVersion"` → none).
+- **Verdict:** procs = REUSE; chapter history = **GREENFIELD** (**SCHEMA CHANGE**).
+- **Smallest change:** a `StoryChapterVersion` model (`chapterId, version, content, createdAt, authorId, reason`) + write-on-edit + a restore proc + a diff UI. Reusing `CreativeVersion` is **not** acceptable (different aggregate).
+- **Dependencies:** none hard; storage grows with edits. **Risk:** history on every keystroke/edit bloats the table. **Decision:** full snapshot vs diff; retention/pruning policy.
+
+### C5. PL-01 — admin usage dashboard
+- **Today (more complete than §7 recorded):** `admin.usageReport` (`admin.ts:1350`), `admin.reconcileBalances` (`:1419`), the pure DB-free accounting helper `creditReporting.ts` (`reconcileRows` `:44`; reports discrepancies, never mutates), and UI `apps/web/src/app/admin/usage/page.tsx` (177 lines; 7/28/90-day ranges, discrepancy filter, "Usage & Ledger"). Supporting: `admin.storyAnalytics` (`:308`), `admin.listGenerationJobs` (`:1091`).
+- **Verdict:** already **IMPLEMENTED** on `feat/raivstream-upgrade`; the only prerequisite is the `(featureKey, createdAt)` index for per-feature aggregation (shipped in `20261012120000_credit_ledger_idempotency`).
+- **Smallest change:** ship as-is once the migration is applied; add a per-feature breakdown if not already rendered. **Dependencies:** Phase 1 migration. **Risk:** low. **Decision:** whether to surface out-of-band adjustments in the discrepancy list (the helper reports, never mutates).
+
+### C6. Recommended order (lowest risk / highest reuse first)
+1. **PL-01** — already built; ships with the Phase 1 index migration.
+2. **R16-02** — code-only, no schema; **data backfill first**, then restrict.
+3. **R16-05** — self-contained schema addition, low coupling.
+4. **R16-03** — needs a storage + approval decision; medium scope.
+5. **R16-04** — largest; depends on Phase 1 idempotency (done) + a worker; highest cost risk.
+
+### C7. Decisions required (owner)
+- **R16-02:** DB enum vs code-only; the `Cartoon` mapping; backfill strategy for out-of-set rows.
+- **R16-03:** approval model + reference storage; approve-before vs generate-then-approve.
+- **R16-04:** worker/queue choice; concurrency; per-run cost cap.
+- **R16-05:** snapshot vs diff; retention.
+- **PL-01:** adjustment handling in the reconciler display.
+
+### C8. Audit limitations
+- Read-only, no DB: existing `visualStyle` value distribution and `StoryCharacterMemory` row counts were not enumerated.
+- Effort/risk are qualitative; no profiling.
+- Scoped to `74b05d5`; the separate R16 uncommitted work in `C:\Raiv\raivstream` is not included.
+
+### Three most consequential
+1. **Only one of five Phase 2 surfaces is already implemented (PL-01).** The other four are either code-only on existing layers (R16-02) or greenfield (R16-03/04/05).
+2. **Two need SCHEMA CHANGE** — R16-03 (character references) and R16-05 (`StoryChapterVersion`); R16-02 and R16-04 are code-only, but **R16-04 is the largest** (durable batch controller + refunds).
+3. **Ordering is forced by data, not preference:** R16-02 needs a **data backfill before** restriction (or live projects break), and R16-04 depends on the **Phase 1 idempotency** already shipped to avoid partial-failure cost blow-ups.
