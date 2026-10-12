@@ -258,6 +258,71 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
   return project;
 }
 
+/** R16-03 — character-only prompt for a canonical reference portrait. */
+export function characterReferencePrompt(c: {
+  name?: string | null;
+  role?: string | null;
+  species?: string | null;
+  ageDescription?: string | null;
+  gender?: string | null;
+  visualDescription?: string | null;
+  favoriteExpression?: string | null;
+  walkingStyle?: string | null;
+}): string {
+  const parts = [
+    `character reference portrait of ${c.name ?? 'the character'}`,
+    c.species,
+    c.ageDescription,
+    c.gender,
+    c.role,
+    c.visualDescription,
+    c.favoriteExpression,
+    c.walkingStyle,
+    'head-and-shoulders framing, neutral plain background, front view, consistent identity, no scene context',
+  ];
+  return parts.filter((p) => typeof p === 'string' && p.trim()).join(', ');
+}
+
+/**
+ * R16-03 — approved reference anchors (character name → assetUrl) for the scene's
+ * characters, plus whether any scene character lacks an approved reference. Only
+ * READY assets are used; unapproved characters contribute no anchor (drafts are
+ * never injected).
+ */
+export async function resolveSceneApprovedReferences(
+  ctx: any,
+  scene: { characters?: unknown },
+  characterMemory: Array<{ name: string; approvedReferenceAssetId?: string | null }>,
+): Promise<{ approvedReferences: Record<string, string>; hasDraftReferences: boolean }> {
+  const key = (n: string) => n.trim().toUpperCase().replace(/\s+/g, '_');
+  const names = sceneCharacterNames(scene);
+  const byKey = new Map<string, { name: string; approvedReferenceAssetId: string | null }>();
+  for (const c of characterMemory ?? []) {
+    byKey.set(key(c.name), { name: c.name, approvedReferenceAssetId: c.approvedReferenceAssetId ?? null });
+  }
+
+  const approvedIds = names
+    .map((n) => byKey.get(key(n))?.approvedReferenceAssetId)
+    .filter((id): id is string => Boolean(id));
+  const assets: Array<{ id: string; assetUrl: string | null }> = approvedIds.length
+    ? await ctx.prisma.characterReferenceAsset.findMany({
+        where: { id: { in: approvedIds }, status: 'READY' },
+        select: { id: true, assetUrl: true },
+      })
+    : [];
+  const urlById = new Map(assets.filter((a) => a.assetUrl).map((a) => [a.id, a.assetUrl as string]));
+
+  const approvedReferences: Record<string, string> = {};
+  let hasDraftReferences = false;
+  for (const n of names) {
+    const c = byKey.get(key(n));
+    const url = c?.approvedReferenceAssetId ? urlById.get(c.approvedReferenceAssetId) : undefined;
+    if (c && url) approvedReferences[c.name] = url;
+    else hasDraftReferences = true;
+  }
+  return { approvedReferences, hasDraftReferences };
+}
+
 function sceneCharacterNames(scene: { characters?: unknown }): string[] {
   if (Array.isArray(scene.characters)) {
     return scene.characters.flatMap((ch) => {
@@ -2655,6 +2720,8 @@ async function generateSceneImageAsset(
   });
   if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
 
+  const { approvedReferences, hasDraftReferences } = await resolveSceneApprovedReferences(ctx, scene, scene.project.characterMemory);
+
   const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
   await trackStoryAnalytics(ctx, {
     event: 'scene_image_started',
@@ -2713,6 +2780,7 @@ async function generateSceneImageAsset(
       negativePrompt: composed.negativePrompt,
       bible: project.productionManifest as unknown as ProductionManifest,
       sceneCharacters: sceneCharacterNames(scene),
+      approvedReferences,
       target: 'IMAGE',
     });
     composed = {
@@ -2970,6 +3038,7 @@ async function generateSceneImageAsset(
       }),
       asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
       criticRun: ctx.isR16 ? safeCriticRunForR16(criticRun) : criticRun,
+      hasDraftReferences,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Picture generation failed. Please try again.';
@@ -2996,6 +3065,7 @@ async function generateSceneImageAsset(
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
       asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
+      hasDraftReferences,
     };
   }
 }
@@ -4812,6 +4882,145 @@ export const storyRouter = router({
         },
       });
       return updated;
+    }),
+
+  // ── Phase 2 (R16-03) — character reference assets + approval ────────────────
+
+  /** Generate a canonical character reference portrait. Does NOT auto-approve. */
+  generateCharacterReference: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      const prompt = characterReferencePrompt(character);
+      const negativePrompt = 'multiple people, crowd, text, watermark, extra limbs, deformed hands, scene background';
+
+      // The row is the idempotency target — create it (PENDING) BEFORE charging/submitting.
+      const refAsset = await ctx.prisma.characterReferenceAsset.create({
+        data: {
+          characterId: character.id,
+          projectId: character.projectId,
+          status: 'PENDING',
+          prompt,
+          negativePrompt,
+          providerModel: 'FLUX2',
+          isLatest: false,
+        },
+      });
+      await ctx.prisma.characterReferenceAsset.update({ where: { id: refAsset.id }, data: { status: 'GENERATING' } });
+
+      const featureKey = MODEL_FEATURE_KEY['FLUX2' as SupportedModel];
+      let creditsUsed = 0;
+      try {
+        if (featureKey) {
+          creditsUsed = await deductCredits(
+            ctx.prisma,
+            ctx.user.id,
+            featureKey,
+            `character-reference-${refAsset.id}`,
+            `Character reference: ${character.name}`,
+            creditKeys.sceneImage.charge(refAsset.id),
+          );
+        }
+
+        let providerOutputUrl: string;
+        if (!process.env.FAL_KEY && process.env.NODE_ENV !== 'production') {
+          providerOutputUrl = devSceneSvgDataUrl(character.name, character.name);
+        } else {
+          const submitted = await submitGenerationJob({ model: 'FLUX2' as SupportedModel, prompt, negativePrompt, aspectRatio: '1:1' });
+          providerOutputUrl = await waitForGenerationOutput('FLUX2' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
+        }
+
+        const r2Key = `story-projects/${character.projectId}/characters/${character.id}/reference-${refAsset.id}.png`;
+        const assetUrl = providerOutputUrl.startsWith('data:')
+          ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'image/png')) ?? providerOutputUrl
+          : await mirrorUrlToR2(providerOutputUrl, r2Key, 'image/png');
+
+        return await ctx.prisma.$transaction(async (tx: any) => {
+          await tx.characterReferenceAsset.updateMany({ where: { characterId: character.id }, data: { isLatest: false } });
+          return tx.characterReferenceAsset.update({
+            where: { id: refAsset.id },
+            data: { status: 'READY', assetUrl, isLatest: true, errorMessage: null },
+          });
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Reference generation failed';
+        await ctx.prisma.characterReferenceAsset.update({ where: { id: refAsset.id }, data: { status: 'FAILED', errorMessage: message.slice(0, 500) } }).catch(() => {});
+        if (creditsUsed > 0 && featureKey) {
+          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, `character-reference-${refAsset.id}`, 'Refund: character reference failed', creditKeys.sceneImage.refund(refAsset.id)).catch(() => {});
+        }
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+      }
+    }),
+
+  /** Approve a canonical reference. Owner-only; idempotent on repeat. */
+  approveCharacterReference: protectedProcedure
+    .input(z.object({ characterId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true, projectId: true, approvedReferenceAssetId: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      if (character.approvedReferenceAssetId === input.assetId) {
+        return ctx.prisma.storyCharacterMemory.findUnique({
+          where: { id: character.id },
+          select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+        });
+      }
+
+      const asset = await ctx.prisma.characterReferenceAsset.findFirst({
+        where: { id: input.assetId, characterId: character.id, projectId: character.projectId, status: 'READY' },
+        select: { id: true },
+      });
+      if (!asset) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That reference does not belong to this character.' });
+
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { approvedReferenceAssetId: asset.id, approvedAt: new Date() },
+        select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+      });
+    }),
+
+  /** Revoke a character's approved reference. Owner-only; idempotent. */
+  revokeCharacterApproval: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { approvedReferenceAssetId: null, approvedAt: null },
+        select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+      });
+    }),
+
+  /** Reference history for a character (newest first). No raw prompt returned. */
+  listCharacterReferences: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true, approvedReferenceAssetId: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      const rows = await ctx.prisma.characterReferenceAsset.findMany({
+        where: { characterId: character.id },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, assetUrl: true, isLatest: true, providerModel: true, createdAt: true },
+      });
+      return {
+        approvedReferenceAssetId: character.approvedReferenceAssetId,
+        references: rows.map((r) => ({ ...r, isApproved: r.id === character.approvedReferenceAssetId })),
+      };
     }),
 
   updateSceneDirector: protectedProcedure
