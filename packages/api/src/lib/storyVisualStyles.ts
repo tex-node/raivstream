@@ -14,6 +14,11 @@ export const STORY_VISUAL_STYLE_BLOCKS = {
     prompt:
       'clean anime-inspired animation style, expressive eyes, dynamic but child-safe composition, colorful background, polished frame',
   },
+  CARTOON: {
+    label: 'Cartoon',
+    prompt:
+      'bright 2D cartoon style, bold clean outlines, flat vivid colors, expressive friendly exaggerated characters, simple uncluttered background, playful and child-safe',
+  },
   COMIC_BOOK: {
     label: 'Comic Book',
     prompt:
@@ -49,7 +54,19 @@ export const STORY_VISUAL_STYLE_BLOCKS = {
 export type StoryVisualStyleKey = keyof typeof STORY_VISUAL_STYLE_BLOCKS;
 
 export const DEFAULT_STORY_VISUAL_STYLE: StoryVisualStyleKey = 'STORYBOOK_ILLUSTRATION';
-export const DEFAULT_R16_STORY_VISUAL_STYLE: StoryVisualStyleKey = 'STORYBOOK_ILLUSTRATION';
+export const DEFAULT_R16_STORY_VISUAL_STYLE: StoryVisualStyleKey = 'CARTOON';
+
+/**
+ * The scene styles R16 (r16.raivstream.com) may SELECT. The main app keeps the
+ * full set. Enforced on WRITE only — a project whose stored style is outside this
+ * set keeps rendering (compatibility read), per the confirmed policy.
+ */
+export const R16_VISUAL_STYLE_KEYS = ['CARTOON', 'THREE_D_ANIMATED', 'ANIME'] as const;
+
+/** True when `value` is one of the R16-selectable scene styles. */
+export function isR16VisualStyle(value: string | null | undefined): boolean {
+  return !!value && (R16_VISUAL_STYLE_KEYS as readonly string[]).includes(value);
+}
 
 export function normaliseStoryVisualStyle(value?: string | null): StoryVisualStyleKey {
   if (!value) return DEFAULT_STORY_VISUAL_STYLE;

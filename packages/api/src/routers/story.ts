@@ -24,7 +24,7 @@ import {
   selectStorybookImageForScene,
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
-import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
+import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -78,6 +78,7 @@ const storyVisualStyleSchema = z.enum([
   'STORYBOOK_ILLUSTRATION',
   'THREE_D_ANIMATED',
   'ANIME',
+  'CARTOON',
   'COMIC_BOOK',
   'PHOTOREALISTIC',
   'WATERCOLOR',
@@ -85,6 +86,22 @@ const storyVisualStyleSchema = z.enum([
   'CINEMATIC_FANTASY',
   'AFRICAN_FOLKTALE_ILLUSTRATION',
 ]);
+
+/**
+ * R16 (KIDS) write guard: only Cartoon / 3D Animation / Anime may be SELECTED.
+ * Enforced on WRITE only — a stored style outside the set keeps rendering
+ * (compatibility read); reads and generation are never refused.
+ */
+function assertR16VisualStyle(audienceMode: StoryAudienceMode, style: string | null | undefined): void {
+  if (audienceMode !== 'KIDS') return;
+  if (style && !isR16VisualStyle(style)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'R16 stories can only use Cartoon, 3D Animation, or Anime.',
+      cause: { code: 'R16_VISUAL_STYLE_NOT_ALLOWED', visualStyle: style },
+    });
+  }
+}
 const directorSettingsSchema = z.object({
   emotion: z.enum(['HAPPY', 'EXCITED', 'CURIOUS', 'BRAVE', 'CALM', 'SAD', 'SURPRISED']).nullable().optional(),
   cameraStyle: z.enum(['CLOSE_UP', 'MEDIUM_SHOT', 'WIDE_SHOT', 'OVER_THE_SHOULDER', 'BIRDS_EYE_VIEW', 'EYE_LEVEL']).nullable().optional(),
@@ -3633,6 +3650,11 @@ export const storyRouter = router({
         });
       }
 
+      const resolvedVisualStyle = normaliseStoryVisualStyle(
+        input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE),
+      );
+      assertR16VisualStyle(audienceMode, resolvedVisualStyle);
+
       const project = await ctx.prisma.storyProject.create({
         data: {
           userId: ctx.user.id,
@@ -3645,7 +3667,7 @@ export const storyRouter = router({
           storyType: input.storyType,
           // Persist explicit educational intent immediately so generateStory skips the classifier.
           ...(input.storyType === 'EDUCATIONAL' ? { contentType: 'EDUCATIONAL' } : {}),
-          visualStyle: normaliseStoryVisualStyle(input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE)),
+          visualStyle: resolvedVisualStyle,
           status: 'DRAFT',
         },
         select: projectSelect,
@@ -5730,6 +5752,7 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
       const preset = STYLE_PRESETS[input.preset];
+      assertR16VisualStyle(project.audienceMode as StoryAudienceMode, preset.visualStyle);
       await (ctx.prisma as any).storyProject.update({
         where: { id: input.projectId },
         data: { visualStyle: preset.visualStyle },
@@ -6987,6 +7010,7 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
       const { projectId, ...data } = input;
+      if (data.visualStyle) assertR16VisualStyle(project.audienceMode as StoryAudienceMode, normaliseStoryVisualStyle(data.visualStyle));
       const updateData = {
         ...data,
         visualStyle: data.visualStyle ? normaliseStoryVisualStyle(data.visualStyle) : data.visualStyle,
