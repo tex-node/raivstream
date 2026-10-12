@@ -11,6 +11,7 @@ import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
+import { recoverShareAttributionRetention } from '../lib/story/shareAttributionRetention';
 
 export const adminRouter = router({
   // ─── Overview Stats ────────────────────────────────────────────────────────
@@ -1056,6 +1057,10 @@ export const adminRouter = router({
   /**
    * Ban / unban a user (lock their account indefinitely).
    */
+  /** Phase 4b — roll raw share attributions older than the window into daily counts. */
+  runShareAttributionRetention: adminProcedure
+    .mutation(async ({ ctx }) => recoverShareAttributionRetention(ctx.prisma)),
+
   setUserBan: adminProcedure
     .input(z.object({
       userId: z.string(),

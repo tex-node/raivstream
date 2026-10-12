@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { VideoCard } from '@/components/video/VideoCard';
 import { Navbar } from '@/components/layout/Navbar';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
+import { shareTargets, whatsappShareUrl } from '@/lib/shareTargets';
 
 export default function VideoPage() {
   const { id } = useParams() as { id: string };
@@ -60,6 +62,81 @@ export default function VideoPage() {
         </div>
       </div>
       {isOwner && isR16 && <PublicationControl videoId={id} />}
+      {isOwner && !isR16 && <ShareMenu videoId={id} />}
+    </div>
+  );
+}
+
+/**
+ * Phase 4b — share menu for the owner of an approved R16 video (main app only;
+ * the R16 experience stays child-simple). Instagram is copy-link only (no direct
+ * share URL). Failures are quiet — sharing is secondary.
+ */
+function ShareMenu({ videoId }: { videoId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const create = trpc.story.createShareLink.useMutation();
+  const canNative = typeof navigator !== 'undefined' && typeof (navigator as unknown as { share?: unknown }).share === 'function';
+
+  async function ensureUrl(): Promise<string | null> {
+    if (url) return url;
+    try {
+      const res = await create.mutateAsync({ videoId });
+      setUrl(res.url);
+      return res.url;
+    } catch {
+      return null; // quiet
+    }
+  }
+
+  async function copyLink() {
+    const u = await ensureUrl();
+    if (!u) return;
+    try {
+      await navigator.clipboard.writeText(u);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* quiet */
+    }
+  }
+
+  async function openWhatsApp() {
+    const u = await ensureUrl();
+    if (u) window.open(whatsappShareUrl(u), '_blank', 'noopener,noreferrer');
+  }
+
+  async function nativeShare() {
+    const u = await ensureUrl();
+    if (u) {
+      try {
+        await (navigator as unknown as { share: (o: { url: string }) => Promise<void> }).share({ url: u });
+      } catch {
+        /* quiet */
+      }
+    }
+  }
+
+  const targets = shareTargets({ canNativeShare: canNative });
+  const btn = { fontSize: 12.5, padding: '9px 13px' } as const;
+
+  return (
+    <div className="mx-auto mb-6 w-full max-w-[520px] px-4">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, borderRadius: 16, border: '1px solid var(--noc-hairline)', background: 'var(--noc-card)', padding: '10px 14px' }}>
+        <span className="noc-label" style={{ width: '100%' }}>Share</span>
+        {targets.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            disabled={create.isPending}
+            onClick={() => { if (t.id === 'whatsapp') void openWhatsApp(); else if (t.id === 'native') void nativeShare(); else void copyLink(); }}
+            className="noc-btn-outline"
+            style={btn}
+          >
+            {t.id === 'copy' && copied ? 'Copied' : t.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

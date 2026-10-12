@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, r16Procedure, router } from '../trpc';
+import { protectedProcedure, publicProcedure, r16Procedure, router } from '../trpc';
 import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
@@ -27,6 +27,7 @@ import {
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
 import { createBatchRun, runBatch, recoverStuckBatchRuns, type BatchDeps } from '../lib/story/batchGeneration';
+import { randomBytes } from 'node:crypto';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -257,6 +258,19 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
   });
   if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
   return project;
+}
+
+/** Phase 4b — opaque share token (a short code, not a secret credential). */
+function newShareToken(): string {
+  return randomBytes(16).toString('base64url');
+}
+function shareUrlFor(token: string): string {
+  const base = (process.env.R16_PUBLIC_URL ?? 'https://r16.raivstream.com').replace(/\/$/, '');
+  return `${base}/s/${token}`;
+}
+/** Identical for missing / revoked / ineligible — a share resolve must not leak which. */
+function shareNotFound(): TRPCError {
+  return new TRPCError({ code: 'NOT_FOUND', message: 'Not found.' });
 }
 
 /** R16-04 — batch worker deps built from a request context (real scene-image path). */
@@ -5139,6 +5153,85 @@ export const storyRouter = router({
       });
       void runBatch(ctx.prisma, run.id, deps);
       return updated;
+    }),
+
+  // ── Phase 4b — share links (R16-only, APPROVED-only) ───────────────────────
+
+  createShareLink: protectedProcedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+        select: { id: true, moderationStatus: true, isPublic: true, withdrawnAt: true, status: true, isKidsSafe: true },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      // Sharing is R16/KIDS content only (the video's audience), APPROVED + public + live.
+      if (
+        !video.isKidsSafe ||
+        video.status !== 'READY' ||
+        video.moderationStatus !== 'APPROVED' ||
+        !video.isPublic ||
+        video.withdrawnAt
+      ) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This video is not ready to share yet.' });
+      }
+
+      // Idempotent per (videoId, sharerId): reuse an existing non-revoked link.
+      const existing = await ctx.prisma.shareLink.findFirst({ where: { videoId: video.id, sharerId: ctx.user.id, revokedAt: null } });
+      const link = existing ?? (await ctx.prisma.shareLink.create({ data: { videoId: video.id, sharerId: ctx.user.id, token: newShareToken() } }));
+      return { token: link.token, url: shareUrlFor(link.token) };
+    }),
+
+  revokeShareLink: protectedProcedure
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const link = await ctx.prisma.shareLink.findFirst({ where: { token: input.token, sharerId: ctx.user.id }, select: { id: true, revokedAt: true } });
+      if (!link) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link not found.' });
+      if (!link.revokedAt) await ctx.prisma.shareLink.update({ where: { id: link.id }, data: { revokedAt: new Date() } });
+      return { revoked: true };
+    }),
+
+  listMyShareLinks: protectedProcedure
+    .input(z.object({ videoId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const links = await ctx.prisma.shareLink.findMany({
+        where: { sharerId: ctx.user.id, ...(input.videoId ? { videoId: input.videoId } : {}) },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      });
+      return links.map((l: any) => ({ token: l.token, videoId: l.videoId, createdAt: l.createdAt, revokedAt: l.revokedAt }));
+    }),
+
+  /** Public resolution. Records a per-click attribution (no IP); exposes only the OWNER handle. */
+  resolveShareLink: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const link = await ctx.prisma.shareLink.findUnique({ where: { token: input.token } });
+      if (!link || link.revokedAt) throw shareNotFound();
+
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: link.videoId, status: 'READY', isPublic: true, withdrawnAt: null, moderationStatus: 'APPROVED' },
+        include: { creator: { select: { username: true, displayName: true, avatarUrl: true } } },
+      });
+      if (!video) throw shareNotFound();
+
+      // Per-click attribution: identified for signed-in viewers, anonymous otherwise. No IP.
+      await ctx.prisma.shareAttribution.create({ data: { shareLinkId: link.id, viewerUserId: ctx.user?.id ?? null } });
+
+      return {
+        video: {
+          id: video.id,
+          title: video.title,
+          description: video.description,
+          thumbnailUrl: video.thumbnailUrl,
+          mp4Url: video.mp4Url,
+          hlsMasterUrl: video.hlsMasterUrl,
+          duration: video.duration,
+          creator: video.creator,
+        },
+        shareToken: link.token,
+        creatorHandle: video.creator.username,
+      };
     }),
 
   updateSceneDirector: protectedProcedure
