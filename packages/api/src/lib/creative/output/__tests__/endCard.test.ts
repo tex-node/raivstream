@@ -5,8 +5,10 @@
  * must append exactly END_CARD_SECONDS of card, carry the attribution handle
  * (escaped for drawtext), and keep one continuous video+audio stream.
  */
-import { describe, expect, it } from 'vitest';
-import { END_CARD_SECONDS, buildEndCardArgs, escapeDrawtext } from '../render';
+import { describe, expect, it, vi } from 'vitest';
+import { writeFile } from 'node:fs/promises';
+import { END_CARD_SECONDS, END_CARD_PREFLIGHT_FAILED, buildEndCardArgs, escapeDrawtext, preflightFailureMessage, renderOutputDerivative } from '../render';
+import { deriveOutput } from '../derivation';
 
 function filterOf(args: string[]): string {
   const i = args.indexOf('-filter_complex');
@@ -74,5 +76,31 @@ describe('buildEndCardArgs', () => {
   it('falls back to a fontconfig default when no font file is given', () => {
     const args = buildEndCardArgs({ ...base, mainHasAudio: true, mainDurationSeconds: 0 });
     expect(filterOf(args)).not.toContain('fontfile=');
+  });
+});
+
+describe('end-card preflight (best-effort skip)', () => {
+  it('names the missing capability in the failure message', () => {
+    const msg = preflightFailureMessage({ drawtext: false, font: false, ok: false });
+    expect(msg).toContain(END_CARD_PREFLIGHT_FAILED);
+    expect(msg).toContain('drawtext');
+    expect(msg).toContain('font');
+  });
+
+  it('skips the end card (one ffmpeg call) when preflight fails, still uploading the main output', async () => {
+    const ffmpeg = vi.fn(async (args: string[]) => {
+      await writeFile(args[args.length - 1]!, Buffer.from('fake-mp4'));
+    });
+    const res = await renderOutputDerivative(
+      { scenes: [{ sceneId: 's1', stillUrl: 'r2://still' }], derivation: deriveOutput('PORTRAIT', null, 6), r2Prefix: 'x/y', creatorHandle: 'ada' },
+      {
+        fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => Buffer.from('media') }) as unknown as Response),
+        ffmpeg,
+        upload: vi.fn(async () => 'r2://out.mp4'),
+        endCardPreflight: async () => ({ drawtext: false, font: true, ok: false }),
+      } as never,
+    );
+    expect(ffmpeg).toHaveBeenCalledTimes(1); // main render only — card skipped
+    expect(res.assetUrl).toBe('r2://out.mp4');
   });
 });

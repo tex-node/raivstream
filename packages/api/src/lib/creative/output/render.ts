@@ -19,6 +19,8 @@ export interface OutputRenderDeps {
   fetch?: typeof fetch;
   ffmpeg?: (args: string[]) => Promise<void>;
   upload?: (buffer: Buffer, key: string, contentType: string) => Promise<string | null>;
+  /** Override the end-card preflight (tests inject a known-good or known-bad result). */
+  endCardPreflight?: () => Promise<EndCardPreflightResult>;
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
@@ -140,6 +142,81 @@ export function buildEndCardArgs(opts: EndCardOptions): string[] {
   ];
 }
 
+export interface EndCardPreflightResult {
+  /** ffmpeg was built with the drawtext filter (`--enable-libfreetype`). */
+  drawtext: boolean;
+  /** A usable font is resolvable (explicit `RAIVSTREAM_END_CARD_FONT`, or fontconfig). */
+  font: boolean;
+  /** Both are present, so the end card will render. */
+  ok: boolean;
+}
+
+/** Typed marker for a preflight failure (best-effort: the card is skipped). */
+export const END_CARD_PREFLIGHT_FAILED = 'END_CARD_PREFLIGHT_FAILED';
+
+/** Human-readable reason + fix for a failed preflight. */
+export function preflightFailureMessage(result: EndCardPreflightResult): string {
+  const parts: string[] = [];
+  if (!result.drawtext) parts.push('ffmpeg lacks the drawtext filter (rebuild with --enable-libfreetype)');
+  if (!result.font) parts.push('no font is resolvable (apt install fonts-dejavu-core, or set RAIVSTREAM_END_CARD_FONT)');
+  return `${END_CARD_PREFLIGHT_FAILED}: ${parts.join('; ') || 'unknown'}`;
+}
+
+const END_CARD_OK: EndCardPreflightResult = { drawtext: true, font: true, ok: true };
+
+async function runCapture(command: string, args: string[]): Promise<{ code: number; out: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      out += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, out }));
+  });
+}
+
+let endCardPreflightCache: Promise<EndCardPreflightResult> | null = null;
+
+/** Test hook — clears the cached preflight so a fresh check runs. */
+export function resetEndCardPreflightForTests(): void {
+  endCardPreflightCache = null;
+}
+
+/**
+ * Best-effort end-card preflight, run ONCE per process (cached). Verifies ffmpeg
+ * has `drawtext` and that a font is resolvable. A failure does NOT abort the
+ * export — the caller skips the card with a loud log and uploads the main output
+ * (the export matters more than the two-second branding).
+ */
+export function runEndCardPreflight(): Promise<EndCardPreflightResult> {
+  if (!endCardPreflightCache) endCardPreflightCache = doEndCardPreflight();
+  return endCardPreflightCache;
+}
+
+async function doEndCardPreflight(): Promise<EndCardPreflightResult> {
+  const explicitFont = process.env.RAIVSTREAM_END_CARD_FONT?.trim();
+
+  let drawtext = false;
+  try {
+    const { code, out } = await runCapture('ffmpeg', ['-hide_banner', '-filters']);
+    drawtext = code === 0 && /\bdrawtext\b/.test(out);
+  } catch {
+    drawtext = false;
+  }
+
+  let font = Boolean(explicitFont);
+  if (!font) {
+    try {
+      font = (await runCapture('fc-match', ['sans-serif'])).code === 0;
+    } catch {
+      font = false;
+    }
+  }
+
+  return { drawtext, font, ok: drawtext && font };
+}
+
 export interface RenderScene {
   sceneId: string;
   videoUrl?: string | null;
@@ -165,10 +242,34 @@ export async function renderOutputDerivative(
   const doFetch = deps.fetch ?? fetch;
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
+  // Preflight guards the REAL ffmpeg; an injected runner owns its own environment.
+  const preflight = deps.endCardPreflight ?? (deps.ffmpeg ? async () => END_CARD_OK : runEndCardPreflight);
 
   const { targetWidth: W, targetHeight: H } = input.derivation;
   const handle = (input.creatorHandle ?? '').trim() || END_CARD_FALLBACK_HANDLE;
   const dir = await mkdtemp(path.join(os.tmpdir(), 'raivstream-output-'));
+
+  // Append the 2s end card to the main output, or (best-effort) fall back to it.
+  const appendEndCard = async (mainPath: string, mainHasAudio: boolean, mainDurationSeconds: number): Promise<string> => {
+    const pre = await preflight();
+    if (!pre.ok) {
+      console.warn(`[end-card] skipped: ${preflightFailureMessage(pre)}`);
+      return mainPath;
+    }
+    const final = path.join(dir, 'final.mp4');
+    await doFfmpeg(buildEndCardArgs({
+      mainPath,
+      mainHasAudio,
+      mainDurationSeconds,
+      outputPath: final,
+      width: W,
+      height: H,
+      handle,
+      fontFile: process.env.RAIVSTREAM_END_CARD_FONT ?? null,
+    }));
+    return final;
+  };
+
   try {
     const hasAudio = input.scenes.some((s) => s.audioUrl);
 
@@ -269,17 +370,7 @@ export async function renderOutputDerivative(
         await rename(concat, out);
       }
 
-      const final = path.join(dir, 'final.mp4');
-      await doFfmpeg(buildEndCardArgs({
-        mainPath: out,
-        mainHasAudio: true,
-        mainDurationSeconds: 0,
-        outputPath: final,
-        width: W,
-        height: H,
-        handle,
-      }));
-
+      const final = await appendEndCard(out, true, 0);
       const buffer = await readFile(final);
       const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
       return { assetUrl };
@@ -361,17 +452,7 @@ export async function renderOutputDerivative(
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const final = path.join(dir, 'final.mp4');
-    await doFfmpeg(buildEndCardArgs({
-      mainPath: out,
-      mainHasAudio: false,
-      mainDurationSeconds: input.derivation.effectiveDurationSeconds,
-      outputPath: final,
-      width: W,
-      height: H,
-      handle,
-    }));
-
+    const final = await appendEndCard(out, false, input.derivation.effectiveDurationSeconds);
     const buffer = await readFile(final);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
     return { assetUrl };

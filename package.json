@@ -33,6 +33,7 @@
     "db:studio": "cd packages/database && prisma studio",
     "db:seed": "cd packages/database && tsx seed.ts",
     "db:seed:academy-demo": "tsx scripts/seed-academy-demo.ts",
+    "verify:end-card": "tsx scripts/verify-end-card.ts",
     "db:reset": "cd packages/database && prisma migrate reset --force",
     "dev:web": "turbo run dev --filter=@raivstream/web",
     "dev:mobile": "turbo run dev --filter=@raivstream/mobile",
