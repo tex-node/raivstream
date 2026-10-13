@@ -46,6 +46,9 @@ Each of the following is an **accepted limitation**:
 3. **R16-03 "use draft" path allows generation without an approved reference — accepted limitation (by design).** Scene generation with unapproved characters warns (via `hasDraftReferences`) and proceeds with the draft reference; it never blocks and never auto-approves.
 4. **R16-02 enforcement is code-only (no DB enum) — accepted limitation.** The shared `StoryProject.visualStyle` field cannot express audience-scoped enums (3 for R16, 10 for the main app), so the restriction is validated in code at the write paths; the read-through policy keeps existing out-of-set values working.
 
+5. **Production carries 14 pre-existing user balance/ledger drift cases - accepted limitation.** Identified 2026-10-13: `credit_balances.balance <> SUM(credit_transactions.amount)` for 14 accounts. All 14 are **test/staging/acceptance** accounts (emails on `raivstream.com` / `raivstream.test` / `test.raivstream.com` - e.g. `integration-5@raivstream.com`, `ca25b-assembly@`, `ugc-480p-acceptance@`, `phase6a-prod@raivstream.test`) whose opening balances were **seeded outside the ledger** (the delta equals the seed; their ledger rows are only the negative USAGE spends). No real user is affected. The reconciliation gate verifies **new** transactions only; historical drift is tracked separately (see the operator queue in `docs/operations/upgrade-plan-closing-status.md`).
+6. **No incident-detection stack in production - accepted limitation.** Sentry is **not configured** (only placeholders in `.env.example` / `docs/SETUP.md`; no `SENTRY_DSN` in the VPS `.env` or `apps/web/.env.local`), so incident detection relies on the health check and PM2 logs alone. Observability gap.
+
 ## 5. Pending operator actions
 
 1. **Apply migrations, in timestamp order** (none applied by this workstream):
