@@ -1,6 +1,6 @@
 -- Phase 2 (R16-03) — character reference assets + approval.
 --
--- Additive: a brand-new table plus two nullable columns on story_character_memories.
+-- Additive: a brand-new table plus two nullable columns on story_character_memory.
 -- No backfill (existing characters simply have no reference / no approval).
 -- camelCase columns (repo convention; see the snake_case incident in session.md).
 --
@@ -33,9 +33,9 @@ CREATE INDEX "character_reference_assets_projectId_status_idx"
 
 ALTER TABLE "character_reference_assets"
   ADD CONSTRAINT "character_reference_assets_characterId_fkey"
-  FOREIGN KEY ("characterId") REFERENCES "story_character_memories" ("id")
+  FOREIGN KEY ("characterId") REFERENCES "story_character_memory" ("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "story_character_memories"
+ALTER TABLE "story_character_memory"
   ADD COLUMN "approvedReferenceAssetId" TEXT,
   ADD COLUMN "approvedAt"               TIMESTAMP(3);
