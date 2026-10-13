@@ -714,37 +714,42 @@ export async function executeMovieRenderJob(
         sources.push({ cue, trackType, trackVolume, filePath: normalizedPath });
       }
 
+      // Phase 16.5 — include each scene clip's native audio (MiniMax SFX) as an
+      // AMBIENCE bed at its canonical start time, alongside the plan cues. Pushed
+      // BEFORE the `sources.length > 0` guard so a project with no materialised
+      // cues but audible clips still mixes. Previously this push ran *inside* the
+      // guard, so `sources` was empty and the native audio was never added — a
+      // non-educational project (no narration cues) rendered with no audio track.
+      for (const native of nativeAudioSources) {
+        sources.push({
+          cue: {
+            cueId: `native-sfx-${native.order}`,
+            startTimeSeconds: native.startTimeSeconds,
+            endTimeSeconds: native.startTimeSeconds + native.durationSeconds,
+            trimStartSeconds: 0,
+            trimEndSeconds: null,
+            volume: 1,
+            fadeInSeconds: 0,
+            fadeOutSeconds: 0,
+            text: null,
+            performancePreset: null,
+            performanceDirection: null,
+            sequenceSceneId: null,
+            characterMemoryId: null,
+            voiceProfileId: null,
+            audioAssetId: null,
+            storageKey: null,
+            duckingEnabled: false,
+            duckingAmountDb: null,
+          } as AudioBlueprintCue,
+          trackType: 'AMBIENCE',
+          trackVolume: 1,
+          filePath: native.filePath,
+        });
+      }
+
       if (sources.length > 0) {
         const mixedAudioPath = path.join(tempDir, 'mixed-audio.m4a');
-        // Phase 16.5 — include each scene clip's native audio (MiniMax SFX) as an
-        // AMBIENCE bed at its canonical start time, alongside the plan cues.
-        for (const native of nativeAudioSources) {
-          sources.push({
-            cue: {
-              cueId: `native-sfx-${native.order}`,
-              startTimeSeconds: native.startTimeSeconds,
-              endTimeSeconds: native.startTimeSeconds + native.durationSeconds,
-              trimStartSeconds: 0,
-              trimEndSeconds: null,
-              volume: 1,
-              fadeInSeconds: 0,
-              fadeOutSeconds: 0,
-              text: null,
-              performancePreset: null,
-              performanceDirection: null,
-              sequenceSceneId: null,
-              characterMemoryId: null,
-              voiceProfileId: null,
-              audioAssetId: null,
-              storageKey: null,
-              duckingEnabled: false,
-              duckingAmountDb: null,
-            } as AudioBlueprintCue,
-            trackType: 'AMBIENCE',
-            trackVolume: 1,
-            filePath: native.filePath,
-          });
-        }
         // canonicalRuntimeSeconds is the Audio Blueprint's own runtimeSeconds,
         // which is always copied directly from the Film Blueprint — never an
         // independently-derived value. Forcing the mix to this exact length

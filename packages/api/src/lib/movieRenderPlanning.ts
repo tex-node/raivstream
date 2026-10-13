@@ -1,7 +1,15 @@
 import crypto from 'node:crypto';
 import type { FilmBlueprint } from './sequencePlanning';
 
-export const MOVIE_RENDERER_VERSION = 'phase-16-v1';
+/**
+ * Movie renderer version — folded into the render-plan hash (`hashRenderPlan` →
+ * `renderPlanHash`, which stringifies the whole plan including `rendererVersion`),
+ * so a bump invalidates every cached `movie_asset` and forces a re-render.
+ * `phase-16-v2`: fixed the native-clip-audio guard — a project with no
+ * materialised cues (but audible clips) now mixes the clips' audio instead of
+ * rendering silent.
+ */
+export const MOVIE_RENDERER_VERSION = 'phase-16-v2';
 export const MOVIE_RENDER_FEATURE_KEY = 'story:movie_render';
 export const MOVIE_RENDER_DURATION_TOLERANCE_SECONDS = 0.25;
 export const MOVIE_RENDER_DEFAULTS = {
