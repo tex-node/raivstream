@@ -42,7 +42,7 @@ import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@raivstream/database';
 import { TRPCError } from '@trpc/server';
 import { deriveOutput } from '../creative/output/derivation';
-import { renderOutputDerivative, type OutputRenderDeps, type RenderScene } from '../creative/output/render';
+import { renderOutputDerivative, EXPORT_RENDERER_VERSION, type OutputRenderDeps, type RenderScene } from '../creative/output/render';
 
 export interface StoryVideoExportState {
   id: string;
@@ -59,10 +59,15 @@ export interface StoryVideoExportState {
   completedAt: Date | null;
 }
 
-function computeSourceHash(pairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }>): string {
+export function computeSourceHash(
+  pairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }>,
+  version: string = EXPORT_RENDERER_VERSION,
+): string {
   const sorted = [...pairs].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
-  // Include audioUrl suffix only when present — preserves backward-compat hash for video-only exports.
-  const payload = sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
+  // E1 — fold the renderer version into the payload so a renderer change (e.g.
+  // preserving source-clip native audio) invalidates every cached export, not just
+  // ones whose source changed. Include the audioUrl suffix only when present.
+  const payload = `${version}|` + sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
   return createHash('sha256').update(payload).digest('hex');
 }
 
