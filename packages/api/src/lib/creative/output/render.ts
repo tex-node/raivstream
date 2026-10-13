@@ -19,6 +19,8 @@ export interface OutputRenderDeps {
   fetch?: typeof fetch;
   ffmpeg?: (args: string[]) => Promise<void>;
   upload?: (buffer: Buffer, key: string, contentType: string) => Promise<string | null>;
+  /** Override the end-card preflight (tests inject a known-good or known-bad result). */
+  endCardPreflight?: () => Promise<EndCardPreflightResult>;
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
@@ -36,6 +38,185 @@ async function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
+/** Appended end-card duration, in seconds (added to every derivative). */
+export const END_CARD_SECONDS = 2;
+/** Fallback attribution handle when a creator username is unavailable. */
+export const END_CARD_FALLBACK_HANDLE = 'raivstream';
+
+/**
+ * Escape a value for ffmpeg `drawtext=text='…'`. drawtext treats `\ : ' % ,` as
+ * special characters, so a username containing any of them (apostrophes are the
+ * realistic case) would otherwise break the filter graph or swallow text.
+ */
+export function escapeDrawtext(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/:/g, '\\:')
+    .replace(/%/g, '\\%')
+    .replace(/,/g, '\\,');
+}
+
+export interface EndCardOptions {
+  /** Already-rendered main video; its duration/streams are preserved. */
+  mainPath: string;
+  /** Whether the main already carries an audio stream. */
+  mainHasAudio: boolean;
+  /** Main duration; used to synthesise matching silent audio when mainHasAudio is false. */
+  mainDurationSeconds: number;
+  outputPath: string;
+  width: number;
+  height: number;
+  handle: string;
+  /** Optional explicit font file; when omitted, fontconfig picks the default. */
+  fontFile?: string | null;
+}
+
+/**
+ * Build the ffmpeg arguments that append a {@link END_CARD_SECONDS}-second end card
+ * to an already-rendered main video.
+ *
+ * Fully synthesised (no external asset): a black `color` card with three
+ * `drawtext` lines — "Created on Raivstream", the creator's `@handle`, and
+ * "RAIVSTREAM" — concatenated after the main output with a silent audio track so
+ * the result is one continuous video+audio stream. The main is re-encoded with the
+ * same codec/pixel format (9:16 output is unchanged in resolution/framerate).
+ */
+export function buildEndCardArgs(opts: EndCardOptions): string[] {
+  const { mainPath, mainHasAudio, mainDurationSeconds, outputPath, width, height, handle, fontFile } = opts;
+  const font = fontFile ? `:fontfile='${fontFile.replace(/'/g, "\\'")}'` : '';
+  const big = Math.max(28, Math.round(width / 18));
+  const mid = Math.max(24, Math.round(width / 24));
+  const small = Math.max(18, Math.round(width / 40));
+  const handleText = escapeDrawtext(`@${handle}`);
+
+  const colorSrc = `color=c=black:s=${width}x${height}:d=${END_CARD_SECONDS}:r=30`;
+  const silence = 'anullsrc=channel_layout=stereo:sample_rate=48000';
+
+  const drawCards =
+    `drawtext=text='Created on Raivstream'${font}:fontcolor=white@0.9:fontsize=${small}:x=(w-text_w)/2:y=h/2-${Math.round(big * 1.4)},` +
+    `drawtext=text='${handleText}'${font}:fontcolor=white:fontsize=${big}:x=(w-text_w)/2:y=h/2-${Math.round(big / 2)},` +
+    `drawtext=text='RAIVSTREAM'${font}:fontcolor=white@0.85:fontsize=${mid}:x=(w-text_w)/2:y=h/2+${Math.round(big * 0.8)}`;
+
+  const mainV = '[0:v]fps=30,setsar=1,format=yuv420p[v0]';
+
+  const tail = [
+    '-map', '[v]', '-map', '[a]',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-movflags', '+faststart',
+    outputPath,
+  ];
+
+  if (mainHasAudio) {
+    // Inputs: 0 = main (v+a), 1 = color card, 2 = silent card audio.
+    const filter = [
+      mainV,
+      `[1:v]fps=30,setsar=1,format=yuv420p,${drawCards}[v1]`,
+      '[2:a]asetpts=PTS-STARTPTS[cdra]',
+      '[v0][0:a][v1][cdra]concat=n=2:v=1:a=1[v][a]',
+    ].join(';');
+    return [
+      '-i', mainPath,
+      '-f', 'lavfi', '-t', String(END_CARD_SECONDS), '-i', colorSrc,
+      '-f', 'lavfi', '-t', String(END_CARD_SECONDS), '-i', silence,
+      '-filter_complex', filter,
+      ...tail,
+    ];
+  }
+
+  // Inputs: 0 = main (v only), 1 = main silent audio, 2 = color card, 3 = silent card audio.
+  const filter = [
+    mainV,
+    `[2:v]fps=30,setsar=1,format=yuv420p,${drawCards}[v1]`,
+    '[3:a]asetpts=PTS-STARTPTS[cdra]',
+    '[v0][1:a][v1][cdra]concat=n=2:v=1:a=1[v][a]',
+  ].join(';');
+  return [
+    '-i', mainPath,
+    '-f', 'lavfi', '-t', String(mainDurationSeconds), '-i', silence,
+    '-f', 'lavfi', '-t', String(END_CARD_SECONDS), '-i', colorSrc,
+    '-f', 'lavfi', '-t', String(END_CARD_SECONDS), '-i', silence,
+    '-filter_complex', filter,
+    ...tail,
+  ];
+}
+
+export interface EndCardPreflightResult {
+  /** ffmpeg was built with the drawtext filter (`--enable-libfreetype`). */
+  drawtext: boolean;
+  /** A usable font is resolvable (explicit `RAIVSTREAM_END_CARD_FONT`, or fontconfig). */
+  font: boolean;
+  /** Both are present, so the end card will render. */
+  ok: boolean;
+}
+
+/** Typed marker for a preflight failure (best-effort: the card is skipped). */
+export const END_CARD_PREFLIGHT_FAILED = 'END_CARD_PREFLIGHT_FAILED';
+
+/** Human-readable reason + fix for a failed preflight. */
+export function preflightFailureMessage(result: EndCardPreflightResult): string {
+  const parts: string[] = [];
+  if (!result.drawtext) parts.push('ffmpeg lacks the drawtext filter (rebuild with --enable-libfreetype)');
+  if (!result.font) parts.push('no font is resolvable (apt install fonts-dejavu-core, or set RAIVSTREAM_END_CARD_FONT)');
+  return `${END_CARD_PREFLIGHT_FAILED}: ${parts.join('; ') || 'unknown'}`;
+}
+
+const END_CARD_OK: EndCardPreflightResult = { drawtext: true, font: true, ok: true };
+
+async function runCapture(command: string, args: string[]): Promise<{ code: number; out: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      out += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, out }));
+  });
+}
+
+let endCardPreflightCache: Promise<EndCardPreflightResult> | null = null;
+
+/** Test hook — clears the cached preflight so a fresh check runs. */
+export function resetEndCardPreflightForTests(): void {
+  endCardPreflightCache = null;
+}
+
+/**
+ * Best-effort end-card preflight, run ONCE per process (cached). Verifies ffmpeg
+ * has `drawtext` and that a font is resolvable. A failure does NOT abort the
+ * export — the caller skips the card with a loud log and uploads the main output
+ * (the export matters more than the two-second branding).
+ */
+export function runEndCardPreflight(): Promise<EndCardPreflightResult> {
+  if (!endCardPreflightCache) endCardPreflightCache = doEndCardPreflight();
+  return endCardPreflightCache;
+}
+
+async function doEndCardPreflight(): Promise<EndCardPreflightResult> {
+  const explicitFont = process.env.RAIVSTREAM_END_CARD_FONT?.trim();
+
+  let drawtext = false;
+  try {
+    const { code, out } = await runCapture('ffmpeg', ['-hide_banner', '-filters']);
+    drawtext = code === 0 && /\bdrawtext\b/.test(out);
+  } catch {
+    drawtext = false;
+  }
+
+  let font = Boolean(explicitFont);
+  if (!font) {
+    try {
+      font = (await runCapture('fc-match', ['sans-serif'])).code === 0;
+    } catch {
+      font = false;
+    }
+  }
+
+  return { drawtext, font, ok: drawtext && font };
+}
+
 export interface RenderScene {
   sceneId: string;
   videoUrl?: string | null;
@@ -45,15 +226,50 @@ export interface RenderScene {
 }
 
 export async function renderOutputDerivative(
-  input: { scenes: RenderScene[]; derivation: OutputDerivation; r2Prefix: string; backgroundMusicUrl?: string | null },
+  input: {
+    scenes: RenderScene[];
+    derivation: OutputDerivation;
+    r2Prefix: string;
+    backgroundMusicUrl?: string | null;
+    /**
+     * Creator's public handle for the end card. Derived from trusted account data
+     * by each caller — never from client input. Falls back to a generic label.
+     */
+    creatorHandle?: string | null;
+  },
   deps: OutputRenderDeps = {},
 ): Promise<{ assetUrl: string }> {
   const doFetch = deps.fetch ?? fetch;
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
+  // Preflight guards the REAL ffmpeg; an injected runner owns its own environment.
+  const preflight = deps.endCardPreflight ?? (deps.ffmpeg ? async () => END_CARD_OK : runEndCardPreflight);
 
   const { targetWidth: W, targetHeight: H } = input.derivation;
+  const handle = (input.creatorHandle ?? '').trim() || END_CARD_FALLBACK_HANDLE;
   const dir = await mkdtemp(path.join(os.tmpdir(), 'raivstream-output-'));
+
+  // Append the 2s end card to the main output, or (best-effort) fall back to it.
+  const appendEndCard = async (mainPath: string, mainHasAudio: boolean, mainDurationSeconds: number): Promise<string> => {
+    const pre = await preflight();
+    if (!pre.ok) {
+      console.warn(`[end-card] skipped: ${preflightFailureMessage(pre)}`);
+      return mainPath;
+    }
+    const final = path.join(dir, 'final.mp4');
+    await doFfmpeg(buildEndCardArgs({
+      mainPath,
+      mainHasAudio,
+      mainDurationSeconds,
+      outputPath: final,
+      width: W,
+      height: H,
+      handle,
+      fontFile: process.env.RAIVSTREAM_END_CARD_FONT ?? null,
+    }));
+    return final;
+  };
+
   try {
     const hasAudio = input.scenes.some((s) => s.audioUrl);
 
@@ -154,8 +370,9 @@ export async function renderOutputDerivative(
         await rename(concat, out);
       }
 
-      const buffer = await readFile(out);
-      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
+      const final = await appendEndCard(out, true, 0);
+      const buffer = await readFile(final);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
       return { assetUrl };
     }
 
@@ -232,8 +449,12 @@ export async function renderOutputDerivative(
       out,
     ];
     await doFfmpeg(args);
-    const buffer = await readFile(out);
-    const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
+
+    // Append the end card so the cached derivative (keyed by source hash) always
+    // includes it — a same-source re-export reuses the row and never double-applies.
+    const final = await appendEndCard(out, false, input.derivation.effectiveDurationSeconds);
+    const buffer = await readFile(final);
+    const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
     return { assetUrl };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);

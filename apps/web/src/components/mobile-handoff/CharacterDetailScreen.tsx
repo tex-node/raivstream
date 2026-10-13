@@ -5,6 +5,7 @@ import { Accordion, Skeleton, optionLabel } from '@/components/mobile/primitives
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { useR16 } from '@/lib/r16';
 import { useTrackTab } from './useTrackTab';
 
 /**
@@ -24,6 +25,7 @@ function chipsFrom(value: unknown): string[] {
 }
 
 export function CharacterDetailScreen({ projectId, characterId }: { projectId: string; characterId: string }) {
+  const isR16 = useR16();
   const { isLoaded, isSignedIn } = useUser();
   useTrackTab(projectId, 'characters');
 
@@ -120,8 +122,72 @@ export function CharacterDetailScreen({ projectId, characterId }: { projectId: s
             body={character.evolutionNotes || (character.evolutionStage ? optionLabel(character.evolutionStage) : 'No arc notes yet.')}
             chips={character.evolutionStage ? [optionLabel(character.evolutionStage)] : []}
           />
+          {isR16 && <CharacterReferencePanel characterId={character.id} name={character.name} />}
         </div>
       </div>
     </Shell>
+  );
+}
+
+/**
+ * R16-03 — canonical reference for a character. Plain copy, no prompt/provider/
+ * model/credit terms. The latest READY reference is shown; approval is explicit.
+ */
+function CharacterReferencePanel({ characterId, name }: { characterId: string; name: string }) {
+  const utils = trpc.useUtils();
+  const list = trpc.story.listCharacterReferences.useQuery({ characterId });
+  const refetch = () => utils.story.listCharacterReferences.invalidate({ characterId });
+  const gen = trpc.story.generateCharacterReference.useMutation({ onSuccess: refetch });
+  const approve = trpc.story.approveCharacterReference.useMutation({ onSuccess: refetch });
+  const revoke = trpc.story.revokeCharacterApproval.useMutation({ onSuccess: refetch });
+
+  const refs = list.data?.references ?? [];
+  const approved = refs.find((r) => r.isApproved) ?? null;
+  const latestReady = refs.find((r) => r.status === 'READY') ?? null;
+  const shown = approved ?? latestReady;
+  const busy = gen.isPending || approve.isPending || revoke.isPending;
+  const err = gen.error || approve.error || revoke.error;
+  const btn = { fontSize: 12.5, padding: '9px 13px' } as const;
+
+  return (
+    <div style={{ borderRadius: 16, border: '1px solid rgba(233,233,237,0.12)', padding: 14 }}>
+      <span className="noc-label">This is what {name} looks like</span>
+      <div style={{ marginTop: 10 }}>
+        {shown?.assetUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown.assetUrl} alt={`${name} reference`} style={{ width: '100%', maxWidth: 220, borderRadius: 12, display: 'block' }} />
+        ) : (
+          <div style={{ width: 140, height: 140, borderRadius: 12, background: gradientPlaceholder(characterId) }} />
+        )}
+      </div>
+      {approved?.createdAt && (
+        <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 8 }}>
+          Looks right · {new Date(approved.createdAt).toLocaleDateString()}
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        {!shown && (
+          <button type="button" disabled={busy} onClick={() => gen.mutate({ characterId })} className="noc-btn-outline" style={btn}>
+            {gen.isPending ? 'Making it…' : 'Make a picture'}
+          </button>
+        )}
+        {shown && !approved && (
+          <button type="button" disabled={busy} onClick={() => approve.mutate({ characterId, assetId: shown.id })} className="noc-btn-outline" style={btn}>
+            Looks right!
+          </button>
+        )}
+        {shown && (
+          <button type="button" disabled={busy} onClick={() => gen.mutate({ characterId })} className="noc-btn-outline" style={btn}>
+            {gen.isPending ? 'Making it…' : 'Try again'}
+          </button>
+        )}
+        {approved && (
+          <button type="button" disabled={busy} onClick={() => revoke.mutate({ characterId })} className="noc-btn-outline" style={btn}>
+            Remove
+          </button>
+        )}
+      </div>
+      {err && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{err.message}</p>}
+    </div>
   );
 }

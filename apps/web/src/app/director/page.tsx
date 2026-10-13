@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
 type Purpose = 'CHARACTER' | 'ENVIRONMENT' | 'PROP' | 'OTHER';
 type CastRow = { tag: string; description: string; voice: string; imageReferenced: boolean };
@@ -70,11 +71,15 @@ export default function DirectorPage() {
   const [result, setResult] = useState<{ scenes: DirectedScene[]; warnings: string[]; creditsUsed: number; ceiling: Ceiling } | null>(null);
 
   const status = trpc.director.status.useQuery(undefined, { enabled: isSignedIn, retry: false });
+  const idempotencyKey = useIdempotencyKey();
   const compose = trpc.director.compose.useMutation({
     onSuccess: (data) => {
       setResult({ scenes: data.scenes, warnings: data.warnings, creditsUsed: data.creditsUsed, ceiling });
       setNote('');
     },
+    // Retry after failure must be a NEW logical request (so it legitimately
+    // charges); a duplicate click on success must dedupe. Rotate only on error.
+    onError: () => idempotencyKey.rotate(),
   });
 
   const maxScenes = status.data?.maxScenes ?? 6;
@@ -82,7 +87,7 @@ export default function DirectorPage() {
   const notConfigured = status.data && !status.data.configured;
 
   function payload(revision?: string) {
-    return {
+    const base = {
       scene,
       world: world.trim() || undefined,
       sceneCount,
@@ -99,6 +104,9 @@ export default function DirectorPage() {
       references: refs.filter((r) => r.label.trim()).map((r) => ({ label: r.label.trim(), purpose: r.purpose, note: r.note.trim() || undefined })),
       ...(revision && result ? { revisionNote: revision, previousScenes: result.scenes.map((s) => s.prompt) } : {}),
     };
+    // Idempotency id is coupled to `base`: unchanged inputs reuse the id
+    // (double-click / retry dedupe); edited inputs (or a new note) get a new id.
+    return { ...base, idempotencyId: idempotencyKey(base) };
   }
 
   function updateCast(i: number, patch: Partial<CastRow>) {

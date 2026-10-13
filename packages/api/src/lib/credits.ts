@@ -107,12 +107,76 @@ export async function getFeatureCreditCost(
   return rate.creditsPerUnit;
 }
 
+// ─── Structured insufficient-credit error (R16-01) ───────────────────────────
+//
+// The client renders a consistent "you need X, you have Y" message. The
+// machine-readable payload travels on the tRPC error `cause` and is projected
+// into `data.credit` by the router errorFormatter (packages/api/src/trpc.ts).
+// It is per-user and never leaks another user's balance.
+
+export interface InsufficientCreditsPayload {
+  required: number;
+  balance: number;
+  shortfall: number;
+  featureKey: string;
+}
+
+export function insufficientCreditsError(
+  featureKey: string,
+  required: number,
+  balance: number,
+): TRPCError {
+  const payload: InsufficientCreditsPayload = {
+    required,
+    balance,
+    shortfall: Math.max(0, required - balance),
+    featureKey,
+  };
+  return new TRPCError({
+    code:    'PAYMENT_REQUIRED',
+    message: `Insufficient credits — you need ${required} but have ${balance}. Top up at /credits.`,
+    cause:   { credit: payload },
+  });
+}
+
+// ─── Idempotency helpers (A1) ────────────────────────────────────────────────
+
+type CreditTxKind = 'USAGE' | 'REFUND';
+
+/**
+ * Reject reuse of an idempotency key for a different logical operation. A key
+ * is only transparently replayable when it belongs to the same user, the same
+ * feature and the same transaction kind.
+ */
+function assertIdempotentReplay(
+  existing: { userId: string; featureKey: string | null; type: string; amount: number },
+  expected: { userId: string; featureKey: string; kind: CreditTxKind },
+): void {
+  const sameOperation =
+    existing.userId === expected.userId &&
+    existing.featureKey === expected.featureKey &&
+    existing.type === expected.kind;
+  if (!sameOperation) {
+    throw new TRPCError({
+      code:    'CONFLICT',
+      message: 'Idempotency key already used for a different operation.',
+    });
+  }
+}
+
 /**
  * Atomically deduct credits for a feature.
- * Throws PAYMENT_REQUIRED if the user has insufficient balance.
+ * Throws PAYMENT_REQUIRED (with a structured `cause.credit` payload) if the
+ * user has insufficient balance.
  * Throws INTERNAL_SERVER_ERROR if no active rate is configured.
  *
- * @returns The number of credits deducted.
+ * When `idempotencyKey` is supplied the operation is replay-safe: a second call
+ * with the same key (sequential or concurrent) is a no-op that returns the
+ * originally charged amount and performs no additional balance mutation. The
+ * balance decrement and the ledger insert commit in one transaction, so a
+ * concurrent duplicate's rollback also undoes its decrement.
+ *
+ * @returns The number of credits deducted (or originally deducted on replay).
  */
 export async function deductCredits(
   prisma: PrismaClient,
@@ -120,7 +184,21 @@ export async function deductCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
+  idempotencyKey?: string,
 ): Promise<number> {
+  // 0. Idempotent pre-check runs BEFORE the rate lookup: a replay must return
+  //    the original charge even if the rate was since changed/deactivated.
+  if (idempotencyKey) {
+    const existing = await prisma.creditTransaction.findUnique({
+      where:  { idempotencyKey },
+      select: { userId: true, featureKey: true, type: true, amount: true },
+    });
+    if (existing) {
+      assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
+      return Math.abs(existing.amount);
+    }
+  }
+
   // 1. Look up the configured cost for this feature
   const rate = await prisma.featureCreditRate.findUnique({
     where:  { featureKey },
@@ -136,47 +214,62 @@ export async function deductCredits(
 
   const cost = rate.creditsPerUnit;
 
-  await prisma.$transaction(async (tx) => {
-    // 2. Attempt an atomic decrement — only succeeds when balance >= cost
-    const result = await tx.creditBalance.updateMany({
-      where: { userId, balance: { gte: cost } },
-      data:  { balance: { decrement: cost } },
-    });
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 2. Attempt an atomic decrement — only succeeds when balance >= cost
+      const result = await tx.creditBalance.updateMany({
+        where: { userId, balance: { gte: cost } },
+        data:  { balance: { decrement: cost } },
+      });
 
-    if (result.count === 0) {
-      // Either no balance row or not enough credits — fetch actual balance for the error message
-      const bal = await tx.creditBalance.findUnique({
+      if (result.count === 0) {
+        // Either no balance row or not enough credits — fetch actual balance for the error message
+        const bal = await tx.creditBalance.findUnique({
+          where:  { userId },
+          select: { balance: true },
+        });
+        throw insufficientCreditsError(featureKey, cost, bal?.balance ?? 0);
+      }
+
+      // 3. Read back the new balance so we can record it accurately
+      const updated = await tx.creditBalance.findUnique({
         where:  { userId },
         select: { balance: true },
       });
-      throw new TRPCError({
-        code:    'PAYMENT_REQUIRED',
-        message: `Insufficient credits — you need ${cost} but have ${bal?.balance ?? 0}. Top up at /credits.`,
+      const balanceAfter  = updated!.balance;
+      const balanceBefore = balanceAfter + cost;
+
+      // 4. Audit trail (the unique idempotencyKey guards against a concurrent duplicate)
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          amount:       -cost,
+          type:         'USAGE',
+          featureKey,
+          description,
+          referenceId,
+          idempotencyKey: idempotencyKey ?? null,
+          balanceBefore,
+          balanceAfter,
+        },
       });
+    });
+  } catch (error) {
+    // 5. Concurrent duplicate → unique-constraint race. The transaction has
+    //    rolled back (including its decrement); return the winner's charge.
+    const code = (error as { code?: string } | null)?.code;
+    if (idempotencyKey && code === 'P2002') {
+      const existing = await prisma.creditTransaction.findUnique({
+        where:  { idempotencyKey },
+        select: { userId: true, featureKey: true, type: true, amount: true },
+      });
+      if (existing) {
+        assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
+        return Math.abs(existing.amount);
+      }
     }
-
-    // 3. Read back the new balance so we can record it accurately
-    const updated = await tx.creditBalance.findUnique({
-      where:  { userId },
-      select: { balance: true },
-    });
-    const balanceAfter  = updated!.balance;
-    const balanceBefore = balanceAfter + cost;
-
-    // 4. Audit trail
-    await tx.creditTransaction.create({
-      data: {
-        userId,
-        amount:       -cost,
-        type:         'USAGE',
-        featureKey,
-        description,
-        referenceId,
-        balanceBefore,
-        balanceAfter,
-      },
-    });
-  });
+    throw error;
+  }
 
   return cost;
 }
@@ -184,6 +277,10 @@ export async function deductCredits(
 /**
  * Refund credits back to a user (e.g. after a failed generation submission).
  * Creates a REFUND transaction row for full auditability.
+ *
+ * When `idempotencyKey` is supplied the refund is replay-safe: a second call
+ * with the same key is a no-op, so a refund path that can be reached twice
+ * (e.g. cancel racing a failure) neither double-credits nor double-logs.
  */
 export async function refundCredits(
   prisma: PrismaClient,
@@ -192,30 +289,59 @@ export async function refundCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
+  idempotencyKey?: string,
 ): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const updated = await tx.creditBalance.upsert({
-      where:  { userId },
-      create: { userId, balance: amount },
-      update: { balance: { increment: amount } },
+  if (idempotencyKey) {
+    const existing = await prisma.creditTransaction.findUnique({
+      where:  { idempotencyKey },
+      select: { userId: true, featureKey: true, type: true, amount: true },
     });
+    if (existing) {
+      assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
+      return;
+    }
+  }
 
-    const balanceAfter  = updated.balance;
-    const balanceBefore = balanceAfter - amount;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.creditBalance.upsert({
+        where:  { userId },
+        create: { userId, balance: amount },
+        update: { balance: { increment: amount } },
+      });
 
-    await tx.creditTransaction.create({
-      data: {
-        userId,
-        amount,
-        type:         'REFUND',
-        featureKey,
-        description,
-        referenceId,
-        balanceBefore,
-        balanceAfter,
-      },
+      const balanceAfter  = updated.balance;
+      const balanceBefore = balanceAfter - amount;
+
+      await tx.creditTransaction.create({
+        data: {
+          userId,
+          amount,
+          type:         'REFUND',
+          featureKey,
+          description,
+          referenceId,
+          idempotencyKey: idempotencyKey ?? null,
+          balanceBefore,
+          balanceAfter,
+        },
+      });
     });
-  });
+  } catch (error) {
+    // Concurrent duplicate → the transaction rolled back; treat as replayed.
+    const code = (error as { code?: string } | null)?.code;
+    if (idempotencyKey && code === 'P2002') {
+      const existing = await prisma.creditTransaction.findUnique({
+        where:  { idempotencyKey },
+        select: { userId: true, featureKey: true, type: true, amount: true },
+      });
+      if (existing) {
+        assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
+        return;
+      }
+    }
+    throw error;
+  }
 }
 
 // ─── Reserve → Settle → Release (Phase §7.5 — flag-guarded) ──────────────────

@@ -289,12 +289,26 @@ export class StoryVideoExportService {
       );
       const derivation = deriveOutput('PORTRAIT', null, totalRuntimeSeconds);
 
+      // End-card attribution: the project owner's handle from trusted account data
+      // (never client input). Fail-soft — a missing username must not fail export.
+      let creatorHandle: string | null = null;
+      try {
+        const owner = await prisma.user.findUnique({
+          where: { id: input.userId },
+          select: { username: true },
+        });
+        creatorHandle = owner?.username ?? null;
+      } catch {
+        creatorHandle = null;
+      }
+
       const rendered = await renderOutputDerivative(
         {
           scenes,
           derivation,
           r2Prefix: `story-exports/${input.projectId}/exports/${exportRow.id}`,
           backgroundMusicUrl,
+          creatorHandle,
         },
         deps,
       );

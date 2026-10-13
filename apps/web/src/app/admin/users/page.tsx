@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/lib/auth';
 import { AdminSpinner, AdminError } from '../AdminShell';
+import { newAdjustmentId, shouldSubmitAdjustment } from '@/lib/adminAdjustmentId';
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN:     '#ef4444',
@@ -43,10 +44,12 @@ function AdjustCreditsModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!shouldSubmitAdjustment(adjust.isPending)) return; // in-flight double-click guard
     const n = parseInt(amount, 10);
     if (isNaN(n) || n === 0) { setError('Enter a non-zero integer'); return; }
     if (!reason.trim()) { setError('Reason is required'); return; }
-    adjust.mutate({ userId, amount: n, description: reason });
+    // Fresh id per submit: an identical second adjustment is a new action, not a replay.
+    adjust.mutate({ userId, amount: n, description: reason, idempotencyId: newAdjustmentId() });
   };
 
   return (

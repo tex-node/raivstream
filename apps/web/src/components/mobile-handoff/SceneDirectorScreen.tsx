@@ -11,6 +11,8 @@ import { useUser } from '@/lib/auth';
 import { useTrackTab } from './useTrackTab';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
+import Link from 'next/link';
+import { shouldShowDraftReferenceWarning } from '@/lib/draftReferenceWarning';
 
 /**
  * Scene Director — design_handoff_raivstream_mobile, screen 7 of 8. Canonical:
@@ -165,6 +167,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
   const regenerateImage = trpc.story.regenerateSceneImage.useMutation();
   const generateVideo = trpc.story.generateSceneVideo.useMutation();
   const [reviewVideoUrl, setReviewVideoUrl] = useState<string | null>(null);
+  const [draftReferenceWarning, setDraftReferenceWarning] = useState(false);
+  const [draftWarningDismissed, setDraftWarningDismissed] = useState(false);
 
   const scene = ((workspaceQuery.data as any)?.project?.sceneSeeds ?? []).find((s: any) => s.id === sceneId);
 
@@ -221,6 +225,8 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
       const result: any = await mutate({ projectId, sceneId, model: sceneImageModel, instruction: instruction.trim() || undefined });
       progress.finish();
       setReviewAssetUrl(result?.assetUrl ?? result?.asset?.assetUrl ?? null);
+      // Informational: any character lacking an approved reference (never blocks).
+      setDraftReferenceWarning(Boolean(result?.hasDraftReferences));
       // Refresh so the "Animate to Video" control activates immediately.
       utils.story.getWorkspace.invalidate({ projectId });
     } catch (e: any) {
@@ -305,6 +311,25 @@ export function SceneDirectorScreen({ projectId, sceneId }: { projectId: string;
           {errorMessage && (
             <div style={{ borderRadius: 12, padding: 10, background: 'rgba(227,93,93,0.12)', border: '1px solid rgba(227,93,93,0.3)' }}>
               <p style={{ fontSize: 13, color: '#e35d5d', margin: 0 }}>{errorMessage}</p>
+            </div>
+          )}
+
+          {shouldShowDraftReferenceWarning({ hasDraftReferences: draftReferenceWarning, isR16, dismissed: draftWarningDismissed }) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderRadius: 12, padding: 10, background: 'rgba(79,139,214,0.1)', border: '1px solid rgba(79,139,214,0.3)' }}>
+              <p style={{ fontSize: 13, color: 'var(--noc-t2)', margin: 0, flex: 1 }}>
+                Some characters are using draft references.{' '}
+                <Link href={`/story-playground/${projectId}/characters`} style={{ color: 'var(--noc-blue)', fontWeight: 600 }}>
+                  Review characters →
+                </Link>
+              </p>
+              <button
+                type="button"
+                onClick={() => setDraftWarningDismissed(true)}
+                aria-label="Dismiss"
+                style={{ background: 'transparent', border: 'none', color: 'var(--noc-t5)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+              >
+                ×
+              </button>
             </div>
           )}
 

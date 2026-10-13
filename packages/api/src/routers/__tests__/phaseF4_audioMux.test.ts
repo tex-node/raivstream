@@ -101,7 +101,7 @@ const AUDIO_URL_2 = 'https://r2.raivstream.com/narration/scene-2.mp3';
 // ─── A. Audio mux — FFmpeg receives video + audio per scene ───────────────────
 
 describe('F4 §A — renderOutputDerivative: audio mux path', () => {
-  it('calls FFmpeg N+1 times for N scenes with audio (per-scene mux + concat)', async () => {
+  it('calls FFmpeg N+2 times for N scenes with audio (per-scene mux + concat + end card)', async () => {
     let ffmpegCallCount = 0;
     const capturedArgLists: string[][] = [];
 
@@ -129,9 +129,9 @@ describe('F4 §A — renderOutputDerivative: audio mux path', () => {
       deps as never,
     );
 
-    // 2 per-scene + 1 concat = 3 calls
-    expect(ffmpegCallCount).toBe(3);
-    expect(capturedArgLists).toHaveLength(3);
+    // 2 per-scene + 1 concat + 1 end-card pass = 4 calls
+    expect(ffmpegCallCount).toBe(4);
+    expect(capturedArgLists).toHaveLength(4);
   });
 
   it('per-scene FFmpeg args include -stream_loop -1 and -shortest (loop video to audio length)', async () => {
@@ -217,8 +217,8 @@ describe('F4 §A — renderOutputDerivative: audio mux path', () => {
       deps as never,
     );
 
-    // Last call = concat
-    const concatArgs = capturedArgLists[capturedArgLists.length - 1]!;
+    // Second-to-last call = concat (the last is the end-card pass)
+    const concatArgs = capturedArgLists[capturedArgLists.length - 2]!;
     const filterArg = concatArgs.find((a) => a.includes('concat='));
     expect(filterArg).toMatch(/concat=n=2:v=1:a=1/);
     expect(filterArg).toMatch(/\[vout\]\[aout\]/);
@@ -246,7 +246,7 @@ describe('F4 §A — renderOutputDerivative: audio mux path', () => {
       deps as never,
     );
 
-    const concatArgs = capturedArgLists[capturedArgLists.length - 1]!;
+    const concatArgs = capturedArgLists[capturedArgLists.length - 2]!; // last call = end-card pass
     const mapValues = concatArgs.flatMap((a, i) => (a === '-map' ? [concatArgs[i + 1]] : []));
     expect(mapValues).toContain('[vout]');
     expect(mapValues).toContain('[aout]');
@@ -691,7 +691,7 @@ describe('F4 §F — Non-educational regression: STORY exports have no audio mux
     );
 
     // Exactly 1 FFmpeg call (the video-only concat)
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(1);
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
 
     // The single call must use a=0 (no audio in output)
     const args = (deps.ffmpeg as any).mock.calls[0][0] as string[];

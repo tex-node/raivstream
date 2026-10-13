@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { protectedProcedure, r16Procedure, router } from '../trpc';
+import { protectedProcedure, publicProcedure, r16Procedure, router } from '../trpc';
 import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
@@ -9,6 +9,7 @@ import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
 import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
+import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -23,7 +24,10 @@ import {
   selectStorybookImageForScene,
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
-import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
+import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
+import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
+import { createBatchRun, runBatch, recoverStuckBatchRuns, type BatchDeps } from '../lib/story/batchGeneration';
+import { randomBytes } from 'node:crypto';
 import {
   SEQUENCE_CAMERA_MOVEMENTS,
   SEQUENCE_CAMERA_SPEEDS,
@@ -77,6 +81,7 @@ const storyVisualStyleSchema = z.enum([
   'STORYBOOK_ILLUSTRATION',
   'THREE_D_ANIMATED',
   'ANIME',
+  'CARTOON',
   'COMIC_BOOK',
   'PHOTOREALISTIC',
   'WATERCOLOR',
@@ -84,6 +89,22 @@ const storyVisualStyleSchema = z.enum([
   'CINEMATIC_FANTASY',
   'AFRICAN_FOLKTALE_ILLUSTRATION',
 ]);
+
+/**
+ * R16 (KIDS) write guard: only Cartoon / 3D Animation / Anime may be SELECTED.
+ * Enforced on WRITE only — a stored style outside the set keeps rendering
+ * (compatibility read); reads and generation are never refused.
+ */
+function assertR16VisualStyle(audienceMode: StoryAudienceMode, style: string | null | undefined): void {
+  if (audienceMode !== 'KIDS') return;
+  if (style && !isR16VisualStyle(style)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'R16 stories can only use Cartoon, 3D Animation, or Anime.',
+      cause: { code: 'R16_VISUAL_STYLE_NOT_ALLOWED', visualStyle: style },
+    });
+  }
+}
 const directorSettingsSchema = z.object({
   emotion: z.enum(['HAPPY', 'EXCITED', 'CURIOUS', 'BRAVE', 'CALM', 'SAD', 'SURPRISED']).nullable().optional(),
   cameraStyle: z.enum(['CLOSE_UP', 'MEDIUM_SHOT', 'WIDE_SHOT', 'OVER_THE_SHOULDER', 'BIRDS_EYE_VIEW', 'EYE_LEVEL']).nullable().optional(),
@@ -239,6 +260,98 @@ async function ensureProject(ctx: { prisma: any; user: { id: string } }, project
   return project;
 }
 
+/** Phase 4b — opaque share token (a short code, not a secret credential). */
+function newShareToken(): string {
+  return randomBytes(16).toString('base64url');
+}
+function shareUrlFor(token: string): string {
+  const base = (process.env.R16_PUBLIC_URL ?? 'https://r16.raivstream.com').replace(/\/$/, '');
+  return `${base}/s/${token}`;
+}
+/** Identical for missing / revoked / ineligible — a share resolve must not leak which. */
+function shareNotFound(): TRPCError {
+  return new TRPCError({ code: 'NOT_FOUND', message: 'Not found.' });
+}
+
+/** R16-04 — batch worker deps built from a request context (real scene-image path). */
+async function batchDepsFor(ctx: any): Promise<BatchDeps> {
+  const featureKey = MODEL_FEATURE_KEY['FLUX2' as SupportedModel];
+  return {
+    perItemCost: featureKey ? await getFeatureCreditCost(ctx.prisma, featureKey) : 0,
+    generateScene: async (run, sceneId) => {
+      const result: any = await generateSceneImageAsset(ctx, { projectId: run.projectId, sceneId, model: 'FLUX2' as SceneImageModel });
+      const asset = result?.asset;
+      if (!asset?.id || asset.status === 'FAILED') throw new Error(asset?.errorMessage ?? 'Scene picture failed.');
+      return { assetId: asset.id as string };
+    },
+  };
+}
+
+/** R16-03 — character-only prompt for a canonical reference portrait. */
+export function characterReferencePrompt(c: {
+  name?: string | null;
+  role?: string | null;
+  species?: string | null;
+  ageDescription?: string | null;
+  gender?: string | null;
+  visualDescription?: string | null;
+  favoriteExpression?: string | null;
+  walkingStyle?: string | null;
+}): string {
+  const parts = [
+    `character reference portrait of ${c.name ?? 'the character'}`,
+    c.species,
+    c.ageDescription,
+    c.gender,
+    c.role,
+    c.visualDescription,
+    c.favoriteExpression,
+    c.walkingStyle,
+    'head-and-shoulders framing, neutral plain background, front view, consistent identity, no scene context',
+  ];
+  return parts.filter((p) => typeof p === 'string' && p.trim()).join(', ');
+}
+
+/**
+ * R16-03 — approved reference anchors (character name → assetUrl) for the scene's
+ * characters, plus whether any scene character lacks an approved reference. Only
+ * READY assets are used; unapproved characters contribute no anchor (drafts are
+ * never injected).
+ */
+export async function resolveSceneApprovedReferences(
+  ctx: any,
+  scene: { characters?: unknown },
+  characterMemory: Array<{ name: string; approvedReferenceAssetId?: string | null }>,
+): Promise<{ approvedReferences: Record<string, string>; hasDraftReferences: boolean }> {
+  const key = (n: string) => n.trim().toUpperCase().replace(/\s+/g, '_');
+  const names = sceneCharacterNames(scene);
+  const byKey = new Map<string, { name: string; approvedReferenceAssetId: string | null }>();
+  for (const c of characterMemory ?? []) {
+    byKey.set(key(c.name), { name: c.name, approvedReferenceAssetId: c.approvedReferenceAssetId ?? null });
+  }
+
+  const approvedIds = names
+    .map((n) => byKey.get(key(n))?.approvedReferenceAssetId)
+    .filter((id): id is string => Boolean(id));
+  const assets: Array<{ id: string; assetUrl: string | null }> = approvedIds.length
+    ? await ctx.prisma.characterReferenceAsset.findMany({
+        where: { id: { in: approvedIds }, status: 'READY' },
+        select: { id: true, assetUrl: true },
+      })
+    : [];
+  const urlById = new Map(assets.filter((a) => a.assetUrl).map((a) => [a.id, a.assetUrl as string]));
+
+  const approvedReferences: Record<string, string> = {};
+  let hasDraftReferences = false;
+  for (const n of names) {
+    const c = byKey.get(key(n));
+    const url = c?.approvedReferenceAssetId ? urlById.get(c.approvedReferenceAssetId) : undefined;
+    if (c && url) approvedReferences[c.name] = url;
+    else hasDraftReferences = true;
+  }
+  return { approvedReferences, hasDraftReferences };
+}
+
 function sceneCharacterNames(scene: { characters?: unknown }): string[] {
   if (Array.isArray(scene.characters)) {
     return scene.characters.flatMap((ch) => {
@@ -391,7 +504,7 @@ async function runSceneShotClipChain(
       const generationRef = `story-shot-clip-${asset.id}`;
       let creditsUsed = 0;
       if (featureKey) {
-        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`, creditKeys.sceneShotClip.charge(asset.id));
       }
 
       const generationJob = await (ctx.prisma as any).generationJob.create({
@@ -466,7 +579,7 @@ async function runSceneShotClipChain(
           properties: { sceneId: scene.id, model: 'H3_MAX', generationType: 'VIDEO', shotIndex: entry.shotIndex, shotGrid: true },
         });
         if (creditsUsed > 0 && featureKey) {
-          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed').catch(() => undefined);
+          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed', creditKeys.sceneShotClip.refund(asset.id)).catch(() => undefined);
         }
         break; // chain stops at the first failure — resumable on the next request
       }
@@ -2636,6 +2749,8 @@ async function generateSceneImageAsset(
   });
   if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
 
+  const { approvedReferences, hasDraftReferences } = await resolveSceneApprovedReferences(ctx, scene, scene.project.characterMemory);
+
   const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
   await trackStoryAnalytics(ctx, {
     event: 'scene_image_started',
@@ -2694,6 +2809,7 @@ async function generateSceneImageAsset(
       negativePrompt: composed.negativePrompt,
       bible: project.productionManifest as unknown as ProductionManifest,
       sceneCharacters: sceneCharacterNames(scene),
+      approvedReferences,
       target: 'IMAGE',
     });
     composed = {
@@ -2739,7 +2855,7 @@ async function generateSceneImageAsset(
 
   try {
     if (featureKey) {
-      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene image: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene image: ${scene.title}`, creditKeys.sceneImage.charge(asset.id));
     }
 
     await trackStoryAnalytics(ctx, {
@@ -2951,6 +3067,7 @@ async function generateSceneImageAsset(
       }),
       asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
       criticRun: ctx.isR16 ? safeCriticRunForR16(criticRun) : criticRun,
+      hasDraftReferences,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Picture generation failed. Please try again.';
@@ -2972,11 +3089,12 @@ async function generateSceneImageAsset(
     }).catch(() => {});
     await (ctx.prisma as any).storySceneSeed.update({ where: { id: scene.id }, data: { imageStatus: 'FAILED' } }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
-      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene image failed').catch(() => {});
+      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene image failed', creditKeys.sceneImage.refund(asset.id)).catch(() => {});
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
       asset: await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: asset.id } }),
+      hasDraftReferences,
     };
   }
 }
@@ -3126,7 +3244,7 @@ async function generateSceneVideoAsset(
 
   try {
     if (featureKey) {
-      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`);
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`, creditKeys.sceneVideo.charge(asset.id));
     }
 
     await trackStoryAnalytics(ctx, {
@@ -3267,7 +3385,7 @@ async function generateSceneVideoAsset(
       data: { status: 'FAILED', errorMessage: message, isLatest: false },
     }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
-      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed').catch(() => {});
+      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed', creditKeys.sceneVideo.refund(asset.id)).catch(() => {});
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
@@ -3570,7 +3688,7 @@ async function generateSpeechForCue(
     });
   }
 
-  const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Narration generation');
+  const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Narration generation', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId));
 
   try {
     const voiceId = input.voiceId || input.voiceRef || elevenLabsDefaultVoiceId();
@@ -3603,7 +3721,7 @@ async function generateSpeechForCue(
     });
     return { cue: updatedCue, asset };
   } catch (error) {
-    await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Refund: narration generation failed').catch(() => {});
+    await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId, 'Refund: narration generation failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId)).catch(() => {});
     throw new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',
       message: error instanceof Error ? error.message : 'Narration generation failed',
@@ -3632,6 +3750,11 @@ export const storyRouter = router({
         });
       }
 
+      const resolvedVisualStyle = normaliseStoryVisualStyle(
+        input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE),
+      );
+      assertR16VisualStyle(audienceMode, resolvedVisualStyle);
+
       const project = await ctx.prisma.storyProject.create({
         data: {
           userId: ctx.user.id,
@@ -3644,7 +3767,7 @@ export const storyRouter = router({
           storyType: input.storyType,
           // Persist explicit educational intent immediately so generateStory skips the classifier.
           ...(input.storyType === 'EDUCATIONAL' ? { contentType: 'EDUCATIONAL' } : {}),
-          visualStyle: normaliseStoryVisualStyle(input.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE)),
+          visualStyle: resolvedVisualStyle,
           status: 'DRAFT',
         },
         select: projectSelect,
@@ -4226,6 +4349,15 @@ export const storyRouter = router({
         orderBy: { chapterNumber: 'asc' },
       });
       if (firstChapter) {
+        // Snapshot the PRIOR chapter state before regenerating (undoable history).
+        await snapshotChapterVersion(ctx.prisma, {
+          chapterId: firstChapter.id,
+          title: firstChapter.title,
+          summary: firstChapter.summary,
+          body: firstChapter.body,
+          createdByUserId: ctx.user.id,
+          source: 'REGENERATE',
+        });
         await ctx.prisma.storyChapter.update({
           where: { id: firstChapter.id },
           data: { title, summary, body, generationPrompt: idea },
@@ -4606,6 +4738,16 @@ export const storyRouter = router({
         }
       }
 
+      // Snapshot the PRIOR state before applying the edit (undoable history).
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'EDIT',
+      });
+
       const updated = await ctx.prisma.storyChapter.update({
         where: { id: chapter.id },
         data: {
@@ -4680,6 +4822,18 @@ export const storyRouter = router({
 
       paragraphs[input.paragraphIndex] = rewritten.trim();
       const body = paragraphs.join('\n\n');
+
+      // Snapshot the PRIOR state before applying the paragraph rewrite.
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'REWRITE_PARAGRAPH',
+        sourceMetadata: { paragraphIndex: input.paragraphIndex, directive: input.directive },
+      });
+
       const updated = await ctx.prisma.storyChapter.update({
         where: { id: chapter.id },
         data: { body, enhancedBody: null },
@@ -4691,6 +4845,393 @@ export const storyRouter = router({
         properties: { chapterId: chapter.id, chapterNumber: chapter.chapterNumber, paragraphIndex: input.paragraphIndex, directive: input.directive },
       });
       return updated;
+    }),
+
+  // ── Phase 2 (R16-05) — chapter version history ──────────────────────────────
+
+  /** List a chapter's version summaries (newest first). Body is NOT returned. */
+  listChapterVersions: protectedProcedure
+    .input(z.object({ projectId: z.string(), chapterId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const chapter = await ctx.prisma.storyChapter.findFirst({
+        where: { id: input.chapterId, projectId: input.projectId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      const versions = await ctx.prisma.storyChapterVersion.findMany({
+        where: { chapterId: chapter.id },
+        orderBy: { versionNumber: 'desc' },
+        select: { id: true, versionNumber: true, title: true, source: true, createdAt: true },
+      });
+      return { versions };
+    }),
+
+  /** Full version record including the body. */
+  getChapterVersion: protectedProcedure
+    .input(z.object({ versionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const version = await ctx.prisma.storyChapterVersion.findFirst({
+        where: { id: input.versionId, chapter: { project: { userId: ctx.user.id } } },
+      });
+      if (!version) throw new TRPCError({ code: 'NOT_FOUND', message: 'Version not found' });
+      return version;
+    }),
+
+  /** Restore a version: snapshot the current state first, then apply the target. */
+  restoreChapterVersion: protectedProcedure
+    .input(z.object({ versionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.prisma.storyChapterVersion.findFirst({
+        where: { id: input.versionId, chapter: { project: { userId: ctx.user.id } } },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Version not found' });
+
+      const chapter = await ctx.prisma.storyChapter.findFirst({ where: { id: target.chapterId } });
+      if (!chapter) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story chapter not found' });
+
+      // Snapshot the CURRENT state so the restore itself can be undone.
+      await snapshotChapterVersion(ctx.prisma, {
+        chapterId: chapter.id,
+        title: chapter.title,
+        summary: chapter.summary,
+        body: chapter.body,
+        createdByUserId: ctx.user.id,
+        source: 'MANUAL',
+        sourceMetadata: { restoredFromVersion: target.versionNumber },
+      });
+
+      const updated = await ctx.prisma.storyChapter.update({
+        where: { id: chapter.id },
+        data: {
+          title: target.title ?? chapter.title,
+          summary: target.summary ?? chapter.summary,
+          body: target.body,
+          enhancedBody: null,
+        },
+      });
+      return updated;
+    }),
+
+  // ── Phase 2 (R16-03) — character reference assets + approval ────────────────
+
+  /** Generate a canonical character reference portrait. Does NOT auto-approve. */
+  generateCharacterReference: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      const prompt = characterReferencePrompt(character);
+      const negativePrompt = 'multiple people, crowd, text, watermark, extra limbs, deformed hands, scene background';
+
+      // The row is the idempotency target — create it (PENDING) BEFORE charging/submitting.
+      const refAsset = await ctx.prisma.characterReferenceAsset.create({
+        data: {
+          characterId: character.id,
+          projectId: character.projectId,
+          status: 'PENDING',
+          prompt,
+          negativePrompt,
+          providerModel: 'FLUX2',
+          isLatest: false,
+        },
+      });
+      await ctx.prisma.characterReferenceAsset.update({ where: { id: refAsset.id }, data: { status: 'GENERATING' } });
+
+      const featureKey = MODEL_FEATURE_KEY['FLUX2' as SupportedModel];
+      let creditsUsed = 0;
+      try {
+        if (featureKey) {
+          creditsUsed = await deductCredits(
+            ctx.prisma,
+            ctx.user.id,
+            featureKey,
+            `character-reference-${refAsset.id}`,
+            `Character reference: ${character.name}`,
+            creditKeys.sceneImage.charge(refAsset.id),
+          );
+        }
+
+        let providerOutputUrl: string;
+        if (!process.env.FAL_KEY && process.env.NODE_ENV !== 'production') {
+          providerOutputUrl = devSceneSvgDataUrl(character.name, character.name);
+        } else {
+          const submitted = await submitGenerationJob({ model: 'FLUX2' as SupportedModel, prompt, negativePrompt, aspectRatio: '1:1' });
+          providerOutputUrl = await waitForGenerationOutput('FLUX2' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
+        }
+
+        const r2Key = `story-projects/${character.projectId}/characters/${character.id}/reference-${refAsset.id}.png`;
+        const assetUrl = providerOutputUrl.startsWith('data:')
+          ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'image/png')) ?? providerOutputUrl
+          : await mirrorUrlToR2(providerOutputUrl, r2Key, 'image/png');
+
+        return await ctx.prisma.$transaction(async (tx: any) => {
+          await tx.characterReferenceAsset.updateMany({ where: { characterId: character.id }, data: { isLatest: false } });
+          return tx.characterReferenceAsset.update({
+            where: { id: refAsset.id },
+            data: { status: 'READY', assetUrl, isLatest: true, errorMessage: null },
+          });
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Reference generation failed';
+        await ctx.prisma.characterReferenceAsset.update({ where: { id: refAsset.id }, data: { status: 'FAILED', errorMessage: message.slice(0, 500) } }).catch(() => {});
+        if (creditsUsed > 0 && featureKey) {
+          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, `character-reference-${refAsset.id}`, 'Refund: character reference failed', creditKeys.sceneImage.refund(refAsset.id)).catch(() => {});
+        }
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+      }
+    }),
+
+  /** Approve a canonical reference. Owner-only; idempotent on repeat. */
+  approveCharacterReference: protectedProcedure
+    .input(z.object({ characterId: z.string(), assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true, projectId: true, approvedReferenceAssetId: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      if (character.approvedReferenceAssetId === input.assetId) {
+        return ctx.prisma.storyCharacterMemory.findUnique({
+          where: { id: character.id },
+          select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+        });
+      }
+
+      const asset = await ctx.prisma.characterReferenceAsset.findFirst({
+        where: { id: input.assetId, characterId: character.id, projectId: character.projectId, status: 'READY' },
+        select: { id: true },
+      });
+      if (!asset) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That reference does not belong to this character.' });
+
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { approvedReferenceAssetId: asset.id, approvedAt: new Date() },
+        select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+      });
+    }),
+
+  /** Revoke a character's approved reference. Owner-only; idempotent. */
+  revokeCharacterApproval: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { approvedReferenceAssetId: null, approvedAt: null },
+        select: { id: true, approvedReferenceAssetId: true, approvedAt: true },
+      });
+    }),
+
+  /** Reference history for a character (newest first). No raw prompt returned. */
+  listCharacterReferences: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true, approvedReferenceAssetId: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+
+      const rows = await ctx.prisma.characterReferenceAsset.findMany({
+        where: { characterId: character.id },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, assetUrl: true, isLatest: true, providerModel: true, createdAt: true },
+      });
+      return {
+        approvedReferenceAssetId: character.approvedReferenceAssetId,
+        references: rows.map((r) => ({ ...r, isApproved: r.id === character.approvedReferenceAssetId })),
+      };
+    }),
+
+  // ── Phase 2 (R16-04) — batch scene generation ──────────────────────────────
+
+  startBatchGeneration: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneIds: z.array(z.string()).min(1), costCapCredits: z.number().int().positive().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const deps = await batchDepsFor(ctx);
+      const run = await createBatchRun(
+        ctx.prisma,
+        { projectId: input.projectId, userId: ctx.user.id, sceneIds: input.sceneIds, costCapCredits: input.costCapCredits },
+        deps,
+      );
+      const started = await ctx.prisma.batchGenerationRun.update({ where: { id: run.id }, data: { status: 'RUNNING' } });
+      // Fire-and-forget, mirroring runSceneShotClipChain (story.ts:386 kicked void at :5379).
+      void runBatch(ctx.prisma, run.id, deps);
+      return started;
+    }),
+
+  getBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      const items = await ctx.prisma.batchGenerationItem.findMany({ where: { runId: run.id }, orderBy: { createdAt: 'asc' } });
+      return { run, items };
+    }),
+
+  listBatchRuns: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      return ctx.prisma.batchGenerationRun.findMany({ where: { projectId: input.projectId }, orderBy: { createdAt: 'desc' }, take: 20 });
+    }),
+
+  cancelBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id }, select: { id: true } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      // Cancelled: no NEW items start; in-flight items finish (the worker re-reads status).
+      return ctx.prisma.batchGenerationRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', finishedAt: new Date() } });
+    }),
+
+  retryFailedItems: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+
+      await ctx.prisma.batchGenerationItem.updateMany({
+        where: { runId: run.id, status: 'FAILED' },
+        data: { status: 'QUEUED', errorMessage: null },
+      });
+      const nextStatus = run.status === 'COMPLETED' || run.status === 'FAILED' ? 'RUNNING' : run.status;
+      const updated = await ctx.prisma.batchGenerationRun.update({
+        where: { id: run.id },
+        data: { status: nextStatus as never, finishedAt: null },
+      });
+      await recoverStuckBatchRuns(ctx.prisma, await batchDepsFor(ctx));
+      if (nextStatus === 'RUNNING') void runBatch(ctx.prisma, run.id, await batchDepsFor(ctx));
+      return updated;
+    }),
+
+  /** R16-04 — plain cost estimate for the batch confirmation dialog. */
+  batchEstimate: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneIds: z.array(z.string()).min(1) }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+      const deps = await batchDepsFor(ctx);
+      return { sceneCount: input.sceneIds.length, perItemCost: deps.perItemCost, estimated: input.sceneIds.length * deps.perItemCost };
+    }),
+
+  resumeBatchRun: protectedProcedure
+    .input(z.object({ runId: z.string(), costCapCredits: z.number().int().positive().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const run = await ctx.prisma.batchGenerationRun.findFirst({ where: { id: input.runId, createdByUserId: ctx.user.id } });
+      if (!run) throw new TRPCError({ code: 'NOT_FOUND', message: 'Batch not found' });
+      if (run.status !== 'PAUSED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a paused batch can be resumed.' });
+
+      const effectiveCap = input.costCapCredits ?? run.costCapCredits;
+      if (effectiveCap <= run.costUsedCredits) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `The limit (${effectiveCap}) must be higher than what has already been used (${run.costUsedCredits}).`,
+        });
+      }
+
+      const deps = await batchDepsFor(ctx);
+      const updated = await ctx.prisma.batchGenerationRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'RUNNING',
+          pauseReason: null,
+          ...(input.costCapCredits ? { costCapCredits: input.costCapCredits } : {}),
+        },
+      });
+      void runBatch(ctx.prisma, run.id, deps);
+      return updated;
+    }),
+
+  // ── Phase 4b — share links (R16-only, APPROVED-only) ───────────────────────
+
+  createShareLink: protectedProcedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+        select: { id: true, moderationStatus: true, isPublic: true, withdrawnAt: true, status: true, isKidsSafe: true },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      // Sharing is R16/KIDS content only (the video's audience), APPROVED + public + live.
+      if (
+        !video.isKidsSafe ||
+        video.status !== 'READY' ||
+        video.moderationStatus !== 'APPROVED' ||
+        !video.isPublic ||
+        video.withdrawnAt
+      ) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This video is not ready to share yet.' });
+      }
+
+      // Idempotent per (videoId, sharerId): reuse an existing non-revoked link.
+      const existing = await ctx.prisma.shareLink.findFirst({ where: { videoId: video.id, sharerId: ctx.user.id, revokedAt: null } });
+      const link = existing ?? (await ctx.prisma.shareLink.create({ data: { videoId: video.id, sharerId: ctx.user.id, token: newShareToken() } }));
+      return { token: link.token, url: shareUrlFor(link.token) };
+    }),
+
+  revokeShareLink: protectedProcedure
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const link = await ctx.prisma.shareLink.findFirst({ where: { token: input.token, sharerId: ctx.user.id }, select: { id: true, revokedAt: true } });
+      if (!link) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link not found.' });
+      if (!link.revokedAt) await ctx.prisma.shareLink.update({ where: { id: link.id }, data: { revokedAt: new Date() } });
+      return { revoked: true };
+    }),
+
+  listMyShareLinks: protectedProcedure
+    .input(z.object({ videoId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const links = await ctx.prisma.shareLink.findMany({
+        where: { sharerId: ctx.user.id, ...(input.videoId ? { videoId: input.videoId } : {}) },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      });
+      return links.map((l: any) => ({ token: l.token, videoId: l.videoId, createdAt: l.createdAt, revokedAt: l.revokedAt }));
+    }),
+
+  /** Public resolution. Records a per-click attribution (no IP); exposes only the OWNER handle. */
+  resolveShareLink: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const link = await ctx.prisma.shareLink.findUnique({ where: { token: input.token } });
+      if (!link || link.revokedAt) throw shareNotFound();
+
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: link.videoId, status: 'READY', isPublic: true, withdrawnAt: null, moderationStatus: 'APPROVED' },
+        include: { creator: { select: { username: true, displayName: true, avatarUrl: true } } },
+      });
+      if (!video) throw shareNotFound();
+
+      // Per-click attribution: identified for signed-in viewers, anonymous otherwise. No IP.
+      await ctx.prisma.shareAttribution.create({ data: { shareLinkId: link.id, viewerUserId: ctx.user?.id ?? null } });
+
+      return {
+        video: {
+          id: video.id,
+          title: video.title,
+          description: video.description,
+          thumbnailUrl: video.thumbnailUrl,
+          mp4Url: video.mp4Url,
+          hlsMasterUrl: video.hlsMasterUrl,
+          duration: video.duration,
+          creator: video.creator,
+        },
+        shareToken: link.token,
+        creatorHandle: video.creator.username,
+      };
     }),
 
   updateSceneDirector: protectedProcedure
@@ -5729,6 +6270,7 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
       const preset = STYLE_PRESETS[input.preset];
+      assertR16VisualStyle(project.audienceMode as StoryAudienceMode, preset.visualStyle);
       await (ctx.prisma as any).storyProject.update({
         where: { id: input.projectId },
         data: { visualStyle: preset.visualStyle },
@@ -6110,7 +6652,7 @@ export const storyRouter = router({
 
       if (renderContext.creditCost > 0) {
         try {
-          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render');
+          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render', creditKeys.movieRender.charge(job.id));
           await (ctx.prisma as any).movieRenderJob.update({
             where: { id: job.id },
             data: { creditsCharged: charged },
@@ -6220,7 +6762,7 @@ export const storyRouter = router({
         include: { movieAsset: true, events: { orderBy: { createdAt: 'desc' }, take: 20 } },
       });
       if (job.creditsCharged > 0) {
-        await refundCredits(ctx.prisma, ctx.user.id, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render cancelled');
+        await refundCredits(ctx.prisma, ctx.user.id, job.creditsCharged, MOVIE_RENDER_FEATURE_KEY, job.id, 'Movie render cancelled', creditKeys.movieRender.refund(job.id));
         await (ctx.prisma as any).movieRenderJob.update({ where: { id: job.id }, data: { creditsReserved: 0, creditsCharged: 0 } });
       }
       return updated;
@@ -6986,6 +7528,7 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
       const { projectId, ...data } = input;
+      if (data.visualStyle) assertR16VisualStyle(project.audienceMode as StoryAudienceMode, normaliseStoryVisualStyle(data.visualStyle));
       const updateData = {
         ...data,
         visualStyle: data.visualStyle ? normaliseStoryVisualStyle(data.visualStyle) : data.visualStyle,
@@ -7523,7 +8066,7 @@ export const storyRouter = router({
       if (!rate.configured) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
       }
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Educational narration');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Educational narration', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId));
       try {
         const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
         const audio = await synthesizeSpeech({ text: narrationText, voiceId, modelId: input.modelId });
@@ -7553,7 +8096,7 @@ export const storyRouter = router({
         });
         return { audioUrl: publicUrl, narration: narrationText };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
       }
     }),
@@ -7625,7 +8168,7 @@ export const storyRouter = router({
       if (!rate.configured) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
       }
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Story narration');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Story narration', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId));
       try {
         const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
         const audio = await synthesizeSpeech({ text: narrationScript, voiceId, modelId: input.modelId });
@@ -7655,7 +8198,7 @@ export const storyRouter = router({
         });
         return { audioUrl: publicUrl, narrationScript };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: story narration failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: story narration failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
       }
     }),
@@ -7671,6 +8214,14 @@ export const storyRouter = router({
   generateStoryMusic: r16Procedure
     .input(z.object({
       projectId: z.string(),
+      /**
+       * Client-supplied idempotency id for this generation attempt. Regenerated
+       * when the user starts a NEW attempt; reused unchanged across retries of the
+       * SAME attempt. Keys the background-music charge (and its refund) so a retry
+       * never double-charges while a genuinely new attempt is still charged.
+       * Mirrors the director/adminAdjust client-id convention in creditKeys.
+       */
+      idempotencyId: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
       const project = await ctx.prisma.storyProject.findFirst({
@@ -7700,7 +8251,7 @@ export const storyRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Music prompt violates content guidelines.') });
       }
 
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Story background music');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Story background music', creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.idempotencyId));
       try {
         const { audio, mimeType } = await generateLyriaMusic({ prompt });
         const ext = mimeType === 'audio/mp3' ? 'mp3' : 'mp3';
@@ -7718,7 +8269,7 @@ export const storyRouter = router({
         });
         return { backgroundMusicUrl: publicUrl, reused: false };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Refund: story background music failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Refund: story background music failed', creditKeys.music.refund(STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.idempotencyId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Background music generation failed' });
       }
     }),
@@ -7765,7 +8316,7 @@ export const storyRouter = router({
         });
       }
 
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Music generation');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Music generation', creditKeys.music.charge(STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id));
 
       try {
         const { audio, mimeType } = await generateLyriaMusic({ prompt, modelId: input.modelId });
@@ -7798,7 +8349,7 @@ export const storyRouter = router({
         });
         return { cue: updatedCue, asset };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Refund: music generation failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id, 'Refund: music generation failed', creditKeys.music.refund(STORY_AUDIO_GENERATION_FEATURE_KEY, cue.id)).catch(() => {});
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: error instanceof Error ? error.message : 'Music generation failed',

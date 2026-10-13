@@ -30,6 +30,14 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    // Structured insufficient-credit payload (R16-01). Carried on the error
+    // `cause` by `insufficientCreditsError` and projected to the client as
+    // `data.credit` — never merged into the human message.
+    const cause = error.cause as { credit?: unknown } | undefined;
+    const credit =
+      cause && typeof cause === 'object' && cause.credit && typeof cause.credit === 'object'
+        ? (cause.credit as { required: number; balance: number; shortfall: number; featureKey: string })
+        : null;
     return {
       ...shape,
       // Strip stack traces and internal messages in production (security: #9 on checklist)
@@ -41,6 +49,7 @@ const t = initTRPC.context<Context>().create({
         // Never expose stack traces to the client in production
         stack: IS_PROD ? undefined : shape.data?.stack,
         zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        ...(credit ? { credit } : {}),
       },
     };
   },

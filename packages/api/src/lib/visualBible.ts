@@ -46,6 +46,12 @@ export function applyMasterVisualBible(input: {
   bible?: VisualBibleSource;
   /** Character names depicted in this scene — only these anchors are injected. */
   sceneCharacters?: string[];
+  /**
+   * R16-03 — approved canonical reference anchors (character name → note). Only
+   * characters the scene depicts are injected; unapproved characters are never
+   * passed here (the caller warns instead).
+   */
+  approvedReferences?: Record<string, string>;
   target: 'IMAGE' | 'VIDEO';
 }): { prompt: string; negativePrompt: string | null } {
   const { prompt, target } = input;
@@ -74,6 +80,18 @@ export function applyMasterVisualBible(input: {
     if (sceneNames.length > 0 && !sceneNames.includes(nameKey)) continue;
     if (containsIgnoreCase(outPrompt, description)) continue;
     outPrompt = `${outPrompt}. Character ${key.trim()}: ${description}`;
+  }
+
+  // 2b. Approved canonical references (R16-03) — only for characters the scene depicts.
+  const approvedReferences = input.approvedReferences ?? {};
+  for (const [name, note] of Object.entries(approvedReferences)) {
+    const nameKey = name.trim().toUpperCase().replace(/\s+/g, '_');
+    const anchor = (note ?? '').trim();
+    if (!anchor) continue;
+    if (sceneNames.length > 0 && !sceneNames.includes(nameKey)) continue;
+    const line = `Approved reference for ${name.trim()}: ${anchor}`;
+    if (containsIgnoreCase(outPrompt, line)) continue;
+    outPrompt = `${outPrompt}. ${line}`;
   }
 
   // 3. Negative suffix.

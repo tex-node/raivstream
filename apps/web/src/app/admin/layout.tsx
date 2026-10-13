@@ -20,6 +20,7 @@ const NAV = [
   { href: '/admin/fal-refunds',        label: 'FAL Refunds',        icon: 'R' },
   { href: '/admin/academy',            label: 'Academy',            icon: 'L' },
   { href: '/admin/revenue',            label: 'Revenue',            icon: '💳' },
+  { href: '/admin/usage',              label: 'Usage & Ledger',     icon: 'Σ' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

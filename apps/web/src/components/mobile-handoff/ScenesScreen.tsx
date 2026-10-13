@@ -9,6 +9,7 @@ import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
 import { useTrackTab } from './useTrackTab';
 import { useState } from 'react';
+import { batchRunIsActive, canStartBatch, defaultResumeCap, summarizeBatch } from '@/lib/batchGenerationUi';
 
 /**
  * Scenes list — design_handoff_raivstream_mobile, screen 6 of 8.
@@ -64,6 +65,32 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   const generateEducationalNarration = trpc.story.generateEducationalNarration.useMutation();
   const [narrationBusy, setNarrationBusy] = useState(false);
 
+  // R16-04 — batch generation ("make all pictures").
+  const sceneIds = scenes.map((s: any) => s.id);
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchCap, setBatchCap] = useState('10000');
+  const [batchRunId, setBatchRunId] = useState<string | null>(null);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [resumeCap, setResumeCap] = useState('');
+  const batchEstimate = trpc.story.batchEstimate.useQuery({ projectId, sceneIds }, { enabled: showBatchDialog && sceneIds.length > 0 });
+  const batchRun = trpc.story.getBatchRun.useQuery({ runId: batchRunId ?? '' }, { enabled: Boolean(batchRunId), refetchInterval: 3000 });
+  const startBatch = trpc.story.startBatchGeneration.useMutation();
+  const cancelBatch = trpc.story.cancelBatchRun.useMutation({ onSuccess: () => utils.story.getBatchRun.invalidate() });
+  const retryBatch = trpc.story.retryFailedItems.useMutation({ onSuccess: () => utils.story.getBatchRun.invalidate() });
+  const resumeBatch = trpc.story.resumeBatchRun.useMutation({ onSuccess: () => { setResumeOpen(false); utils.story.getBatchRun.invalidate(); } });
+
+  const batchData: any = batchRun.data;
+  const estimated = batchEstimate.data?.estimated ?? 0;
+  const perItemCost = batchEstimate.data?.perItemCost ?? 0;
+  const startOk = canStartBatch(estimated, Number(batchCap) || 0);
+  const summary = summarizeBatch((batchData?.items ?? []) as any);
+
+  async function doStartBatch() {
+    const run: any = await startBatch.mutateAsync({ projectId, sceneIds, costCapCredits: Number(batchCap) || undefined });
+    setBatchRunId(run?.id ?? null);
+    setShowBatchDialog(false);
+  }
+
   const runNarration = async () => {
     setNarrationBusy(true);
     try {
@@ -93,6 +120,9 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={runNarration} disabled={narrationBusy || scenes.length === 0} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '10px 14px' }}>
               {narrationBusy ? 'Generating narration…' : 'Generate narration'}
+            </button>
+            <button type="button" onClick={() => setShowBatchDialog(true)} disabled={scenes.length === 0} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '10px 14px' }}>
+              Make all pictures
             </button>
             <button type="button" onClick={() => addScene.mutate({ projectId })} disabled={addScene.isPending} className="noc-btn-primary" style={{ fontSize: 12.5, padding: '10px 14px' }}>
               {addScene.isPending ? 'Adding…' : '+ Add Scene'}
@@ -159,6 +189,72 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
               </Link>
             );
           })
+        )}
+        {showBatchDialog && (
+          <div style={{ gridColumn: '1 / -1', borderRadius: 16, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.04)', padding: 14 }}>
+            <span className="noc-label">Make all pictures</span>
+            <p style={{ fontSize: 13.5, color: 'var(--noc-t2)', marginTop: 8 }}>
+              {batchEstimate.isLoading ? 'Working out the cost…' : `${sceneIds.length} picture${sceneIds.length === 1 ? '' : 's'} · about ${estimated} credits.`}
+            </p>
+            <label style={{ display: 'block', fontSize: 12.5, color: 'var(--noc-t5)', marginTop: 8 }}>
+              Credit limit
+              <input value={batchCap} onChange={(e) => setBatchCap(e.target.value)} inputMode="numeric" style={{ marginLeft: 8, width: 110, borderRadius: 8, border: '1px solid rgba(233,233,237,0.16)', background: 'rgba(0,0,0,0.2)', color: 'var(--noc-t1)', padding: '6px 8px', fontSize: 13 }} />
+            </label>
+            {!startOk && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>That is more than the limit — raise it to continue.</p>}
+            {startBatch.error && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{startBatch.error.message}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button type="button" disabled={!startOk || startBatch.isPending} onClick={doStartBatch} className="noc-btn-primary" style={{ fontSize: 12.5, padding: '10px 14px' }}>
+                {startBatch.isPending ? 'Starting…' : 'Start'}
+              </button>
+              <button type="button" onClick={() => setShowBatchDialog(false)} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '10px 14px' }}>Not now</button>
+            </div>
+          </div>
+        )}
+
+        {batchRunId && batchData && batchRunIsActive(batchData.run.status) && (
+          <div style={{ gridColumn: '1 / -1', borderRadius: 16, border: '1px solid rgba(79,139,214,0.3)', background: 'rgba(79,139,214,0.08)', padding: 14 }}>
+            <span className="noc-label">{batchData.run.status === 'PAUSED' ? 'Paused' : 'Making your pictures…'}</span>
+            <p style={{ fontSize: 13.5, color: 'var(--noc-t1)', marginTop: 8 }}>
+              {summary.done} of {summary.total} done{summary.failed ? ` · ${summary.failed} did not work` : ''}.
+            </p>
+            <p style={{ fontSize: 12.5, color: 'var(--noc-t5)' }}>{batchData.run.costUsedCredits} of {batchData.run.costCapCredits} credits used.</p>
+            {batchData.run.status === 'PAUSED' && (
+              <p style={{ fontSize: 12.5, color: '#e3b25d' }}>We reached the credit limit for this run.</p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+              {(batchData.items ?? []).map((it: any, idx: number) => (
+                <span key={it.id} style={{ fontSize: 12, color: 'var(--noc-t5)' }}>
+                  Picture {idx + 1}: {it.status === 'READY' ? 'done' : it.status === 'FAILED' ? 'did not work' : it.status === 'RUNNING' ? 'working…' : 'waiting'}
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              {summary.failed > 0 && (
+                <button type="button" onClick={() => retryBatch.mutate({ runId: batchRunId })} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '9px 13px' }}>Try the failed ones again</button>
+              )}
+              {(batchData.run.status === 'RUNNING' || batchData.run.status === 'PAUSED') && (
+                <button type="button" onClick={() => cancelBatch.mutate({ runId: batchRunId })} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '9px 13px' }}>Stop</button>
+              )}
+              {batchData.run.status === 'PAUSED' && !resumeOpen && (
+                <button type="button" onClick={() => { setResumeCap(String(defaultResumeCap(batchData.run.costUsedCredits, perItemCost || 80))); setResumeOpen(true); }} className="noc-btn-primary" style={{ fontSize: 12.5, padding: '9px 13px' }}>Keep going</button>
+              )}
+            </div>
+            {resumeOpen && (
+              <div style={{ marginTop: 10 }}>
+                <label style={{ fontSize: 12.5, color: 'var(--noc-t5)' }}>
+                  New credit limit
+                  <input value={resumeCap} onChange={(e) => setResumeCap(e.target.value)} inputMode="numeric" style={{ marginLeft: 8, width: 110, borderRadius: 8, border: '1px solid rgba(233,233,237,0.16)', background: 'rgba(0,0,0,0.2)', color: 'var(--noc-t1)', padding: '6px 8px', fontSize: 13 }} />
+                </label>
+                {resumeBatch.error && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{resumeBatch.error.message}</p>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button type="button" disabled={resumeBatch.isPending} onClick={() => resumeBatch.mutate({ runId: batchRunId, costCapCredits: Number(resumeCap) || undefined })} className="noc-btn-primary" style={{ fontSize: 12.5, padding: '9px 13px' }}>
+                    {resumeBatch.isPending ? 'Starting…' : 'Keep going'}
+                  </button>
+                  <button type="button" onClick={() => setResumeOpen(false)} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '9px 13px' }}>Not now</button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </Shell>

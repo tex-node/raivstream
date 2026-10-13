@@ -10,6 +10,7 @@ import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
+import { VISUAL_STYLE_OPTIONS, R16_STYLE_VALUES, stylesForAudience, type VisualStyleOption, type VisualStyleValue } from '@/lib/storyVisualStyleOptions';
 
 type PlaygroundStep = 'spark' | 'questions' | 'story';
 
@@ -174,13 +175,6 @@ const EDUCATIONAL_EXAMPLES = [
   "What are stars made of?",
 ];
 
-type VisualStyleOption = {
-  value: VisualStyleValue;
-  label: string;
-  r16Label: string;
-  description: string;
-};
-
 type DirectorSettingValue =
   | 'HAPPY'
   | 'EXCITED'
@@ -217,31 +211,6 @@ type DirectorSettingValue =
   | 'MOONLIGHT'
   | 'NORMAL'
   | 'ENERGETIC';
-
-type VisualStyleValue =
-  | 'STORYBOOK_ILLUSTRATION'
-  | 'THREE_D_ANIMATED'
-  | 'ANIME'
-  | 'COMIC_BOOK'
-  | 'PHOTOREALISTIC'
-  | 'WATERCOLOR'
-  | 'CLAYMATION'
-  | 'CINEMATIC_FANTASY'
-  | 'AFRICAN_FOLKTALE_ILLUSTRATION';
-
-const VISUAL_STYLE_OPTIONS: VisualStyleOption[] = [
-  { value: 'STORYBOOK_ILLUSTRATION', label: 'Storybook Illustration', r16Label: 'Storybook', description: 'Soft colors and warm picture-book charm.' },
-  { value: 'THREE_D_ANIMATED', label: '3D Animated', r16Label: '3D Cartoon', description: 'Polished family-film look with expressive characters.' },
-  { value: 'ANIME', label: 'Anime', r16Label: 'Anime', description: 'Clean animated frames with colorful backgrounds.' },
-  { value: 'COMIC_BOOK', label: 'Comic Book', r16Label: 'Comic', description: 'Bright line art and panel-ready action.' },
-  { value: 'PHOTOREALISTIC', label: 'Photorealistic', r16Label: 'Realistic', description: 'Cinematic realism and natural lighting.' },
-  { value: 'WATERCOLOR', label: 'Watercolor', r16Label: 'Watercolor', description: 'Gentle painted texture and soft washes.' },
-  { value: 'CLAYMATION', label: 'Claymation', r16Label: 'Clay', description: 'Handmade sculpted character style.' },
-  { value: 'CINEMATIC_FANTASY', label: 'Cinematic Fantasy', r16Label: 'Fantasy', description: 'Rich magical scenes with safe wonder.' },
-  { value: 'AFRICAN_FOLKTALE_ILLUSTRATION', label: 'African Folktale Illustration', r16Label: 'Folktale', description: 'Rich colors, patterned textiles, handcrafted feel.' },
-];
-
-const R16_STYLE_VALUES = new Set(['STORYBOOK_ILLUSTRATION', 'THREE_D_ANIMATED', 'ANIME', 'COMIC_BOOK', 'WATERCOLOR']);
 
 type DirectorSettingKey = 'emotion' | 'cameraStyle' | 'timeOfDay' | 'weather' | 'environmentMood' | 'lighting' | 'scenePace';
 
@@ -380,6 +349,12 @@ export default function StoryPlaygroundPage() {
   const [step, setStep] = useState<PlaygroundStep>('spark');
   const [idea, setIdea] = useState('');
   const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyleValue>('STORYBOOK_ILLUSTRATION');
+
+  // R16 offers only the restricted styles; keep the selection in-allowlist (the
+  // default is Storybook for the main app, Cartoon for R16).
+  useEffect(() => {
+    if (isR16 && !R16_STYLE_VALUES.has(selectedVisualStyle)) setSelectedVisualStyle('CARTOON');
+  }, [isR16, selectedVisualStyle]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -746,7 +721,7 @@ export default function StoryPlaygroundPage() {
     });
   };
 
-  const visibleStyleOptions = isR16 ? VISUAL_STYLE_OPTIONS.filter((option) => R16_STYLE_VALUES.has(option.value)) : VISUAL_STYLE_OPTIONS;
+  const visibleStyleOptions = stylesForAudience(isR16);
 
   const chooseVisualStyle = (value: VisualStyleValue) => {
     setSelectedVisualStyle(value);

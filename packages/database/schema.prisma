@@ -483,6 +483,11 @@ model Video {
   contentRating     String?          // "G" | "PG" | "PG-13" | "R"
   moderationStatus  ModerationStatus @default(PENDING)
 
+  // Publication lifecycle (Phase 4a, R16-only)
+  submittedForPublicationAt DateTime?  // set by the creator on submit; null = never submitted
+  moderationReason          String?    // latest reject/flag reason (mirrors ModerationLog for fast reads)
+  withdrawnAt               DateTime?  // set on creator withdrawal; null = live
+
   // Relations
   interactions      VideoInteraction[]
   watchHistory      WatchHistory[]
@@ -733,6 +738,10 @@ model CreditTransaction {
   featureKey  String?      // which feature was used (populated on USAGE)
   description String?
   referenceId String?      // payment ref, generation job ID, etc.
+  // Optional idempotency anchor. When set, a logical operation (a single charge
+  // or refund) can be replayed safely: the unique key prevents a duplicate
+  // balance mutation + ledger row. Null for legacy rows and non-idempotent ops.
+  idempotencyKey String?   @unique
 
   balanceBefore Int
   balanceAfter  Int
@@ -742,6 +751,7 @@ model CreditTransaction {
   @@index([userId])
   @@index([userId, createdAt])
   @@index([type])
+  @@index([featureKey, createdAt])
   @@map("credit_transactions")
 }
 
@@ -1221,6 +1231,7 @@ model StoryChapter {
   educationalContract  Json?
 
   sceneSeeds       StorySceneSeed[]
+  versions         StoryChapterVersion[]
 
   createdAt        DateTime     @default(now())
 
@@ -1228,6 +1239,26 @@ model StoryChapter {
   @@index([projectId])
   @@index([projectId, chapterNumber])
   @@map("story_chapters")
+}
+
+model StoryChapterVersion {
+  id              String       @id @default(cuid())
+  chapterId       String
+  chapter         StoryChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  versionNumber   Int
+  title           String?
+  summary         String?
+  body            String
+  createdByUserId String
+  source          String       // 'EDIT' | 'REWRITE_PARAGRAPH' | 'REGENERATE' | 'MANUAL'
+  sourceMetadata  Json?
+
+  createdAt       DateTime     @default(now())
+
+  @@unique([chapterId, versionNumber])
+  @@index([chapterId, createdAt])
+  @@map("story_chapter_versions")
 }
 
 model StoryCharacterMemory {
@@ -1255,8 +1286,13 @@ model StoryCharacterMemory {
   evolutionSceneOrder Int?
   directorChangedAt DateTime?
 
+  // R16-03 — approved canonical reference (points at one CharacterReferenceAsset).
+  approvedReferenceAssetId String?
+  approvedAt               DateTime?
+
   voiceProfiles     VoiceProfile[]
   audioCues         AudioCue[]
+  referenceAssets   CharacterReferenceAsset[]
 
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
@@ -1264,6 +1300,131 @@ model StoryCharacterMemory {
   @@index([projectId])
   @@index([projectId, name])
   @@map("story_character_memory")
+}
+
+enum CharacterReferenceStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model CharacterReferenceAsset {
+  id              String                   @id @default(cuid())
+  characterId     String
+  character       StoryCharacterMemory     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  projectId       String
+
+  status          CharacterReferenceStatus @default(PENDING)
+  assetUrl        String?
+  prompt          String
+  negativePrompt  String?
+  providerModel   String                   @default("FLUX2")
+  generationJobId String?
+  errorMessage    String?
+  isLatest        Boolean                  @default(false)
+
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([characterId, isLatest])
+  @@index([projectId, status])
+  @@map("character_reference_assets")
+}
+
+enum BatchGenerationRunStatus {
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BatchGenerationItemStatus {
+  QUEUED
+  RUNNING
+  READY
+  FAILED
+  SKIPPED
+}
+
+model BatchGenerationRun {
+  id              String                   @id @default(cuid())
+  projectId       String
+  status          BatchGenerationRunStatus @default(QUEUED)
+  concurrency     Int                      @default(2)
+  costCapCredits  Int                      @default(10000)
+  costUsedCredits Int                      @default(0)
+  sceneIds        Json
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  lastHeartbeatAt DateTime?
+  pauseReason     String?
+  createdByUserId String
+  createdAt       DateTime                 @default(now())
+
+  items           BatchGenerationItem[]
+
+  @@index([projectId, status])
+  @@map("batch_generation_runs")
+}
+
+model BatchGenerationItem {
+  id           String                    @id @default(cuid())
+  runId        String
+  run          BatchGenerationRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sceneId      String
+  status       BatchGenerationItemStatus @default(QUEUED)
+  assetId      String?
+  errorMessage String?
+  creditsUsed  Int                       @default(0)
+  attemptCount Int                       @default(0)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([runId, sceneId])
+  @@index([runId, status])
+  @@map("batch_generation_items")
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  videoId   String
+  sharerId  String
+  token     String    @unique
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  attributions ShareAttribution[]
+  dailyCounts  ShareLinkDailyCount[]
+
+  @@index([videoId])
+  @@index([sharerId])
+  @@map("share_links")
+}
+
+model ShareAttribution {
+  id           String    @id @default(cuid())
+  shareLinkId  String
+  shareLink    ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  viewerUserId String?
+  createdAt    DateTime  @default(now())
+  // NO IP field — deliberate. The absence is a compliance invariant (design §8).
+
+  @@index([shareLinkId, createdAt])
+  @@map("share_attributions")
+}
+
+model ShareLinkDailyCount {
+  id          String    @id @default(cuid())
+  shareLinkId String
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  day         DateTime  @db.Date
+  count       Int
+
+  @@unique([shareLinkId, day])
+  @@map("share_link_daily_counts")
 }
 
 model StorySceneSeed {

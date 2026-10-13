@@ -51,6 +51,7 @@ export function StoryScreen({ projectId }: { projectId: string }) {
     },
   });
   const [editingStory, setEditingStory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [suggestionRequested, setSuggestionRequested] = useState(false);
@@ -167,6 +168,14 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                   style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
                 >
                   {continueStory.isPending ? 'Adding…' : '+ Add Chapter'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                  className="noc-btn-outline"
+                  style={{ fontSize: 12.5, padding: '9px 13px', whiteSpace: 'nowrap' }}
+                >
+                  {isR16 ? 'History' : 'Version history'}
                 </button>
               </div>
             </div>
@@ -338,9 +347,108 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 );
               })}
             </div>
+
+            {showHistory && (
+              <ChapterHistoryPanel projectId={projectId} chapterId={latestChapter.id} isR16={isR16} />
+            )}
           </>
         )}
       </div>
     </Shell>
+  );
+}
+
+/**
+ * Phase 2 (R16-05) — chapter history. Shows earlier versions (newest first), lets
+ * the writer preview one read-only, then restore it behind a confirm step. R16 copy
+ * is deliberately simple; no technical terms.
+ */
+function ChapterHistoryPanel({ projectId, chapterId, isR16 }: { projectId: string; chapterId: string; isR16: boolean }) {
+  const utils = trpc.useUtils();
+  const list = trpc.story.listChapterVersions.useQuery({ projectId, chapterId });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const preview = trpc.story.getChapterVersion.useQuery({ versionId: selectedId ?? '' }, { enabled: !!selectedId });
+  const restore = trpc.story.restoreChapterVersion.useMutation({
+    onSuccess: () => {
+      setConfirmingId(null);
+      setSelectedId(null);
+      utils.story.invalidate();
+    },
+  });
+
+  const versions = list.data?.versions ?? [];
+  const labelFor = (source: string) =>
+    source === 'REWRITE_PARAGRAPH' ? 'A part was rewritten'
+      : source === 'REGENERATE' ? 'The story was rewritten'
+        : source === 'MANUAL' ? 'A version was restored'
+          : 'The story was edited';
+
+  return (
+    <div style={{ borderRadius: 16, border: '1px solid rgba(233,233,237,0.14)', background: 'rgba(233,233,237,0.04)', padding: 14 }}>
+      <span className="noc-label">{isR16 ? 'Earlier versions' : 'Version history'}</span>
+      {versions.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--noc-t6)', marginTop: 8 }}>
+          {isR16 ? 'No earlier versions yet.' : 'No versions recorded yet.'}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+          {versions.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => { setSelectedId(v.id); setConfirmingId(null); }}
+              style={{
+                textAlign: 'left',
+                borderRadius: 10,
+                border: `1px solid ${selectedId === v.id ? 'rgba(178,90,217,0.5)' : 'rgba(233,233,237,0.12)'}`,
+                background: 'transparent',
+                padding: '9px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--noc-t1)' }}>{labelFor(v.source)}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: 'var(--noc-t6)' }}>{new Date(v.createdAt).toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selectedId && preview.data && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ maxHeight: 260, overflowY: 'auto', borderRadius: 10, border: '1px solid rgba(233,233,237,0.12)', background: 'rgba(0,0,0,0.15)', padding: 12 }}>
+            <p style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--noc-t2)', margin: 0 }}>{preview.data.body}</p>
+          </div>
+          {confirmingId === selectedId ? (
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                disabled={restore.isPending}
+                onClick={() => restore.mutate({ versionId: selectedId })}
+                style={{ flex: 1, borderRadius: 10, border: 'none', background: 'var(--noc-purple)', padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0B0D12', cursor: restore.isPending ? 'default' : 'pointer', opacity: restore.isPending ? 0.6 : 1 }}
+              >
+                {restore.isPending ? 'One moment…' : (isR16 ? 'Yes, use this one' : 'Confirm restore')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingId(null)}
+                style={{ borderRadius: 10, border: '1px solid rgba(233,233,237,0.14)', background: 'transparent', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-t1)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingId(selectedId)}
+              style={{ marginTop: 10, borderRadius: 10, border: '1px solid rgba(178,90,217,0.4)', background: 'rgba(178,90,217,0.08)', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: 'var(--noc-purple)', cursor: 'pointer' }}
+            >
+              {isR16 ? 'Use this version' : 'Restore this version'}
+            </button>
+          )}
+          {restore.error && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{restore.error.message}</p>}
+        </div>
+      )}
+    </div>
   );
 }

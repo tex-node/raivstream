@@ -11,12 +11,12 @@
  *   FeatureCreditRate (set it in /admin/credits). Refunded if the model fails.
  * - Stateless: no schema changes, nothing stored server-side.
  */
-import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { router, creativeProcedure } from '../trpc';
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { deductCredits, getFeatureCreditCost, refundCredits, resolveFeatureCreditRate } from '../lib/credits';
+import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { DIRECTOR_MAX_SCENES, movieDirector } from '../lib/movieDirector';
 
 export const DIRECTOR_FEATURE_KEY = 'director:compose';
@@ -44,6 +44,10 @@ export const directorComposeInput = z.object({
   world: z.string().trim().max(600).optional(),
   revisionNote: z.string().trim().max(500).optional(),
   previousScenes: z.array(z.string().max(6000)).max(DIRECTOR_MAX_SCENES).optional(),
+  // Client-supplied idempotency id, regenerated whenever the form inputs change.
+  // Duplicate submits of unchanged inputs reuse the id and dedupe; edited inputs
+  // get a new id and a new charge. See web `useIdempotencyKey`.
+  idempotencyId: z.string().uuid(),
 });
 
 export const directorRouter = router({
@@ -70,11 +74,11 @@ export const directorRouter = router({
       throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'This scene brief cannot be directed.') });
     }
 
-    const referenceId = `director:${randomUUID()}`;
+    const referenceId = `director:${input.idempotencyId}`;
     const rate = await resolveFeatureCreditRate(ctx.prisma, DIRECTOR_FEATURE_KEY);
     let creditsUsed = 0;
     if (rate.configured) {
-      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, DIRECTOR_FEATURE_KEY, referenceId, `Director: ${input.sceneCount} scene prompt(s)`);
+      creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, DIRECTOR_FEATURE_KEY, referenceId, `Director: ${input.sceneCount} scene prompt(s)`, creditKeys.director.charge(input.idempotencyId));
     }
 
     try {
@@ -82,7 +86,7 @@ export const directorRouter = router({
       return { ...result, creditsUsed };
     } catch (error) {
       if (creditsUsed > 0) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, DIRECTOR_FEATURE_KEY, referenceId, 'Director failed: refund').catch((e) =>
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, DIRECTOR_FEATURE_KEY, referenceId, 'Director failed: refund', creditKeys.director.refund(input.idempotencyId)).catch((e) =>
           console.error('[director] refund failed', referenceId, e),
         );
       }

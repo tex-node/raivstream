@@ -366,6 +366,7 @@ describe('generateNarrationForCue', () => {
 
     expect(mocks.deductCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 'story:speech_generation', CUE_ID, expect.any(String),
+      `narr:charge:story:speech_generation:${CUE_ID}`,
     );
     expect(mocks.synthesizeSpeech).toHaveBeenCalledWith(
       expect.objectContaining({ text: 'Default narration.' }),
@@ -412,6 +413,7 @@ describe('generateNarrationForCue', () => {
     await expect(generateNarrationForCue(prisma, BASE_INPUT)).rejects.toThrow('ElevenLabs 500');
     expect(mocks.refundCredits).toHaveBeenCalledWith(
       prisma, USER_ID, 10, 'story:speech_generation', CUE_ID, expect.any(String),
+      `narr:refund:story:speech_generation:${CUE_ID}`,
     );
   });
 

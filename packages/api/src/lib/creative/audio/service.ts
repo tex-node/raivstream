@@ -22,6 +22,7 @@ import {
   STORY_SPEECH_GENERATION_FEATURE_KEY,
   STORY_AUDIO_GENERATION_FEATURE_KEY,
 } from '../../credits';
+import { creditKeys } from '../../credits/idempotencyKeys';
 import {
   synthesizeSpeech,
   isElevenLabsTtsEnabled,
@@ -329,6 +330,7 @@ export async function generateNarrationForCue(
     STORY_SPEECH_GENERATION_FEATURE_KEY,
     input.cueId,
     `Creative narration TTS — cue ${input.cueId}`,
+    creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId),
   );
 
   const voiceId = (cue.voiceProfile?.voiceRef ?? null) || elevenLabsDefaultVoiceId(input.deps?.env);
@@ -369,6 +371,7 @@ export async function generateNarrationForCue(
       STORY_SPEECH_GENERATION_FEATURE_KEY,
       input.cueId,
       `Refund — Creative narration TTS failure cue ${input.cueId}`,
+      creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.cueId),
     );
     throw err;
   }
@@ -538,20 +541,12 @@ export async function generateMusicForVersion(
 
   const brief = buildMusicBrief(bible, plan, input.creatorInstructions);
 
-  // Deduct credits BEFORE provider call (refund on any failure after this point).
-  const creditsUsed = await deductCredits(
-    prisma,
-    input.userId,
-    STORY_AUDIO_GENERATION_FEATURE_KEY,
-    input.creativeVersionId,
-    `Creative music track — version ${input.creativeVersionId}`,
-  );
-
-  // TOCTOU guard: create the unmaterialised intent cue while holding the
-  // partial-unique-index lock (Phase 6D migration: @@unique on trackId WHERE
-  // kind='MUSIC_TRACK'). A Prisma P2002 from this create means another request
-  // is already in flight — refund immediately and surface CONFLICT so the caller
-  // can retry once the in-flight generation completes.
+    // TOCTOU guard (Phase 6D): create the unmaterialised intent cue FIRST while
+  // holding the partial-unique-index lock (@@unique on trackId WHERE
+  // kind='MUSIC_TRACK'). The winner then charges PER-CUE. A loser's P2002 means
+  // another request already owns this track's cue, so the loser neither charges
+  // nor refunds. (Root cause of the under-charge: a per-VERSION key collapsed the
+  // two concurrent requests to one charge while the loser still refunded, netting 0.)
   let newCue: { id: string };
   try {
     newCue = await db.audioCue.create({
@@ -566,18 +561,32 @@ export async function generateMusicForVersion(
       },
     });
   } catch (createErr) {
-    await refundCredits(
-      prisma,
-      input.userId,
-      creditsUsed,
-      STORY_AUDIO_GENERATION_FEATURE_KEY,
-      input.creativeVersionId,
-      `Refund — concurrent music generation conflict version ${input.creativeVersionId}`,
-    );
     if (isMusicCueConcurrentError(createErr)) {
       throw new TRPCError({ code: 'CONFLICT', message: 'Music generation is already in progress for this version. Retry shortly.' });
     }
     throw createErr;
+  }
+
+  // Charge AFTER the cue exists, keyed PER-CUE. The referenceId stays the version
+  // (the ledger is reconciled per version); the idempotency key is the cue.
+  let creditsUsed = 0;
+  try {
+    creditsUsed = await deductCredits(
+      prisma,
+      input.userId,
+      STORY_AUDIO_GENERATION_FEATURE_KEY,
+      input.creativeVersionId,
+      `Creative music track - version ${input.creativeVersionId}`,
+      creditKeys.music.charge(STORY_AUDIO_GENERATION_FEATURE_KEY, newCue.id),
+    );
+  } catch (chargeErr) {
+    // Do not leave an orphan intent cue that would block retries.
+    try {
+      await db.audioCue.delete({ where: { id: newCue.id } });
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw chargeErr;
   }
 
   const storageKeyBase = `creative/${input.creativeProjectId}/music/${newCue.id}-${Date.now()}`;
@@ -622,6 +631,7 @@ export async function generateMusicForVersion(
       STORY_AUDIO_GENERATION_FEATURE_KEY,
       input.creativeVersionId,
       `Refund — Creative music generation failure version ${input.creativeVersionId}`,
+      creditKeys.music.refund(STORY_AUDIO_GENERATION_FEATURE_KEY, newCue.id),
     );
     // Unlock the track by deleting the unmaterialised intent cue so retries succeed.
     try {

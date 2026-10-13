@@ -1,9 +1,10 @@
-import { router, protectedProcedure, publicProcedure } from '../trpc';
+import { router, protectedProcedure, publicProcedure, r16Procedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
+import { analytics } from '../lib/analytics';
 
 function getR2Client() {
   return new S3Client({
@@ -50,10 +51,21 @@ export const videoRouter = router({
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const video = await ctx.prisma.video.findUnique({
-        where: { id: input.id },
-        select: videoCardSelect,
-      });
+      // §3 visibility: publicly, only APPROVED + public + not withdrawn + playable.
+      // The owner always sees their own row; moderators/admins see everything.
+      const isStaff = ctx.user?.role === 'ADMIN' || ctx.user?.role === 'MODERATOR';
+      const video = isStaff
+        ? await ctx.prisma.video.findUnique({ where: { id: input.id }, select: videoCardSelect })
+        : await ctx.prisma.video.findFirst({
+            where: {
+              id: input.id,
+              OR: [
+                { moderationStatus: 'APPROVED', isPublic: true, withdrawnAt: null, status: 'READY' },
+                ...(ctx.user ? [{ creatorId: ctx.user.id }] : []),
+              ],
+            },
+            select: videoCardSelect,
+          });
       if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found' });
       return video;
     }),
@@ -274,5 +286,105 @@ export const videoRouter = router({
       }
 
       return { videos, nextCursor };
+    }),
+
+  // ── Phase 4a — R16 publication lifecycle (creator-facing) ──────────────────
+  // R16-only via r16Procedure (requireR16): publication scope is R16-only, and the
+  // host is the reliable signal. Ownership is enforced inside each handler.
+
+  /** Send a finished video for moderation. Leaves moderationStatus at PENDING. */
+  submitForPublication: r16Procedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      if (video.status !== 'READY') {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Finish the video before sending it for review.' });
+      }
+      if (video.moderationStatus === 'APPROVED') {
+        throw new TRPCError({ code: 'CONFLICT', message: 'This video is already live.' });
+      }
+      if (video.submittedForPublicationAt) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'This video is already in review.' });
+      }
+
+      const updated = await ctx.prisma.video.update({
+        where: { id: video.id },
+        data: { submittedForPublicationAt: new Date(), moderationStatus: 'PENDING', withdrawnAt: null },
+        select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
+      });
+      await analytics.track(ctx.prisma, { event: 'video_submitted_for_publication', userId: ctx.user.id, properties: { videoId: video.id } });
+      return updated;
+    }),
+
+  /** Withdraw a submitted/live video from the R16 timeline (soft; keeps the row). */
+  withdrawPublication: r16Procedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      if (!video.submittedForPublicationAt) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This video has not been sent for review.' });
+      }
+      if (video.withdrawnAt) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'This video is already withdrawn.' });
+      }
+
+      const updated = await ctx.prisma.video.update({
+        where: { id: video.id },
+        data: { withdrawnAt: new Date() },
+        select: { id: true, moderationStatus: true, withdrawnAt: true },
+      });
+      await analytics.track(ctx.prisma, { event: 'video_publication_withdrawn', userId: ctx.user.id, properties: { videoId: video.id } });
+      return updated;
+    }),
+
+  /** Resubmit a rejected/withdrawn video: a fresh review cycle (clears the reason). */
+  resubmitPublication: r16Procedure
+    .input(z.object({ videoId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      if (video.moderationStatus !== 'REJECTED' && !video.withdrawnAt) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only a not-approved or withdrawn video can be sent again.' });
+      }
+
+      const updated = await ctx.prisma.video.update({
+        where: { id: video.id },
+        data: {
+          submittedForPublicationAt: new Date(),
+          withdrawnAt: null,
+          moderationReason: null,
+          moderationStatus: 'PENDING',
+        },
+        select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
+      });
+      await analytics.track(ctx.prisma, { event: 'video_publication_resubmitted', userId: ctx.user.id, properties: { videoId: video.id } });
+      return updated;
+    }),
+
+  /** Owner-only publication state for the creator UI (never exposes moderator notes). */
+  publicationStatus: protectedProcedure
+    .input(z.object({ videoId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findFirst({
+        where: { id: input.videoId, creatorId: ctx.user.id },
+        select: {
+          id: true,
+          status: true,
+          moderationStatus: true,
+          submittedForPublicationAt: true,
+          withdrawnAt: true,
+          moderationReason: true,
+        },
+      });
+      if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
+      return video;
     }),
 });

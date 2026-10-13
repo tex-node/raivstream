@@ -64,7 +64,8 @@ describe('renderOutputDerivative — Phase C background music', () => {
         r2Prefix: 'pfx',
       }, deps);
 
-      expect(deps.ffmpegCalls).toHaveLength(1);
+      // 1 video encode + 1 end-card append = 2 calls
+      expect(deps.ffmpegCalls).toHaveLength(2);
       expect(deps.fetch).toHaveBeenCalledTimes(1); // video only
     });
   });
@@ -117,8 +118,8 @@ describe('renderOutputDerivative — Phase C background music', () => {
         r2Prefix: 'pfx',
       }, deps);
 
-      // 1 per-scene mux + 1 concat = 2 calls, no music amix
-      expect(deps.ffmpegCalls).toHaveLength(2);
+      // 1 per-scene mux + 1 concat + 1 end card = 3 calls, no music amix
+      expect(deps.ffmpegCalls).toHaveLength(3);
       const concatArgs = deps.ffmpegCalls[1]!.join(' ');
       expect(concatArgs).toContain('concat=n=1');
       expect(concatArgs).not.toContain('amix');
@@ -135,8 +136,8 @@ describe('renderOutputDerivative — Phase C background music', () => {
         backgroundMusicUrl: MUSIC_URL,
       }, deps);
 
-      // 1 per-scene mux + 1 concat + 1 music amix = 3 calls
-      expect(deps.ffmpegCalls).toHaveLength(3);
+      // 1 per-scene mux + 1 concat + 1 music amix + 1 end card = 4 calls
+      expect(deps.ffmpegCalls).toHaveLength(4);
 
       const amixArgs = deps.ffmpegCalls[2]!.join(' ');
       expect(amixArgs).toContain('amix');
