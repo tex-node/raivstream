@@ -117,8 +117,31 @@ export const FLUX_KONTEXT_CONTRACT: ModelContract = {
     'Image-conditioned generation. Takes a source image + prompt; outputs images[] matching FLUX Pro output shape. Subject identity (product, person) is preserved from the source image while the scene/background follow the prompt.',
 };
 
+export const FLUX_2_EDIT_CONTRACT: ModelContract = {
+  endpoint: 'fal-ai/flux-2/edit',
+  kind: 'image',
+  displayName: 'FLUX.2 [dev] Edit',
+  fields: [
+    { name: 'prompt', required: true, description: 'Edit prompt (natural language).' },
+    { name: 'image_urls', required: true, description: 'Reference images to edit/condition on — max 4; only the first 4 are used.' },
+    { name: 'image_size', required: false, description: 'Enum (square_hd, portrait_16_9, …) or {width,height} 512–2048.' },
+    { name: 'seed', required: false, description: 'Integer seed.' },
+    { name: 'guidance_scale', required: false, description: '0–20 (default 2.5).' },
+    { name: 'num_inference_steps', required: false, description: '4–50 (default 28).' },
+    { name: 'num_images', required: false, description: 'Number of images (default 1).' },
+    { name: 'acceleration', required: false, description: 'none | regular | high (default regular).' },
+    { name: 'enable_prompt_expansion', required: false, description: 'Boolean (default false).' },
+    { name: 'output_format', required: false, description: 'jpeg | png | webp (default png).' },
+    { name: 'enable_safety_checker', required: false, description: 'Boolean (default true).' },
+    { name: 'sync_mode', required: false, description: 'Return data URI (default false).' },
+  ],
+  notes:
+    'Multi-reference image editing. image_urls is REQUIRED (max 4). Output matches FLUX.2: { images:[{url,content_type,file_name,file_size,width,height}], timings, seed, has_nsfw_concepts, prompt }. Reconciled 2026-10-13 against fal.ai/models/fal-ai/flux-2/edit/api.',
+};
+
 export const FAL_CONTRACTS = {
   image: FLUX_2_CONTRACT,
+  imageEdit: FLUX_2_EDIT_CONTRACT,
   imageCond: FLUX_KONTEXT_CONTRACT,
   video: H3_MAX_I2V_CONTRACT,
   ugc: VEED_FABRIC_CONTRACT,
@@ -175,6 +198,21 @@ export function toFlux2Input(input: ImageGenerationInput): Record<string, unknow
     );
   }
   const payload: Record<string, unknown> = { prompt: input.prompt };
+  if (input.width && input.height) payload.image_size = { width: input.width, height: input.height };
+  else if (input.aspectRatio) payload.image_size = aspectToFlux2Size(input.aspectRatio);
+  if (typeof input.seed === 'number') payload.seed = input.seed;
+  return payload;
+}
+
+export function toFlux2EditInput(input: ImageGenerationInput): Record<string, unknown> {
+  const refs = input.imageUrls ?? [];
+  if (refs.length === 0) {
+    throw new MediaProviderError('INVALID_REQUEST', 'fal-ai/flux-2/edit requires at least one reference image (imageUrls)');
+  }
+  if (refs.length > 4) {
+    console.warn(`[flux2edit] ${refs.length} reference images provided; the endpoint uses only the first 4`);
+  }
+  const payload: Record<string, unknown> = { prompt: input.prompt, image_urls: refs.slice(0, 4) };
   if (input.width && input.height) payload.image_size = { width: input.width, height: input.height };
   else if (input.aspectRatio) payload.image_size = aspectToFlux2Size(input.aspectRatio);
   if (typeof input.seed === 'number') payload.seed = input.seed;

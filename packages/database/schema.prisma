@@ -1487,6 +1487,9 @@ model StorySceneAsset {
   promptVersionId String?
   composedPrompt  String?
   negativePrompt  String?
+  // Track D Layer 1 — which scene-image renderer produced this asset
+  // (text-only FLUX.2 vs reference-conditioned flux-2/edit). Provenance only.
+  rendererVersion String?
   r2Key           String?
   assetUrl        String?
   thumbnailUrl    String?
