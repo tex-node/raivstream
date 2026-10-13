@@ -21,6 +21,50 @@ export interface OutputRenderDeps {
   upload?: (buffer: Buffer, key: string, contentType: string) => Promise<string | null>;
   /** Override the end-card preflight (tests inject a known-good or known-bad result). */
   endCardPreflight?: () => Promise<EndCardPreflightResult>;
+  /**
+   * E1 — probe a local media file for a native audio stream + duration. Injected
+   * in tests (ffmpeg/ffprobe are not available in CI unit runs); defaults to a
+   * real `ffprobe` call. Used to decide whether a source clip carries audio and
+   * how to position it in the ambience bed.
+   */
+  probe?: (filePath: string) => Promise<MediaProbe>;
+}
+
+/** E1 — native-audio probe result for a source clip. */
+export interface MediaProbe {
+  hasAudioStream: boolean;
+  durationSeconds: number | null;
+}
+
+async function probeWithFfprobe(filePath: string): Promise<MediaProbe> {
+  return new Promise<MediaProbe>((resolve, reject) => {
+    const child = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'stream=codec_type',
+      '-show_entries', 'format=duration',
+      '-of', 'json',
+      filePath,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (chunk: Buffer) => { out += String(chunk); });
+    child.stderr.on('data', (chunk: Buffer) => { err += String(chunk); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`ffprobe exited with ${code}: ${err.slice(-500)}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(out) as { streams?: Array<{ codec_type?: string }>; format?: { duration?: string } };
+        const hasAudioStream = (parsed.streams ?? []).some((s) => s.codec_type === 'audio');
+        const durationSeconds = parsed.format?.duration ? Number(parsed.format.duration) : null;
+        resolve({ hasAudioStream, durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null });
+      } catch (parseError) {
+        reject(parseError instanceof Error ? parseError : new Error('ffprobe output unparseable'));
+      }
+    });
+  });
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
@@ -142,6 +186,91 @@ export function buildEndCardArgs(opts: EndCardOptions): string[] {
   ];
 }
 
+/**
+ * E1 — extract a source clip's native audio into a canonical PCM bed, looped to
+ * `durationSeconds`. Mirrors `movieRenderWorker.extractNativeAudio`. Keeps the
+ * clip's own synchronized audio (e.g. MiniMax H3 SFX) so stitched exports are
+ * not silent when there is no narration/music cue.
+ */
+async function extractNativeAudioBed(
+  inputPath: string,
+  outputPath: string,
+  durationSeconds: number,
+  run: (args: string[]) => Promise<void>,
+): Promise<void> {
+  await run([
+    '-stream_loop', '-1',
+    '-i', inputPath,
+    '-t', Math.max(0.5, durationSeconds).toFixed(3),
+    '-vn',
+    '-acodec', 'pcm_s16le',
+    '-ar', '44100',
+    '-ac', '2',
+    outputPath,
+  ]);
+}
+
+/** E1 — one audible source clip's native audio, positioned on the export timeline. */
+export interface NativeAudioSource {
+  filePath: string;
+  startSeconds: number;
+  durationSeconds: number;
+}
+
+/**
+ * E1 — mux a native-audio ambience bed (one delayed stream per audible source
+ * clip) into a rendered video. When `videoPath` already carries audio (e.g. a
+ * background-music mix) the bed is combined with it via amix; otherwise the bed
+ * becomes the output's audio. Returns the input path unchanged when there are no
+ * native sources (preserving the pre-E1 silent behavior for audio-less sources).
+ */
+async function muxNativeAudioBed(opts: {
+  videoPath: string;
+  nativeSources: NativeAudioSource[];
+  outputPath: string;
+  dir: string;
+  run: (args: string[]) => Promise<void>;
+  hasExistingAudio: boolean;
+}): Promise<string> {
+  const { videoPath, nativeSources, outputPath, dir, run, hasExistingAudio } = opts;
+  if (nativeSources.length === 0) return videoPath;
+
+  const bedFiles: string[] = [];
+  for (let i = 0; i < nativeSources.length; i += 1) {
+    const src = nativeSources[i]!;
+    const wav = path.join(dir, `native-${i}.wav`);
+    await extractNativeAudioBed(src.filePath, wav, src.durationSeconds, run);
+    bedFiles.push(wav);
+  }
+
+  const delays = bedFiles.map((_, i) => {
+    const ms = Math.max(0, Math.round(nativeSources[i]!.startSeconds * 1000));
+    return `[${i + 1}:a]adelay=${ms}|${ms}[n${i}]`;
+  });
+  const labels = bedFiles.map((_, i) => `[n${i}]`).join('');
+  const bed = bedFiles.length === 1
+    ? delays[0]!.replace('[n0]', '[amb]')
+    : `${delays.join(';')};${labels}amix=inputs=${bedFiles.length}:normalize=0[amb]`;
+  const filter = hasExistingAudio
+    ? `[0:a]volume=1[base];${bed};[base][amb]amix=inputs=2:normalize=0[aout]`
+    : bed;
+
+  await run([
+    '-i', videoPath,
+    ...bedFiles.flatMap((f) => ['-i', f]),
+    '-filter_complex', filter,
+    '-map', '0:v',
+    '-map', hasExistingAudio ? '[aout]' : '[amb]',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-shortest',
+    '-movflags', '+faststart',
+    outputPath,
+  ]);
+  return outputPath;
+}
+
 export interface EndCardPreflightResult {
   /** ffmpeg was built with the drawtext filter (`--enable-libfreetype`). */
   drawtext: boolean;
@@ -242,6 +371,7 @@ export async function renderOutputDerivative(
   const doFetch = deps.fetch ?? fetch;
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
+  const doProbe = deps.probe ?? probeWithFfprobe;
   // Preflight guards the REAL ffmpeg; an injected runner owns its own environment.
   const preflight = deps.endCardPreflight ?? (deps.ffmpeg ? async () => END_CARD_OK : runEndCardPreflight);
 
@@ -303,21 +433,47 @@ export async function renderOutputDerivative(
         // This handles narration longer than the clip (the common case for educational content)
         // and adds silence if narration is shorter than the clip.
         const sceneOut = path.join(dir, `scene-${i}.mp4`);
-        await doFfmpeg([
-          '-stream_loop', '-1',
-          '-i', vFile,
-          '-i', aFile,
-          '-filter_complex', `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
-          '-map', '[v]',
-          '-map', '1:a',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-shortest',
-          sceneOut,
-        ]);
+        const vProbe = await doProbe(vFile).catch(() => ({ hasAudioStream: false, durationSeconds: null }) as MediaProbe);
+        if (vProbe.hasAudioStream) {
+          // E1 — keep the source clip's native audio (e.g. H3 SFX) alongside the
+          // narration: amix them so the stitched export is not narration-only.
+          // `duration=shortest` + `-shortest` still end the scene at the narration
+          // length (the native track is looped, so it is effectively infinite).
+          await doFfmpeg([
+            '-stream_loop', '-1',
+            '-i', vFile,
+            '-i', aFile,
+            '-filter_complex',
+              `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v];` +
+              `[0:a]volume=1[na];[1:a]volume=1[nr];[na][nr]amix=inputs=2:duration=shortest:normalize=0[aout]`,
+            '-map', '[v]',
+            '-map', '[aout]',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-shortest',
+            sceneOut,
+          ]);
+        } else {
+          // No native audio on the source clip — narration-only, exactly as before.
+          await doFfmpeg([
+            '-stream_loop', '-1',
+            '-i', vFile,
+            '-i', aFile,
+            '-filter_complex', `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
+            '-map', '[v]',
+            '-map', '1:a',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-shortest',
+            sceneOut,
+          ]);
+        }
         sceneParts.push(sceneOut);
       }
 
@@ -389,6 +545,23 @@ export async function renderOutputDerivative(
     }
     if (inputs.length === 0) throw new Error('No source media available to derive an output.');
 
+    // E1 — probe each source clip for a native audio stream + duration so its
+    // audio can be carried into the export, positioned on the timeline. Sources
+    // without audio (e.g. stills) are skipped, exactly as before.
+    const nativeSources: NativeAudioSource[] = [];
+    let cursorSeconds = 0;
+    for (const file of inputs) {
+      const probe = await doProbe(file).catch(() => ({ hasAudioStream: false, durationSeconds: null }) as MediaProbe);
+      if (probe.hasAudioStream) {
+        nativeSources.push({
+          filePath: file,
+          startSeconds: cursorSeconds,
+          durationSeconds: probe.durationSeconds ?? input.derivation.effectiveDurationSeconds,
+        });
+      }
+      cursorSeconds += probe.durationSeconds ?? 0;
+    }
+
     const parts = inputs.map(
       (_, index) => `[${index}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v${index}]`,
     );
@@ -431,8 +604,17 @@ export async function renderOutputDerivative(
         '-movflags', '+faststart',
         out,
       ]);
-      const buffer = await readFile(out);
-      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${out}`;
+      // E1 — carry the source clips' native audio into the music mix.
+      const mixed = await muxNativeAudioBed({
+        videoPath: out,
+        nativeSources,
+        outputPath: path.join(dir, 'out-with-native.mp4'),
+        dir,
+        run: doFfmpeg,
+        hasExistingAudio: true,
+      });
+      const buffer = await readFile(mixed);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${mixed}`;
       return { assetUrl };
     }
 
@@ -450,9 +632,19 @@ export async function renderOutputDerivative(
     ];
     await doFfmpeg(args);
 
+    // E1 — carry the source clips' native audio into the export before the end card.
+    const withAudio = await muxNativeAudioBed({
+      videoPath: out,
+      nativeSources,
+      outputPath: path.join(dir, 'out-with-native.mp4'),
+      dir,
+      run: doFfmpeg,
+      hasExistingAudio: false,
+    });
+
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const final = await appendEndCard(out, false, input.derivation.effectiveDurationSeconds);
+    const final = await appendEndCard(withAudio, nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
     const buffer = await readFile(final);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
     return { assetUrl };
