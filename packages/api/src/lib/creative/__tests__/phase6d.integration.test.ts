@@ -27,18 +27,23 @@ const CreativeApprovalStatus = { APPROVED: 'APPROVED'   } as const;
 // ── Provider mocks (never call real Lyria or real R2) ─────────────────────────
 // vi.hoisted creates the mock instances ONCE before any factory runs; the factory
 // then references them so the service and test always share the same vi.fn() objects.
-// (If vi.fn() were inside the factory, multiple factory invocations would create
-//  separate instances, breaking the mockResolvedValue setup in beforeAll.)
+// ALL four functions are hoisted so that vitest's restoreMocks:true (which resets
+// vi.fn() implementations before each test) is counteracted by the beforeEach
+// that re-establishes every implementation. Inline vi.fn()s in the factory body
+// can be left without an implementation after restore if vitest doesn't track them
+// as named spies — hoisting all four eliminates any ambiguity.
 
 const mocks = vi.hoisted(() => ({
-  generateMusic:    vi.fn<() => Promise<{ audio: Buffer; mimeType: string }>>(),
-  uploadBufferToR2: vi.fn<() => Promise<string | null>>(),
+  generateMusic:       vi.fn<() => Promise<{ audio: Buffer; mimeType: string }>>(),
+  uploadBufferToR2:    vi.fn<() => Promise<string | null>>(),
+  isLyriaMusicEnabled: vi.fn<() => boolean>(),
+  lyriaModelId:        vi.fn<() => string>(),
 }));
 
 vi.mock('../../generators/lyriaMusic', () => ({
   generateMusic:       mocks.generateMusic,
-  isLyriaMusicEnabled: vi.fn<() => boolean>(() => true),
-  lyriaModelId:        vi.fn<() => string>(() => 'lyria-3-clip-preview'),
+  isLyriaMusicEnabled: mocks.isLyriaMusicEnabled,
+  lyriaModelId:        mocks.lyriaModelId,
 }));
 
 vi.mock('../../r2', () => ({
@@ -144,19 +149,25 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  // Re-establish mock implementations before each test.
-  // vitest's restoreMocks:true resets vi.fn() implementations before each test,
-  // so beforeAll is too early — implementations must be set here.
+  // Re-establish all mock implementations before each test.
+  // vitest's restoreMocks:true resets vi.fn() implementations before each test
+  // (restoring to undefined when there is no original), so beforeAll is too early —
+  // every implementation must be set here. All four mocks are hoisted so this
+  // beforeEach is the single authoritative source of their state.
   mocks.generateMusic.mockResolvedValue({
     audio:    Buffer.alloc(16, 0x42),
     mimeType: 'audio/mp3',
   });
   mocks.uploadBufferToR2.mockResolvedValue('https://cdn.test/phase6d-integration.mp3');
+  mocks.isLyriaMusicEnabled.mockReturnValue(true);
+  mocks.lyriaModelId.mockReturnValue('lyria-3-clip-preview');
 });
 
 afterEach(() => {
   mocks.generateMusic.mockClear();
   mocks.uploadBufferToR2.mockClear();
+  mocks.isLyriaMusicEnabled.mockClear();
+  mocks.lyriaModelId.mockClear();
 });
 
 // ── Helper to build per-iteration fixtures ────────────────────────────────────

@@ -66,6 +66,7 @@ import {
 } from '../lib/visualPromptComposer';
 import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntelligence/types';
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
+import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -7591,28 +7592,34 @@ export const storyRouter = router({
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Use generateEducationalNarration for educational stories.' });
       }
 
-      // Resolve or generate the narration script.
-      let narrationScript = scene.narrationScript ?? null;
-      if (!narrationScript) {
-        narrationScript = await storyIntelligenceProvider.planSceneNarration({
-          sceneTitle: scene.title,
-          sceneDescription: scene.description,
-          chapterBody: scene.chapter?.body ?? null,
-          genre: scene.project?.genre ?? null,
-          tone: scene.project?.tone ?? null,
-          mood: scene.mood ?? null,
-          audienceMode: 'KIDS',
-        });
-        // Persist the script so subsequent calls reuse it without another AI round-trip.
-        await ctx.prisma.storySceneSeed.update({
-          where: { id: input.sceneId },
-          data: { narrationScript },
-        });
-      }
-
-      const moderation = await moderatePrompt(narrationScript);
-      if (!moderation.allowed) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Narration script violates content guidelines.') });
+      // Resolve or generate the narration script. The script is persisted only
+      // AFTER moderation passes (see resolveNarrationScript) so a flagged script
+      // never lands in the DB and a retry can generate and moderate a fresh one.
+      let narrationScript: string;
+      try {
+        narrationScript = (
+          await resolveNarrationScript(scene.narrationScript ?? null, {
+            generate: () => storyIntelligenceProvider.planSceneNarration({
+              sceneTitle: scene.title,
+              sceneDescription: scene.description,
+              chapterBody: scene.chapter?.body ?? null,
+              genre: scene.project?.genre ?? null,
+              tone: scene.project?.tone ?? null,
+              mood: scene.mood ?? null,
+              audienceMode: 'KIDS',
+            }),
+            moderate: (text) => moderatePrompt(text),
+            rejectMessage: (moderation) => moderationRejectMessage(moderation, 'Narration script violates content guidelines.'),
+            persist: async (text) => {
+              await ctx.prisma.storySceneSeed.update({ where: { id: input.sceneId }, data: { narrationScript: text } });
+            },
+          })
+        ).script;
+      } catch (error) {
+        if (error instanceof NarrationModerationError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: error.message });
+        }
+        throw error;
       }
       const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
       if (!rate.configured) {
