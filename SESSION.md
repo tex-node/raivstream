@@ -2270,3 +2270,18 @@ Test suite: `packages/api/src/lib/storyIntelligence/__tests__/educationalContent
   `story_director_prompt_quality` — do not chase these.
 - New runbook: `docs/operations/migration-runbook.md` — pre-flight Check C
   (expand/contract gate) is mandatory; the `.hold` dir-rename is prohibited.
+
+### 2026-10-13 (later): Upgrade plan deployed; incident fully reconciled
+
+- PR #4 merged (6057bdf) — full Phase 1–4 upgrade deployed to production
+- PR #5 merged (542939e) — reconciliation migration re-enforced
+  credit_transactions.idempotencyKey NOT NULL (dropped during the morning incident)
+- Live verification: 16 keyed charges observed pre-constraint; 1 keyed charge
+  observed post-constraint with 0 × 23502
+- Constraint state: is_nullable = NO (enforced by DB)
+- Production HEAD: 542939e on main
+- Feature tracker: docs/feature-tracker.md (created; statuses reflect deployed state)
+- Incident 2026-10-13 (morning): reconciled. No user impact observed (medium
+  confidence; Sentry not configured).
+- Process change: docs/operations/migration-runbook.md — Check C-1 (branch vs.
+  target-branch migration state) added after the branch divergence was caught.

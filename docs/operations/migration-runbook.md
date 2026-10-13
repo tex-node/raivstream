@@ -83,6 +83,7 @@ Expected `{"status":"healthy",…}`. If not healthy, **roll back the migrations 
 - **Impact:** ~64 minutes (**05:53:02 → 06:56:45 UTC**) during which every `credit_transactions` insert by the live app failed with `23502`.
 - **Remediation:** `ALTER TABLE credit_transactions ALTER COLUMN "idempotencyKey" DROP NOT NULL;` (service restored); a **new** migration will re-enforce NOT NULL **after** the code that sets keys is deployed.
 - **Lesson:** **Check C is mandatory**, and the **`.hold` trick is prohibited**.
+- **Resolution:** the constraint was re-enforced via `20261013120000_..._enforce_not_null` on 2026-10-13, after the new code (PR #4) was deployed and a live keyed write was observed. Full reconciliation record: docs/feature-tracker.md.
 
 ## 4. Applied-migration checksum discipline
 

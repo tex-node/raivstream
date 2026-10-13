@@ -17,14 +17,14 @@ Update one row per feature per status change. Never conflate the four states.
 **Rule:** a feature is never "done" until its row reads DEPLOYED with a commit SHA in the Notes column.
 
 > **Statuses are not interchangeable.** TESTS PASSING ≠ PR MERGEABLE ≠ RELEASE AUTHORIZED.
-> Track B is DEPLOYED. Track A is rebased, type-checked, test-green and MERGEABLE but its
-> release is **not authorized** — the merge window is separate (see Open decisions #1).
+> Track A and Track B are both **DEPLOYED** to production. The upgrade plan is fully deployed
+> and the 2026-10-13 incident is reconciled (Open decisions #1 and #2, both resolved).
 
 ## Current release tracks
 
 | Track | Contents | Status |
 |---|---|---|
-| **A — Upgrade (Phase 0–4)** | `feat/raivstream-upgrade`, PR #4 | Rebased; type-check + API tests green; CI green; MERGEABLE/CLEAN — merge window **not yet authorized** |
+| **A — Upgrade (Phase 0–4)** | `feat/raivstream-upgrade`, PR #4 | **DEPLOYED** (`6057bdf`; incident reconciliation `542939e`) |
 | **B — R16 A/B/C** | R16 video audio pipeline | **DEPLOYED** (`a4f46a3`) |
 | **C — Admin observability** | Per-user drill-down (extends PL-01) | **PROPOSED** — not started |
 
@@ -50,8 +50,8 @@ Merged 2026-10-13 as PR #2. Production HEAD `a4f46a3`, healthy.
 
 ## Track A — Upgrade (Phase 0–4)
 
-Branch `feat/raivstream-upgrade`, PR #4 (draft, MERGEABLE/CLEAN). Migrations already applied on
-prod (2026-10-13 union run); code deploy pending the merge window.
+Branch `feat/raivstream-upgrade`, PR #4 — **DEPLOYED** (`6057bdf`). Migrations applied on prod;
+the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 
 ### Phase 0 — Baseline audit
 
@@ -63,14 +63,14 @@ prod (2026-10-13 union run); code deploy pending the merge window.
 
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
-| Idempotency keys on all credit call sites | TESTED | `dce4352` | `creditIdempotencyCoverage.test.ts` | PR #4 |
-| Director idempotency (client-supplied id) | TESTED | `d5e2125`, `d9e56b6` | `directorIdempotency.test.ts` | PR #4 |
-| Remaining direct writers keyed (webhook, admin, paystack) | TESTED | `7c83c0c` | coverage gate | PR #4 |
-| Music charge per-cue fix (under-charge bug) | TESTED | `a56597b` | `musicChargeRace.test.ts` | PR #4 |
-| R16 narration + background-music charge keying (rebase integration) | TESTED | `67b743b` | `phase_r16_music.test.ts` §D + coverage gate | PR #4 |
-| Admin usage dashboard (PL-01) | TESTED | `98c22c7` | `creditReporting.test.ts` | PR #4 |
-| Ledger backfill + NOT NULL migrations | PARTIAL | `6feb6df` | `migration-runbook.md` | migrations applied; NOT NULL reverted during incident |
-| NOT NULL enforce (reconcile) | IDEA | (not yet) | — | pending PR + code live |
+| Idempotency keys on all credit call sites | DEPLOYED | `dce4352` | `creditIdempotencyCoverage.test.ts` | `6057bdf` |
+| Director idempotency (client-supplied id) | DEPLOYED | `d5e2125`, `d9e56b6` | `directorIdempotency.test.ts` | `6057bdf` |
+| Remaining direct writers keyed (webhook, admin, paystack) | DEPLOYED | `7c83c0c` | coverage gate | `6057bdf` |
+| Music charge per-cue fix (under-charge bug) | DEPLOYED | `a56597b` | `musicChargeRace.test.ts` | `6057bdf` |
+| R16 narration + background-music charge keying (rebase integration) | DEPLOYED | `67b743b` | `phase_r16_music.test.ts` §D + coverage gate | `6057bdf` |
+| Admin usage dashboard (PL-01) | DEPLOYED | `98c22c7` | `creditReporting.test.ts` | `6057bdf` |
+| Ledger backfill + NOT NULL migrations | DEPLOYED | `6feb6df` | `migration-runbook.md` | reconciled 2026-10-13 |
+| NOT NULL enforce (reconcile) | DEPLOYED | `9f90438` | `542939e` | constraint enforced; `is_nullable = NO` |
 
 **Accepted limitations:**
 - 14 test/staging accounts carry pre-existing balance/ledger drift (documented, no remediation)
@@ -82,12 +82,12 @@ prod (2026-10-13 union run); code deploy pending the merge window.
 
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
-| R16-02 — Style restriction (Cartoon, Anime, 3D Animation) | TESTED | `a3e004a` | `r16VisualStyle.test.ts` | PR #4 |
-| R16-03 — Character reference approval | TESTED | `e9d47ec`, `8fe7df7` | `characterReferences.test.ts` | PR #4 |
-| R16-03 — Draft-reference warning banner | TESTED | `5e3dfb5` | `draftReferenceWarning.test.ts` | PR #4 |
-| R16-04 — Batch generation (server) | TESTED | `324abc0`, `915c7be` | `batchGeneration.test.ts` | PR #4 |
-| R16-04 — Batch UI + pause-resume | TESTED | `2145173` | `batchGenerationUi.test.ts` | PR #4 |
-| R16-05 — Chapter version history | TESTED | `354f882` | `chapterVersioning.test.ts` | PR #4 |
+| R16-02 — Style restriction (Cartoon, Anime, 3D Animation) | DEPLOYED | `a3e004a` | `r16VisualStyle.test.ts` | `6057bdf` |
+| R16-03 — Character reference approval | DEPLOYED | `e9d47ec`, `8fe7df7` | `characterReferences.test.ts` | `6057bdf` |
+| R16-03 — Draft-reference warning banner | DEPLOYED | `5e3dfb5` | `draftReferenceWarning.test.ts` | `6057bdf` |
+| R16-04 — Batch generation (server) | DEPLOYED | `324abc0`, `915c7be` | `batchGeneration.test.ts` | `6057bdf` |
+| R16-04 — Batch UI + pause-resume | DEPLOYED | `2145173` | `batchGenerationUi.test.ts` | `6057bdf` |
+| R16-05 — Chapter version history | DEPLOYED | `354f882` | `chapterVersioning.test.ts` | `6057bdf` |
 | Phase 2 release evidence | DEPLOYED (docs) | `5b18aff` | `docs/operations/phase-2-release-evidence.md` | committed |
 
 **Accepted limitations:**
@@ -99,8 +99,8 @@ prod (2026-10-13 union run); code deploy pending the merge window.
 
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
-| Two-second end card in `renderOutputDerivative` | STAGING-QUALIFIED | `14ee523` | `endCard.test.ts` + `pnpm verify:end-card` PASS on VPS | PR #4 |
-| Preflight (drawtext/font) + verification script | STAGING-QUALIFIED | `e4937ce` | verify script | PR #4 |
+| Two-second end card in `renderOutputDerivative` | DEPLOYED | `14ee523` | `endCard.test.ts` + `pnpm verify:end-card` PASS on VPS | `6057bdf` |
+| Preflight (drawtext/font) + verification script | DEPLOYED | `e4937ce` | verify script | `6057bdf` |
 
 **Verified:** `ffmpeg 6.1.1-3ubuntu5`; 8.02s output, h264 1080×1920 + aac.
 **Scope:** end card rides the render pipeline only. Direct uploads do not carry it (Option A — accepted).
@@ -109,11 +109,11 @@ prod (2026-10-13 union run); code deploy pending the merge window.
 
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
-| Publication lifecycle (submit/withdraw/resubmit) | TESTED | `ca2d84f` | `publication.test.ts` | PR #4 |
-| Feed `withdrawnAt` filter + `getById` tightening | TESTED | `ca2d84f` | `publication.test.ts` | PR #4 |
-| Share link model + attribution | TESTED | `1d2bb4e`, `ee8a4ca` | `shareLinks.test.ts` | PR #4 |
-| Retention (90-day aggregate) | TESTED | `ee8a4ca` | `shareAttributionRetention.test.ts` | PR #4 |
-| Share menu (WhatsApp, Instagram, copy, native) | TESTED | `4027580` | `shareTargets.test.ts` | PR #4 |
+| Publication lifecycle (submit/withdraw/resubmit) | DEPLOYED | `ca2d84f` | `publication.test.ts` | `6057bdf` |
+| Feed `withdrawnAt` filter + `getById` tightening | DEPLOYED | `ca2d84f` | `publication.test.ts` | `6057bdf` |
+| Share link model + attribution | DEPLOYED | `1d2bb4e`, `ee8a4ca` | `shareLinks.test.ts` | `6057bdf` |
+| Retention (90-day aggregate) | DEPLOYED | `ee8a4ca` | `shareAttributionRetention.test.ts` | `6057bdf` |
+| Share menu (WhatsApp, Instagram, copy, native) | DEPLOYED | `4027580` | `shareTargets.test.ts` | `6057bdf` |
 | Phase 4 design doc | DEPLOYED (docs) | `ed5343c` | `docs/architecture/phase-4-publication-sharing.md` | committed |
 | Phase 4 release evidence | DEPLOYED (docs) | `6cea587` | `docs/operations/phase-4-release-evidence.md` | committed |
 
@@ -218,8 +218,8 @@ Ordered by leverage. Do not start more than one of these at a time.
 
 | # | Decision | Blocks |
 |---|---|---|
-| 1 | Merge PR #4 in its window? (requires separate authorization) | Track A completion |
-| 2 | When to add `20261013120000_..._enforce_not_null`? | Reconciling incident state |
+| 1 | Merge PR #4 in its window? | **RESOLVED** — merged (`6057bdf`) |
+| 2 | When to add `20261013120000_..._enforce_not_null`? | **RESOLVED** — applied (`542939e`); constraint enforced |
 | 3 | Is "skip end card on preflight failure" acceptable? | Phase 3 policy |
 | 4 | Which product thread starts first — World Builder vs. Timeline/Movie Builder? | Product roadmap |
 | 5 | Do the 14 drifted accounts need a seed-script fix? | Reconciliation integrity for future test accounts |
@@ -240,24 +240,24 @@ For each release track, all must be true before declaring DEPLOYED:
 - [ ] Production health observed ≥ 1 hour post-deploy
 - [ ] Rollback plan documented
 
-### Track A — current checklist state (PR #4)
+### Track A — checklist state (DEPLOYED)
 
-- [x] All feature rows IMPLEMENTED or better
-- [x] CI green — run `38412188638` (API unit + real-Postgres integration)
+- [x] All feature rows DEPLOYED
+- [x] CI green — runs `38415105321` (PR #4) and `38429242486` (PR #5)
 - [x] Type-check green (api + web); API suite 1665 passed / 5 skipped / 0 failed locally
-- [x] Migrations applied on prod (2026-10-13 union run); `migrate status` up to date
-- [ ] Merge window **not yet authorized** (Open decision #1)
-- [ ] Post-deploy health ≥ 1h observation (pending merge)
-- [ ] `20261013120000_..._enforce_not_null` as its own PR (after PR #4 deploys)
+- [x] Migrations applied on prod; `migrate status` up to date
+- [x] Merge window authorized and executed — PR #4 (`6057bdf`)
+- [x] Post-deploy health ≥ 1h observation — 4/4 samples healthy, 0 × `23502`
+- [x] `20261013120000_..._enforce_not_null` applied — PR #5 (`542939e`); constraint enforced
 
 ---
 
 ## Last updated
 
-2026-10-13 — PR #4 rebased onto `main` (`a4f46a3`); conflict resolution + R16 credit-key
-integration (`67b743b`); CI green (`38412188638`). PR #4 is MERGEABLE/CLEAN but its release is
-**not authorized** — statuses are tracked separately. Track C (admin per-user observability) added
-— proposed, not started.
+2026-10-13 — Upgrade plan **fully deployed**. PR #4 merged (`6057bdf`); PR #5 reconciliation merged
+(`542939e`) re-enforcing `credit_transactions.idempotencyKey` NOT NULL. Live verification: 16 keyed
+charges pre-constraint + keyed charges post-constraint; 0 × `23502`. The 2026-10-13 incident is
+**reconciled**. Track C (admin per-user observability) remains proposed, not started.
 
 ### SHA map (pre-rebase → post-rebase) and verification basis
 
@@ -277,4 +277,5 @@ Subject-matched (distinctive subjects): `b9081e9→7c83c0c`, `c8f4adb→a56597b`
 **Unresolved:** none outstanding. Track B's pre-rebuild SHAs (`c188f76`, `433f0aa`, `9d8ca17`,
 `25d7ee9`) are superseded by `fb332b8`/`24db068`/`b0e5c91`/`1f3a810` on `main`.
 
-Next review: after PR #4 merges and `20261013120000` is applied.
+Next review: none outstanding — upgrade plan deployed and incident reconciled. Product backlog
+(World Builder / Timeline / Movie Builder) is the next thread, when chosen.
