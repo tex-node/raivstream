@@ -224,13 +224,14 @@ click-through. This track adds the drill-down.
 
 ---
 
-## E1 — Silent output on stitched exports (DIAGNOSED)
+## E1 — Silent output on stitched exports (DEPLOYED)
 
 | Item | Status | Notes |
 |---|---|---|
-| E1 — source clip audio dropped in stitched exports | **FIX IN PROGRESS** | Branch `fix/export-clip-audio` @ `5c82d21`; **PR #9** (base `main`). Root cause: `renderOutputDerivative` mixed only narration + background music and never mapped the source clips' native audio (the Movie Builder does — `movieRenderWorker.ts:721–747`). Fix (additive): per-scene native+narration `amix` on the narration path; a probed ambience bed (`adelay` + `amix`) on the video-only path (single-pass concat → Option A was the only option); end card preserved. Cache invalidation: `EXPORT_RENDERER_VERSION = 'phase-3-v2'` folded into `computeSourceHash`. Tests: `exportClipAudio.test.ts` (6, asserting the constructed filter graph — ffmpeg is absent locally). |
+| E1 — source clip audio dropped in stitched exports | **DEPLOYED** | Both audio-carrying paths fixed and verified live. **Export path** (`renderOutputDerivative`): PR #9 @ `c4ee530` — audible. **Movie Builder path** (`movieRenderWorker`): PR #11 @ `64e6e9d` — the native-audio push sat inside `if (sources.length > 0)`, so a project with no cues rendered silent; moved above the guard. Renderer versions: `EXPORT_RENDERER_VERSION = 'phase-3-v2'`, `MOVIE_RENDERER_VERSION = 'phase-16-v2'` (both folded into their hashes → cached silent outputs invalidated). Evidence: movie asset `metadata.hasAudio: true`, `audioVerification` non-null, file h264 + aac, mean −26.1 dB (max −2.6 dB); export re-render audible. |
 | E1 — video-only music path does not append the end card | **FOLLOW-UP (low priority)** | Pre-existing bug, discovered 2026-10-13 while implementing E1 (the video-only + background-music path returns before `appendEndCard`). Not fixed in PR #9 — separate small fix. |
 | E1a — auto-trigger narration for non-educational projects | **OPEN (product decision)** | Non-educational projects do not auto-generate narration. Whether they should is a product choice, not a bug. No code. |
+| E1 — duplicated native-audio extraction (tech debt) | **FOLLOW-UP** | Audio extraction is duplicated: `extractNativeAudio` (`movieRenderWorker.ts`) and `extractNativeAudioBed` (`render.ts`). Consolidate into a shared utility when the next audio work happens — this duplication is the reason a single fix didn't cover both surfaces. |
 
 **Cache invalidation:** `computeSourceHash` (`storyVideoExportService.ts`) = SHA-256 of `${EXPORT_RENDERER_VERSION}|sorted(sceneId:assetId[:audio:audioUrl])`, under `@@unique([projectId, sourceHash])`. The renderer version is now folded in (E1 requirement), so this renderer change invalidates every cached export — otherwise already-exported rows would be reused and stay silent.
 
@@ -337,5 +338,6 @@ Subject-matched (distinctive subjects): `b9081e9→7c83c0c`, `c8f4adb→a56597b`
 **Unresolved:** none outstanding. Track B's pre-rebuild SHAs (`c188f76`, `433f0aa`, `9d8ca17`,
 `25d7ee9`) are superseded by `fb332b8`/`24db068`/`b0e5c91`/`1f3a810` on `main`.
 
-Next review: none outstanding — upgrade plan deployed and incident reconciled. Product backlog
-(World Builder / Timeline / Movie Builder) is the next thread, when chosen.
+E1 closed 2026-10-13 — both audio-carrying paths (export `c4ee530`, Movie Builder `64e6e9d`) verified audible.
+
+Next review: **Track D Layer 1 scoping** (character canon — multi-view sheet / immutable bible).
