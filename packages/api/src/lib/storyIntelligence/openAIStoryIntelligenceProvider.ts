@@ -6,6 +6,7 @@ import {
   type DirectScenesInput,
   type ClassifyContentInput,
   type PlanEducationInput,
+  type PlanSceneNarrationInput,
   type StoryBlueprint,
   type DirectedScene,
   type ContentType,
@@ -260,5 +261,30 @@ export class OpenAIStoryIntelligenceProvider implements StoryIntelligenceProvide
       );
     }
     return result.data;
+  }
+
+  async planSceneNarration(input: PlanSceneNarrationInput): Promise<string> {
+    const audienceClause = input.audienceMode === 'KIDS'
+      ? 'for a young audience (ages 4–12). Keep it friendly, clear, and engaging. No adult themes.'
+      : 'for a general audience. Keep it clear and engaging.';
+    const system = [
+      `You are a narration writer writing voiceover scripts ${audienceClause}`,
+      'Write a single, continuous narration paragraph (40–100 words) for the given scene.',
+      'The narration should be spoken aloud as voiceover — present tense, vivid, and natural.',
+      'Do NOT include any formatting, scene titles, or speaker labels. Output only the narration text.',
+    ].join('\n');
+
+    const contextParts: string[] = [`Scene: ${input.sceneTitle}`, `Description: ${input.sceneDescription}`];
+    if (input.chapterBody) contextParts.push(`Chapter context: ${input.chapterBody.slice(0, 400)}`);
+    if (input.genre) contextParts.push(`Genre: ${input.genre}`);
+    if (input.tone) contextParts.push(`Tone: ${input.tone}`);
+    if (input.mood) contextParts.push(`Mood: ${input.mood}`);
+
+    const content = await this.complete(system, contextParts.join('\n'), { temperature: 0.6, responseFormat: 'text' });
+    const trimmed = content.trim();
+    if (trimmed.length < 10) {
+      throw new StoryIntelligenceError('NARRATIVE_ENHANCEMENT_FAILED', 'Scene narration was too short');
+    }
+    return trimmed.slice(0, 600);
   }
 }

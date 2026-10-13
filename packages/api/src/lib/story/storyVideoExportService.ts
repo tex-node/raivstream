@@ -133,6 +133,13 @@ export class StoryVideoExportService {
     // ── 2. Load and authorize project ───────────────────────────────────────
     const project = await prisma.storyProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
+      select: {
+        id: true,
+        userId: true,
+        audienceMode: true,
+        contentType: true,
+        backgroundMusicUrl: true,
+      },
     });
     if (!project) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found.' });
@@ -211,15 +218,21 @@ export class StoryVideoExportService {
     // ── 6. Idempotency — compute sourceHash ──────────────────────────────────
     // narrationAudioUrl is included in the hash so that adding audio after a
     // video-only export produces a distinct export row (not a stale cache hit).
+    // backgroundMusicUrl is included so a music change invalidates the export.
     const audioByScene = new Map<string, string | null>(
       allScenes.map((s) => [s.id, s.narrationAudioUrl ?? null]),
     );
-    const pairs = sceneIdList.map((sceneId) => ({
+    const backgroundMusicUrl = project.backgroundMusicUrl ?? null;
+    const pairsBase = sceneIdList.map((sceneId) => ({
       sceneId,
       assetId: readyByScene.get(sceneId)!.id,
       audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : null,
     }));
-    const sourceHash = computeSourceHash(pairs);
+    // Include backgroundMusicUrl in hash as a synthetic trailing pair.
+    const hashPayloadPairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }> = backgroundMusicUrl
+      ? [...pairsBase, { sceneId: '__music__', assetId: backgroundMusicUrl }]
+      : pairsBase;
+    const sourceHash = computeSourceHash(hashPayloadPairs);
 
     // Check for existing non-FAILED export with same hash (optimistic read).
     const existing = await prisma.storyVideoExport.findFirst({
@@ -281,6 +294,7 @@ export class StoryVideoExportService {
           scenes,
           derivation,
           r2Prefix: `story-exports/${input.projectId}/exports/${exportRow.id}`,
+          backgroundMusicUrl,
         },
         deps,
       );

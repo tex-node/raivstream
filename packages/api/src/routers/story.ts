@@ -8,7 +8,7 @@ import { applyMasterVisualBible } from '../lib/visualBible';
 import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
 import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY } from '../lib/credits';
+import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
@@ -66,6 +66,7 @@ import {
 } from '../lib/visualPromptComposer';
 import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntelligence/types';
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
+import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -7554,6 +7555,171 @@ export const storyRouter = router({
       } catch (error) {
         await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: educational narration failed').catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
+      }
+    }),
+
+  /**
+   * Phase A — R16-safe non-educational narration.
+   * Generates TTS audio from a per-scene narration script WITHOUT using the
+   * Sequence/AudioCue/AudioTrack Film-tab pipeline (which is blocked for R16 users).
+   * Only available for R16 users on NON-EDUCATIONAL content.
+   * If narrationScript is already set on the scene, uses it; otherwise calls
+   * storyIntelligenceProvider.planSceneNarration() to generate one.
+   * Stores the audio URL on StorySceneSeed.narrationAudioUrl and the script on
+   * StorySceneSeed.narrationScript (so re-generate is idempotent).
+   */
+  generateStoryNarration: r16Procedure
+    .input(z.object({
+      projectId: z.string(),
+      sceneId: z.string(),
+      voiceId: z.string().max(80).optional(),
+      modelId: z.string().max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ensureProject(ctx, input.projectId);
+      if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+      }
+      const scene = await ctx.prisma.storySceneSeed.findFirst({
+        where: { id: input.sceneId, projectId: input.projectId },
+        include: {
+          project: { select: { contentType: true, genre: true, tone: true } },
+          chapter: { select: { body: true } },
+        },
+      });
+      if (!scene) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story scene not found' });
+      if (scene.project?.contentType === 'EDUCATIONAL') {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Use generateEducationalNarration for educational stories.' });
+      }
+
+      // Resolve or generate the narration script. The script is persisted only
+      // AFTER moderation passes (see resolveNarrationScript) so a flagged script
+      // never lands in the DB and a retry can generate and moderate a fresh one.
+      let narrationScript: string;
+      try {
+        narrationScript = (
+          await resolveNarrationScript(scene.narrationScript ?? null, {
+            generate: () => storyIntelligenceProvider.planSceneNarration({
+              sceneTitle: scene.title,
+              sceneDescription: scene.description,
+              chapterBody: scene.chapter?.body ?? null,
+              genre: scene.project?.genre ?? null,
+              tone: scene.project?.tone ?? null,
+              mood: scene.mood ?? null,
+              audienceMode: 'KIDS',
+            }),
+            moderate: (text) => moderatePrompt(text),
+            rejectMessage: (moderation) => moderationRejectMessage(moderation, 'Narration script violates content guidelines.'),
+            persist: async (text) => {
+              await ctx.prisma.storySceneSeed.update({ where: { id: input.sceneId }, data: { narrationScript: text } });
+            },
+          })
+        ).script;
+      } catch (error) {
+        if (error instanceof NarrationModerationError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: error.message });
+        }
+        throw error;
+      }
+      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_SPEECH_GENERATION_FEATURE_KEY);
+      if (!rate.configured) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
+      }
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Story narration');
+      try {
+        const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
+        const audio = await synthesizeSpeech({ text: narrationScript, voiceId, modelId: input.modelId });
+        const storageKey = `story-projects/${input.projectId}/narration/${input.sceneId}-${Date.now()}.mp3`;
+        const publicUrl = await uploadBufferToR2(audio, storageKey, 'audio/mpeg');
+        if (!publicUrl) throw new Error('R2 storage is not configured for narration.');
+        await ctx.prisma.audioAsset.create({
+          data: {
+            projectId: input.projectId,
+            userId: ctx.user.id,
+            storageProvider: 'R2',
+            storageKey,
+            publicUrl,
+            mimeType: 'audio/mpeg',
+            fileSizeBytes: audio.length,
+            sourceKind: 'GENERATED_SPEECH',
+          },
+        });
+        await ctx.prisma.storySceneSeed.update({
+          where: { id: input.sceneId },
+          data: { narrationAudioUrl: publicUrl },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'story_narration_generated',
+          projectId: input.projectId,
+          properties: { sceneId: input.sceneId, voiceModel: elevenLabsModelId() },
+        });
+        return { audioUrl: publicUrl, narrationScript };
+      } catch (error) {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: story narration failed').catch(() => {});
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
+      }
+    }),
+
+  /**
+   * Phase B — R16 background music generation (fail-closed).
+   * Derives a music brief from the StoryProject and calls Lyria to generate
+   * a background track. Returns null (no charge) if the feature flag is off
+   * or if the story:background_music credit rate is not configured.
+   * Stores the result URL on StoryProject.backgroundMusicUrl; idempotent —
+   * returns the existing URL without a new charge if already set.
+   */
+  generateStoryMusic: r16Procedure
+    .input(z.object({
+      projectId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ctx.prisma.storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        select: { id: true, genre: true, tone: true, theme: true, backgroundMusicUrl: true },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+
+      // Fail-closed: return existing URL without charge if already set.
+      if (project.backgroundMusicUrl) {
+        return { backgroundMusicUrl: project.backgroundMusicUrl, reused: true };
+      }
+
+      // Fail-closed: feature flag check.
+      if (!isLyriaMusicEnabled() || !geminiApiKey()) {
+        return { backgroundMusicUrl: null, reused: false };
+      }
+
+      const rate = await resolveFeatureCreditRate(ctx.prisma, STORY_BACKGROUND_MUSIC_FEATURE_KEY);
+      if (!rate.configured) {
+        return { backgroundMusicUrl: null, reused: false };
+      }
+
+      const prompt = defaultMusicPrompt(project);
+      const moderation = await moderatePrompt(prompt);
+      if (!moderation.allowed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Music prompt violates content guidelines.') });
+      }
+
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Story background music');
+      try {
+        const { audio, mimeType } = await generateLyriaMusic({ prompt });
+        const ext = mimeType === 'audio/mp3' ? 'mp3' : 'mp3';
+        const storageKey = `story-projects/${input.projectId}/music/background-${Date.now()}.${ext}`;
+        const publicUrl = await uploadBufferToR2(audio, storageKey, mimeType);
+        if (!publicUrl) throw new Error('R2 storage is not configured for background music.');
+        await ctx.prisma.storyProject.update({
+          where: { id: input.projectId },
+          data: { backgroundMusicUrl: publicUrl },
+        });
+        await trackStoryAnalytics(ctx, {
+          event: 'story_background_music_generated',
+          projectId: input.projectId,
+          properties: { model: lyriaModelId() },
+        });
+        return { backgroundMusicUrl: publicUrl, reused: false };
+      } catch (error) {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Refund: story background music failed').catch(() => {});
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Background music generation failed' });
       }
     }),
 

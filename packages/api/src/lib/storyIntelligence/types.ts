@@ -149,6 +149,16 @@ export type PlanEducationInput = {
   sceneCount: number;
 };
 
+export type PlanSceneNarrationInput = {
+  sceneTitle: string;
+  sceneDescription: string;
+  chapterBody?: string | null;
+  genre?: string | null;
+  tone?: string | null;
+  mood?: string | null;
+  audienceMode: StoryAudienceMode;
+};
+
 export interface StoryIntelligenceProvider {
   readonly name: string;
   planStory(input: PlanStoryInput): Promise<StoryBlueprint>;
@@ -156,6 +166,7 @@ export interface StoryIntelligenceProvider {
   directScenes(input: DirectScenesInput): Promise<DirectedScene[]>;
   classifyContent(input: ClassifyContentInput): Promise<ContentType>;
   planEducation(input: PlanEducationInput): Promise<EducationalContract>;
+  planSceneNarration(input: PlanSceneNarrationInput): Promise<string>;
 }
 
 // ─── Typed Failures ──────────────────────────────────────────────────────────

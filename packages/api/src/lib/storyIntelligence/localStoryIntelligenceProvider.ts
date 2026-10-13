@@ -5,6 +5,7 @@ import type {
   DirectScenesInput,
   ClassifyContentInput,
   PlanEducationInput,
+  PlanSceneNarrationInput,
   StoryBlueprint,
   DirectedScene,
   ContentType,
@@ -460,5 +461,18 @@ export class LocalStoryIntelligenceProvider implements StoryIntelligenceProvider
       recapIncluded: true,
       antiCommercialTopics: ['luxury goods', 'brand logos', 'advertisements', 'commercial products', 'aspirational lifestyle imagery'],
     };
+  }
+
+  async planSceneNarration(input: PlanSceneNarrationInput): Promise<string> {
+    const moodPart = input.mood ? ` The mood is ${input.mood}.` : '';
+    const tonePart = input.tone ? ` The tone is ${input.tone}.` : '';
+    const genrePart = input.genre ? ` Genre: ${input.genre}.` : '';
+    const audiencePrefix = input.audienceMode === 'KIDS'
+      ? 'In this scene, '
+      : 'The scene unfolds as ';
+    const body = input.chapterBody
+      ? input.chapterBody.trim().split(/[.!?]/)[0]?.trim() ?? input.sceneDescription
+      : input.sceneDescription;
+    return `${audiencePrefix}${input.sceneTitle.toLowerCase()}. ${body.slice(0, 200)}.${moodPart}${tonePart}${genrePart}`.slice(0, 600);
   }
 }

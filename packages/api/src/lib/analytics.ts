@@ -102,6 +102,10 @@ export const STORY_ANALYTICS_EVENTS = [
   'scene_narration_generated',
   // Phase C — R16 educational narration (bypasses Film-tab Sequence pipeline)
   'educational_narration_generated',
+  // Phase A — R16 non-educational story narration
+  'story_narration_generated',
+  // Phase B — R16 background music generation
+  'story_background_music_generated',
   // Phase 16.5 — production manifest
   'production_manifest_persisted',
   // Story editing
