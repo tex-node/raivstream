@@ -228,10 +228,11 @@ click-through. This track adds the drill-down.
 
 | Item | Status | Notes |
 |---|---|---|
-| E1 — source clip audio dropped in stitched exports | **FIX IN PROGRESS** | Branch `fix/export-clip-audio` @ `9fb27b6` (local, not pushed). Root cause: `renderOutputDerivative` mixed only narration + background music and never mapped the source clips' native audio (the Movie Builder does — `movieRenderWorker.ts:721–747`). Fix: per-scene native+narration `amix` on the audio path; an ambience bed (`adelay` + `amix`) muxed into the video-only path; end card preserved. Tests: `exportClipAudio.test.ts` (5, asserting the constructed filter graph — ffmpeg is absent locally). |
+| E1 — source clip audio dropped in stitched exports | **FIX IN PROGRESS** | Branch `fix/export-clip-audio` @ `5c82d21`; **PR #9** (base `main`). Root cause: `renderOutputDerivative` mixed only narration + background music and never mapped the source clips' native audio (the Movie Builder does — `movieRenderWorker.ts:721–747`). Fix (additive): per-scene native+narration `amix` on the narration path; a probed ambience bed (`adelay` + `amix`) on the video-only path (single-pass concat → Option A was the only option); end card preserved. Cache invalidation: `EXPORT_RENDERER_VERSION = 'phase-3-v2'` folded into `computeSourceHash`. Tests: `exportClipAudio.test.ts` (6, asserting the constructed filter graph — ffmpeg is absent locally). |
+| E1 — video-only music path does not append the end card | **FOLLOW-UP (low priority)** | Pre-existing bug, discovered 2026-10-13 while implementing E1 (the video-only + background-music path returns before `appendEndCard`). Not fixed in PR #9 — separate small fix. |
 | E1a — auto-trigger narration for non-educational projects | **OPEN (product decision)** | Non-educational projects do not auto-generate narration. Whether they should is a product choice, not a bug. No code. |
 
-**Cache note (flagged, not silently changed):** `computeSourceHash` (`storyVideoExportService.ts:62–67`) = SHA-256 of sorted `sceneId:assetId[:audio:audioUrl]`, under `@@unique([projectId, sourceHash])`. It covers the source clip's identity, but this code change alone does not change the hash — **already-exported rows will be reused and stay silent until re-exported/invalidated**.
+**Cache invalidation:** `computeSourceHash` (`storyVideoExportService.ts`) = SHA-256 of `${EXPORT_RENDERER_VERSION}|sorted(sceneId:assetId[:audio:audioUrl])`, under `@@unique([projectId, sourceHash])`. The renderer version is now folded in (E1 requirement), so this renderer change invalidates every cached export — otherwise already-exported rows would be reused and stay silent.
 
 ---
 
