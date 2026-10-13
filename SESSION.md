@@ -2,8 +2,14 @@
 
 This file is the living project/session record for Raivstream. Update it every time a feature is added, changed, deployed, or materially debugged so future development starts from the current GitHub/VPS reality.
 
-Last updated: 2026-09-23 (Director→Readiness fix: applyInstruction re-evaluates readiness after a directive, assertSourceReady uses combined intent+refinedIntent, DirectorPanel shows inline ReadinessGate on block; deployed `a89bba1`; CONDITIONAL GO — Human UX Acceptance still PENDING)
-Current GitHub commit deployed to VPS: `a89bba1` (fix(creative): re-evaluate readiness after Director instruction changes commercial context — deployed 2026-09-23)
+Latest verification (2026-10-12, upgrade PR) — Draft PR **#4** opened for `feat/raivstream-upgrade` → `main` (https://github.com/tex-node/raivstream/pull/4); branch pushed (**34 commits**, HEAD **`c8f4adb`**, base `a9cb10f`). A **Phase 1 regression was caught by the hosted real-Postgres integration job and fixed**: the music charge was keyed `creditKeys.music.charge(featureKey, creativeVersionId)`, which collapsed two concurrent same-version requests to one USAGE row while the loser still refunded → **net 0 for a delivered track** (`phase6d` race asserted "expected +0 to be 1"). **Fix (`c8f4adb`):** create the `MUSIC_TRACK` cue first (the partial-unique index on `trackId` is the concurrency guard), then charge **per-cue** `creditKeys.music.charge(featureKey, cueId)`; the P2002 loser neither charges nor refunds; `referenceId` stays the version; provider-failure refund keyed per-cue; orphan cue deleted if the charge fails. **6 pre-existing unit assertions** (`phase6c.test.ts` ×2, `phase6d.test.ts` ×4) that encoded the old "P2002 refunds the other" contract were **flipped to the new contract** (positive assertions — not weakened); new unit race test `audio/__tests__/musicChargeRace.test.ts` (2). Tests: `pnpm --filter @raivstream/api test` → **92 files, 1631 passed | 5 skipped, EXIT 0**; `pnpm --filter @raivstream/web test` → 9 files / 96 passed. **CI on PR #4:** `test-unit` **PASS**; `test-integration` — the real-Postgres suite now **passes 14/14** (`[phase6d] race=20/20 reuse=0/20`) but the **JOB is still red on a STALE exact-count assertion** in `.github/workflows/{ci,deploy}.yml` ("exactly 4 passing tests" — predates `creditLedger.integration.test.ts`; the count is now **14**). Pending one-line fix: **4 → 14**. **Nine migrations remain UNAPPLIED**; VPS end-card not verified; PR is a **DRAFT** — do NOT merge until the operator queue in `docs/operations/upgrade-plan-closing-status.md` §6 *and* the CI count fix are done.
+
+Latest verification (2026-10-12) — **Phase 1–4 upgrade complete on `feat/raivstream-upgrade`** (base `a9cb10f`, 33 commits, HEAD `50fdca8`). Feature-complete + test-verified; **production verification PENDING**. Nine features: Phase 1 credit-ledger idempotency + PL-01 admin usage; Phase 2 R16-02 styles (Cartoon/Anime/3D Animation, R16-only); R16-03 character reference approval + continuity; R16-04 batch scene generation (cap + partial-failure retry); R16-05 chapter version history (snapshot + restore); Phase 3 two-second end card in `renderOutputDerivative` (+ drawtext/font preflight); Phase 4a R16 publication lifecycle (submit/withdraw/resubmit + feed filter); Phase 4b share links + per-click attribution (90-day retention, **no IP**). Tests: `pnpm --filter @raivstream/api test` → **91 files, 1629 passed | 5 skipped, EXIT 0**; `pnpm --filter @raivstream/web test` → **9 files, 96 passed**; web lint EXIT 0; both type-checks EXIT 0. **Nine migrations are UNAPPLIED** — ordered list + the commit that introduced each is in `docs/operations/upgrade-plan-closing-status.md` §4 (only `20261012140000_…_not_null` is non-additive; it follows the `…130000` backfill). **De-risking NOT yet done:** the migrate rehearsal + `test:integration` are BLOCKED by the environment (no sustainable local Postgres — PG 17 backend processes die with `0xC0000142`; Docker engine down; local `:5432` is scram with no credential), VPS end-card verification is BLOCKED (no VPS access), and **no PR was opened**. Evidence docs: `docs/operations/{phase-2-release-evidence,phase-4-release-evidence,upgrade-plan-closing-status}.md` and `docs/architecture/phase-4-publication-sharing.md`. Recommendation: **CONDITIONAL GO** — run the operator queue in the closing-status doc §6 (migrations → end-card → VPS HEAD → PR hygiene → staging verification) before merge.
+
+Latest verification (2026-10-11) — R16 Video Audio A/B/C release-gate closure. Candidate: `main` HEAD `9d8ca17` (ahead 5) **plus** uncommitted release code (`routers/story.ts`, `phase6d.integration.test.ts`, `lib/story/narrationScript.ts`, `lib/story/__tests__/narrationScript.test.ts`) and a test-harness fix (`packages/api/vitest.config.ts` + new `vitest.integration.config.ts` + `package.json` `test:integration`). **Parallel integration timeout RESOLVED:** the DB integration test (`beforeAll` connect + `TRUNCATE`s) exceeded vitest's 10 s hook timeout under 84 parallel forks (reproduced 2/2); it is now excluded from the parallel unit suite and run in isolation via `test:integration` (`fileParallelism:false`, 60 s hook/test timeouts). Post-fix: `pnpm --filter @raivstream/api test` → **83 files, 1553 passed | 5 skipped, EXIT 0**; `test:integration` → **4/4, EXIT 0, `race=19/20 reuse=1/20`** against disposable PostgreSQL 17.11 (`localhost:5433`, trust; schema via `prisma db push` 80 tables + the real partial-index migration; predicate verified in `pg_indexes`). Type-check EXIT 0, lint EXIT 0. Migrations `20261009120000`/`20261009130000` exercised on the disposable DB (drop → apply → re-add; idempotent) and prepared for DBA review. FFmpeg absent → real-media render BLOCKED (unit tests + source review only). Staging S1–S11: NOT TESTED (no access; S9 needs separate music authorization). Nothing staged/committed/pushed/deployed. Recommendation: CONDITIONAL — READY FOR HUMAN RELEASE REVIEW. See `docs/operations/r16-video-audio-phase-abc-verification.md` §14.
+
+Last updated: 2026-10-09 (R16 Video Export Audio Pipeline Phase A/B/C COMPLETE — narration script + background music + FFmpeg audio mux. Three commits on main (not yet pushed): c188f76 Phase A, 4330faa Phase C, 9d8ca17 Phase B. Narration recovery FIXED via `resolveNarrationScript` (generate → moderate → persist; flagged script never stored) + regression `narrationScript.test.ts` (3/3 PASS). Integration-test mock isolation fixed (all Lyria mocks hoisted). Tests: 1557 passed | 5 skipped | 0 failed (1562). TypeScript: 0 errors. Phase 6D real-DB integration re-run BLOCKED by environment (no reachable disposable Postgres — Docker engine down/needs admin; local PG :5432 is scram with no credential; sandbox kills self-hosted :5433 cluster) — took the DB-skip path, NOT a real-DB pass. NOT YET DEPLOYED: requires staging S1–S11 + re-run of S12 with a reachable DB, prisma migrate deploy for migrations 20261009120000 + 20261009130000, and separate authorization before push.)
+Last known GitHub commit deployed to VPS: `7324c47` (deployed 2026-09-23) — **UNVERIFIED / STALE**; `origin/main` has since advanced to `a9cb10f`. Confirm the live HEAD on the VPS with `git -C /root/raivstream rev-parse HEAD` before trusting this line.
 
 ## Maintenance Rule
 
@@ -275,6 +281,37 @@ Key containers:
 There are other Supabase/Postgres stacks on the VPS for other projects. Do not assume a container with `users` table is the Raivstream database. Verify the full app table set before changing DB targets.
 
 ## Recent Changes
+
+### 2026-10-09: R16 Video Export Audio Pipeline — Phase A/B/C (NOT YET PUSHED)
+
+Implements the complete R16 audio pipeline on top of the story video export system. Three commits on main branch, not yet pushed. Requires human release review + staging S1–S11 before deployment.
+
+**Phase A — narration script (`c188f76`):**
+- `narrationScript String?` on `StorySceneSeed` (migration `20261009120000_phase_a_story_scene_narration_script`)
+- `planSceneNarration` added to `StoryIntelligenceProvider` interface + OpenAI/local implementations
+- `generateStoryNarration` r16Procedure: non-educational R16 path, generates + moderates + stores narration script, then synthesises speech via ElevenLabs and writes `audioAsset` + `narrationAudioUrl` (fail-closed on unconfigured `story:speech_generation` rate; `ELEVENLABS_TTS_ENABLED` gate)
+- **Narration recovery FIXED**: extracted `resolveNarrationScript` (`packages/api/src/lib/story/narrationScript.ts`) — `generateStoryNarration` now runs generate → moderate → persist, so a flagged script is never written to `storySceneSeed.narrationScript` and a retry generates and moderates a fresh script. Regression: `packages/api/src/lib/story/__tests__/narrationScript.test.ts` (3/3 PASS: rejected not persisted; retry fresh; existing reused).
+
+**Phase B — background music (`9d8ca17`):**
+- `backgroundMusicUrl String?` on `StoryProject` (migration `20261009130000_phase_b_story_project_background_music`)
+- `STORY_BACKGROUND_MUSIC_FEATURE_KEY = 'story:background_music'` credit constant
+- `generateStoryMusic` r16Procedure: four ordered gates (R16 check, `LYRIA_MUSIC_ENABLED` flag, configured credit rate, moderation); charges credits; uploads to R2; writes `backgroundMusicUrl` on `StoryProject`; `LYRIA_MUSIC_ENABLED=true` NOT set in production (fail-closed by design)
+
+**Phase C — FFmpeg mux + export threading (`4330faa`):**
+- `renderOutputDerivative` extended with `backgroundMusicUrl?` — narration+music path uses `amix=inputs=2:duration=first` + `afade=t=in` + `volume=0.3`; video-only+music path adds two-pass with `afade` in/out + `atrim`
+- `storyVideoExportService` selects `backgroundMusicUrl`, includes it as synthetic `{ sceneId: '__music__', assetId: backgroundMusicUrl }` in source hash (music change invalidates export cache), passes it to `renderOutputDerivative`; export failure sets `status: 'FAILED'`
+
+**Integration test fix:**
+- `phase6d.integration.test.ts`: moved `isLyriaMusicEnabled` and `lyriaModelId` into `vi.hoisted` alongside `generateMusic` and `uploadBufferToR2`. All four implementations re-established in `beforeEach`. Eliminates intermittent full-suite failures caused by `restoreMocks:true` leaving inline factory `vi.fn()` instances without implementations between tests.
+
+**Verification (second pass):** 1557 passed | 5 skipped | 0 failed (1562). TypeScript 0 errors. Narration recovery regression `narrationScript.test.ts` 3/3 PASS. Phase 6D real-DB integration re-run **BLOCKED by environment** (no reachable disposable Postgres) — took the DB-skip path; the partial-index/concurrency evidence must be re-produced by an operator with a reachable DB (see `docs/operations/r16-video-audio-phase-abc-verification.md` §1a). Full verification record: `docs/operations/r16-video-audio-phase-abc-verification.md`.
+
+**Deployment prerequisites (NOT YET DONE):**
+- Staging S1–S11 acceptance (real media, ElevenLabs TTS, R2 upload, fail-closed music path)
+- `prisma migrate deploy` for migrations `20261009120000` + `20261009130000` on VPS
+- Seed `story:speech_generation` rate (currently unseeded on staging/prod)
+- `LYRIA_MUSIC_ENABLED=true` NOT set until Phase B separately authorized
+- `git push` only after staging acceptance + explicit push authorization
 
 ### 2026-09-23: Creator UX exposure, Intent Readiness, commercial source & contextual Director (`19c8cf9` → `8b1049a`)
 
@@ -2123,3 +2160,113 @@ Current release state:
 - R16 movie builder API denial and production health checks remained clean.
 - Decision: GO for controlled Phase 9B.1 production release. No commit, push, production migration, production PM2 restart, or production deployment was performed during requalification.
 - Production render smoke completed 2026-08-31: 24-second movie rendered via Film tab (account `texdevices@gmail.com`), 100 credits deducted (matching `story:movie_render` rate), no worker crash logged, app and R16 health clean post-render. Phase 9B.1 status: PRODUCTION COMPLETE.
+
+### 2026-09-25/26: R16 Kids Mode — Video Export (Phase 2A–2D) — IMPLEMENTATION COMPLETE, NOT YET DEPLOYED
+
+Implemented the full R16 story video export capability. All tests pass; VPS deployment requires `prisma migrate deploy` before going live.
+
+**Phase 2A — R16 scene video UI guard removed**
+- File: `apps/web/src/app/story-playground/new/page.tsx`
+- Removed the `!isR16` conditional that was blocking the "Bring this scene to life" button for R16 users.
+- `generateSceneVideo` / `regenerateSceneVideo` use `protectedProcedure` (not `creativeProcedure`) so they were never blocked at the API level — only the UI button was hidden.
+- Regression suite: `packages/api/src/routers/__tests__/r16SceneVideo.test.ts` (15 tests) — proves KIDS safety stack intact: `audienceMode=KIDS`, KIDS negative prompts, `assertKidsSafeIdea`, moderation.
+
+**Phase 2C — StoryVideoExport model, migration, service, and tRPC procedures**
+- New Prisma model `StoryVideoExport` in `packages/database/schema.prisma` with `@@unique([projectId, sourceHash])` for DB-level idempotency.
+- Migration: `packages/database/migrations/20260925180000_story_video_export/migration.sql` — creates `StoryVideoExportStatus` enum and `story_video_exports` table; additive with `IF NOT EXISTS` guards. Must be applied on VPS with `prisma migrate deploy`.
+- Service: `packages/api/src/lib/story/storyVideoExportService.ts` — 10 safety invariants (isR16, project ownership, audienceMode=KIDS, scene FK chain, assetType=VIDEO, status=READY, isLatest, not deleted, non-null assetUrl), synchronous lifecycle (creates row in GENERATING directly), P2002 race handling with composite `projectId+sourceHash` scope.
+- New middleware and procedure in `packages/api/src/trpc.ts`: `requireR16` middleware + `r16Procedure` export (auth + requireR16).
+- New tRPC procedures in `packages/api/src/routers/story.ts`: `requestStoryVideoExport` and `getStoryVideoExport` — both use `r16Procedure`.
+- Test suite: `packages/api/src/routers/__tests__/r16StoryExport.test.ts` (19 tests).
+
+**Phase 2D — Export UI in Story Playground**
+- File: `apps/web/src/app/story-playground/new/page.tsx`
+- Added `storyVideoExport` query hook (`getStoryVideoExport`, enabled only when `isR16 && !!projectId`).
+- Added `requestStoryVideoExport` mutation hook (refetches query on success).
+- Added `allScenesHaveReadyVideo` derived boolean (`isR16 && scenes.length > 0 && scenes.every(latestVideoAsset)`).
+- Added export UI section in the aside (after "Read Story" link), R16-gated (`isR16 && projectId && scenes.length > 0`), with five states:
+  - PROGRESS: "N of M scenes have video / Bring all scenes to life to export your story."
+  - EXPORT_READY: "All scenes ready!" + Export Story gradient button.
+  - ASSEMBLING: "Assembling your story…" + animated pulse bar (mutation pending or row GENERATING).
+  - STORY_READY: "Your story is ready!" + Watch Story link (target=`_blank`, cyan accent).
+  - FAILED: "Something went wrong. You can try again." + Try Again button.
+- Test suite: `apps/web/src/app/story-playground/r16ExportUi.test.ts` (22 pure-logic tests).
+- Full suite gate: 815 API tests PASS, 31 web tests PASS.
+
+**Safety invariants unchanged:**
+- `isNotR16` on `creativeProcedure` untouched.
+- `audienceMode=KIDS`, `assertKidsSafeIdea()`, KIDS negative prompts, prompt/video moderation untouched.
+- Legacy Sequence/Audio/Film tabs remain R16-blocked.
+- No second video-generation implementation.
+
+**Pending before production:**
+- Run `prisma migrate deploy` on VPS (migration committed, not applied in prod).
+- Phase 2H: Real acceptance test on VPS (scene videos → FFmpeg → R2 → Watch Story).
+- Phase 2I: Regression sweep confirming legacy R16 blocks intact after all changes.
+
+---
+
+### 2026-09-26: Educational Content Engine — Phase B (Educational Intent/Content Contract) — IMPLEMENTATION COMPLETE, NOT YET DEPLOYED
+
+Root cause addressed: Story Playground had no content-type detection. "Let's talk about ships" was processed as a narrative story and produced luxury-yacht commercial visuals with no narration.
+
+**What was built:**
+
+`ContentType` enum + `EducationalContract` schema in `packages/api/src/lib/storyIntelligence/types.ts`:
+- `ContentType`: `'EDUCATIONAL' | 'STORY' | 'COMMERCIAL' | 'ENTERTAINMENT' | 'DOCUMENTARY' | 'TRANSFORMATION'`
+- `EducationalContract`: 12-field contract (`version`, `topic`, `targetAge`, `learningObjective`, `keyConcepts`, `vocabularyLevel`, `explanationStrategy`, `examplesToUse`, `visualTeachingStrategy`, `narrationRequired`, `sceneProgression`, `recapIncluded`, `antiCommercialTopics`)
+- New input types: `ClassifyContentInput`, `PlanEducationInput`
+- `StoryIntelligenceProvider` interface extended with `classifyContent()` and `planEducation()`
+
+New prompt files:
+- `packages/api/src/lib/storyIntelligence/prompts/contentClassifierPrompt.ts` — classifies idea into 6 content types; "let's talk about X" → EDUCATIONAL
+- `packages/api/src/lib/storyIntelligence/prompts/educationContractPrompt.ts` — produces full 12-field teaching contract with anti-commercial guard
+
+Both providers extended:
+- `OpenAIStoryIntelligenceProvider`: `classifyContent` (temperature 0.1, json_object), `planEducation` (temperature 0.4, json_object); both validate via Zod
+- `LocalStoryIntelligenceProvider`: deterministic fallbacks using keyword matching for `classifyContent`, template contract for `planEducation`
+
+Prisma schema (`packages/database/schema.prisma`):
+- `StoryProject`: added `contentType String?`
+- `StoryChapter`: added `educationalContract Json?`
+- Migration: `packages/database/migrations/20260926120000_educational_contract/migration.sql` (additive, `IF NOT EXISTS`)
+
+`packages/api/src/routers/story.ts` — `generateStory` mutation:
+- Before blueprint: classifies content type, fires `ctx.prisma.storyProject.update({ contentType })` (soft-fail)
+- If EDUCATIONAL: runs `planEducation` (soft-fail); contract passed into `storyChapter.create` as `educationalContract` JSON
+- `planStory` blueprint still runs for all content types (Phase C will consume the contract)
+- Both classification and education contract are fire-and-forget on error — never block generation
+
+Test suite: `packages/api/src/lib/storyIntelligence/__tests__/educationalContentEngine.test.ts` — 24 tests:
+- `contentTypeSchema` validation (2 tests)
+- `classifyContent` deterministic classification of 8 idea patterns (9 tests)
+- `educationalContractSchema` validation (3 tests)
+- `planEducation` output validation (10 tests)
+- Full suite gate: **839 API tests PASS** (815 pre-existing + 24 new)
+
+**Pending before production:**
+- Run both migrations on VPS: `20260925180000_story_video_export` AND `20260926120000_educational_contract`
+- Phase C: Narration + scene teaching plan (consume `educationalContract` in `sceneDirectorPrompt` and narration layer)
+- Phase D: Educational visual direction / anti-commercial guard (inject `antiCommercialTopics` into `composeScenePromptText`)
+- Phase E: Educational quality validation
+- Phase F: Full test suite
+- Phase G: Controlled production test ("Let's talk about ships")
+
+### 2026-10-13: Production incident — partial migration deploy
+
+- Cause: `20261012140000_..._not_null` applied while running code (`a9cb10f`) predated
+  the code that sets `idempotencyKey`. Compounded by a `.hold` directory rename that
+  Prisma treated as a real migration and applied.
+- Impact window: 64 minutes (05:53:02 → 06:56:45 UTC) during which any
+  `credit_transactions` insert by the live app would fail with 23502.
+- User impact: LIKELY NONE. Zero DB activity of any kind in the window (0 ledger
+  rows, 0 generation jobs, 0 subscriptions). Failed writes are transactional and
+  leave no partial state. Confidence: MEDIUM — absence of evidence, not proven
+  absence; Sentry is not configured and PM2 logs show no matching errors.
+- Remediation: `ALTER COLUMN idempotencyKey DROP NOT NULL`; service restored.
+  Running app untouched (`a9cb10f` still live).
+- `_prisma_migrations` carries the rolled-back #7 row (expected for a retried
+  migration) and a pre-existing July rolled-back row for
+  `story_director_prompt_quality` — do not chase these.
+- New runbook: `docs/operations/migration-runbook.md` — pre-flight Check C
+  (expand/contract gate) is mandatory; the `.hold` dir-rename is prohibited.
