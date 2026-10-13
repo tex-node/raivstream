@@ -1508,7 +1508,7 @@ function characterPromptIngredient(character: CharacterMemoryRecord) {
   ].filter(Boolean).join(', ');
 }
 
-function characterReferencesFromScene(
+export function characterReferencesFromScene(
   scene: { characters?: unknown; orderIndex?: number | null },
   currentCharacters?: CharacterMemoryRecord[],
 ): Array<{ name: string; promptIngredient: string; lockedBlock: string | null }> {
@@ -1520,7 +1520,18 @@ function characterReferencesFromScene(
   }));
   if (!Array.isArray(scene.characters)) return currentReferences.slice(0, 4);
   const references = scene.characters.flatMap((character) => {
-    if (typeof character === 'string') return [{ name: character, promptIngredient: character, lockedBlock: null }];
+    if (typeof character === 'string') {
+      // Resolve the name against character memory (mirrors the object branch) so a
+      // string-typed scene character still picks up its promptIngredient and its
+      // Track D Layer 2 lockedIdentityBlock. Previously this returned the raw name
+      // with lockedBlock: null, so the frozen identity never reached the prompt.
+      const current = currentByName.get(character.toLowerCase());
+      if (current) {
+        return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null }];
+      }
+      console.warn(`[identity] no memory for character ${character}`);
+      return [{ name: character, promptIngredient: character, lockedBlock: null }];
+    }
     if (!character || typeof character !== 'object') return [];
     const record = character as { name?: unknown; promptIngredient?: unknown; visualDescription?: unknown };
     if (typeof record.name !== 'string') return [];
