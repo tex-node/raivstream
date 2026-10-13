@@ -27,6 +27,7 @@ Update one row per feature per status change. Never conflate the four states.
 | **A — Upgrade (Phase 0–4)** | `feat/raivstream-upgrade`, PR #4 | **DEPLOYED** (`6057bdf`; incident reconciliation `542939e`) |
 | **B — R16 A/B/C** | R16 video audio pipeline | **DEPLOYED** (`a4f46a3`) |
 | **C — Admin observability** | Per-user drill-down (extends PL-01) | **PROPOSED** — not started |
+| **D — Character consistency** | Multi-view canon, locked identity block, R2V | **PROPOSED** — not started (Layer 3 R2V is provider-available on fal) |
 
 ---
 
@@ -177,6 +178,52 @@ click-through. This track adds the drill-down.
 
 ---
 
+## Track D — Character consistency (PROPOSED)
+
+**Current pipeline:** story → scene seeds → FLUX2 starting frame → MiniMax H3 image-to-video. Identity is anchored by one still and by LLM-paraphrased text.
+
+**The problem:** characters drift and morph — expected for I2V from a single frame (any variation in that frame or the prompt propagates). No reference mode, no multi-view anchor, no locked identity block.
+
+**Impact:** three pipeline points — pre-production (character canon), prompt composition (`visualBible.ts`), and the generation adapter (H3 I2V → R2V).
+
+> **Investigation (2026-10-13, read-only).** The deployed adapter `minimax/h3-max-turbo/image-to-video` (`packages/api/src/lib/mediaProviders/fal/contracts.ts:71`, `H3_MAX_I2V_CONTRACT`) is **image-to-video only** — fields `prompt`, `image_url`, `end_image_url`, `duration`, `resolution`, `mode`, `seed`, `prompt_expansion`; **no reference/multi-reference mode**. However fal exposes **`minimax/h3-max/reference-to-video`** (and `minimax/h3/reference-to-video`) — "up to 9 subject/style reference images … cited in the prompt by order (Image 1, Image 2 …)", input `reference_image_urls`. So **Layer 3 R2V is provider-available, not blocked** — it needs a new endpoint adapter plus the ordered-reference prompt convention. For canon images, FLUX.2 offers **multi-reference editing** (`fal-ai/flux-2/edit`, ≤10 refs via `@image1 …`) and **FLUX.2 LoRA training**; there is **no dedicated "CharacterSheet"/"TripleView" endpoint** — multi-view needs one of those mechanisms.
+
+### Layer 1 — Character canon
+
+| Feature | Status | Notes |
+|---|---|---|
+| Multi-view character sheet | IDEA | Front/side/back from a single portrait. [capability pending: no dedicated CharacterSheet endpoint — use `fal-ai/flux-2/edit` multi-reference (≤10 imgs) or a trained FLUX.2 character LoRA; multi-prompt generation is the fallback]. |
+| Freeze the canonical reference | IDEA | **Extends R16-03.** `StoryCharacterMemory.approvedReferenceAssetId` + `approvedAt` (`schema.prisma:1289`) already point at ONE `CharacterReferenceAsset` (`schema.prisma:1312`). Add immutability (currently `isLatest` lets assets be superseded). |
+| Immutable character bible | IDEA | `applyMasterVisualBible` (`visualBible.ts:43`) already injects `bible.characters` verbatim as `Character <name>: <description>` (`:76–83`); immutability is a data/authoring change, not a new prompt mechanism. |
+
+### Layer 2 — Prompt: no reinterpretation
+
+| Feature | Status | Notes |
+|---|---|---|
+| Locked identity block | IDEA | **Extends** `applyMasterVisualBible` — a fixed per-character string injected verbatim in every scene prompt. The verbatim-injection seam already exists (`visualBible.ts:70–95`, incl. R16-03 `approvedReferences`). |
+| Reference-role tagging | IDEA | Needs the R2V ordered-reference convention: a role per `reference_image_urls[i]`, cited in-prompt as "Image N". [capability pending: per-image role semantics on `minimax/h3-max/reference-to-video`]. |
+| MiniMax H3 six-section format | IDEA | `subject_definitions` (character → ordinal) + `retention_analysis`. [capability pending: verify the reference-to-video prompt schema accepts these sections — unverified]. |
+| `applyMasterVisualBible` extension | IDEA | Extend to carry identity blocks + ordinals. Current signature: `applyMasterVisualBible({ prompt, negativePrompt?, bible?, sceneCharacters?, approvedReferences?, target }) → { prompt, negativePrompt }` (`visualBible.ts:43–56`). |
+
+### Layer 3 — Pipeline: identity across shots
+
+| Feature | Status | Notes |
+|---|---|---|
+| **R2V mode** | IDEA | Highest-impact change. **Not provider-blocked** — `minimax/h3-max/reference-to-video` exists on fal. Requires a new adapter + endpoint switch from the deployed I2V endpoint; `H3_MAX_I2V_CONTRACT` has no R2V path. |
+| Last-frame → first-frame chaining | IDEA (partial) | **Already exists at scene level** — `chainLastFrameSeedImage` (`story.ts:386`) seeds shot N+1 with the previous scene's last frame via `extractLastFrameAsSeedImage` (`lastFrameExtract.ts:32`), falling back to the still. Extend to per-shot within a shot grid. |
+| Per-character state store | IDEA | `{ canonical refs, identity block, current-appearance }` retrieved per shot. Canon already lives on `StoryCharacterMemory` + `CharacterReferenceAsset`; a per-shot resolver is new. |
+| Movie Builder continuity check | IDEA | Verify each shot's opening frame matches the prior close within tolerance. New work in `movieRenderWorker.ts` (no existing check). |
+
+### Track D — open questions (findings)
+
+1. **R2V on the deployed endpoint?** The deployed `minimax/h3-max-turbo/image-to-video` is **I2V-only** (`contracts.ts:71`). R2V exists as a **separate** fal endpoint — `minimax/h3-max/reference-to-video` / `minimax/h3/reference-to-video` (up to 9 reference images). Upgrade path: **new adapter for the reference-to-video endpoint** (not blocked).
+2. **FLUX2 CharacterSheet / TripleView on fal?** **No such named endpoint.** FLUX.2 supports multi-reference **editing** (`fal-ai/flux-2/edit`, ≤10 images, `@imageN`) and **LoRA training** (incl. "same object from different angles"). Multi-view canon is achievable via multi-reference edit or a character LoRA, not an existing adapter.
+3. **Character sheet scope** — every named character, or ≥N scenes? **Open** (product decision).
+4. **Existing projects** — backfill or new-only? **Open** (canon assets are immutable once frozen; backfill needs a migration path).
+5. **Extend R16-03's model or add a new one?** **Extendable** — `CharacterReferenceAsset` (`schema.prisma:1312`) + `approvedReferenceAssetId` already model one approved reference; multi-view needs a view/role field or a sheet-level asset.
+
+---
+
 ## Product backlog (not started)
 
 Ordered by leverage. Do not start more than one of these at a time.
@@ -257,7 +304,8 @@ For each release track, all must be true before declaring DEPLOYED:
 2026-10-13 — Upgrade plan **fully deployed**. PR #4 merged (`6057bdf`); PR #5 reconciliation merged
 (`542939e`) re-enforcing `credit_transactions.idempotencyKey` NOT NULL. Live verification: 16 keyed
 charges pre-constraint + keyed charges post-constraint; 0 × `23502`. The 2026-10-13 incident is
-**reconciled**. Track C (admin per-user observability) remains proposed, not started.
+**reconciled**. Track C (admin per-user observability) and Track D (character consistency) remain
+proposed, not started.
 
 ### SHA map (pre-rebase → post-rebase) and verification basis
 
