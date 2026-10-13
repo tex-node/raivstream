@@ -123,7 +123,10 @@ export function CharacterDetailScreen({ projectId, characterId }: { projectId: s
             body={character.evolutionNotes || (character.evolutionStage ? optionLabel(character.evolutionStage) : 'No arc notes yet.')}
             chips={character.evolutionStage ? [optionLabel(character.evolutionStage)] : []}
           />
-          {isR16 && <CharacterReferencePanel characterId={character.id} name={character.name} />}
+          {/* Reference approval is available to all audiences (un-gated from R16)
+              so non-R16 projects can build the canonical reference that Track D
+              Layer 1 conditions scene generation on. */}
+          <CharacterReferencePanel characterId={character.id} name={character.name} />
           {/* Track D Layer 2 — locked identity block (all audiences). */}
           <CharacterIdentityPanel
             characterId={character.id}
