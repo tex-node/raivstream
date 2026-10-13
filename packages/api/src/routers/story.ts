@@ -8168,7 +8168,7 @@ export const storyRouter = router({
       if (!rate.configured) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration pricing is not configured yet.', cause: { errorCode: rate.errorCode } });
       }
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Story narration');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Story narration', creditKeys.narration.charge(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId));
       try {
         const voiceId = input.voiceId || elevenLabsDefaultVoiceId();
         const audio = await synthesizeSpeech({ text: narrationScript, voiceId, modelId: input.modelId });
@@ -8198,7 +8198,7 @@ export const storyRouter = router({
         });
         return { audioUrl: publicUrl, narrationScript };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: story narration failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId, 'Refund: story narration failed', creditKeys.narration.refund(STORY_SPEECH_GENERATION_FEATURE_KEY, input.sceneId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Narration generation failed' });
       }
     }),
@@ -8214,6 +8214,14 @@ export const storyRouter = router({
   generateStoryMusic: r16Procedure
     .input(z.object({
       projectId: z.string(),
+      /**
+       * Client-supplied idempotency id for this generation attempt. Regenerated
+       * when the user starts a NEW attempt; reused unchanged across retries of the
+       * SAME attempt. Keys the background-music charge (and its refund) so a retry
+       * never double-charges while a genuinely new attempt is still charged.
+       * Mirrors the director/adminAdjust client-id convention in creditKeys.
+       */
+      idempotencyId: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
       const project = await ctx.prisma.storyProject.findFirst({
@@ -8243,7 +8251,7 @@ export const storyRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Music prompt violates content guidelines.') });
       }
 
-      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Story background music');
+      const creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Story background music', creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.idempotencyId));
       try {
         const { audio, mimeType } = await generateLyriaMusic({ prompt });
         const ext = mimeType === 'audio/mp3' ? 'mp3' : 'mp3';
@@ -8261,7 +8269,7 @@ export const storyRouter = router({
         });
         return { backgroundMusicUrl: publicUrl, reused: false };
       } catch (error) {
-        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Refund: story background music failed').catch(() => {});
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.projectId, 'Refund: story background music failed', creditKeys.music.refund(STORY_BACKGROUND_MUSIC_FEATURE_KEY, input.idempotencyId)).catch(() => {});
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error instanceof Error ? error.message : 'Background music generation failed' });
       }
     }),

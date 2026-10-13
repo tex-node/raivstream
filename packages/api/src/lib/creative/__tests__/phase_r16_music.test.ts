@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Credits module used directly (no mock needed — pure functions with prisma dep)
 
 import { STORY_BACKGROUND_MUSIC_FEATURE_KEY, resolveFeatureCreditRate } from '../../credits';
+import { creditKeys } from '../../credits/idempotencyKeys';
 
 describe('Phase B — story:background_music credit infrastructure', () => {
 
@@ -69,6 +70,29 @@ describe('Phase B — story:background_music credit infrastructure', () => {
       expect(result.configured).toBe(true);
       expect(result.cost).toBe(75);
       expect(result.errorCode).toBeNull();
+    });
+  });
+
+  describe('D. — background-music charge key: stable per attempt, distinct across attempts', () => {
+    it('same attempt id yields the same charge key (a retry does not double-charge)', () => {
+      expect(creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-1'))
+        .toBe(creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-1'));
+    });
+
+    it('a new attempt id yields a new charge key (a genuinely new attempt is charged)', () => {
+      expect(creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-1'))
+        .not.toBe(creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-2'));
+    });
+
+    it('charge and refund keys are distinct (a refund never collides with its charge)', () => {
+      expect(creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-1'))
+        .not.toBe(creditKeys.music.refund(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'attempt-1'));
+    });
+
+    it('the key embeds the feature key so it never collides with the audio-generation path', () => {
+      const bg = creditKeys.music.charge(STORY_BACKGROUND_MUSIC_FEATURE_KEY, 'x');
+      expect(bg).not.toBe(creditKeys.music.charge('story:audio_generation', 'x'));
+      expect(bg).toContain(STORY_BACKGROUND_MUSIC_FEATURE_KEY);
     });
   });
 
