@@ -39,6 +39,9 @@ If **any** pending migration is **breaking**, the running code must satisfy the 
 
 > **Do NOT rename migration directories to defer them.** Prisma treats **any** directory under `prisma/migrations/` as a migration, including suffixed names (`.hold`). This is exactly what caused the 2026-10-13 incident — the renamed `…_not_null.hold` folder was applied as a real migration.
 
+### Check C-1 — Branch vs. target-branch migration state
+Before applying any migration from branch X, verify that X's `prisma/migrations/` directory is a **superset of all migrations already applied to the target database**. If not, apply via a **scratch union branch**, not directly from X. Cause: parallel branches can fork migration history (see the 2026-10-13 R16-union case). A branch missing migrations that are applied on the target will report **DIVERGED** in `migrate status` and block clean verification.
+
 ### Check D — Backup (non-negotiable)
 ```bash
 pg_dump -Fc -f /root/raivstream/backups/pre_migration_$(date +%Y%m%d-%H%M%S).dump "$DATABASE_URL"
