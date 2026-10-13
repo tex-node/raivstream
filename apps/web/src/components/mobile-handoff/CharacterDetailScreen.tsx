@@ -6,6 +6,7 @@ import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { useR16 } from '@/lib/r16';
+import { useState } from 'react';
 import { useTrackTab } from './useTrackTab';
 
 /**
@@ -123,6 +124,13 @@ export function CharacterDetailScreen({ projectId, characterId }: { projectId: s
             chips={character.evolutionStage ? [optionLabel(character.evolutionStage)] : []}
           />
           {isR16 && <CharacterReferencePanel characterId={character.id} name={character.name} />}
+          {/* Track D Layer 2 — locked identity block (all audiences). */}
+          <CharacterIdentityPanel
+            characterId={character.id}
+            name={character.name}
+            frozenAt={character.identityFrozenAt ?? null}
+            isR16={isR16}
+          />
         </div>
       </div>
     </Shell>
@@ -187,6 +195,84 @@ function CharacterReferencePanel({ characterId, name }: { characterId: string; n
           </button>
         )}
       </div>
+      {err && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{err.message}</p>}
+    </div>
+  );
+}
+
+/**
+ * Track D Layer 2 — locked identity block. Shows the exact string the model will
+ * receive, lets the owner review/edit it, then freeze. Plain copy for R16; the
+ * "locked" concept is separate from the R16-03 reference-image approval.
+ */
+function CharacterIdentityPanel({ characterId, name, frozenAt, isR16 }: { characterId: string; name: string; frozenAt: string | null; isR16: boolean }) {
+  const utils = trpc.useUtils();
+  const preview = trpc.story.previewCharacterIdentity.useQuery({ characterId });
+  const refetch = () => utils.story.previewCharacterIdentity.invalidate({ characterId });
+  const lock = trpc.story.lockCharacterIdentity.useMutation({ onSuccess: () => { setOpen(false); refetch(); } });
+  const unlock = trpc.story.unlockCharacterIdentity.useMutation({ onSuccess: refetch });
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const locked = Boolean(preview.data?.current);
+  const busy = lock.isPending || unlock.isPending;
+  const err = lock.error || unlock.error;
+  const btn = { fontSize: 12.5, padding: '9px 13px' } as const;
+
+  return (
+    <div style={{ borderRadius: 16, border: '1px solid rgba(233,233,237,0.12)', padding: 14, marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className="noc-label">{isR16 ? `${name} always looks the same` : `${name} identity lock`}</span>
+        {locked && (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(76,175,80,0.18)', color: '#4caf50' }}>
+            Locked{frozenAt ? ` · ${new Date(frozenAt).toLocaleDateString()}` : ''}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 8 }}>
+        {isR16 ? 'They will always look like this in every picture.' : 'The exact description sent to the model on every generation.'}
+      </p>
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={5}
+            style={{ width: '100%', fontSize: 12.5, borderRadius: 10, padding: 8, background: 'transparent', border: '1px solid rgba(233,233,237,0.18)', color: 'var(--noc-t1)' }}
+          />
+          <p style={{ fontSize: 11.5, color: 'var(--noc-t6)', marginTop: 6 }}>This is exactly what will be sent to the model on every generation.</p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <button type="button" disabled={busy || !draft.trim()} onClick={() => lock.mutate({ characterId, block: draft.trim() })} className="noc-btn-outline" style={btn}>
+              {lock.isPending ? 'Locking…' : 'Lock'}
+            </button>
+            <button type="button" disabled={busy} onClick={() => setOpen(false)} className="noc-btn-outline" style={btn}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {!open && !locked && (
+        <div style={{ marginTop: 10 }}>
+          <button type="button" disabled={busy || preview.isLoading} onClick={() => { setDraft(preview.data?.composed ?? ''); setOpen(true); }} className="noc-btn-outline" style={btn}>
+            Lock this character
+          </button>
+        </div>
+      )}
+      {!open && locked && (
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (typeof window === 'undefined' || window.confirm('Future generations will use the updated description. Existing images are unaffected.')) unlock.mutate({ characterId });
+            }}
+            className="noc-btn-outline"
+            style={btn}
+          >
+            Unlock to edit
+          </button>
+        </div>
+      )}
       {err && <p style={{ fontSize: 12.5, color: '#e35d5d', marginTop: 6 }}>{err.message}</p>}
     </div>
   );

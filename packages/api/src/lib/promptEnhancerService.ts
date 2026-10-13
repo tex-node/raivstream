@@ -198,6 +198,7 @@ class PromptEnhancerService {
                 'Preserve character identity exactly. Preserve scene intent.',
                 'Do not add new characters. Do not add text overlays, UI, phone screens, gallery framing, watermarks.',
                 'Keep child-safe tone for KIDS audience.',
+                'Preserve any {{...}} placeholder tokens exactly as they appear. Do not modify, explain, expand, or remove them. They will be substituted after your response.',
               ].join(' ') : [
                 'You improve internal AI media generation prompts for Raivstream Story Playground.',
                 'Return structured JSON only. Do not include markdown.',
@@ -205,6 +206,7 @@ class PromptEnhancerService {
                 'Do not add new characters unless requested.',
                 'Avoid text on screen, UI overlays, phone-screen framing, gallery framing, social-media interfaces, watermarks, labels, or captions.',
                 'Keep the same child-safe tone. Make the prompt visually rich and provider-ready.',
+                'Preserve any {{...}} placeholder tokens exactly as they appear. Do not modify, explain, expand, or remove them. They will be substituted after your response.',
               ].join(' '),
             },
             {

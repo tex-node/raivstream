@@ -13,6 +13,7 @@ import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
+import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks } from '../lib/story/characterIdentity';
 import {
   applyCriticImprovementsToCreativeSpecification,
   createCreativeCriticRun,
@@ -1234,6 +1235,8 @@ type CharacterMemoryRecord = {
   evolutionNotes?: string | null;
   evolutionSceneOrder?: number | null;
   directorChangedAt?: Date | string | null;
+  lockedIdentityBlock?: string | null;
+  immutableDetails?: unknown;
 };
 
 type CharacterRelationship = {
@@ -1508,27 +1511,29 @@ function characterPromptIngredient(character: CharacterMemoryRecord) {
 function characterReferencesFromScene(
   scene: { characters?: unknown; orderIndex?: number | null },
   currentCharacters?: CharacterMemoryRecord[],
-): Array<{ name: string; promptIngredient: string }> {
+): Array<{ name: string; promptIngredient: string; lockedBlock: string | null }> {
   const currentByName = new Map((currentCharacters ?? []).map((character) => [character.name.toLowerCase(), character]));
   const currentReferences = (currentCharacters ?? []).map((character) => ({
     name: character.name,
     promptIngredient: characterPromptIngredient(character),
+    lockedBlock: character.lockedIdentityBlock ?? null,
   }));
   if (!Array.isArray(scene.characters)) return currentReferences.slice(0, 4);
   const references = scene.characters.flatMap((character) => {
-    if (typeof character === 'string') return [{ name: character, promptIngredient: character }];
+    if (typeof character === 'string') return [{ name: character, promptIngredient: character, lockedBlock: null }];
     if (!character || typeof character !== 'object') return [];
     const record = character as { name?: unknown; promptIngredient?: unknown; visualDescription?: unknown };
     if (typeof record.name !== 'string') return [];
     const current = currentByName.get(record.name.toLowerCase());
     if (current) {
-      return [{ name: current.name, promptIngredient: characterPromptIngredient(current) }];
+      return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null }];
     }
     return [{
       name: record.name,
       promptIngredient: typeof record.promptIngredient === 'string'
         ? record.promptIngredient
         : [record.name, typeof record.visualDescription === 'string' ? record.visualDescription : undefined].filter(Boolean).join(', '),
+      lockedBlock: null,
     }];
   });
   return references.length ? references : currentReferences.slice(0, 4);
@@ -2307,6 +2312,16 @@ export async function composeEnhancedScenePrompt(
   // that does not meet the moviedirector.md CUT-list contract.
   let base: ReturnType<typeof composeScenePromptText> & { isV2?: boolean; v2Canonical?: unknown };
   let characterIdentity: string;
+  // Track D Layer 2 — the enhancer receives NAME-BASED placeholders it cannot
+  // paraphrase; the resolved identity blocks are substituted back after it returns.
+  let identityMap: Record<string, string> = {};
+  const identityPlaceholders = (): string => {
+    const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
+    if (!characters.length) return 'use the established main character design from the story';
+    const placeholders = renderPlaceholders(characters);
+    identityMap = placeholders.map;
+    return placeholders.text;
+  };
 
   if (input.outputType !== 'SHORT_VIDEO' && isVisualPromptComposerV2Enabled()) {
     const ds = safeParseDirectedScene(input.scene.directorMetadata);
@@ -2318,17 +2333,11 @@ export async function composeEnhancedScenePrompt(
       // Non-fatal fallback: log and fall through to V1
       console.warn('[vpc2] V2 composer failed, falling back to V1:', err instanceof VpcError ? err.code : err);
       base = composeScenePromptText(input);
-      const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
-      characterIdentity = characters.length
-        ? characters.map((character) => character.promptIngredient).join('; ')
-        : 'use the established main character design from the story';
+      characterIdentity = identityPlaceholders();
     }
   } else {
     base = composeScenePromptText(input);
-    const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
-    characterIdentity = characters.length
-      ? characters.map((character) => character.promptIngredient).join('; ')
-      : 'use the established main character design from the story';
+    characterIdentity = identityPlaceholders();
   }
   await trackStoryAnalytics(ctx, {
     event: 'prompt_enhancement_started',
@@ -2387,10 +2396,15 @@ export async function composeEnhancedScenePrompt(
       },
     });
 
+    // Track D Layer 2 — substitute the placeholders the enhancer saw with the
+    // resolved identity blocks (locked verbatim, else the composer fallback).
+    const substituted = substituteIdentityBlocks(enhanced.enhancedPrompt, identityMap);
+    if (substituted.fallbackUsed) console.warn('[identity] fallback appended');
+
     return {
       ...base,
       deterministicPrompt: base.prompt,
-      prompt: enhanced.enhancedPrompt,
+      prompt: substituted.prompt,
       negativePrompt: enhanced.negativePrompt,
       styleUsed: enhanced.styleUsed,
       characterIdentity,
@@ -5050,6 +5064,52 @@ export const storyRouter = router({
         approvedReferenceAssetId: character.approvedReferenceAssetId,
         references: rows.map((r) => ({ ...r, isApproved: r.id === character.approvedReferenceAssetId })),
       };
+    }),
+
+  // ── Track D Layer 2 — locked identity block ────────────────────────────────
+
+  /** Deterministic preview of a character's identity block (exactly what the user freezes). Owner-only. */
+  previewCharacterIdentity: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true, name: true, visualDescription: true, favoriteExpression: true, walkingStyle: true, immutableDetails: true, lockedIdentityBlock: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+      return { composed: composeIdentityBlock(character), current: character.lockedIdentityBlock ?? null };
+    }),
+
+  /** Freeze a character's identity block — injected verbatim on every generation. Owner-only. */
+  lockCharacterIdentity: protectedProcedure
+    .input(z.object({ characterId: z.string(), block: z.string().trim().min(1).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { lockedIdentityBlock: input.block, identityFrozenAt: new Date() },
+        select: { id: true, lockedIdentityBlock: true, identityFrozenAt: true },
+      });
+    }),
+
+  /** Unfreeze a character's identity block. Owner-only; idempotent. Existing images are unaffected. */
+  unlockCharacterIdentity: protectedProcedure
+    .input(z.object({ characterId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const character = await ctx.prisma.storyCharacterMemory.findFirst({
+        where: { id: input.characterId, project: { userId: ctx.user.id } },
+        select: { id: true },
+      });
+      if (!character) throw new TRPCError({ code: 'NOT_FOUND', message: 'Character not found' });
+      return ctx.prisma.storyCharacterMemory.update({
+        where: { id: character.id },
+        data: { lockedIdentityBlock: null, identityFrozenAt: null },
+        select: { id: true, lockedIdentityBlock: true, identityFrozenAt: true },
+      });
     }),
 
   // ── Phase 2 (R16-04) — batch scene generation ──────────────────────────────
