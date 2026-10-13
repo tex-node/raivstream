@@ -492,9 +492,13 @@ export async function generateMusicForVersion(
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'No MUSIC track found on the audio plan.' });
   }
 
-  // Idempotency — return the existing materialised track without a new charge.
+  // Idempotency — check for any existing cue (materialised OR unmaterialised).
+  // An unmaterialised cue means a previous attempt failed after cue creation and
+  // cue cleanup also failed, leaving an orphaned intent record. Surface CONFLICT
+  // with the cue ID so an admin can delete it to unblock retries without duplicate
+  // charges. A materialised cue means success; return it without a new charge.
   const existingCue = await db.audioCue.findFirst({
-    where: { trackId: musicTrack.id, audioAssetId: { not: null } },
+    where: { trackId: musicTrack.id },
     select: { id: true, audioAssetId: true },
   });
   if (existingCue?.audioAssetId) {
@@ -505,6 +509,12 @@ export async function generateMusicForVersion(
     if (existingAsset) {
       return { assetId: existingAsset.id, storageKey: existingAsset.storageKey, creditsUsed: 0, reused: true };
     }
+  }
+  if (existingCue && !existingCue.audioAssetId) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `Music generation is already in progress for this version. If a previous attempt failed, delete cue ${existingCue.id} to reset.`,
+    });
   }
 
   // Credit gate — rate must be configured (seeded in Phase 6C).
@@ -537,18 +547,38 @@ export async function generateMusicForVersion(
     `Creative music track — version ${input.creativeVersionId}`,
   );
 
-  // Create an unmaterialised cue as the intent record.
-  const newCue = await db.audioCue.create({
-    data: {
-      trackId: musicTrack.id,
-      startTimeSeconds: 0,
-      durationSeconds: brief.durationSeconds,
-      order: 0,
-      enabled: true,
-      volume: 0.4,
-      metadata: { kind: 'MUSIC_TRACK', creativeVersionId: input.creativeVersionId },
-    },
-  });
+  // TOCTOU guard: create the unmaterialised intent cue while holding the
+  // partial-unique-index lock (Phase 6D migration: @@unique on trackId WHERE
+  // kind='MUSIC_TRACK'). A Prisma P2002 from this create means another request
+  // is already in flight — refund immediately and surface CONFLICT so the caller
+  // can retry once the in-flight generation completes.
+  let newCue: { id: string };
+  try {
+    newCue = await db.audioCue.create({
+      data: {
+        trackId: musicTrack.id,
+        startTimeSeconds: 0,
+        durationSeconds: brief.durationSeconds,
+        order: 0,
+        enabled: true,
+        volume: 0.4,
+        metadata: { kind: 'MUSIC_TRACK', creativeVersionId: input.creativeVersionId },
+      },
+    });
+  } catch (createErr) {
+    await refundCredits(
+      prisma,
+      input.userId,
+      creditsUsed,
+      STORY_AUDIO_GENERATION_FEATURE_KEY,
+      input.creativeVersionId,
+      `Refund — concurrent music generation conflict version ${input.creativeVersionId}`,
+    );
+    if (isMusicCueConcurrentError(createErr)) {
+      throw new TRPCError({ code: 'CONFLICT', message: 'Music generation is already in progress for this version. Retry shortly.' });
+    }
+    throw createErr;
+  }
 
   const storageKeyBase = `creative/${input.creativeProjectId}/music/${newCue.id}-${Date.now()}`;
 
@@ -593,6 +623,12 @@ export async function generateMusicForVersion(
       input.creativeVersionId,
       `Refund — Creative music generation failure version ${input.creativeVersionId}`,
     );
+    // Unlock the track by deleting the unmaterialised intent cue so retries succeed.
+    try {
+      await db.audioCue.delete({ where: { id: newCue.id } });
+    } catch {
+      // Best-effort cleanup — do not mask the original error.
+    }
     throw err;
   }
 }
@@ -614,9 +650,23 @@ type PrismaClientWithAudio = {
     findUnique: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string; text: string | null; voiceProfileId: string | null; voiceProfile: { voiceRef: string | null } | null } | null>;
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
     update: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<{ id: string }>;
+    delete: (args: { where: Record<string, unknown> }) => Promise<{ id: string }>;
   };
   audioAsset: {
     create: (args: { data: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string }>;
     findUnique: (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => Promise<{ id: string; storageKey: string } | null>;
   };
 };
+
+/**
+ * Detect a Prisma unique constraint violation (P2002).
+ * Used by generateMusicForVersion to identify concurrent-submission races.
+ */
+function isMusicCueConcurrentError(err: unknown): boolean {
+  return (
+    err !== null &&
+    typeof err === 'object' &&
+    'code' in err &&
+    (err as { code: unknown }).code === 'P2002'
+  );
+}

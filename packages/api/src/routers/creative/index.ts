@@ -10,6 +10,7 @@ import { creativeOutputRouter } from './output';
 import { creativeSeriesRouter } from './series';
 import { creativeStudioRouter } from './studio';
 import { creativeObservabilityRouter } from './observability';
+import { creativeAudioRouter } from './audio';
 
 /**
  * Raivstream 5.0 — Creative API surface.
@@ -27,4 +28,5 @@ export const creativeRouter = router({
   series: creativeSeriesRouter,
   studio: creativeStudioRouter,
   observability: creativeObservabilityRouter,
+  audio: creativeAudioRouter,
 });
