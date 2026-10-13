@@ -82,6 +82,19 @@ async function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
+/**
+ * E1 — export-renderer version, folded into the export cache key
+ * (`computeSourceHash`, storyVideoExportService.ts). Bump whenever the rendered
+ * output changes for the SAME source inputs (e.g. E1 preserved source-clip native
+ * audio), so already-cached exports are invalidated and re-render. Mirrors
+ * `MOVIE_RENDERER_VERSION` (movieRenderPlanning.ts).
+ *
+ * `phase-3-v2`: E1 — source clip native audio is now carried into the export
+ * (previously narration + background music only, so audio-less-cue exports were
+ * silent). Existing silent exports must re-render.
+ */
+export const EXPORT_RENDERER_VERSION = 'phase-3-v2';
+
 /** Appended end-card duration, in seconds (added to every derivative). */
 export const END_CARD_SECONDS = 2;
 /** Fallback attribution handle when a creator username is unavailable. */

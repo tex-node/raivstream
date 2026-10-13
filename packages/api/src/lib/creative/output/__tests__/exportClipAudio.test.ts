@@ -15,7 +15,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { writeFile } from 'node:fs/promises';
-import { renderOutputDerivative, type OutputRenderDeps, type MediaProbe } from '../render';
+import { renderOutputDerivative, EXPORT_RENDERER_VERSION, type OutputRenderDeps, type MediaProbe } from '../render';
+import { computeSourceHash } from '../../../story/storyVideoExportService';
 import { deriveOutput } from '../derivation';
 
 const DERIVATION = deriveOutput('PORTRAIT', null, 10);
@@ -82,5 +83,11 @@ describe('E1 — renderOutputDerivative preserves source clip audio', () => {
     const videoOnly = makeDeps(true);
     await renderOutputDerivative({ scenes: [VIDEO_ONLY_SCENE], derivation: DERIVATION, r2Prefix: 'pfx' }, videoOnly);
     expect(allArgs(videoOnly.ffmpegCalls)).toContain('drawtext');
+  });
+
+  it('6. computeSourceHash differs across renderer versions (cache invalidation)', () => {
+    const pairs = [{ sceneId: 's1', assetId: 'a1' }];
+    expect(computeSourceHash(pairs, 'v1')).not.toBe(computeSourceHash(pairs, 'v2'));
+    expect(computeSourceHash(pairs)).toBe(computeSourceHash(pairs, EXPORT_RENDERER_VERSION));
   });
 });
