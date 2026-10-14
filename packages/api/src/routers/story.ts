@@ -14,7 +14,6 @@ import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
 import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, computeSceneImageRouting, fetchApprovedReferences } from '../lib/story/characterIdentity';
-import { deterministicSeed } from '../lib/story/sceneSeed';
 import { isFalCapabilityLive, readFalMediaConfig } from '../lib/mediaProviders/config';
 import { SCENE_IMAGE_RENDERER_VERSION } from '../lib/sceneImageVersion';
 import {
@@ -2907,6 +2906,7 @@ async function generateSceneImageAsset(
     prompt: composed.prompt,
     approvedRefs,
     capabilityLive,
+    sceneId: scene.id,
   });
   if (routing.truncated) {
     console.warn(`[sceneImage] ${approvedRefs.length} refs provided, using first 4`);
@@ -2917,7 +2917,7 @@ async function generateSceneImageAsset(
   const imageUrls = routing.imageUrls;
   // Pin a deterministic seed for the reference-conditioned edit path so
   // regenerations are reproducible; the non-edit FLUX2 path keeps no seed.
-  const effectiveSeed = editLive ? deterministicSeed(scene.id) : undefined;
+  const effectiveSeed = routing.seed;
   if (routing.editLive) {
     console.info('[sceneImage] routed to FLUX2_EDIT', { imageCount: imageUrls.length, chars: approvedRefs.map((r) => r.characterName) });
   }

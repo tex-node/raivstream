@@ -13,6 +13,8 @@
  * compatible). Pure + deterministic — no LLM, no I/O.
  */
 
+import { deterministicSeed } from './sceneSeed';
+
 export interface CharacterIdentityInput {
   name: string;
   /** Today's composer output (`characterPromptIngredient`) — the backward-compatible fallback. */
@@ -160,6 +162,8 @@ export interface SceneImageRouting {
   /** More than 4 approved refs were supplied (only the first 4 are used). */
   truncated: boolean;
   editLive: boolean;
+  /** Deterministic seed for the edit path; undefined for the non-edit path. */
+  seed: number | undefined;
 }
 
 /**
@@ -172,6 +176,8 @@ export function computeSceneImageRouting(input: {
   prompt: string;
   approvedRefs: Array<{ characterName: string; assetUrl: string }>;
   capabilityLive: boolean;
+  /** Scene id — source of the deterministic seed for the edit path. */
+  sceneId: string;
 }): SceneImageRouting {
   const refs = input.approvedRefs;
   const imageUrls = refs.slice(0, 4).map((r) => r.assetUrl);
@@ -183,5 +189,6 @@ export function computeSceneImageRouting(input: {
     imageUrls: editLive ? imageUrls : [],
     truncated,
     editLive,
+    seed: editLive ? deterministicSeed(input.sceneId) : undefined,
   };
 }
