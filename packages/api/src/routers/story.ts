@@ -13,7 +13,7 @@ import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
-import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, roleTag, fetchApprovedReferences } from '../lib/story/characterIdentity';
+import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, computeSceneImageRouting, fetchApprovedReferences } from '../lib/story/characterIdentity';
 import { isFalCapabilityLive, readFalMediaConfig } from '../lib/mediaProviders/config';
 import { SCENE_IMAGE_RENDERER_VERSION } from '../lib/sceneImageVersion';
 import {
@@ -2869,17 +2869,20 @@ async function generateSceneImageAsset(
   // instead of re-inventing the character each regeneration.
   const sceneChars = characterReferencesFromScene(scene, scene.project.characterMemory);
   const approvedRefs = await fetchApprovedReferences(ctx.prisma, sceneChars);
-  const imageUrls = approvedRefs.slice(0, 4).map((r) => r.assetUrl);
-  if (approvedRefs.length > 4) {
+  const routing = computeSceneImageRouting({
+    requestedModel: input.model,
+    prompt: composed.prompt,
+    approvedRefs,
+    capabilityLive: isFalCapabilityLive(readFalMediaConfig(), 'imageEdit'),
+  });
+  if (routing.truncated) {
     console.warn(`[sceneImage] ${approvedRefs.length} refs provided, using first 4`);
   }
-  const editLive = imageUrls.length > 0 && isFalCapabilityLive(readFalMediaConfig(), 'imageEdit');
-  const effectiveModel: SceneImageModel = editLive ? 'FLUX2_EDIT' : input.model;
+  const effectiveModel: SceneImageModel = routing.effectiveModel;
   const effectiveRendererVersion = SCENE_IMAGE_RENDERER_VERSION;
-  const effectivePrompt = editLive
-    ? roleTag(composed.prompt, approvedRefs.map((r) => r.characterName))
-    : composed.prompt;
-  if (editLive) {
+  const effectivePrompt = routing.effectivePrompt;
+  const imageUrls = routing.imageUrls;
+  if (routing.editLive) {
     console.info('[sceneImage] routed to FLUX2_EDIT', { imageCount: imageUrls.length, chars: approvedRefs.map((r) => r.characterName) });
   }
 

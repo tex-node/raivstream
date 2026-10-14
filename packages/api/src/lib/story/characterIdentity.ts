@@ -152,3 +152,36 @@ export async function fetchApprovedReferences(
   }
   return out;
 }
+
+export interface SceneImageRouting {
+  effectiveModel: 'FLUX2' | 'FLUX2_EDIT';
+  effectivePrompt: string;
+  imageUrls: string[];
+  /** More than 4 approved refs were supplied (only the first 4 are used). */
+  truncated: boolean;
+  editLive: boolean;
+}
+
+/**
+ * Pure routing decision for the scene-image path. `capabilityLive` is the caller's
+ * `isFalCapabilityLive(config, 'imageEdit')` (master AND real-calls AND maxRequests
+ * AND credential AND FAL_IMAGE_EDIT_ENABLED) — the bare flag is not sufficient.
+ */
+export function computeSceneImageRouting(input: {
+  requestedModel: 'FLUX2' | 'FLUX2_EDIT';
+  prompt: string;
+  approvedRefs: Array<{ characterName: string; assetUrl: string }>;
+  capabilityLive: boolean;
+}): SceneImageRouting {
+  const refs = input.approvedRefs;
+  const imageUrls = refs.slice(0, 4).map((r) => r.assetUrl);
+  const truncated = refs.length > 4;
+  const editLive = imageUrls.length > 0 && input.capabilityLive;
+  return {
+    effectiveModel: editLive ? 'FLUX2_EDIT' : input.requestedModel,
+    effectivePrompt: editLive ? roleTag(input.prompt, refs.map((r) => r.characterName)) : input.prompt,
+    imageUrls: editLive ? imageUrls : [],
+    truncated,
+    editLive,
+  };
+}
