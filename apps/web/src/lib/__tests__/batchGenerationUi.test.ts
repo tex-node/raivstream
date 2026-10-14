@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { batchRunIsActive, canStartBatch, defaultResumeCap, summarizeBatch } from '../batchGenerationUi';
+import { batchRunIsActive, canStartBatch, defaultResumeCap, describeBatchPanel, summarizeBatch } from '../batchGenerationUi';
 
 describe('canStartBatch', () => {
   it('disables Start when the estimate exceeds the cap', () => {
@@ -38,5 +38,56 @@ describe('batchRunIsActive', () => {
     expect(batchRunIsActive('PAUSED')).toBe(true);
     expect(batchRunIsActive('COMPLETED')).toBe(false);
     expect(batchRunIsActive('CANCELLED')).toBe(false);
+  });
+});
+
+describe('describeBatchPanel', () => {
+  const full = { total: 6, ready: 6, failed: 0, done: 6 };
+  const partial = { total: 6, ready: 4, failed: 2, done: 6 };
+  const early = { total: 6, ready: 2, failed: 0, done: 2 };
+
+  it('renders at COMPLETED with the summary count and no cancel/resume', () => {
+    const p = describeBatchPanel('COMPLETED', full);
+    expect(p.show).toBe(true);
+    expect(p.headline).toBe('Made 6 of 6 — view them.');
+    expect(p.showItems).toBe(true);
+    expect(p.showCancel).toBe(false);
+    expect(p.showResume).toBe(false);
+    expect(p.showRetry).toBe(false);
+    expect(p.showStartAnother).toBe(true);
+  });
+
+  it('renders at FAILED with the retry affordance', () => {
+    const p = describeBatchPanel('FAILED', partial);
+    expect(p.show).toBe(true);
+    expect(p.headline).toBe("6 of 6 done. Some pictures didn't work.");
+    expect(p.showRetry).toBe(true);
+    expect(p.showCancel).toBe(false);
+    expect(p.showStartAnother).toBe(true);
+  });
+
+  it('renders at CANCELLED and offers retry when items failed', () => {
+    const p = describeBatchPanel('CANCELLED', partial);
+    expect(p.show).toBe(true);
+    expect(p.headline).toBe('Stopped — 6 of 6 done.');
+    expect(p.showRetry).toBe(true);
+  });
+
+  it('keeps RUNNING / PAUSED behavior (cancel; resume only when paused)', () => {
+    const running = describeBatchPanel('RUNNING', early);
+    expect(running.show).toBe(true);
+    expect(running.showCancel).toBe(true);
+    expect(running.showResume).toBe(false);
+    expect(running.showRetry).toBe(false);
+    expect(running.showStartAnother).toBe(false);
+
+    const paused = describeBatchPanel('PAUSED', early);
+    expect(paused.show).toBe(true);
+    expect(paused.showResume).toBe(true);
+    expect(paused.headline).toBe('Paused — 2 of 6 done.');
+  });
+
+  it('keeps the per-item list visible at COMPLETED', () => {
+    expect(describeBatchPanel('COMPLETED', full).showItems).toBe(true);
   });
 });
