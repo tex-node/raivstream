@@ -63,6 +63,7 @@ export interface GenerateInput {
   aspectRatio?:   string;
   seedImageUrl?:  string;
   imageUrls?:     string[]; // FLUX2_EDIT multi-reference conditioning (max 4)
+  seed?:          number;   // deterministic seed (FLUX2_EDIT)
   audioUrl?:      string; // VEED Fabric lip-sync audio track
   resolution?:    string; // MiniMax H3 output resolution preset ('480p'|'720p'|'768p'|'1080p')
 }
@@ -172,7 +173,7 @@ async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<Genera
         prompt:       input.prompt,
         imageUrls:    input.imageUrls ?? [],
         aspectRatio:  input.aspectRatio,
-        seed:         undefined,
+        seed:         input.seed,
       });
       return { providerJobId: jobId };
     }
