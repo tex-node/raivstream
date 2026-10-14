@@ -75,7 +75,7 @@ describe('media provider config (default-off)', () => {
   it('restricts endpoints to the explicit allowlist', () => {
     expect(isFalEndpointAllowed(FAL_ENDPOINTS.image)).toBe(true);
     expect(isFalEndpointAllowed(FAL_ENDPOINTS.imageCond)).toBe(true);
-    expect(FAL_ALLOWED_ENDPOINTS).toEqual([FAL_ENDPOINTS.image, FAL_ENDPOINTS.imageCond, FAL_ENDPOINTS.video, FAL_ENDPOINTS.ugc]);
+    expect(FAL_ALLOWED_ENDPOINTS).toEqual([FAL_ENDPOINTS.image, FAL_ENDPOINTS.imageCond, FAL_ENDPOINTS.imageEdit, FAL_ENDPOINTS.video, FAL_ENDPOINTS.ugc]);
     expect(isFalEndpointAllowed('evil/model')).toBe(false);
   });
 });
