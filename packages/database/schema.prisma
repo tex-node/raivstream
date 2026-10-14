@@ -63,6 +63,7 @@ enum GenerationModel {
   COG_VIDEO_X
   SEEDANCE
   FLUX2        // fal.ai FLUX.2 text-to-image (fal-ai/flux-2)
+  FLUX2_EDIT   // fal.ai FLUX.2 edit — reference-conditioned scene stills (Track D Layer 1)
   H3_MAX       // fal.ai MiniMax H3-Max image-to-video (minimax/h3-max/image-to-video)
   VEED_FABRIC  // fal.ai VEED Fabric 1.0 talking-video lip-sync (veed/fabric-1.0)
 }
