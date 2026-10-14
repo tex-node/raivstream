@@ -94,6 +94,7 @@ the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 **Accepted limitations:**
 - `affectedSceneIdsForChapterEdit` returns all scenes when mapping unavailable (conservative)
 - Batch concurrency fixed at 2, no user override
+- **Batch routing — verified correct (not a bypass).** The batch runs through `generateSceneImageAsset` (via `batchDepsFor`, `story.ts:285-290`), so it uses the same `computeSceneImageRouting` decision as the single-scene path (FLUX2_EDIT + `deterministicSeed(sceneId)` when approved refs exist and the capability is live; plain FLUX2 otherwise). The earlier observation that the batch "used plain FLUX2" was a project-scope confusion: the batch ran in `cmv8feun40013t9d9ld7ul2rs`, which has **zero approved character references** — plain FLUX2 was the correct output. No code change required.
 - R16-03 allows "use draft" without approval (by design)
 
 ### Phase 3 — Branded video output
