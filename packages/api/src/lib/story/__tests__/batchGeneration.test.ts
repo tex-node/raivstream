@@ -160,6 +160,23 @@ describe('runBatch', () => {
     expect(prisma.__runs[0].status).toBe('COMPLETED');
   });
 
+  it('delegates each QUEUED item to the injected generateScene with the run + sceneId', async () => {
+    // The controller is dependency-injected: routing (FLUX2_EDIT + deterministic
+    // seed) lives inside the injected `generateScene` — wired by `batchDepsFor`
+    // (story.ts) to `generateSceneImageAsset`, the same function the single-scene
+    // path uses. This guards the delegation contract: the run object (carrying
+    // `projectId`) and the sceneId reach the dep unchanged.
+    const prisma = makePrisma();
+    seedRun(prisma);
+    seedItem(prisma, { sceneId: 's1' });
+    seedItem(prisma, { sceneId: 's2' });
+    const gen = vi.fn(async (_run: any, _sceneId: string) => ({ assetId: 'a' }));
+    await runBatch(prisma, 'run-1', deps(gen));
+    expect(gen).toHaveBeenCalledTimes(2);
+    expect(gen.mock.calls.map((c) => c[1]).sort()).toEqual(['s1', 's2']);
+    expect(gen.mock.calls[0]![0]).toMatchObject({ projectId: 'p1' });
+  });
+
   it('pauses mid-run when the next item would exceed the cap', async () => {
     const prisma = makePrisma();
     seedRun(prisma, { costCapCredits: 100 }); // 100/80 → only 1 item affordable
