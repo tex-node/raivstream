@@ -13,7 +13,9 @@ import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
-import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks } from '../lib/story/characterIdentity';
+import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, roleTag, fetchApprovedReferences } from '../lib/story/characterIdentity';
+import { isFalCapabilityLive, readFalMediaConfig } from '../lib/mediaProviders/config';
+import { SCENE_IMAGE_RENDERER_VERSION } from '../lib/sceneImageVersion';
 import {
   applyCriticImprovementsToCreativeSpecification,
   createCreativeCriticRun,
@@ -1280,7 +1282,7 @@ type ScenePromptContext = {
   };
 };
 
-type SceneImageModel = 'FLUX2';
+type SceneImageModel = 'FLUX2' | 'FLUX2_EDIT';
 type SceneVideoModel = 'H3_MAX';
 
 const PROMPT_PROVIDER_META: Record<PromptProvider, {
@@ -2464,6 +2466,14 @@ function imageDimensions(aspectRatio: string) {
 }
 
 function sceneImageProviderInfo(requestedModel: SceneImageModel, _providerJobId?: string | null) {
+  // Track D Layer 1 — reference-conditioned stills via fal-ai/flux-2/edit.
+  if (requestedModel === 'FLUX2_EDIT') {
+    return {
+      provider: 'fal',
+      model: 'fal-ai/flux-2/edit',
+      requestedModel,
+    };
+  }
   // Story scene images are fal.ai-only (FLUX2 → fal-ai/flux-2). RunPod is not
   // a valid story-scene image provider.
   return {
@@ -2854,15 +2864,35 @@ async function generateSceneImageAsset(
     throw new TRPCError({ code: 'BAD_REQUEST', message: moderationRejectMessage(moderation, 'Please try a safer picture idea.') });
   }
 
+  // Track D Layer 1 — route locked-character scenes with approved references to
+  // fal-ai/flux-2/edit so the still is conditioned on the canonical reference
+  // instead of re-inventing the character each regeneration.
+  const sceneChars = characterReferencesFromScene(scene, scene.project.characterMemory);
+  const approvedRefs = await fetchApprovedReferences(ctx.prisma, sceneChars);
+  const imageUrls = approvedRefs.slice(0, 4).map((r) => r.assetUrl);
+  if (approvedRefs.length > 4) {
+    console.warn(`[sceneImage] ${approvedRefs.length} refs provided, using first 4`);
+  }
+  const editLive = imageUrls.length > 0 && isFalCapabilityLive(readFalMediaConfig(), 'imageEdit');
+  const effectiveModel: SceneImageModel = editLive ? 'FLUX2_EDIT' : input.model;
+  const effectiveRendererVersion = SCENE_IMAGE_RENDERER_VERSION;
+  const effectivePrompt = editLive
+    ? roleTag(composed.prompt, approvedRefs.map((r) => r.characterName))
+    : composed.prompt;
+  if (editLive) {
+    console.info('[sceneImage] routed to FLUX2_EDIT', { imageCount: imageUrls.length, chars: approvedRefs.map((r) => r.characterName) });
+  }
+
   const asset = await (ctx.prisma as any).storySceneAsset.create({
     data: {
       sceneId: scene.id,
       projectId: project.id,
       userId: ctx.user.id,
       assetType: 'IMAGE',
-      // fal.ai-only for story scene images: FLUX2 (fal-ai/flux-2). No RunPod.
+      // fal.ai-only for story scene images: FLUX2 (fal-ai/flux-2) or FLUX2_EDIT.
       provider: 'fal',
-      model: input.model,
+      model: effectiveModel,
+      rendererVersion: effectiveRendererVersion,
       promptVersionId: null,
       composedPrompt: composed.prompt,
       negativePrompt: composed.negativePrompt,
@@ -2877,7 +2907,7 @@ async function generateSceneImageAsset(
     data: { imageStatus: 'GENERATING' },
   });
 
-  const featureKey = MODEL_FEATURE_KEY[input.model as SupportedModel];
+  const featureKey = MODEL_FEATURE_KEY[effectiveModel];
   let creditsUsed = 0;
   const generationRef = `story-scene-asset-${asset.id}`;
 
@@ -2918,8 +2948,8 @@ async function generateSceneImageAsset(
     const generationJob = await ctx.prisma.generationJob.create({
       data: {
         userId: ctx.user.id,
-        model: input.model,
-        prompt: composed.prompt,
+        model: effectiveModel,
+        prompt: effectivePrompt,
         negativePrompt: composed.negativePrompt,
         duration: 5,
         aspectRatio: composed.aspectRatio ?? '9:16',
@@ -2952,13 +2982,14 @@ async function generateSceneImageAsset(
       providerOutputUrl = devSceneSvgDataUrl(scene.title, characterReferencesFromScene(scene, scene.project.characterMemory)[0]?.name ?? 'Story Friend');
     } else {
       const submitted = await submitGenerationJob({
-        model: input.model as SupportedModel,
-        prompt: composed.prompt,
+        model: effectiveModel,
+        prompt: effectivePrompt,
         negativePrompt: composed.negativePrompt,
         aspectRatio: composed.aspectRatio,
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
       });
       providerJobId = submitted.providerJobId;
-      const providerInfo = sceneImageProviderInfo(input.model, providerJobId);
+      const providerInfo = sceneImageProviderInfo(effectiveModel, providerJobId);
       await ctx.prisma.generationJob.update({
         where: { id: generationJob.id },
         data: {
@@ -2974,9 +3005,9 @@ async function generateSceneImageAsset(
           },
         },
       });
-      providerOutputUrl = await waitForGenerationOutput(input.model as SupportedModel, providerJobId, submitted.outputUrl);
+      providerOutputUrl = await waitForGenerationOutput(effectiveModel, providerJobId, submitted.outputUrl);
     }
-    const providerInfo = sceneImageProviderInfo(input.model, providerJobId);
+    const providerInfo = sceneImageProviderInfo(effectiveModel, providerJobId);
 
     const r2Key = `story-projects/${project.id}/scenes/${scene.id}/assets/${asset.id}.png`;
     const assetUrl = providerOutputUrl.startsWith('data:')
