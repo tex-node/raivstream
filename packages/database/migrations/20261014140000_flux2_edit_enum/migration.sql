@@ -1,0 +1,11 @@
+-- Add FLUX2_EDIT to the GenerationModel enum.
+--
+-- The Track D Layer 1 foundation (2026-10-14) added FLUX2_EDIT to the TypeScript
+-- `SupportedModel` union but NOT to the Postgres `GenerationModel` enum. Routing
+-- selects FLUX2_EDIT for scenes whose characters have approved references, and
+-- `generationJob.create({ model: 'FLUX2_EDIT' })` was rejected by the enum — the
+-- gap only surfaced when the flux-2/edit capability was first enabled in prod.
+--
+-- Additive enum value; existing rows and code are unaffected. IF NOT EXISTS for
+-- idempotency.
+ALTER TYPE "GenerationModel" ADD VALUE IF NOT EXISTS 'FLUX2_EDIT';
