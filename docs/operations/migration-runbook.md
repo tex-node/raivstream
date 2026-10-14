@@ -42,6 +42,9 @@ If **any** pending migration is **breaking**, the running code must satisfy the 
 ### Check C-1 — Branch vs. target-branch migration state
 Before applying any migration from branch X, verify that X's `prisma/migrations/` directory is a **superset of all migrations already applied to the target database**. If not, apply via a **scratch union branch**, not directly from X. Cause: parallel branches can fork migration history (see the 2026-10-13 R16-union case). A branch missing migrations that are applied on the target will report **DIVERGED** in `migrate status` and block clean verification.
 
+### Check C-2 — TS union ↔ DB enum parity
+If a PR adds an identifier to a TypeScript union that mirrors a Prisma/Postgres enum, verify the DB enum was extended in the same PR. A TS-only addition passes CI and fails at first production write. (Learned 2026-10-14: `SupportedModel.FLUX2_EDIT` was added without a matching `GenerationModel` value; the failure surfaced only when the routing first fired against production.)
+
 ### Check D — Backup (non-negotiable)
 ```bash
 pg_dump -Fc -f /root/raivstream/backups/pre_migration_$(date +%Y%m%d-%H%M%S).dump "$DATABASE_URL"
@@ -69,6 +72,11 @@ psql "$DATABASE_URL" -c 'BEGIN; INSERT INTO credit_transactions (id,"userId",amo
 curl -s https://app.raivstream.com/api/health
 ```
 Expected `{"status":"healthy",…}`. If not healthy, **roll back the migrations or roll forward the code — do not leave the DB and code mismatched.**
+
+## 1b. Environment-file precedence (empirical)
+The running app's PM2 exec cwd is `/root/raivstream/apps/web`. **`apps/web/.env.local` wins over the root `/root/raivstream/.env` on conflicts; both load.** Flag changes go in `apps/web/.env.local`. No symlink exists.
+
+**Follow-up:** `FAL_MAX_REQUESTS` diverges (10 in root `.env` vs 200 in `.env.local`; the running process uses 200). Reconcile to a single value (keep 200, remove the root line).
 
 ## 2. Rollback guidance
 
