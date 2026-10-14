@@ -170,7 +170,7 @@ describe('runBatch', () => {
     seedRun(prisma);
     seedItem(prisma, { sceneId: 's1' });
     seedItem(prisma, { sceneId: 's2' });
-    const gen = vi.fn(async () => ({ assetId: 'a' }));
+    const gen = vi.fn(async (_run: any, _sceneId: string) => ({ assetId: 'a' }));
     await runBatch(prisma, 'run-1', deps(gen));
     expect(gen).toHaveBeenCalledTimes(2);
     expect(gen.mock.calls.map((c) => c[1]).sort()).toEqual(['s1', 's2']);
