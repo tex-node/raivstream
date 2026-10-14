@@ -207,6 +207,10 @@ click-through. This track adds the drill-down.
 | MiniMax H3 six-section format | IDEA | `subject_definitions` (character → ordinal) + `retention_analysis`. [capability pending: verify the reference-to-video prompt schema accepts these sections — unverified]. |
 | `applyMasterVisualBible` extension | IDEA | Extend to carry identity blocks + ordinals. Current signature: `applyMasterVisualBible({ prompt, negativePrompt?, bible?, sceneCharacters?, approvedReferences?, target }) → { prompt, negativePrompt }` (`visualBible.ts:43–56`). |
 
+| Reference-conditioned scene images (flux-2/edit) | **DEPLOYED** (PR #18, `c7b81e0`) | **Track D Layer 1.** Scenes whose characters have approved references route to `fal-ai/flux-2/edit` (`image_urls` max 4) with a **deterministic seed** (`deterministicSeed(sceneId)`) and the **prompt enhancer skipped** so the composed prompt is byte-stable. Gate: `isFalCapabilityLive(config,'imageEdit')`. Provenance: `StorySceneAsset.rendererVersion = 'phase-d1-v1'`. **Determinism verified in production 2026-10-14:** two regenerations of the same scene produced identical `prompt_hash` (`1686abfa…`) and identical outputs; identity from the reference image, character detail (backpack) from the text description. |
+| D - flux-2/edit `guidance_scale` not tuned | **FOLLOW-UP** | `toFlux2EditInput` never sets `guidance_scale` (endpoint default 2.5). Leave at default unless future drift surfaces; the lever is `guidance_scale: 7.5`. |
+| D - placeholder instruction not holding | **FOLLOW-UP** | `[identity] fallback appended` fires on every regeneration — the deterministic fallback does the work, so the placeholder mechanism is dead weight. Consider removing the placeholder path or tightening the enhancer instruction. |
+
 ### Layer 3 — Pipeline: identity across shots
 
 | Feature | Status | Notes |
