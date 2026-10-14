@@ -14,6 +14,7 @@ import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
 import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, computeSceneImageRouting, fetchApprovedReferences } from '../lib/story/characterIdentity';
+import { deterministicSeed } from '../lib/story/sceneSeed';
 import { isFalCapabilityLive, readFalMediaConfig } from '../lib/mediaProviders/config';
 import { SCENE_IMAGE_RENDERER_VERSION } from '../lib/sceneImageVersion';
 import {
@@ -2319,6 +2320,12 @@ export async function composeEnhancedScenePrompt(
     audienceMode: StoryAudienceMode;
     projectId: string;
     analyticsSource: 'preview' | 'generation';
+    /**
+     * Track D Layer 1 — skip the (non-deterministic) prompt enhancer and use the
+     * deterministic composed prompt verbatim. Used for the reference-conditioned
+     * FLUX2_EDIT path, where the reference image carries identity.
+     */
+    skipEnhancer?: boolean;
   },
 ) {
   const meta = PROMPT_PROVIDER_META[input.provider];
@@ -2355,6 +2362,25 @@ export async function composeEnhancedScenePrompt(
     base = composeScenePromptText(input);
     characterIdentity = identityPlaceholders();
   }
+  if (input.skipEnhancer) {
+    // Deterministic path (reference-conditioned FLUX2_EDIT): skip the enhancer so
+    // the composed prompt is byte-stable across regenerations. The reference
+    // images carry character identity.
+    return {
+      ...base,
+      deterministicPrompt: base.prompt,
+      prompt: base.prompt,
+      negativePrompt: base.negativePrompt,
+      styleUsed: base.styleUsed,
+      characterIdentity,
+      storyDna: input.scene.project.storyDna ?? null,
+      providerHints: {},
+      enhancerProvider: 'deterministic-fallback' as const,
+      enhancerModel: undefined,
+      safetyNotes: undefined,
+    };
+  }
+
   await trackStoryAnalytics(ctx, {
     event: 'prompt_enhancement_started',
     projectId: input.projectId,
@@ -2796,6 +2822,14 @@ async function generateSceneImageAsset(
     audienceMode,
     properties: { sceneId: scene.id, model: input.model, isRegeneration: Boolean(input.isRegeneration) },
   });
+  // Track D Layer 1 — resolve the scene's approved references + the capability
+  // gate BEFORE composing, so the composer knows whether to skip the (non-
+  // deterministic) enhancer for the reference-conditioned edit path.
+  const sceneChars = characterReferencesFromScene(scene, scene.project.characterMemory);
+  const approvedRefs = await fetchApprovedReferences(ctx.prisma, sceneChars);
+  const capabilityLive = isFalCapabilityLive(readFalMediaConfig(), 'imageEdit');
+  const editLive = approvedRefs.length > 0 && capabilityLive;
+
   let composed = await composeEnhancedScenePrompt(ctx, {
     scene,
     outputType: 'IMAGE',
@@ -2803,6 +2837,7 @@ async function generateSceneImageAsset(
     audienceMode,
     projectId: project.id,
     analyticsSource: 'generation',
+    skipEnhancer: editLive,
   });
   if (input.creativeCriticRunId) {
     const criticRun = await (ctx.prisma as any).creativeCriticRun.findFirst({
@@ -2867,13 +2902,11 @@ async function generateSceneImageAsset(
   // Track D Layer 1 — route locked-character scenes with approved references to
   // fal-ai/flux-2/edit so the still is conditioned on the canonical reference
   // instead of re-inventing the character each regeneration.
-  const sceneChars = characterReferencesFromScene(scene, scene.project.characterMemory);
-  const approvedRefs = await fetchApprovedReferences(ctx.prisma, sceneChars);
   const routing = computeSceneImageRouting({
     requestedModel: input.model,
     prompt: composed.prompt,
     approvedRefs,
-    capabilityLive: isFalCapabilityLive(readFalMediaConfig(), 'imageEdit'),
+    capabilityLive,
   });
   if (routing.truncated) {
     console.warn(`[sceneImage] ${approvedRefs.length} refs provided, using first 4`);
@@ -2882,6 +2915,9 @@ async function generateSceneImageAsset(
   const effectiveRendererVersion = SCENE_IMAGE_RENDERER_VERSION;
   const effectivePrompt = routing.effectivePrompt;
   const imageUrls = routing.imageUrls;
+  // Pin a deterministic seed for the reference-conditioned edit path so
+  // regenerations are reproducible; the non-edit FLUX2 path keeps no seed.
+  const effectiveSeed = editLive ? deterministicSeed(scene.id) : undefined;
   if (routing.editLive) {
     console.info('[sceneImage] routed to FLUX2_EDIT', { imageCount: imageUrls.length, chars: approvedRefs.map((r) => r.characterName) });
   }
@@ -2990,6 +3026,7 @@ async function generateSceneImageAsset(
         negativePrompt: composed.negativePrompt,
         aspectRatio: composed.aspectRatio,
         imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+        seed: effectiveSeed,
       });
       providerJobId = submitted.providerJobId;
       const providerInfo = sceneImageProviderInfo(effectiveModel, providerJobId);
