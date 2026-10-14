@@ -1237,6 +1237,7 @@ type CharacterMemoryRecord = {
   directorChangedAt?: Date | string | null;
   lockedIdentityBlock?: string | null;
   immutableDetails?: unknown;
+  approvedReferenceAssetId?: string | null;
 };
 
 type CharacterRelationship = {
@@ -1511,12 +1512,13 @@ function characterPromptIngredient(character: CharacterMemoryRecord) {
 export function characterReferencesFromScene(
   scene: { characters?: unknown; orderIndex?: number | null },
   currentCharacters?: CharacterMemoryRecord[],
-): Array<{ name: string; promptIngredient: string; lockedBlock: string | null }> {
+): Array<{ name: string; promptIngredient: string; lockedBlock: string | null; approvedReferenceAssetId: string | null }> {
   const currentByName = new Map((currentCharacters ?? []).map((character) => [character.name.toLowerCase(), character]));
   const currentReferences = (currentCharacters ?? []).map((character) => ({
     name: character.name,
     promptIngredient: characterPromptIngredient(character),
     lockedBlock: character.lockedIdentityBlock ?? null,
+    approvedReferenceAssetId: character.approvedReferenceAssetId ?? null,
   }));
   if (!Array.isArray(scene.characters)) return currentReferences.slice(0, 4);
   const references = scene.characters.flatMap((character) => {
@@ -1527,17 +1529,17 @@ export function characterReferencesFromScene(
       // with lockedBlock: null, so the frozen identity never reached the prompt.
       const current = currentByName.get(character.toLowerCase());
       if (current) {
-        return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null }];
+        return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null, approvedReferenceAssetId: current.approvedReferenceAssetId ?? null }];
       }
       console.warn(`[identity] no memory for character ${character}`);
-      return [{ name: character, promptIngredient: character, lockedBlock: null }];
+      return [{ name: character, promptIngredient: character, lockedBlock: null, approvedReferenceAssetId: null }];
     }
     if (!character || typeof character !== 'object') return [];
     const record = character as { name?: unknown; promptIngredient?: unknown; visualDescription?: unknown };
     if (typeof record.name !== 'string') return [];
     const current = currentByName.get(record.name.toLowerCase());
     if (current) {
-      return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null }];
+      return [{ name: current.name, promptIngredient: characterPromptIngredient(current), lockedBlock: current.lockedIdentityBlock ?? null, approvedReferenceAssetId: current.approvedReferenceAssetId ?? null }];
     }
     return [{
       name: record.name,
@@ -1545,6 +1547,7 @@ export function characterReferencesFromScene(
         ? record.promptIngredient
         : [record.name, typeof record.visualDescription === 'string' ? record.visualDescription : undefined].filter(Boolean).join(', '),
       lockedBlock: null,
+      approvedReferenceAssetId: null,
     }];
   });
   return references.length ? references : currentReferences.slice(0, 4);

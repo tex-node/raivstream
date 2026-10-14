@@ -109,3 +109,46 @@ export function substituteIdentityBlocks(
   if (missing.length === 0) return { prompt: out.trim(), fallbackUsed: false };
   return { prompt: `${out.trim()} Character identity (verbatim): ${missing.join('; ')}`.trim(), fallbackUsed: true };
 }
+
+/**
+ * fal-ai/flux-2/edit role-tag prefix. UNVERIFIED for that endpoint (Black Forest
+ * Labs family convention). If references don't condition after the feature flag is
+ * flipped, the one-line fix is `'Image '` instead of `'@image'`.
+ */
+export const FLUX2_EDIT_ROLE_TAG_PREFIX = '@image';
+
+/**
+ * Prepend reference-role tags for a reference-conditioned edit prompt:
+ * `@image1 is A. @image2 is B. Preserve each character's identity from its
+ * reference. Scene: <prompt>`.
+ */
+export function roleTag(prompt: string, names: string[]): string {
+  if (names.length === 0) return prompt;
+  const tags = names.map((name, index) => `${FLUX2_EDIT_ROLE_TAG_PREFIX}${index + 1} is ${name}.`).join(' ');
+  return `${tags} Preserve each character's identity from its reference. Scene: ${prompt}`;
+}
+
+/**
+ * Fetch approved reference asset URLs for the given characters, in scene order.
+ * Returns only characters with a non-null approvedReferenceAssetId AND a
+ * resolvable assetUrl.
+ */
+export async function fetchApprovedReferences(
+  prisma: unknown,
+  chars: Array<{ name: string; approvedReferenceAssetId: string | null }>,
+): Promise<Array<{ characterName: string; assetUrl: string }>> {
+  const ids = chars.map((c) => c.approvedReferenceAssetId).filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return [];
+  const rows: Array<{ id: string; assetUrl: string | null }> = await (prisma as any).characterReferenceAsset.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, assetUrl: true },
+  });
+  const urlById = new Map(rows.map((r) => [r.id, r.assetUrl]));
+  const out: Array<{ characterName: string; assetUrl: string }> = [];
+  for (const character of chars) {
+    if (!character.approvedReferenceAssetId) continue;
+    const url = urlById.get(character.approvedReferenceAssetId);
+    if (url) out.push({ characterName: character.name, assetUrl: url });
+  }
+  return out;
+}
