@@ -26,6 +26,7 @@ export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
   COG_VIDEO_X:    'generate:cog_video_x',    // 250 credits
   SEEDANCE:       'generate:seedance',       // 200 credits
   FLUX2:          'generate:flux2',          // fal.ai FLUX.2 image
+  FLUX2_EDIT:     'generate:flux2_edit',     // fal.ai FLUX.2 edit (Track D Layer 1; flag-gated)
   FLUX_KONTEXT:   'generate:flux_kontext',   // fal.ai FLUX Pro Kontext image-conditioned
   H3_MAX:         'generate:h3_max',         // fal.ai MiniMax H3-Max I2V
   VEED_FABRIC:    'generate:veed_fabric',    // fal.ai VEED Fabric talking-video

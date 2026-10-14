@@ -39,6 +39,7 @@ import {
   parseH3MaxOutput,
   parseVeedFabricOutput,
   toFlux2Input,
+  toFlux2EditInput,
   toFluxKontextInput,
   toH3MaxInput,
   toVeedFabricInput,
@@ -135,7 +136,7 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
   const transport = deps.transport ?? createDefaultFalQueueTransport();
   let requestCount = 0;
 
-  function assertLive(kind: 'image' | 'imageCond' | 'video' | 'ugc'): void {
+  function assertLive(kind: 'image' | 'imageCond' | 'imageEdit' | 'video' | 'ugc'): void {
     if (!isFalCapabilityLive(config, kind)) {
       throw new MediaProviderError('PROVIDER_DISABLED', `fal ${kind} disabled: ${falDisabledReason(config, kind)}`);
     }
@@ -283,6 +284,26 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
     },
   };
 
+  const imageEdit: ImageGenerationProvider = {
+    name: 'fal',
+    kind: 'image',
+    async submitImage(input: ImageGenerationInput, options: SubmitMediaOptions): Promise<MediaJobRef> {
+      assertLive('imageEdit');
+      const endpoint = config.endpoints.imageEdit;
+      assertEndpoint(endpoint);
+      const requestId = await guardedSubmit('image', endpoint, toFlux2EditInput(input), options);
+      requestCount += 1;
+      return refOf('image', endpoint, requestId, options);
+    },
+    async getStatus(ref: MediaJobRef): Promise<MediaJobStatusResult> {
+      if (ref.kind !== 'image') throw new MediaProviderError('INVALID_REQUEST', 'ref is not an image job');
+      return statusFor(ref, ref.model ?? config.endpoints.imageEdit);
+    },
+    async cancel(ref: MediaJobRef): Promise<void> {
+      await transport.cancel(ref.model ?? config.endpoints.imageEdit, ref.requestId);
+    },
+  };
+
   const ugc: UGCVideoProvider = {
     name: 'fal',
     kind: 'ugc_video',
@@ -306,9 +327,10 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
   const capabilities: MediaProviderCapabilities[] = [
     { kind: 'image', enabled: isFalCapabilityLive(config, 'image'), reason: falDisabledReason(config, 'image') },
     { kind: 'image', enabled: isFalCapabilityLive(config, 'imageCond'), reason: falDisabledReason(config, 'imageCond') },
+    { kind: 'image', enabled: isFalCapabilityLive(config, 'imageEdit'), reason: falDisabledReason(config, 'imageEdit') },
     { kind: 'video', enabled: isFalCapabilityLive(config, 'video'), reason: falDisabledReason(config, 'video') },
     { kind: 'ugc_video', enabled: isFalCapabilityLive(config, 'ugc'), reason: falDisabledReason(config, 'ugc') },
   ];
 
-  return { name: 'fal', capabilities, image, imageCond, video, ugc };
+  return { name: 'fal', capabilities, image, imageCond, imageEdit, video, ugc };
 }

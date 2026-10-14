@@ -11,6 +11,7 @@
 export const FAL_ENDPOINTS = {
   image: 'fal-ai/flux-2',
   imageCond: 'fal-ai/flux-pro/kontext',
+  imageEdit: 'fal-ai/flux-2/edit',
   video: 'minimax/h3-max-turbo/image-to-video',
   ugc: 'veed/fabric-1.0',
 } as const;
@@ -18,6 +19,7 @@ export const FAL_ENDPOINTS = {
 export const FAL_ALLOWED_ENDPOINTS: readonly string[] = Object.freeze([
   FAL_ENDPOINTS.image,
   FAL_ENDPOINTS.imageCond,
+  FAL_ENDPOINTS.imageEdit,
   FAL_ENDPOINTS.video,
   FAL_ENDPOINTS.ugc,
 ]);
@@ -30,6 +32,8 @@ export interface FalMediaConfig {
   imageEnabled: boolean;
   /** Image-conditioned generation via FLUX Kontext (fal-ai/flux-pro/kontext). Default false. */
   imageCondEnabled: boolean;
+  /** Multi-reference image editing via FLUX.2 edit (fal-ai/flux-2/edit). Default false. */
+  imageEditEnabled: boolean;
   videoEnabled: boolean;
   ugcEnabled: boolean;
   /** Hard cap on provider submissions. 0 = none permitted. */
@@ -39,7 +43,7 @@ export interface FalMediaConfig {
   credentialEnvVar: string;
   /** Whether the credential env var is present (value is never read/returned). */
   credentialPresent: boolean;
-  endpoints: { image: string; imageCond: string; video: string; ugc: string };
+  endpoints: { image: string; imageCond: string; imageEdit: string; video: string; ugc: string };
   allowedEndpoints: readonly string[];
 }
 
@@ -63,6 +67,7 @@ export function readFalMediaConfig(env: NodeJS.ProcessEnv = process.env): FalMed
     realProviderCallsEnabled: readBool(env, 'FAL_REAL_PROVIDER_CALLS_ENABLED', false),
     imageEnabled: readBool(env, 'FAL_IMAGE_ENABLED', false),
     imageCondEnabled: readBool(env, 'FAL_IMAGE_COND_ENABLED', false),
+    imageEditEnabled: readBool(env, 'FAL_IMAGE_EDIT_ENABLED', false),
     videoEnabled: readBool(env, 'FAL_VIDEO_ENABLED', false),
     ugcEnabled: readBool(env, 'FAL_UGC_ENABLED', false),
     maxRequests: readInt(env, 'FAL_MAX_REQUESTS', 0),
@@ -75,13 +80,14 @@ export function readFalMediaConfig(env: NodeJS.ProcessEnv = process.env): FalMed
 }
 
 /** True only when every gate for a real call of `kind` is open. */
-export function isFalCapabilityLive(config: FalMediaConfig, kind: 'image' | 'imageCond' | 'video' | 'ugc'): boolean {
+export function isFalCapabilityLive(config: FalMediaConfig, kind: 'image' | 'imageCond' | 'imageEdit' | 'video' | 'ugc'): boolean {
   if (!config.mediaProviderEnabled) return false;
   if (!config.realProviderCallsEnabled) return false;
   if (config.maxRequests <= 0) return false;
   if (!config.credentialPresent) return false;
   if (kind === 'image' && !config.imageEnabled) return false;
   if (kind === 'imageCond' && !config.imageCondEnabled) return false;
+  if (kind === 'imageEdit' && !config.imageEditEnabled) return false;
   if (kind === 'video' && !config.videoEnabled) return false;
   if (kind === 'ugc' && !config.ugcEnabled) return false;
   return true;
@@ -93,13 +99,14 @@ export function isFalEndpointAllowed(endpoint: string, config: FalMediaConfig = 
 }
 
 /** Human-readable reason a capability is disabled (for diagnostics, no secrets). */
-export function falDisabledReason(config: FalMediaConfig, kind: 'image' | 'imageCond' | 'video' | 'ugc'): string {
+export function falDisabledReason(config: FalMediaConfig, kind: 'image' | 'imageCond' | 'imageEdit' | 'video' | 'ugc'): string {
   if (!config.mediaProviderEnabled) return 'FAL_MEDIA_PROVIDER_ENABLED is false';
   if (!config.realProviderCallsEnabled) return 'FAL_REAL_PROVIDER_CALLS_ENABLED is false';
   if (config.maxRequests <= 0) return 'FAL_MAX_REQUESTS is 0';
   if (!config.credentialPresent) return `${config.credentialEnvVar} is not set`;
   if (kind === 'image' && !config.imageEnabled) return 'FAL_IMAGE_ENABLED is false';
   if (kind === 'imageCond' && !config.imageCondEnabled) return 'FAL_IMAGE_COND_ENABLED is false';
+  if (kind === 'imageEdit' && !config.imageEditEnabled) return 'FAL_IMAGE_EDIT_ENABLED is false';
   if (kind === 'video' && !config.videoEnabled) return 'FAL_VIDEO_ENABLED is false';
   if (kind === 'ugc' && !config.ugcEnabled) return 'FAL_UGC_ENABLED is false';
   return 'enabled';

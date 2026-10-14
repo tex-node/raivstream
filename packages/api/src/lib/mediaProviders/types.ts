@@ -183,6 +183,7 @@ export interface MediaProvider {
   readonly capabilities: MediaProviderCapabilities[];
   readonly image?: ImageGenerationProvider;
   readonly imageCond?: ImageGenerationProvider;
+  readonly imageEdit?: ImageGenerationProvider;
   readonly video?: VideoGenerationProvider;
   readonly ugc?: UGCVideoProvider;
 }
