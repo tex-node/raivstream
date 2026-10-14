@@ -6,6 +6,7 @@ import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
 import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
+import { chooseVideoSeedSource } from '../lib/story/videoSeedPolicy';
 import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
 import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
@@ -391,16 +392,36 @@ async function chainLastFrameSeedImage(
   projectId: string,
   orderIndex: number,
   fallbackUrl: string,
+  sceneImageCreatedAt?: Date | null,
 ): Promise<string> {
-  if (!orderIndex || orderIndex <= 1) return fallbackUrl;
-  const previousScene = await prisma.storySceneSeed.findFirst({
-    where: { projectId, orderIndex: orderIndex - 1 },
-    include: {
-      assets: { where: { assetType: 'VIDEO', status: 'READY', deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
-    },
-  });
+  let previousScene: any;
+  if (orderIndex && orderIndex > 1) {
+    previousScene = await prisma.storySceneSeed.findFirst({
+      where: { projectId, orderIndex: orderIndex - 1 },
+      include: {
+        assets: { where: { assetType: 'VIDEO', status: 'READY', deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
+  }
   const previousVideo = previousScene?.assets?.[0];
-  if (!previousVideo?.assetUrl) return fallbackUrl;
+
+  // Regenerate-still override: a still produced after the chain source existed
+  // means the creator regenerated it — open on their still, not the previous clip.
+  const source = chooseVideoSeedSource({
+    orderIndex,
+    sceneImageCreatedAt,
+    prevVideoCreatedAt: previousVideo?.createdAt ?? null,
+    hasPrevVideo: Boolean(previousVideo?.assetUrl),
+  });
+  console.info('[videoSeed] source', {
+    sceneOrderIndex: orderIndex,
+    source,
+    sceneStillAge: sceneImageCreatedAt ?? null,
+    prevVideoAge: previousVideo?.createdAt ?? null,
+  });
+
+  if (source === 'own-still' || !previousVideo?.assetUrl) return fallbackUrl;
+
   const chained = await extractLastFrameAsSeedImage(
     previousVideo.assetUrl,
     `story-projects/${projectId}/scenes/${previousScene.id}/seeds`,
@@ -3247,7 +3268,7 @@ async function generateSceneVideoAsset(
   // LAST frame of the previous scene's clip (extracted via ffmpeg), then the
   // scene's own still as the opening frame.
   const seedImageUrl = manifestScene?.first_frame_image_url
-    ?? await chainLastFrameSeedImage(ctx.prisma, project.id, scene.orderIndex, seedImage.assetUrl);
+    ?? await chainLastFrameSeedImage(ctx.prisma, project.id, scene.orderIndex, seedImage.assetUrl, seedImage.createdAt);
 
   await trackStoryAnalytics(ctx, {
     event: 'scene_generation_started',
