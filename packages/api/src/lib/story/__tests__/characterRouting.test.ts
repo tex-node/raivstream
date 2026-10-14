@@ -14,7 +14,7 @@ const ref = (name: string) => ({ characterName: name, assetUrl: `https://cdn.tes
 
 describe('Track D Layer 1 — scene-image routing', () => {
   it('1. no approved references → text-only FLUX2', () => {
-    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [], capabilityLive: true });
+    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [], capabilityLive: true, sceneId: 'scene-1' });
     expect(r.effectiveModel).toBe('FLUX2');
     expect(r.imageUrls).toEqual([]);
     expect(r.editLive).toBe(false);
@@ -22,7 +22,7 @@ describe('Track D Layer 1 — scene-image routing', () => {
   });
 
   it('2. one approved ref + capability live → FLUX2_EDIT with one ref + @image1 tag', () => {
-    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper')], capabilityLive: true });
+    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper')], capabilityLive: true, sceneId: 'scene-1' });
     expect(r.effectiveModel).toBe('FLUX2_EDIT');
     expect(r.imageUrls).toEqual(['https://cdn.test/Sneaky Hopper.png']);
     expect(r.effectivePrompt.startsWith('@image1 is Sneaky Hopper.')).toBe(true);
@@ -30,20 +30,20 @@ describe('Track D Layer 1 — scene-image routing', () => {
   });
 
   it('3. two approved refs → both role tags in scene order', () => {
-    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper'), ref('Pip')], capabilityLive: true });
+    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper'), ref('Pip')], capabilityLive: true, sceneId: 'scene-1' });
     expect(r.effectiveModel).toBe('FLUX2_EDIT');
     expect(r.imageUrls).toHaveLength(2);
     expect(r.effectivePrompt.startsWith('@image1 is Sneaky Hopper. @image2 is Pip.')).toBe(true);
   });
 
   it('4. five approved refs → truncated to 4 (flagged)', () => {
-    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: ['A', 'B', 'C', 'D', 'E'].map(ref), capabilityLive: true });
+    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: ['A', 'B', 'C', 'D', 'E'].map(ref), capabilityLive: true, sceneId: 'scene-1' });
     expect(r.imageUrls).toHaveLength(4);
     expect(r.truncated).toBe(true);
   });
 
   it('5. capability not live → FLUX2 even with refs (no partial refs)', () => {
-    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper')], capabilityLive: false });
+    const r = computeSceneImageRouting({ requestedModel: 'FLUX2', prompt: 'scene', approvedRefs: [ref('Sneaky Hopper')], capabilityLive: false, sceneId: 'scene-1' });
     expect(r.effectiveModel).toBe('FLUX2');
     expect(r.imageUrls).toEqual([]);
     expect(r.editLive).toBe(false);

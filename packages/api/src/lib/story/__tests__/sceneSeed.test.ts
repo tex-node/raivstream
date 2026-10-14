@@ -38,19 +38,28 @@ describe('routing determinism (FLUX2_EDIT)', () => {
     { characterName: 'Pip', assetUrl: 'https://cdn.test/pip.png' },
   ];
 
+  const input = { requestedModel: 'FLUX2' as const, prompt: 'the scene', approvedRefs: refs, capabilityLive: true, sceneId: 'scene-1' };
+
+  it('5. FLUX2_EDIT routing returns seed = deterministicSeed(sceneId)', () => {
+    const r = computeSceneImageRouting(input);
+    expect(r.effectiveModel).toBe('FLUX2_EDIT');
+    expect(r.seed).toBe(deterministicSeed('scene-1'));
+  });
+
+  it('6. non-edit FLUX2 routing returns seed = undefined', () => {
+    const r = computeSceneImageRouting({ ...input, capabilityLive: false });
+    expect(r.effectiveModel).toBe('FLUX2');
+    expect(r.seed).toBeUndefined();
+  });
+
   it('9. two computations for the same scene produce identical { model, prompt, seed }', () => {
-    const input = { requestedModel: 'FLUX2' as const, prompt: 'the scene', approvedRefs: refs, capabilityLive: true };
     const a = computeSceneImageRouting(input);
     const b = computeSceneImageRouting(input);
-    expect({
-      model: a.effectiveModel,
-      prompt: a.effectivePrompt,
-      seed: deterministicSeed('scene-1'),
-    }).toEqual({
+    expect({ model: a.effectiveModel, prompt: a.effectivePrompt, seed: a.seed }).toEqual({
       model: b.effectiveModel,
       prompt: b.effectivePrompt,
-      seed: deterministicSeed('scene-1'),
+      seed: b.seed,
     });
-    expect(a.effectiveModel).toBe('FLUX2_EDIT');
+    expect(a.seed).toBe(deterministicSeed('scene-1'));
   });
 });
