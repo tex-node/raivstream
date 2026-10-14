@@ -27,6 +27,7 @@ import { submitCogVideoX, getCogVideoXStatus } from './cogVideoX';
 import { submitSeedance, getSeedanceStatus } from './seedance';
 import { submitFalFlux2, getFalFlux2Status, cancelFalFlux2 } from './falFlux2';
 import { submitFalKontext, getFalKontextStatus, cancelFalKontext } from './falKontext';
+import { submitFalFlux2Edit, getFalFlux2EditStatus, cancelFalFlux2Edit } from './falFlux2Edit';
 import { submitFalH3Max, getFalH3MaxStatus, cancelFalH3Max } from './falH3Max';
 import { submitFalVeed, getFalVeedStatus, cancelFalVeed } from './falVeed';
 import type { GenerationJobError, GenerationJobState } from './jobModel';
@@ -49,6 +50,7 @@ export type SupportedModel =
   | 'COG_VIDEO_X'
   | 'SEEDANCE'
   | 'FLUX2'
+  | 'FLUX2_EDIT'
   | 'FLUX_KONTEXT'
   | 'H3_MAX'
   | 'VEED_FABRIC';
@@ -60,6 +62,7 @@ export interface GenerateInput {
   duration?:      number;
   aspectRatio?:   string;
   seedImageUrl?:  string;
+  imageUrls?:     string[]; // FLUX2_EDIT multi-reference conditioning (max 4)
   audioUrl?:      string; // VEED Fabric lip-sync audio track
   resolution?:    string; // MiniMax H3 output resolution preset ('480p'|'720p'|'768p'|'1080p')
 }
@@ -158,6 +161,16 @@ async function dispatchSubmitGenerationJob(input: GenerateInput): Promise<Genera
     case 'FLUX2': {
       const jobId = await submitFalFlux2({
         prompt:       input.prompt,
+        aspectRatio:  input.aspectRatio,
+        seed:         undefined,
+      });
+      return { providerJobId: jobId };
+    }
+
+    case 'FLUX2_EDIT': {
+      const jobId = await submitFalFlux2Edit({
+        prompt:       input.prompt,
+        imageUrls:    input.imageUrls ?? [],
         aspectRatio:  input.aspectRatio,
         seed:         undefined,
       });
@@ -272,6 +285,11 @@ export async function pollJobStatus(
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
     }
 
+    case 'FLUX2_EDIT': {
+      const s = await getFalFlux2EditStatus(providerJobId);
+      return { status: s.status, outputUrl: s.outputUrl, error: s.error };
+    }
+
     case 'FLUX_KONTEXT': {
       const s = await getFalKontextStatus(providerJobId);
       return { status: s.status, outputUrl: s.outputUrl, error: s.error };
@@ -300,6 +318,8 @@ export async function cancelProviderJob(model: SupportedModel, providerJobId: st
   switch (model) {
     case 'FLUX2':
       return cancelFalFlux2(providerJobId);
+    case 'FLUX2_EDIT':
+      return cancelFalFlux2Edit(providerJobId);
     case 'FLUX_KONTEXT':
       return cancelFalKontext(providerJobId);
     case 'H3_MAX':
@@ -487,6 +507,19 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'fal.ai · FLUX.2',
     providerUrl:          'https://fal.ai/models/fal-ai/flux-2',
     mediaType:            'image',
+  },
+  FLUX2_EDIT: {
+    label:                'Flux 2 Edit',
+    description:          'FLUX.2 [dev] edit — multi-reference image editing. Conditions the still on approved character references (max 4).',
+    badge:                'live',
+    icon:                 '🧬',
+    minDuration:          0,
+    maxDuration:          0,
+    supportsImageToVideo: false,
+    provider:             'fal.ai · FLUX.2 Edit',
+    providerUrl:          'https://fal.ai/models/fal-ai/flux-2/edit',
+    mediaType:            'image',
+    hidden:               true,
   },
   FLUX_KONTEXT: {
     label:                'FLUX Kontext',
