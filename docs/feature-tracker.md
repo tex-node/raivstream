@@ -211,6 +211,7 @@ click-through. This track adds the drill-down.
 | D - flux-2/edit `guidance_scale` not tuned | **FOLLOW-UP** | `toFlux2EditInput` never sets `guidance_scale` (endpoint default 2.5). Leave at default unless future drift surfaces; the lever is `guidance_scale: 7.5`. |
 | D - placeholder instruction not holding | **FOLLOW-UP** | `[identity] fallback appended` fires on every regeneration — the deterministic fallback does the work, so the placeholder mechanism is dead weight. Consider removing the placeholder path or tightening the enhancer instruction. |
 | D - enhancer-spy tests (7-8) missing | **FOLLOW-UP** | FLUX2_EDIT-skips-the-enhancer and non-edit-runs-the-enhancer are not unit-tested; the production retest (identical `prompt_hash` across two regenerations) proves the skip end-to-end. Add spies on `promptEnhancerService.enhance` around `composeEnhancedScenePrompt`. |
+| D - video seed ignored regenerated stills | **FIXED** (`fbbebc57`) | The I2V chain (Phase 17) always seeded scene N from scene N-1's last frame, so a regenerated still was never the video's opening frame. Fix: if a scene's latest READY IMAGE is newer than the previous scene's latest READY VIDEO, seed from the scene's own still (`chooseVideoSeedSource`, `videoSeedPolicy.ts`); chain preserved for straight-through generation. Evidence: `[videoSeed] source { sceneOrderIndex: 6, source: 'own-still', sceneStillAge: 2026-10-14T15:00:26Z, prevVideoAge: 2026-10-14T03:54:59Z }`; user confirmed the video opens on the regenerated still (scale + likeness). |
 
 ### Layer 3 — Pipeline: identity across shots
 
@@ -320,6 +321,8 @@ For each release track, all must be true before declaring DEPLOYED:
 ---
 
 ## Last updated
+
+2026-10-14 — video-seed override deployed (`fbbebc57`); user confirmed the regenerated video opens on the correct still. Multi-character drift was a wrong-seed symptom, not H3 weakness — R2V adapter not required.
 
 2026-10-14 — **Track D closed; both layers deployed and verified.** Layer 2 (locked identity block,
 `9526929`) and Layer 1 (reference-conditioned scene stills via `fal-ai/flux-2/edit`, `c7b81e0`) are
