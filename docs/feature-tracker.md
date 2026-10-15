@@ -88,7 +88,7 @@ the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 | R16-03 — Draft-reference warning banner | DEPLOYED | `5e3dfb5` | `draftReferenceWarning.test.ts` | `6057bdf` |
 | R16-04 — Batch generation (server) | **ACCEPTED** | `324abc0`, `915c7be` | `batchGeneration.test.ts` (controller: cap, concurrency, pause-resume, idempotency, delegation) + `batchRoutingWiring.test.ts` (router-level: `batchDepsFor.generateScene` → `generateSceneImageAsset` → `computeSceneImageRouting` → FLUX2_EDIT) | `6057bdf` |
 | R16-04 — Batch UI + pause-resume | **ACCEPTED** | `2145173` | `batchGenerationUi.test.ts` (incl. terminal-state panel: COMPLETED/FAILED/CANCELLED stay mounted) | `6057bdf` |
-| R16-05 — Chapter version history | DEPLOYED | `354f882` | `chapterVersioning.test.ts` | `6057bdf` |
+| R16-05 — Chapter version history | **ACCEPTED** | `354f882` | `chapterVersioning.test.ts` + prod: project `cmv14z8t601fgx61oozrk0lnz` versions v1 EDIT 9509 → v2 EDIT 9004 → v3 MANUAL **9509** (restore = pre-edit body); **0 scene assets created in the restore window (2026-10-14 18:00–18:20)** → restore neither deletes nor regenerates scene assets. **Gap:** `affectedSceneIdsForChapterEdit` (pure helper + unit test) is **not wired** into the router (`story.ts` imports only `snapshotChapterVersion`) → affected-scene identification is not returned/shown (needs a product decision; not fixed here). | `6057bdf` |
 | Phase 2 release evidence | DEPLOYED (docs) | `5b18aff` | `docs/operations/phase-2-release-evidence.md` | committed |
 
 **Accepted limitations:**
@@ -322,6 +322,8 @@ For each release track, all must be true before declaring DEPLOYED:
 ---
 
 ## Last updated
+
+2026-10-15 — **Slice B gap closed + R16-05 → ACCEPTED.** "Reused across regeneration" proven in prod: scene `cmv156v6v01max61ob18tqyr6` (ord 4) has **4** `fal-ai/flux-2/edit` IMAGE versions (`isLatest` f,f,f,t) and scene `cmv156v6v01mex61o14x5qhkq` (ord 6) has **3** (f,f,t) — both with the approved chars Pip + Sneaky Hopper. **R16-05 → ACCEPTED**: versions v1 EDIT 9509 → v2 EDIT 9004 → v3 MANUAL 9509 (restore == pre-edit body); **0 scene assets created in the restore window** (2026-10-14 18:00–18:20) → restore neither deletes nor regenerates assets. **Gap (product decision):** `affectedSceneIdsForChapterEdit` is defined + unit-tested but not wired into the router → affected-scene identification is not surfaced.
 
 2026-10-15 — **R16-03 → ACCEPTED** (reference-conditioned continuity verified in prod: project `cmv14z8t601fgx61oozrk0lnz`, scenes ord 4 + 6 route to `fal-ai/flux-2/edit`/`phase-d1-v1` with the approved chars Pip + Sneaky Hopper; refs reused across scenes + regeneration). **Slice A pending-deploy audit (read-only):** repo migrations **62 == prod `_prisma_migrations` applied 62** (parity checked 2026-10-15); R16-EXPORT `20260925180000_story_video_export`, EDU-B `20260926120000_educational_contract`, R16-AUDIO `20261009120000` + `20261009130000` are **all applied in prod** and the live schema matches → **DEPLOYED** (next gate = real-use acceptance: R16-EXPORT needs a Phase 2H real export → Watch Story; R16-AUDIO needs the `story:speech_generation` rate + ELEVENLABS/LYRIA flags set in prod env). **P1 credits → DEPLOYED**: contract phase applied (`20261012140000` + `20261013120000`); `credit_transactions.idempotencyKey` NOT NULL confirmed in the live schema.
 
