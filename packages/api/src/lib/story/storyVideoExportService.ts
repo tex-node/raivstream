@@ -53,6 +53,7 @@ export interface StoryVideoExportState {
   widthPx: number | null;
   heightPx: number | null;
   errorMessage: string | null;
+  endCardApplied: boolean | null;
   sourceHash: string;
   sceneIds: string[];
   createdAt: Date;
@@ -80,6 +81,7 @@ function serializeExport(row: {
   widthPx: number | null;
   heightPx: number | null;
   errorMessage: string | null;
+  endCardApplied?: boolean | null;
   sourceHash: string;
   sceneIds: unknown;
   createdAt: Date;
@@ -94,6 +96,7 @@ function serializeExport(row: {
     widthPx: row.widthPx,
     heightPx: row.heightPx,
     errorMessage: row.errorMessage,
+    endCardApplied: row.endCardApplied ?? null,
     sourceHash: row.sourceHash,
     sceneIds: Array.isArray(row.sceneIds) ? (row.sceneIds as string[]) : [],
     createdAt: row.createdAt,
@@ -314,6 +317,7 @@ export class StoryVideoExportService {
           r2Prefix: `story-exports/${input.projectId}/exports/${exportRow.id}`,
           backgroundMusicUrl,
           creatorHandle,
+          exportId: exportRow.id,
         },
         deps,
       );
@@ -325,6 +329,7 @@ export class StoryVideoExportService {
           assetUrl: rendered.assetUrl,
           r2Key: `story-exports/${input.projectId}/exports/${exportRow.id}/out.mp4`,
           completedAt: new Date(),
+          endCardApplied: rendered.endCardApplied,
         },
       });
       return serializeExport(updated);

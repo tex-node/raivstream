@@ -1422,6 +1422,21 @@ export const adminRouter = router({
     }),
 
   /**
+   * End-card observability for R16 story video exports.
+   * applied=true: card rendered; false: skipped (preflight or music path);
+   * null: pre-feature row (column was NULL before this writer shipped).
+   */
+  r16ExportStats: adminProcedure.query(async ({ ctx }) => {
+    const [total, applied, skipped, preFeature] = await Promise.all([
+      ctx.prisma.storyVideoExport.count({ where: { status: 'READY' } }),
+      ctx.prisma.storyVideoExport.count({ where: { status: 'READY', endCardApplied: true } }),
+      ctx.prisma.storyVideoExport.count({ where: { status: 'READY', endCardApplied: false } }),
+      ctx.prisma.storyVideoExport.count({ where: { status: 'READY', endCardApplied: null } }),
+    ]);
+    return { total, applied, skipped, preFeature };
+  }),
+
+  /**
    * Per-user balance reconciliation against the authoritative ledger. Reads
    * only — never mutates balances. Discrepancies are reported for an
    * owner-approved remediation policy; opening balances or historical

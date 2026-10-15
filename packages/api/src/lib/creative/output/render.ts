@@ -378,9 +378,11 @@ export async function renderOutputDerivative(
      * by each caller — never from client input. Falls back to a generic label.
      */
     creatorHandle?: string | null;
+    /** Export row id for structured logging. Passed by storyVideoExportService. */
+    exportId?: string;
   },
   deps: OutputRenderDeps = {},
-): Promise<{ assetUrl: string }> {
+): Promise<{ assetUrl: string; endCardApplied: boolean }> {
   const doFetch = deps.fetch ?? fetch;
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
@@ -393,11 +395,16 @@ export async function renderOutputDerivative(
   const dir = await mkdtemp(path.join(os.tmpdir(), 'raivstream-output-'));
 
   // Append the 2s end card to the main output, or (best-effort) fall back to it.
-  const appendEndCard = async (mainPath: string, mainHasAudio: boolean, mainDurationSeconds: number): Promise<string> => {
+  const appendEndCard = async (
+    mainPath: string,
+    mainHasAudio: boolean,
+    mainDurationSeconds: number,
+  ): Promise<{ path: string; applied: boolean; reason: string }> => {
     const pre = await preflight();
     if (!pre.ok) {
+      const reason = !pre.drawtext ? 'drawtext' : !pre.font ? 'font' : 'other';
       console.warn(`[end-card] skipped: ${preflightFailureMessage(pre)}`);
-      return mainPath;
+      return { path: mainPath, applied: false, reason };
     }
     const final = path.join(dir, 'final.mp4');
     await doFfmpeg(buildEndCardArgs({
@@ -410,7 +417,7 @@ export async function renderOutputDerivative(
       handle,
       fontFile: process.env.RAIVSTREAM_END_CARD_FONT ?? null,
     }));
-    return final;
+    return { path: final, applied: true, reason: 'n/a' };
   };
 
   try {
@@ -539,10 +546,11 @@ export async function renderOutputDerivative(
         await rename(concat, out);
       }
 
-      const final = await appendEndCard(out, true, 0);
-      const buffer = await readFile(final);
-      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
-      return { assetUrl };
+      const card = await appendEndCard(out, true, 0);
+      const buffer = await readFile(card.path);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
+      console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
+      return { assetUrl, endCardApplied: card.applied };
     }
 
     // ── Video-only path (non-educational, existing behavior unchanged) ─────────
@@ -626,9 +634,11 @@ export async function renderOutputDerivative(
         run: doFfmpeg,
         hasExistingAudio: true,
       });
-      const buffer = await readFile(mixed);
-      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${mixed}`;
-      return { assetUrl };
+      const card = await appendEndCard(mixed, true, input.derivation.effectiveDurationSeconds);
+      const buffer = await readFile(card.path);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
+      console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
+      return { assetUrl, endCardApplied: card.applied };
     }
 
     const out = path.join(dir, 'out.mp4');
@@ -657,10 +667,11 @@ export async function renderOutputDerivative(
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const final = await appendEndCard(withAudio, nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
-    const buffer = await readFile(final);
-    const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${final}`;
-    return { assetUrl };
+    const card = await appendEndCard(withAudio, nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
+    const buffer = await readFile(card.path);
+    const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
+    console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
+    return { assetUrl, endCardApplied: card.applied };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
