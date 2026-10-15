@@ -1560,6 +1560,7 @@ model StoryVideoExport {
   heightPx      Int?
 
   errorMessage  String?
+  endCardApplied Boolean?
 
   completedAt   DateTime?
   createdAt     DateTime               @default(now())

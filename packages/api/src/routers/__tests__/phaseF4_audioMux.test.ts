@@ -326,7 +326,7 @@ describe('F4 §B — StoryVideoExportService: educational export with full audio
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -367,7 +367,7 @@ describe('F4 §B — StoryVideoExportService: educational export with full audio
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -488,7 +488,7 @@ describe('F4 §D — Audio ownership: audioUrl is derived from DB, never from cl
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -544,7 +544,7 @@ describe('F4 §E — Scene ordering preserved in educational mux', () => {
     let capturedScenes: Array<{ sceneId: string }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -600,7 +600,7 @@ describe('F4 §F — Non-educational regression: STORY exports have no audio mux
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -635,7 +635,7 @@ describe('F4 §F — Non-educational regression: STORY exports have no audio mux
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -838,7 +838,7 @@ describe('F4 §F4.11 — Acceptance: ships educational export pipeline shape', (
     let capturedScenes: Array<{ sceneId: string; audioUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/ships-export.mp4' };
+      return { assetUrl: 'https://r2.raivstream.com/ships-export.mp4', endCardApplied: true };
     });
 
     const prisma = makePrisma();
@@ -892,6 +892,7 @@ describe('F4 §F4.11 — Acceptance: ships educational export pipeline shape', (
     const hashes: string[] = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockResolvedValue({
       assetUrl: 'https://r2.raivstream.com/out.mp4',
+      endCardApplied: true,
     });
 
     const prisma = makePrisma();

@@ -216,3 +216,84 @@ describe('StoryVideoExportService — Phase C backgroundMusicUrl', () => {
     });
   });
 });
+
+describe('StoryVideoExportService — endCardApplied writer', () => {
+  let svc: StoryVideoExportService;
+
+  beforeEach(() => {
+    svc = new StoryVideoExportService();
+  });
+
+  function makePrismaCapturing(updateResult: Record<string, unknown>) {
+    const updateSpy = vi.fn().mockResolvedValue({
+      id: 'export-1', projectId: 'proj-1', status: 'READY', sourceHash: 'hash',
+      sceneIds: [], createdAt: new Date(), completedAt: new Date(),
+      assetUrl: 'https://cdn.test/out.mp4', durationSeconds: null, widthPx: null,
+      heightPx: null, errorMessage: null, endCardApplied: null,
+      ...updateResult,
+    });
+    const prisma: DeepPartial<PrismaClient> = {
+      storyProject: {
+        findFirst: vi.fn().mockResolvedValue(makeProject()),
+      } as unknown as PrismaClient['storyProject'],
+      storySceneSeed: {
+        findMany: vi.fn().mockResolvedValue(BASE_SCENES),
+      } as unknown as PrismaClient['storySceneSeed'],
+      storySceneAsset: {
+        findMany: vi.fn().mockResolvedValue(BASE_ASSETS),
+      } as unknown as PrismaClient['storySceneAsset'],
+      user: {
+        findUnique: vi.fn().mockResolvedValue({ username: 'testuser' }),
+      } as unknown as PrismaClient['user'],
+      storyVideoExport: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({
+          id: 'export-1', projectId: 'proj-1', status: 'GENERATING', sourceHash: 'hash',
+          sceneIds: [], createdAt: new Date(), completedAt: null, assetUrl: null,
+          durationSeconds: null, widthPx: null, heightPx: null, errorMessage: null, endCardApplied: null,
+        }),
+        update: updateSpy,
+      } as unknown as PrismaClient['storyVideoExport'],
+    };
+    return { prisma: prisma as unknown as PrismaClient, updateSpy };
+  }
+
+  it('F. sets endCardApplied=true in DB update when card is applied', async () => {
+    const { prisma, updateSpy } = makePrismaCapturing({ endCardApplied: true });
+    const deps: OutputRenderDeps = {
+      fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
+      ffmpeg: vi.fn(async (args: string[]) => {
+        const outArg = [...args].reverse().find((a) => a.endsWith('.mp4'));
+        if (outArg) await writeFile(outArg, Buffer.alloc(8, 0x00));
+      }),
+      upload: vi.fn(async () => 'https://cdn.test/out.mp4'),
+      endCardPreflight: async () => ({ drawtext: true, font: true, ok: true }),
+    };
+
+    const result = await svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps);
+
+    const updateCall = updateSpy.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(updateCall?.data.endCardApplied).toBe(true);
+    expect(result.status).toBe('READY');
+  });
+
+  it('G. sets endCardApplied=false in DB update when preflight fails; export still READY', async () => {
+    const { prisma, updateSpy } = makePrismaCapturing({ endCardApplied: false });
+    const deps: OutputRenderDeps = {
+      fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
+      ffmpeg: vi.fn(async (args: string[]) => {
+        const outArg = [...args].reverse().find((a) => a.endsWith('.mp4'));
+        if (outArg) await writeFile(outArg, Buffer.alloc(8, 0x00));
+      }),
+      upload: vi.fn(async () => 'https://cdn.test/out.mp4'),
+      endCardPreflight: async () => ({ drawtext: false, font: true, ok: false }),
+    };
+
+    const result = await svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps);
+
+    const updateCall = updateSpy.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(updateCall?.data.endCardApplied).toBe(false);
+    expect(updateCall?.data.status).toBe('READY');
+    expect(result.status).toBe('READY');
+  });
+});
