@@ -7669,10 +7669,13 @@ export const storyRouter = router({
       storyType: storyTypeSchema.optional(),
     }))
     .mutation(({ ctx, input }) => {
+      const audienceMode = resolveAudienceMode(ctx, input.audienceMode);
+      // Same R16 write rule as createSpark (shared helper — no duplicated logic).
+      if (input.visualStyle) assertR16VisualStyle(audienceMode, normaliseStoryVisualStyle(input.visualStyle));
       return ctx.prisma.storyProject.create({
         data: {
           ...input,
-          audienceMode: resolveAudienceMode(ctx, input.audienceMode),
+          audienceMode,
           userId: ctx.user.id,
         },
         select: projectSelect,
