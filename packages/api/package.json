@@ -9,7 +9,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "share:retention": "tsx scripts/share-retention.ts"
   },
   "dependencies": {
     "@aws-sdk/client-mediaconvert": "^3.478.0",
