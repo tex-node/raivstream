@@ -267,9 +267,12 @@ export class OpenAIStoryIntelligenceProvider implements StoryIntelligenceProvide
     const audienceClause = input.audienceMode === 'KIDS'
       ? 'for a young audience (ages 4–12). Keep it friendly, clear, and engaging. No adult themes.'
       : 'for a general audience. Keep it clear and engaging.';
+    const wordBudgetClause = input.wordBudget
+      ? `Write exactly ${input.wordBudget[0]}–${input.wordBudget[1]} words — no more, no fewer.`
+      : 'Write a single, continuous narration paragraph (40–100 words) for the given scene.';
     const system = [
       `You are a narration writer writing voiceover scripts ${audienceClause}`,
-      'Write a single, continuous narration paragraph (40–100 words) for the given scene.',
+      wordBudgetClause,
       'The narration should be spoken aloud as voiceover — present tense, vivid, and natural.',
       'Do NOT include any formatting, scene titles, or speaker labels. Output only the narration text.',
     ].join('\n');

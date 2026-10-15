@@ -1,3 +1,4 @@
+import { isStoryPaceEnabled, STORY_PACE_CONFIG } from '../types';
 import type { PlanStoryInput } from '../types';
 
 export const STORY_BLUEPRINT_PROMPT_VERSION = 'story_blueprint_v1';
@@ -60,6 +61,18 @@ export function buildBlueprintUserPrompt(input: PlanStoryInput): string {
     '  "continuityRules": ["string"]',
     '}',
     '',
-    'beats must have 4 to 6 entries. Each beat must describe a visually distinct moment.',
+    beatConstraint(input.storyLength),
   ].join('\n');
+}
+
+function beatConstraint(storyLength?: string | null): string {
+  if (!isStoryPaceEnabled() || !storyLength) {
+    return 'beats must have 4 to 6 entries. Each beat must describe a visually distinct moment.';
+  }
+  const cfg = STORY_PACE_CONFIG[storyLength as keyof typeof STORY_PACE_CONFIG];
+  if (!cfg) return 'beats must have 4 to 6 entries. Each beat must describe a visually distinct moment.';
+  return [
+    `beats must have ${cfg.beatMin} to ${cfg.beatMax} entries. Each beat must describe a visually distinct moment.`,
+    `If a beat would require more than ${cfg.narrationWordMax} narration words to describe, split it into two beats.`,
+  ].join(' ');
 }
