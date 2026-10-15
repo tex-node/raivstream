@@ -7694,7 +7694,15 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const project = await ensureProject(ctx, input.projectId);
       const { projectId, ...data } = input;
-      if (data.visualStyle) assertR16VisualStyle(project.audienceMode as StoryAudienceMode, normaliseStoryVisualStyle(data.visualStyle));
+      if (data.visualStyle) {
+        const incomingStyle = normaliseStoryVisualStyle(data.visualStyle);
+        // R16 write restriction applies to a CHANGE only. Clients re-send the
+        // current style on unrelated saves, so guarding an unchanged (possibly
+        // legacy, pre-restriction) value would trap an existing R16 project.
+        if (incomingStyle !== project.visualStyle) {
+          assertR16VisualStyle(project.audienceMode as StoryAudienceMode, incomingStyle);
+        }
+      }
       const updateData = {
         ...data,
         visualStyle: data.visualStyle ? normaliseStoryVisualStyle(data.visualStyle) : data.visualStyle,
