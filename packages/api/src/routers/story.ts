@@ -278,7 +278,7 @@ function shareNotFound(): TRPCError {
 }
 
 /** R16-04 — batch worker deps built from a request context (real scene-image path). */
-async function batchDepsFor(ctx: any): Promise<BatchDeps> {
+export async function batchDepsFor(ctx: any): Promise<BatchDeps> {
   const featureKey = MODEL_FEATURE_KEY['FLUX2' as SupportedModel];
   return {
     perItemCost: featureKey ? await getFeatureCreditCost(ctx.prisma, featureKey) : 0,
