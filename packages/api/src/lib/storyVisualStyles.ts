@@ -68,6 +68,30 @@ export function isR16VisualStyle(value: string | null | undefined): boolean {
   return !!value && (R16_VISUAL_STYLE_KEYS as readonly string[]).includes(value);
 }
 
+/** Set form of R16_VISUAL_STYLE_KEYS — used for O(1) generation-time lookup. */
+export const R16_ALLOWED_STYLES = new Set<string>(R16_VISUAL_STYLE_KEYS);
+
+/**
+ * Remap a stored style to an R16-safe one at **generation time only**.
+ * Does NOT affect what is written to the database; write-path enforcement
+ * (`assertR16VisualStyle`) already runs separately on the write side.
+ *
+ * For KIDS audience mode: any style outside the R16 approved set maps to
+ * CARTOON. Logs `[r16.style] legacy=<stored> mapped=CARTOON projectId=<id>`
+ * when a remap actually occurs.
+ */
+export function enforceR16Style(
+  value: string | null | undefined,
+  audienceMode: string | null | undefined,
+  projectId?: string,
+): StoryVisualStyleKey {
+  const normalised = normaliseStoryVisualStyle(value);
+  if (audienceMode !== 'KIDS') return normalised;
+  if (R16_ALLOWED_STYLES.has(normalised)) return normalised;
+  console.info(`[r16.style] legacy=${normalised} mapped=CARTOON projectId=${projectId ?? 'unknown'}`);
+  return 'CARTOON';
+}
+
 export function normaliseStoryVisualStyle(value?: string | null): StoryVisualStyleKey {
   if (!value) return DEFAULT_STORY_VISUAL_STYLE;
   const trimmed = value.trim();

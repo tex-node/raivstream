@@ -502,8 +502,8 @@ export default function StoryPlaygroundPage() {
     onError: (error) => setMessage(error.message),
   });
 
-  const stylePresets = trpc.story.listStylePresets.useQuery();
-  const [selectedStylePreset, setSelectedStylePreset] = useState('WARM_STORYBOOK');
+  const stylePresets = trpc.story.listStylePresets.useQuery({ audienceMode: isR16 ? 'KIDS' : 'GENERAL' });
+  const [selectedStylePreset, setSelectedStylePreset] = useState(isR16 ? 'CARTOON_ADVENTURE' : 'WARM_STORYBOOK');
   const applyStylePreset = trpc.story.applyStylePreset.useMutation({
     onSuccess: async (result) => {
       setSelectedVisualStyle(result.visualStyle);
@@ -1155,9 +1155,9 @@ export default function StoryPlaygroundPage() {
                 </p>
               )}
             </div>
-            {!isR16 && stylePresets.data && stylePresets.data.length > 0 && (
+            {stylePresets.data && stylePresets.data.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-3">
-                <span className="text-xs font-black uppercase text-[var(--noc-t4)]">Style preset</span>
+                <span className="text-xs font-black uppercase text-[var(--noc-t4)]">{isR16 ? 'Story look' : 'Style preset'}</span>
                 <select
                   value={selectedStylePreset}
                   onChange={(event) => setSelectedStylePreset(event.target.value)}
@@ -1176,6 +1176,11 @@ export default function StoryPlaygroundPage() {
                   {applyStylePreset.isPending ? 'Applying…' : 'Apply preset'}
                 </button>
                 <span className="text-xs font-semibold text-[var(--noc-t4)]">Sets the visual style + scene lighting/mood + a music prompt.</span>
+              </div>
+            )}
+            {isR16 && project?.visualStyle && !R16_STYLE_VALUES.has(project.visualStyle as VisualStyleValue) && (
+              <div className="mb-4 rounded-xl border border-[rgba(217,70,168,0.25)] bg-[rgba(217,70,168,0.08)] px-4 py-3 text-sm font-semibold text-[var(--noc-t2)]">
+                Your story uses an older style. Pick a new one below.
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
