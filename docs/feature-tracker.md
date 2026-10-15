@@ -109,10 +109,10 @@ the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
-| Publication lifecycle (submit/withdraw/resubmit) | DEPLOYED | `ca2d84f` | `publication.test.ts` | `6057bdf` |
-| Feed `withdrawnAt` filter + `getById` tightening | DEPLOYED | `ca2d84f` | `publication.test.ts` | `6057bdf` |
-| Share link model + attribution | DEPLOYED | `1d2bb4e`, `ee8a4ca` | `shareLinks.test.ts` | `6057bdf` |
-| Retention (90-day aggregate) | DEPLOYED | `ee8a4ca` | `shareAttributionRetention.test.ts` | `6057bdf` |
+| Publication lifecycle (submit/withdraw/resubmit) | **ACCEPTED** | `ca2d84f` | `publication.test.ts` + prod/code: all three are `r16Procedure` with `creatorId: ctx.user.id` ownership → non-owner gets NOT_FOUND; approve/reject/flag = `moderateVideo`/`moderationQueue` on `moderatorProcedure` | `6057bdf` |
+| Feed `withdrawnAt` filter + `getById` tightening | **ACCEPTED** | `ca2d84f` | `publication.test.ts` + code: feed filters `withdrawnAt: null` + `moderationStatus` (`feed.ts:40-42`); public video path requires `{ moderationStatus:'APPROVED', isPublic:true, withdrawnAt:null, status:'READY' }` (`video.ts:63`) → pending/rejected/withdrawn/private not fetchable | `6057bdf` |
+| Share link model + attribution | **ACCEPTED** | `1d2bb4e`, `ee8a4ca` | `shareLinks.test.ts` + code: `resolveShareLink` requires `{ status:'READY', isPublic:true, withdrawnAt:null, moderationStatus:'APPROVED' }` (`story.ts:5379`) → a link to a non-public video doesn't resolve; **no IP**: `share_attributions` = `{id, shareLinkId, viewerUserId, createdAt}` (no IP column; migration comment records it as a compliance invariant), no `req.ip`/`x-forwarded-for` in code | `6057bdf` |
+| Retention (90-day aggregate) | **PARTIAL** | `ee8a4ca` | `shareAttributionRetention.test.ts` + `SHARE_ATTRIBUTION_RETENTION_DAYS=90`, aggregates into `share_link_daily_counts` then deletes raw rows; manually runnable (`admin.runShareAttributionRetention`). **Gap: NOT scheduled** (no cron/workflow) and **has never run** (`share_attributions` = 0 rows, 0 `[share.retention]` log lines) | `6057bdf` |
 | Share menu (WhatsApp, Instagram, copy, native) | DEPLOYED | `4027580` | `shareTargets.test.ts` | `6057bdf` |
 | Phase 4 design doc | DEPLOYED (docs) | `ed5343c` | `docs/architecture/phase-4-publication-sharing.md` | committed |
 | Phase 4 release evidence | DEPLOYED (docs) | `6cea587` | `docs/operations/phase-4-release-evidence.md` | committed |
@@ -320,6 +320,8 @@ For each release track, all must be true before declaring DEPLOYED:
 ---
 
 ## Last updated
+
+2026-10-15 — **Slice E (P4A/P4B) → ACCEPTED (retention scheduling = PARTIAL).** Containment verified: feed filters `withdrawnAt:null` + moderation (`feed.ts:40-42`); the public video path (`video.ts:63`) and `resolveShareLink` (`story.ts:5379`) both require `{status:'READY', isPublic:true, withdrawnAt:null, moderationStatus:'APPROVED'}` → pending/rejected/withdrawn/private are neither in the feed nor fetchable by ID nor playable via a share link. Authorization: submit/withdraw/resubmit are `r16Procedure` + `creatorId` ownership (non-owner → NOT_FOUND); approve/reject/flag are `moderatorProcedure` (`moderateVideo`/`moderationQueue`). **No IP stored anywhere** (`share_attributions` = `{id, shareLinkId, viewerUserId, createdAt}`; no `req.ip`/`x-forwarded-for` in code). **Retention gap:** the 90-day aggregate→`share_link_daily_counts`→delete job exists + is manually runnable (`admin.runShareAttributionRetention`) but is **not scheduled** and has **never run** (0 rows; 0 `[share.retention]` log lines).
 
 2026-10-15 — **Defect fixed: R16 legacy-style trap** (`2032ae06`). `updateProject` guarded whenever `visualStyle` was present in the payload; `story-studio/page.tsx` re-sends the current style on every save (seeded from `project.visualStyle`) → an existing R16 project with a pre-restriction style (`STORYBOOK_ILLUSTRATION` / `COMIC_BOOK` / `WATERCOLOR`) could not be saved. Fix: guard only on a **changed** value (incoming ≠ stored); reads/generation untouched (no generation path calls `assertR16VisualStyle`). 4 regression cases added to `r16VisualStyle.test.ts` (21 pass). **Data-cleanup flag (do not touch now):** 2 GENERAL projects store **raw strings** as `visualStyle` — one a full Afrofuturist prompt, one `3D Animated` — left as-is. **git quirk resolved:** the `git pull --ff-only` "Aborting … no such ref was fetched" was a transient fetch failure masked by output truncation; config is correct (`branch.main.merge = refs/heads/main`, `remote.origin.fetch = +refs/heads/*:refs/remotes/origin/*`) — stop masking fetch output.
 
