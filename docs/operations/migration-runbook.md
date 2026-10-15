@@ -78,6 +78,14 @@ The running app's PM2 exec cwd is `/root/raivstream/apps/web`. **`apps/web/.env.
 
 **Follow-up:** `FAL_MAX_REQUESTS` diverges (10 in root `.env` vs 200 in `.env.local`; the running process uses 200). Reconcile to a single value (keep 200, remove the root line).
 
+## 1c. VPS change rules (shared infrastructure)
+
+The VPS hosts other businesses' jobs. Crontab, `.env`, `Caddyfile`, PM2 ecosystem and
+any other shared-config edit must follow **backup → write a file → validate (line count,
+`cat -A`, diff) → install once**, and anything outside `/root/raivstream` is **read-only**
+unless explicitly approved. Full rules + the 2026-10-15 empty-crontab incident:
+`docs/operations/vps-change-rules.md`.
+
 ## 2. Rollback guidance
 
 - **Additive** migrations: no rollback needed; leave the columns/tables in place.
