@@ -28,7 +28,7 @@ import {
   selectStorybookImageForScene,
   type CreativeCriticInput,
 } from '../lib/creativeCritic';
-import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
+import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, enforceR16Style, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
 import { createBatchRun, runBatch, recoverStuckBatchRuns, type BatchDeps } from '../lib/story/batchGeneration';
 import { randomBytes } from 'node:crypto';
@@ -1401,8 +1401,22 @@ const STYLE_PRESETS = {
     director: { lighting: 'WARM', environmentMood: 'PEACEFUL', scenePace: 'NORMAL' },
     musicPrompt: 'warm african percussion and kora, gentle rhythmic storytelling, no vocals',
   },
+  CARTOON_ADVENTURE: {
+    label: 'Cartoon Adventure',
+    visualStyle: 'CARTOON' as StoryVisualStyleKey,
+    director: { lighting: 'BRIGHT', environmentMood: 'ADVENTUROUS', scenePace: 'ENERGETIC' },
+    musicPrompt: 'bright cheerful cartoon adventure theme, playful brass and woodwinds, no vocals',
+  },
+  THREE_D_ADVENTURE: {
+    label: '3D Adventure',
+    visualStyle: 'THREE_D_ANIMATED' as StoryVisualStyleKey,
+    director: { lighting: 'BRIGHT', environmentMood: 'ADVENTUROUS', scenePace: 'NORMAL' },
+    musicPrompt: 'warm upbeat family film adventure score, full orchestra, no vocals',
+  },
 } as const;
-const STYLE_PRESET_NAMES = ['WARM_STORYBOOK', 'EPIC_CINEMATIC', 'ANIME_ADVENTURE', 'PHOTOREAL_CINEMATIC', 'AFRICAN_FOLKTALE'] as const;
+const STYLE_PRESET_NAMES = ['WARM_STORYBOOK', 'EPIC_CINEMATIC', 'ANIME_ADVENTURE', 'PHOTOREAL_CINEMATIC', 'AFRICAN_FOLKTALE', 'CARTOON_ADVENTURE', 'THREE_D_ADVENTURE'] as const;
+/** Preset names available exclusively to R16/KIDS projects. */
+const R16_PRESET_NAMES = new Set<string>(['ANIME_ADVENTURE', 'CARTOON_ADVENTURE', 'THREE_D_ADVENTURE']);
 
 function titleCase(value: string) {
   return value
@@ -1620,8 +1634,12 @@ function automaticNegativePrompt(audienceMode: StoryAudienceMode, outputType: Pr
   return [...base, ...kids, ...media, ...educational].join(', ');
 }
 
-function effectiveVisualStyle(project: { visualStyle?: string | null; audienceMode?: string | null }, audienceMode: StoryAudienceMode) {
-  return project.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE);
+function effectiveVisualStyle(
+  project: { visualStyle?: string | null; audienceMode?: string | null; id?: string },
+  audienceMode: StoryAudienceMode,
+): StoryVisualStyleKey {
+  const raw = project.visualStyle ?? (audienceMode === 'KIDS' ? DEFAULT_R16_STORY_VISUAL_STYLE : DEFAULT_STORY_VISUAL_STYLE);
+  return enforceR16Style(raw, audienceMode, project.id);
 }
 
 function storyDnaPromptText(value: unknown) {
@@ -6416,15 +6434,22 @@ export const storyRouter = router({
       return { applied: targets.length, preset: input.preset, runtimeSeconds: runtime.totalRuntimeSeconds };
     }),
 
-  /** Phase 11 — named style presets (visual style + director + music prompt). */
-  listStylePresets: protectedProcedure.query(() =>
-    STYLE_PRESET_NAMES.map((name) => ({
-      name,
-      label: STYLE_PRESETS[name].label,
-      visualStyle: STYLE_PRESETS[name].visualStyle,
-      musicPrompt: STYLE_PRESETS[name].musicPrompt,
-    })),
-  ),
+  /** Phase 11 — named style presets (visual style + director + music prompt).
+   *  Pass `audienceMode: 'KIDS'` to receive only R16-safe presets; omit for the main-app set. */
+  listStylePresets: protectedProcedure
+    .input(z.object({ audienceMode: z.enum(['KIDS', 'GENERAL']).optional() }))
+    .query(({ input }) => {
+      const isR16Req = input.audienceMode === 'KIDS';
+      const names = STYLE_PRESET_NAMES.filter((name) =>
+        isR16Req ? R16_PRESET_NAMES.has(name) : !R16_PRESET_NAMES.has(name),
+      );
+      return names.map((name) => ({
+        name,
+        label: STYLE_PRESETS[name].label,
+        visualStyle: STYLE_PRESETS[name].visualStyle,
+        musicPrompt: STYLE_PRESETS[name].musicPrompt,
+      }));
+    }),
 
   /** Phase 11 — apply a style preset to the project (and optionally all scenes). */
   applyStylePreset: protectedProcedure
