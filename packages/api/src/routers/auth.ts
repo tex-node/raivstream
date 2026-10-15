@@ -26,10 +26,11 @@ function toTRPCError(err: unknown): never {
   const e = err as Error & { code?: string };
   const code = ((): TRPCError['code'] => {
     switch (e.code) {
-      case 'CONFLICT':          return 'CONFLICT';
-      case 'UNAUTHORIZED':      return 'UNAUTHORIZED';
-      case 'TOO_MANY_REQUESTS': return 'TOO_MANY_REQUESTS';
-      default:                  return 'INTERNAL_SERVER_ERROR';
+      case 'CONFLICT':           return 'CONFLICT';
+      case 'CONCURRENT_REFRESH': return 'CONFLICT';
+      case 'UNAUTHORIZED':       return 'UNAUTHORIZED';
+      case 'TOO_MANY_REQUESTS':  return 'TOO_MANY_REQUESTS';
+      default:                   return 'INTERNAL_SERVER_ERROR';
     }
   })();
   throw new TRPCError({ code, message: e.message });
