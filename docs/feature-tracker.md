@@ -84,7 +84,7 @@ the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 | Feature | Status | Commit(s) | Evidence | Deployed |
 |---|---|---|---|---|
 | R16-02 — Style restriction (Cartoon, Anime, 3D Animation) | DEPLOYED | `a3e004a` | `r16VisualStyle.test.ts` | `6057bdf` |
-| R16-03 — Character reference approval | DEPLOYED | `e9d47ec`, `8fe7df7` | `characterReferences.test.ts` | `6057bdf` |
+| R16-03 — Character reference approval | **ACCEPTED** | `e9d47ec`, `8fe7df7` | `characterReferences.test.ts` + prod evidence: project `cmv14z8t601fgx61oozrk0lnz` (Pip + Sneaky Hopper approved) — scenes ord 4 and ord 6 (both `["Sneaky Hopper","Pip"]`) have latest IMAGE assets `fal-ai/flux-2/edit` with `rendererVersion='phase-d1-v1'`; 13 edit-path assets total; refs reused across scenes + across regeneration | `6057bdf` |
 | R16-03 — Draft-reference warning banner | DEPLOYED | `5e3dfb5` | `draftReferenceWarning.test.ts` | `6057bdf` |
 | R16-04 — Batch generation (server) | **ACCEPTED** | `324abc0`, `915c7be` | `batchGeneration.test.ts` (controller: cap, concurrency, pause-resume, idempotency, delegation) + `batchRoutingWiring.test.ts` (router-level: `batchDepsFor.generateScene` → `generateSceneImageAsset` → `computeSceneImageRouting` → FLUX2_EDIT) | `6057bdf` |
 | R16-04 — Batch UI + pause-resume | **ACCEPTED** | `2145173` | `batchGenerationUi.test.ts` (incl. terminal-state panel: COMPLETED/FAILED/CANCELLED stay mounted) | `6057bdf` |
@@ -322,6 +322,8 @@ For each release track, all must be true before declaring DEPLOYED:
 ---
 
 ## Last updated
+
+2026-10-15 — **R16-03 → ACCEPTED** (reference-conditioned continuity verified in prod: project `cmv14z8t601fgx61oozrk0lnz`, scenes ord 4 + 6 route to `fal-ai/flux-2/edit`/`phase-d1-v1` with the approved chars Pip + Sneaky Hopper; refs reused across scenes + regeneration). **Slice A pending-deploy audit (read-only):** repo migrations **62 == prod `_prisma_migrations` applied 62** (parity checked 2026-10-15); R16-EXPORT `20260925180000_story_video_export`, EDU-B `20260926120000_educational_contract`, R16-AUDIO `20261009120000` + `20261009130000` are **all applied in prod** and the live schema matches → **DEPLOYED** (next gate = real-use acceptance: R16-EXPORT needs a Phase 2H real export → Watch Story; R16-AUDIO needs the `story:speech_generation` rate + ELEVENLABS/LYRIA flags set in prod env). **P1 credits → DEPLOYED**: contract phase applied (`20261012140000` + `20261013120000`); `credit_transactions.idempotencyKey` NOT NULL confirmed in the live schema.
 
 2026-10-15 — **R16-04 → ACCEPTED** (promoted from DEPLOYED). Acceptance verified against prod data (run `cmv8gevl40036t9d91ctcu4g9` COMPLETED, 6/6 items READY, `costUsedCredits` 480 = 6 × 80, ledger matches); batch routing verified to reuse `generateSceneImageAsset`/`computeSceneImageRouting` (no bypass — the earlier "plain FLUX2" observation was a zero-reference project); router-level wiring coverage added (`batchRoutingWiring.test.ts`; `batchDepsFor` exported as a named export, no behavior change); batch UI terminal-state fix `7c4f63aa`. `main` = `044af63`; VPS in sync.
 
