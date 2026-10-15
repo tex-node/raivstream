@@ -45,6 +45,30 @@ outside `/root/raivstream`:
 4. Apply once; verify (re-read + diff).
 5. Keep the backup until the change is confirmed good.
 
+## Running multi-line commands on the VPS (use the helper)
+
+All multi-line VPS commands go through the local helper — it writes/sends an **LF-only**
+script via a shell redirect and **fails loudly if the content contains CR (0x0D)**:
+
+```powershell
+& C:\Raiv\bin\ssh-remote.ps1 -FromString @'
+echo hello
+uname -a
+'@
+& C:\Raiv\bin\ssh-remote.ps1 -Script C:\path\cmd.sh      # a pre-written LF file
+```
+
+Rules:
+- **Never** pipe `prisma migrate deploy`, `crontab`, or any state-changing command into
+  `tail`/`head`/`grep`. Run it **unpiped**, capture the full output, then inspect.
+  (2026-10-15: `migrate deploy | tail -n 12` with a stray `\r` SIGPIPE'd the pipe and lost
+  the output — the migration had applied but its evidence was gone.)
+- **After any state change, wait for the command to exit before verifying.** No mid-flight
+  reads (2026-10-15: a re-check landed while the migration was still committing and
+  reported the column "absent").
+- Inline here-strings directly into `ssh bash -s` are the thing this helper replaces —
+  they leave CRs and corrupt remote commands.
+
 ## Scope
 
 - Under `/root/raivstream`: changes are allowed per the task's approval (still back up
