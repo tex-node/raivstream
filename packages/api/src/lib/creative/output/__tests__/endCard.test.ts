@@ -127,6 +127,7 @@ describe('endCardApplied — render return value', () => {
         ffmpeg,
         upload: commonUpload,
         endCardPreflight: async () => ({ drawtext: true, font: true, ok: true }),
+        probe: async () => ({ hasAudioStream: false, durationSeconds: 2 }),
       } as never,
     );
     expect(res.endCardApplied).toBe(true);
@@ -144,10 +145,32 @@ describe('endCardApplied — render return value', () => {
         ffmpeg,
         upload: commonUpload,
         endCardPreflight: async () => ({ drawtext: false, font: true, ok: false }),
+        probe: async () => ({ hasAudioStream: false, durationSeconds: 2 }),
       } as never,
     );
     expect(res.endCardApplied).toBe(false);
     expect(res.assetUrl).toBe('r2://out.mp4'); // export succeeds despite skip
     expect(ffmpeg).toHaveBeenCalledTimes(1);   // main render only
+  });
+
+  it('returns endCardApplied=true on video-only + background-music path', async () => {
+    // This is the most common R16 path: no per-scene narration (not educational),
+    // but project has background music. Must apply the end card.
+    const ffmpeg = vi.fn(async (args: string[]) => {
+      await writeFile(args[args.length - 1]!, Buffer.from('fake-mp4'));
+    });
+    const res = await renderOutputDerivative(
+      { ...commonInput, backgroundMusicUrl: 'r2://bg.mp3' },
+      {
+        fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => Buffer.from('media') }) as unknown as Response),
+        ffmpeg,
+        upload: commonUpload,
+        endCardPreflight: async () => ({ drawtext: true, font: true, ok: true }),
+        probe: async () => ({ hasAudioStream: false, durationSeconds: 2 }),
+      } as never,
+    );
+    expect(res.endCardApplied).toBe(true);
+    // video encode + music mix + end card = 3 ffmpeg calls
+    expect(ffmpeg).toHaveBeenCalledTimes(3);
   });
 });

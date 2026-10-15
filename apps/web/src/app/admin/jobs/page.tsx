@@ -5,6 +5,35 @@ import { trpc } from '@/lib/trpc';
 import { AdminSpinner, AdminError } from '../AdminShell';
 import { MODEL_LABELS, MODEL_OPTIONS, type ModelKey } from '@/lib/modelLabels';
 
+function EndCardStats() {
+  const { data, isLoading, error } = trpc.admin.r16ExportStats.useQuery();
+  if (isLoading) return <div className="h-20 animate-pulse rounded-2xl bg-[var(--noc-card)]" />;
+  if (error || !data) return null;
+  const pct = data.total > 0 ? Math.round((data.applied / data.total) * 100) : 0;
+  const stats = [
+    { label: 'End card applied', value: data.applied, color: '#22c55e' },
+    { label: 'Skipped (preflight)', value: data.skipped, color: '#f59e0b' },
+    { label: 'Pre-feature (null)', value: data.preFeature, color: '#6b7280' },
+    { label: 'Total READY exports', value: data.total, color: 'var(--noc-t1)' },
+  ];
+  return (
+    <div className="rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-6 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-[var(--noc-t1)]">R16 End Card Coverage</h2>
+        <span className="text-xs text-[var(--noc-t4)]">{pct}% of READY exports have the card</span>
+      </div>
+      <div className="flex flex-wrap gap-6">
+        {stats.map((s) => (
+          <div key={s.label}>
+            <div className="text-xl font-bold font-mono tabular-nums" style={{ color: s.color }}>{s.value.toLocaleString()}</div>
+            <div className="text-xs text-[var(--noc-t4)]">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED:  '#22c55e',
   GENERATING: '#f59e0b',
@@ -28,6 +57,8 @@ export default function AdminJobsPage() {
         <h1 className="text-2xl font-bold text-[var(--noc-t1)]">AI Generation Jobs</h1>
         <p className="mt-1 text-sm text-[var(--noc-t4)]">All generation jobs across the platform</p>
       </div>
+
+      <EndCardStats />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

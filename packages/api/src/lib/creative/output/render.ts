@@ -634,10 +634,11 @@ export async function renderOutputDerivative(
         run: doFfmpeg,
         hasExistingAudio: true,
       });
-      const buffer = await readFile(mixed);
-      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${mixed}`;
-      console.info(`[export.endcard] applied=false reason=music_path exportId=${input.exportId ?? 'unknown'}`);
-      return { assetUrl, endCardApplied: false };
+      const card = await appendEndCard(mixed, true, input.derivation.effectiveDurationSeconds);
+      const buffer = await readFile(card.path);
+      const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
+      console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
+      return { assetUrl, endCardApplied: card.applied };
     }
 
     const out = path.join(dir, 'out.mp4');

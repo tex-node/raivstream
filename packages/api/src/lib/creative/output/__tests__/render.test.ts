@@ -71,7 +71,7 @@ describe('renderOutputDerivative — Phase C background music', () => {
   });
 
   describe('B. Video-only path WITH music', () => {
-    it('fetches music and calls ffmpeg twice (video encode + amix)', async () => {
+    it('fetches music and calls ffmpeg three times (video encode + amix + end card)', async () => {
       const deps = makeDeps();
       await renderOutputDerivative({
         scenes: [VIDEO_SCENE],
@@ -80,8 +80,8 @@ describe('renderOutputDerivative — Phase C background music', () => {
         backgroundMusicUrl: MUSIC_URL,
       }, deps);
 
-      // 2 ffmpeg calls: encode video-only, then add music track
-      expect(deps.ffmpegCalls).toHaveLength(2);
+      // 3 ffmpeg calls: encode video-only, add music track, append end card
+      expect(deps.ffmpegCalls).toHaveLength(3);
 
       // Second call must include volume=0.3 for the music layer
       const musicArgs = deps.ffmpegCalls[1]!.join(' ');
