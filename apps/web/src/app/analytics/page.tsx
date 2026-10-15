@@ -6,6 +6,28 @@ import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
 import { Navbar } from '@/components/layout/Navbar';
 
+/**
+ * True when a tRPC query failed because the account is not a creator.
+ *
+ * Every `analytics.*` procedure throws
+ * `TRPCError({ code: 'FORBIDDEN', message: 'Creator account required' })`.
+ * The error code can land on `error.data.code` or `error.shape.data.code`
+ * depending on how the batched response is deserialized, so check both and
+ * fall back to the message — otherwise a non-creator silently falls through
+ * to the empty "No videos yet" render instead of the upsell screen.
+ */
+function isCreatorGateError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as {
+    message?: unknown;
+    data?: { code?: unknown } | null;
+    shape?: { data?: { code?: unknown } | null } | null;
+  };
+  const code = e.data?.code ?? e.shape?.data?.code;
+  if (code === 'FORBIDDEN') return true;
+  return typeof e.message === 'string' && /creator account required/i.test(e.message);
+}
+
 function StatCard({
   label,
   value,
@@ -110,6 +132,13 @@ export default function AnalyticsPage() {
   const videos = videoBreakdown.data?.pages.flatMap((p) => p.videos) ?? [];
   const ov = overview.data;
 
+  // All three analytics queries are creator-gated identically — treat a FORBIDDEN
+  // from any of them as "needs a creator account" so the upsell always wins.
+  const creatorGated =
+    isCreatorGateError(overview.error) ||
+    isCreatorGateError(dailyViews.error) ||
+    isCreatorGateError(videoBreakdown.error);
+
   if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center text-white">
@@ -118,7 +147,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (overview.isLoading) {
+  if (overview.isLoading && !creatorGated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
@@ -126,7 +155,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (overview.error?.data?.code === 'FORBIDDEN') {
+  if (creatorGated) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-6 px-4 text-center">
         <div className="text-5xl">🎬</div>
