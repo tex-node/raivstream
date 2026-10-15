@@ -54,6 +54,15 @@ outside `/root/raivstream`:
 - Scheduled jobs (`crontab`, systemd timers, other PM2 apps) are shared infrastructure —
   any change follows the backup → file → validate → install-once pattern above.
 
+## Observation for the owner (not ours to fix)
+
+The two **Powervend** cron lines use an **unquoted path containing a space**
+(`/root/Powervend by Bainsbridge/...`), so cron executes `/root/Powervend` and gets
+`Permission denied` — visible in `/var/log/powervend-sync.log` and
+`/var/log/powervend-power-cuts.log`, and it predates 2026-10-15 by a long way. **Left
+untouched** — Powervend is a separate project; recorded here only as an observation for
+its owner.
+
 Last incident: 2026-10-15 (empty-crontab window ≈ 08:46:30–08:47:10 CEST; restored from
 the captured original; verified 6 lines, no CR; no scheduled run missed — chart-bridge
 ran at 08:45 and 08:50, covering the window).
