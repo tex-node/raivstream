@@ -82,6 +82,27 @@ describe('createSpark — main app unaffected', () => {
   }
 });
 
+describe('createProject — R16 write restriction (parity with createSpark)', () => {
+  it('rejects a disallowed style in an R16 context', async () => {
+    const caller = storyRouter.createCaller(makeCtx(true) as never);
+    await expect(
+      caller.createProject({ title: 'A story', visualStyle: 'STORYBOOK_ILLUSTRATION' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', cause: { code: 'R16_VISUAL_STYLE_NOT_ALLOWED' } });
+  });
+
+  it('accepts an allowed style in an R16 context', async () => {
+    const caller = storyRouter.createCaller(makeCtx(true) as never);
+    const p = (await caller.createProject({ title: 'A story', visualStyle: 'ANIME' })) as { id: string };
+    expect(p.id).toBe('p1');
+  });
+
+  it('non-R16 is unaffected (all styles allowed)', async () => {
+    const caller = storyRouter.createCaller(makeCtx(false) as never);
+    const p = (await caller.createProject({ title: 'A story', visualStyle: 'STORYBOOK_ILLUSTRATION' })) as { id: string };
+    expect(p.id).toBe('p1');
+  });
+});
+
 describe('compatibility read', () => {
   it('a stored dropped style still resolves (no throw) and is simply not R16-selectable', () => {
     expect(normaliseStoryVisualStyle('STORYBOOK_ILLUSTRATION')).toBe('STORYBOOK_ILLUSTRATION');
