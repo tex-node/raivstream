@@ -89,3 +89,46 @@ describe('compatibility read', () => {
     expect(isR16VisualStyle('CARTOON')).toBe(true);
   });
 });
+
+describe('updateProject — a legacy R16 style is not a trap', () => {
+  const legacyCtx = () => {
+    const ctx = makeCtx(true);
+    (ctx.prisma.storyProject.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'p1', userId: 'u1', audienceMode: 'KIDS', visualStyle: 'STORYBOOK_ILLUSTRATION',
+    });
+    return ctx;
+  };
+
+  it('re-sending the current legacy style on an unrelated save is allowed', async () => {
+    const caller = storyRouter.createCaller(legacyCtx() as never);
+    const p = (await caller.updateProject({ projectId: 'p1', title: 'A new title', visualStyle: 'STORYBOOK_ILLUSTRATION' })) as { id: string };
+    expect(p.id).toBe('p1');
+  });
+
+  it('an unrelated save with no style field is allowed', async () => {
+    const caller = storyRouter.createCaller(legacyCtx() as never);
+    const p = (await caller.updateProject({ projectId: 'p1', title: 'A new title' })) as { id: string };
+    expect(p.id).toBe('p1');
+  });
+
+  it('changing to a disallowed R16 style is still rejected', async () => {
+    const ctx = makeCtx(true);
+    (ctx.prisma.storyProject.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'p1', userId: 'u1', audienceMode: 'KIDS', visualStyle: 'CARTOON',
+    });
+    const caller = storyRouter.createCaller(ctx as never);
+    await expect(
+      caller.updateProject({ projectId: 'p1', visualStyle: 'STORYBOOK_ILLUSTRATION' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('changing to an allowed R16 style succeeds', async () => {
+    const ctx = makeCtx(true);
+    (ctx.prisma.storyProject.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'p1', userId: 'u1', audienceMode: 'KIDS', visualStyle: 'STORYBOOK_ILLUSTRATION',
+    });
+    const caller = storyRouter.createCaller(ctx as never);
+    const p = (await caller.updateProject({ projectId: 'p1', visualStyle: 'ANIME' })) as { id: string };
+    expect(p.id).toBe('p1');
+  });
+});
