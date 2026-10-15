@@ -86,8 +86,8 @@ the `idempotencyKey` constraint was reconciled on 2026-10-13 (`542939e`).
 | R16-02 — Style restriction (Cartoon, Anime, 3D Animation) | DEPLOYED | `a3e004a` | `r16VisualStyle.test.ts` | `6057bdf` |
 | R16-03 — Character reference approval | DEPLOYED | `e9d47ec`, `8fe7df7` | `characterReferences.test.ts` | `6057bdf` |
 | R16-03 — Draft-reference warning banner | DEPLOYED | `5e3dfb5` | `draftReferenceWarning.test.ts` | `6057bdf` |
-| R16-04 — Batch generation (server) | DEPLOYED | `324abc0`, `915c7be` | `batchGeneration.test.ts` | `6057bdf` |
-| R16-04 — Batch UI + pause-resume | DEPLOYED | `2145173` | `batchGenerationUi.test.ts` | `6057bdf` |
+| R16-04 — Batch generation (server) | **ACCEPTED** | `324abc0`, `915c7be` | `batchGeneration.test.ts` (controller: cap, concurrency, pause-resume, idempotency, delegation) + `batchRoutingWiring.test.ts` (router-level: `batchDepsFor.generateScene` → `generateSceneImageAsset` → `computeSceneImageRouting` → FLUX2_EDIT) | `6057bdf` |
+| R16-04 — Batch UI + pause-resume | **ACCEPTED** | `2145173` | `batchGenerationUi.test.ts` (incl. terminal-state panel: COMPLETED/FAILED/CANCELLED stay mounted) | `6057bdf` |
 | R16-05 — Chapter version history | DEPLOYED | `354f882` | `chapterVersioning.test.ts` | `6057bdf` |
 | Phase 2 release evidence | DEPLOYED (docs) | `5b18aff` | `docs/operations/phase-2-release-evidence.md` | committed |
 
@@ -322,6 +322,8 @@ For each release track, all must be true before declaring DEPLOYED:
 ---
 
 ## Last updated
+
+2026-10-15 — **R16-04 → ACCEPTED** (promoted from DEPLOYED). Acceptance verified against prod data (run `cmv8gevl40036t9d91ctcu4g9` COMPLETED, 6/6 items READY, `costUsedCredits` 480 = 6 × 80, ledger matches); batch routing verified to reuse `generateSceneImageAsset`/`computeSceneImageRouting` (no bypass — the earlier "plain FLUX2" observation was a zero-reference project); router-level wiring coverage added (`batchRoutingWiring.test.ts`; `batchDepsFor` exported as a named export, no behavior change); batch UI terminal-state fix `7c4f63aa`. `main` = `044af63`; VPS in sync.
 
 2026-10-14 — video-seed override deployed (`fbbebc57`); user confirmed the regenerated video opens on the correct still. Multi-character drift was a wrong-seed symptom, not H3 weakness — R2V adapter not required.
 
