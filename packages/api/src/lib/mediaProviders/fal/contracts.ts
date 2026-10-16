@@ -239,10 +239,20 @@ export function toH3MaxInput(input: VideoGenerationInput): Record<string, unknow
   const payload: Record<string, unknown> = { prompt: input.prompt, image_url: input.imageUrl };
   if (input.endImageUrl) payload.end_image_url = input.endImageUrl;
   if (typeof input.durationSeconds === 'number') payload.duration = input.durationSeconds;
-  // Endpoint requires the literal enum '480P' | '768P' | '1080P' — normalize and
-  // drop invalid values so the provider default applies instead of a 422.
+  // Endpoint requires the literal enum '480P' | '768P' | '1080P'. Unrecognised
+  // values must never be silently dropped — that would let the charged rate diverge
+  // from the resolution the provider actually renders.
   const resolution = input.resolution?.toUpperCase();
-  if (resolution === '480P' || resolution === '768P' || resolution === '1080P') payload.resolution = resolution;
+  if (resolution !== undefined) {
+    if (resolution === '480P' || resolution === '768P' || resolution === '1080P') {
+      payload.resolution = resolution;
+    } else {
+      throw new MediaProviderError(
+        'INVALID_REQUEST',
+        `toH3MaxInput: unrecognised resolution "${input.resolution}"; valid values: 480P, 768P, 1080P`,
+      );
+    }
+  }
   if (typeof input.seed === 'number') payload.seed = input.seed;
   if (typeof input.promptExpansion === 'boolean') payload.prompt_expansion = input.promptExpansion;
   return payload;

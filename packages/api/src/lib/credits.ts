@@ -185,19 +185,17 @@ export async function deductCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ): Promise<number> {
   // 0. Idempotent pre-check runs BEFORE the rate lookup: a replay must return
   //    the original charge even if the rate was since changed/deactivated.
-  if (idempotencyKey) {
-    const existing = await prisma.creditTransaction.findUnique({
-      where:  { idempotencyKey },
-      select: { userId: true, featureKey: true, type: true, amount: true },
-    });
-    if (existing) {
-      assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
-      return Math.abs(existing.amount);
-    }
+  const existing = await prisma.creditTransaction.findUnique({
+    where:  { idempotencyKey },
+    select: { userId: true, featureKey: true, type: true, amount: true },
+  });
+  if (existing) {
+    assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
+    return Math.abs(existing.amount);
   }
 
   // 1. Look up the configured cost for this feature
@@ -249,7 +247,7 @@ export async function deductCredits(
           featureKey,
           description,
           referenceId,
-          idempotencyKey: idempotencyKey ?? null,
+          idempotencyKey,
           balanceBefore,
           balanceAfter,
         },
@@ -259,7 +257,7 @@ export async function deductCredits(
     // 5. Concurrent duplicate → unique-constraint race. The transaction has
     //    rolled back (including its decrement); return the winner's charge.
     const code = (error as { code?: string } | null)?.code;
-    if (idempotencyKey && code === 'P2002') {
+    if (code === 'P2002') {
       const existing = await prisma.creditTransaction.findUnique({
         where:  { idempotencyKey },
         select: { userId: true, featureKey: true, type: true, amount: true },
@@ -290,17 +288,15 @@ export async function refundCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ): Promise<void> {
-  if (idempotencyKey) {
-    const existing = await prisma.creditTransaction.findUnique({
-      where:  { idempotencyKey },
-      select: { userId: true, featureKey: true, type: true, amount: true },
-    });
-    if (existing) {
-      assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
-      return;
-    }
+  const existing = await prisma.creditTransaction.findUnique({
+    where:  { idempotencyKey },
+    select: { userId: true, featureKey: true, type: true, amount: true },
+  });
+  if (existing) {
+    assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
+    return;
   }
 
   try {
@@ -322,7 +318,7 @@ export async function refundCredits(
           featureKey,
           description,
           referenceId,
-          idempotencyKey: idempotencyKey ?? null,
+          idempotencyKey,
           balanceBefore,
           balanceAfter,
         },
@@ -331,7 +327,7 @@ export async function refundCredits(
   } catch (error) {
     // Concurrent duplicate → the transaction rolled back; treat as replayed.
     const code = (error as { code?: string } | null)?.code;
-    if (idempotencyKey && code === 'P2002') {
+    if (code === 'P2002') {
       const existing = await prisma.creditTransaction.findUnique({
         where:  { idempotencyKey },
         select: { userId: true, featureKey: true, type: true, amount: true },
@@ -355,6 +351,51 @@ export async function refundCredits(
 export function isReserveSettleEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.CREDIT_RESERVE_SETTLE_ENABLED === 'true';
 }
+
+export function isVideoPerSecondPricingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VIDEO_PER_SECOND_PRICING === 'true';
+}
+
+/** Credits to charge for a given duration at a per-second rate. Always rounds up. */
+export function perSecondCredits(durationSeconds: number, ratePerSecond: number): number {
+  return Math.ceil(durationSeconds * ratePerSecond);
+}
+
+/**
+ * Resolve the per-resolution feature key for H3-Max. Caller must pass the
+ * exact resolution string that was sent to the provider so the charged rate
+ * and rendered resolution never diverge.
+ */
+export function h3MaxFeatureKey(resolution: string): string {
+  const r = resolution.toUpperCase();
+  if (r === '768P') return 'generate:h3_max_768p';
+  if (r === '1080P') return 'generate:h3_max_1080p';
+  return 'generate:h3_max_480p';
+}
+
+/** Resolve the per-resolution feature key for VEED Fabric. */
+export function veedFabricFeatureKey(resolution: string): string {
+  return resolution.toLowerCase() === '720p' ? 'generate:veed_fabric_720p' : 'generate:veed_fabric_480p';
+}
+
+/** Resolve the per-resolution feature key for MiniMax video-recast (video-to-video). */
+export function minimaxRecastFeatureKey(resolution: string): string {
+  return resolution.toUpperCase() === '1080P' ? 'generate:minimax_recast_1080p' : 'generate:minimax_recast_768p';
+}
+
+/** Resolve the per-resolution feature key for MiniMax reference-to-video. */
+export function minimaxRtvFeatureKey(resolution: string): string {
+  const r = resolution.toUpperCase();
+  if (r === '768P') return 'generate:minimax_rtv_768p';
+  if (r === '1080P') return 'generate:minimax_rtv_1080p';
+  return 'generate:minimax_rtv_480p';
+}
+
+/** Feature key for VEED lipsync (no resolution variants — billed per second of output). */
+export const VEED_LIPSYNC_FEATURE_KEY = 'generate:veed_lipsync';
+
+/** Feature key for VEED avatar (no resolution variants — billed per second of output). */
+export const VEED_AVATAR_FEATURE_KEY = 'generate:veed_avatar';
 
 export interface ReserveCreditsInput {
   userId: string;
@@ -418,6 +459,7 @@ export async function reserveCredits(
           featureKey:   input.featureKey,
           description:  input.description ?? 'Credit reservation',
           referenceId:  input.referenceId,
+          idempotencyKey: `ct:reserve:${input.idempotencyKey}`,
           balanceBefore,
           balanceAfter,
         },
@@ -487,6 +529,7 @@ export async function settleCredits(
           featureKey:   reservation.featureKey ?? undefined,
           description:  delta > 0 ? 'Credit settlement overage refund' : 'Credit settlement underage charge',
           referenceId:  reservation.referenceId ?? idempotencyKey,
+          idempotencyKey: `ct:settle:${idempotencyKey}`,
           balanceBefore: (updated!.balance) - delta,
           balanceAfter:  updated!.balance,
         },
@@ -530,6 +573,7 @@ export async function releaseCredits(
         featureKey:   reservation.featureKey ?? undefined,
         description:  'Credit reservation released',
         referenceId:  reservation.referenceId ?? idempotencyKey,
+        idempotencyKey: `ct:release:${idempotencyKey}`,
         balanceBefore,
         balanceAfter,
       },
