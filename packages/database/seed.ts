@@ -176,11 +176,45 @@ async function main() {
       unitLabel:      'request',
       description:    'MiniMax H3-Max (fal.ai) — image-to-video (₦200/gen)',
     },
+    // ── Per-second video pricing (VIDEO_PER_SECOND_PRICING flag) ────────────
+    // Rate = credits per second of generated video. Target ≥ ₦50/s at 480P on
+    // the Pro pack (₦0.80/cr). 480P $0.025/s → 65 cr/s; 768P $0.04/s → 105 cr/s;
+    // 1080P $0.08/s → 210 cr/s. VEED Fabric 480p $0.08/s → 210 cr/s; 720p $0.15/s → 390 cr/s.
+    {
+      featureKey:     'generate:h3_max_480p',
+      creditsPerUnit: 65,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 480P — per-second billing (65 cr/s)',
+    },
+    {
+      featureKey:     'generate:h3_max_768p',
+      creditsPerUnit: 105,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 768P — per-second billing (105 cr/s)',
+    },
+    {
+      featureKey:     'generate:h3_max_1080p',
+      creditsPerUnit: 210,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 1080P — per-second billing (210 cr/s)',
+    },
     {
       featureKey:     'generate:veed_fabric',
       creditsPerUnit: 300,
       unitLabel:      'request',
       description:    'VEED Fabric (fal.ai) — talking-video lip-sync (₦300/gen)',
+    },
+    {
+      featureKey:     'generate:veed_fabric_480p',
+      creditsPerUnit: 210,
+      unitLabel:      'second',
+      description:    'VEED Fabric 480p — per-second billing (210 cr/s)',
+    },
+    {
+      featureKey:     'generate:veed_fabric_720p',
+      creditsPerUnit: 390,
+      unitLabel:      'second',
+      description:    'VEED Fabric 720p — per-second billing (390 cr/s)',
     },
     // ── Other AI features ───────────────────────────────────────────────────
     {

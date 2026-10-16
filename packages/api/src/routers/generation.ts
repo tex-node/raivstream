@@ -10,6 +10,10 @@ import {
   settleCredits,
   resolveFeatureCreditRate,
   isReserveSettleEnabled,
+  isVideoPerSecondPricingEnabled,
+  h3MaxFeatureKey,
+  veedFabricFeatureKey,
+  perSecondCredits,
   MODEL_FEATURE_KEY,
 } from '../lib/credits';
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
@@ -57,6 +61,7 @@ async function createWithReserveSettle(
   input: { model: string; prompt: string; negativePrompt?: string; duration?: number; aspectRatio?: string; style?: string; seedImageUrl?: string; audioUrl?: string; resolution?: string },
   meta: (typeof MODEL_META)[SupportedModel],
   featureKey: string,
+  unitCount = 1,
 ) {
   const rate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
   if (!rate.configured) {
@@ -85,7 +90,7 @@ async function createWithReserveSettle(
     creditsUsed = await reserveCredits(ctx.prisma, {
       userId:         ctx.user.id,
       featureKey,
-      amount:         rate.cost,
+      amount:         Math.ceil(rate.cost * unitCount),
       idempotencyKey: reservationKey,
       referenceId:    job.id,
       generationJobId: job.id,
@@ -234,6 +239,28 @@ export const generationRouter = router({
         }
       }
       // ─────────────────────────────────────────────────────────────────────────
+
+      // ── Per-second pricing path (VIDEO_PER_SECOND_PRICING flag, default OFF) ──
+      // For H3_MAX and VEED_FABRIC, derive the per-resolution feature key and
+      // compute the reserve amount from requested duration × rate/second.
+      const isPerSecond = isVideoPerSecondPricingEnabled();
+      if (isPerSecond && (input.model === 'H3_MAX' || input.model === 'VEED_FABRIC')) {
+        const effectiveResolution =
+          input.model === 'H3_MAX'
+            ? (input.resolution ?? '768P')
+            : (input.resolution ?? '720p');
+        const perSecKey = input.model === 'H3_MAX'
+          ? h3MaxFeatureKey(effectiveResolution)
+          : veedFabricFeatureKey(effectiveResolution);
+        const unitCount = input.duration ?? 5;
+        return createWithReserveSettle(
+          ctx,
+          { ...input, prompt, resolution: effectiveResolution },
+          meta,
+          perSecKey,
+          unitCount,
+        );
+      }
 
       // ── Reserve/settle path (flag-guarded, default OFF) ─────────────────────
       // Requires the financial policy decision; until then the deduct-first path

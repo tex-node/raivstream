@@ -356,6 +356,32 @@ export function isReserveSettleEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return env.CREDIT_RESERVE_SETTLE_ENABLED === 'true';
 }
 
+export function isVideoPerSecondPricingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VIDEO_PER_SECOND_PRICING === 'true';
+}
+
+/** Credits to charge for a given duration at a per-second rate. Always rounds up. */
+export function perSecondCredits(durationSeconds: number, ratePerSecond: number): number {
+  return Math.ceil(durationSeconds * ratePerSecond);
+}
+
+/**
+ * Resolve the per-resolution feature key for H3-Max. Caller must pass the
+ * exact resolution string that was sent to the provider so the charged rate
+ * and rendered resolution never diverge.
+ */
+export function h3MaxFeatureKey(resolution: string): string {
+  const r = resolution.toUpperCase();
+  if (r === '768P') return 'generate:h3_max_768p';
+  if (r === '1080P') return 'generate:h3_max_1080p';
+  return 'generate:h3_max_480p';
+}
+
+/** Resolve the per-resolution feature key for VEED Fabric. */
+export function veedFabricFeatureKey(resolution: string): string {
+  return resolution.toLowerCase() === '720p' ? 'generate:veed_fabric_720p' : 'generate:veed_fabric_480p';
+}
+
 export interface ReserveCreditsInput {
   userId: string;
   featureKey: string;

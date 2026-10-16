@@ -5,11 +5,11 @@ import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
-import { extractLastFrameAsSeedImage } from '../lib/lastFrameExtract';
+import { extractLastFrameAsSeedImage, getVideoDurationSeconds } from '../lib/lastFrameExtract';
 import { chooseVideoSeedSource } from '../lib/story/videoSeedPolicy';
 import { buildShotClipPlan } from '../lib/shotClipEngine';
 import { submitGenerationJob, pollJobStatus, type SupportedModel } from '../lib/generators';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
+import { deductCredits, refundCredits, reserveCredits, releaseCredits, settleCredits, MODEL_FEATURE_KEY, getFeatureCreditCost, resolveMovieRenderCreditRate, resolveFeatureCreditRate, isVideoPerSecondPricingEnabled, h3MaxFeatureKey, perSecondCredits, STORY_SPEECH_GENERATION_FEATURE_KEY, STORY_AUDIO_GENERATION_FEATURE_KEY, STORY_BACKGROUND_MUSIC_FEATURE_KEY } from '../lib/credits';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
@@ -463,8 +463,20 @@ async function runSceneShotClipChain(
 
     const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
     const aspectRatio = '9:16';
-    const resolution = '480P'; // All story scenes at 480P — lowest cost tier; manifest resolution ignored.
-    const featureKey = MODEL_FEATURE_KEY.H3_MAX as string | undefined;
+    // Shot-grid always generates at 480P — lowest cost tier; manifest resolution ignored.
+    const resolution = '480P';
+    const isPerSecond = isVideoPerSecondPricingEnabled();
+    const featureKey = isPerSecond ? h3MaxFeatureKey('480P') : (MODEL_FEATURE_KEY.H3_MAX as string | undefined);
+
+    let ratePerSecond = 0;
+    if (isPerSecond && featureKey) {
+      const shotRate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
+      if (!shotRate.configured) {
+        console.error(`[shotClipEngine] no active credit rate for ${featureKey} — aborting chain`);
+        return;
+      }
+      ratePerSecond = shotRate.cost;
+    }
 
     const existing = await (ctx.prisma as any).storySceneAsset.findMany({
       where: { sceneId: scene.id, projectId: project.id, assetType: 'VIDEO', deletedAt: null, shotIndex: { not: null } },
@@ -526,9 +538,21 @@ async function runSceneShotClipChain(
       });
 
       const generationRef = `story-shot-clip-${asset.id}`;
+      const shotReservationKey = creditKeys.sceneShotClip.charge(asset.id);
       let creditsUsed = 0;
       if (featureKey) {
-        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`, creditKeys.sceneShotClip.charge(asset.id));
+        if (isPerSecond) {
+          creditsUsed = await reserveCredits(ctx.prisma, {
+            userId:         ctx.user.id,
+            featureKey,
+            amount:         perSecondCredits(entry.durationSeconds, ratePerSecond),
+            idempotencyKey: shotReservationKey,
+            referenceId:    generationRef,
+            description:    `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`,
+          });
+        } else {
+          creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene shot ${entry.shotIndex + 1}: ${scene.title}`, shotReservationKey);
+        }
       }
 
       const generationJob = await (ctx.prisma as any).generationJob.create({
@@ -574,6 +598,15 @@ async function runSceneShotClipChain(
         });
 
         const providerOutputUrl = await waitForGenerationOutput('H3_MAX' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
+
+        if (isPerSecond && creditsUsed > 0) {
+          const actualDur = await getVideoDurationSeconds(providerOutputUrl).catch(() => null);
+          const settledAmt = actualDur !== null
+            ? perSecondCredits(Math.min(entry.durationSeconds, actualDur), ratePerSecond)
+            : creditsUsed;
+          await settleCredits(ctx.prisma, shotReservationKey, settledAmt).catch(() => undefined);
+        }
+
         const r2Key = `story-projects/${project.id}/scenes/${scene.id}/shots/${entry.shotIndex}/clip-${asset.id}.mp4`;
         const assetUrl = providerOutputUrl.startsWith('data:')
           ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'video/mp4')) ?? providerOutputUrl
@@ -603,7 +636,11 @@ async function runSceneShotClipChain(
           properties: { sceneId: scene.id, model: 'H3_MAX', generationType: 'VIDEO', shotIndex: entry.shotIndex, shotGrid: true },
         });
         if (creditsUsed > 0 && featureKey) {
-          await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed', creditKeys.sceneShotClip.refund(asset.id)).catch(() => undefined);
+          if (isPerSecond) {
+            await releaseCredits(ctx.prisma, shotReservationKey).catch(() => undefined);
+          } else {
+            await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Scene shot clip failed', creditKeys.sceneShotClip.refund(asset.id)).catch(() => undefined);
+          }
         }
         break; // chain stops at the first failure — resumable on the next request
       }
@@ -3376,13 +3413,34 @@ async function generateSceneVideoAsset(
     },
   });
 
-  const featureKey = MODEL_FEATURE_KEY[input.model as SupportedModel];
+  const isPerSecondVideo = isVideoPerSecondPricingEnabled() && input.model === 'H3_MAX';
+  const featureKey = isPerSecondVideo
+    ? h3MaxFeatureKey('480P')
+    : MODEL_FEATURE_KEY[input.model as SupportedModel];
   let creditsUsed = 0;
+  let videoRatePerSecond = 0;
   const generationRef = `story-scene-video-${asset.id}`;
+  const videoReservationKey = creditKeys.sceneVideo.charge(asset.id);
 
   try {
     if (featureKey) {
-        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`, creditKeys.sceneVideo.charge(asset.id));
+      if (isPerSecondVideo) {
+        const videoRate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
+        if (!videoRate.configured) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `No active credit rate configured for feature: ${featureKey}` });
+        }
+        videoRatePerSecond = videoRate.cost;
+        creditsUsed = await reserveCredits(ctx.prisma, {
+          userId:         ctx.user.id,
+          featureKey,
+          amount:         perSecondCredits(duration, videoRatePerSecond),
+          idempotencyKey: videoReservationKey,
+          referenceId:    generationRef,
+          description:    `Story scene video: ${scene.title}`,
+        });
+      } else {
+        creditsUsed = await deductCredits(ctx.prisma, ctx.user.id, featureKey, generationRef, `Story scene video: ${scene.title}`, videoReservationKey);
+      }
     }
 
     await trackStoryAnalytics(ctx, {
@@ -3454,6 +3512,14 @@ async function generateSceneVideoAsset(
 
     const providerOutputUrl = await waitForGenerationOutput(input.model as SupportedModel, providerJobId, submitted.outputUrl);
 
+    if (isPerSecondVideo && creditsUsed > 0) {
+      const actualDur = await getVideoDurationSeconds(providerOutputUrl).catch(() => null);
+      const settledAmt = actualDur !== null
+        ? perSecondCredits(Math.min(duration, actualDur), videoRatePerSecond)
+        : creditsUsed;
+      await settleCredits(ctx.prisma, videoReservationKey, settledAmt).catch(() => undefined);
+    }
+
     const r2Key = `story-projects/${project.id}/scenes/${scene.id}/videos/${asset.id}.mp4`;
     const assetUrl = providerOutputUrl.startsWith('data:')
       ? (await uploadBufferToR2(Buffer.from(providerOutputUrl.split(',')[1] ?? '', 'base64'), r2Key, 'video/mp4')) ?? providerOutputUrl
@@ -3523,7 +3589,11 @@ async function generateSceneVideoAsset(
       data: { status: 'FAILED', errorMessage: message, isLatest: false },
     }).catch(() => {});
     if (creditsUsed > 0 && featureKey) {
-      await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed', creditKeys.sceneVideo.refund(asset.id)).catch(() => {});
+      if (isPerSecondVideo) {
+        await releaseCredits(ctx.prisma, videoReservationKey).catch(() => {});
+      } else {
+        await refundCredits(ctx.prisma, ctx.user.id, creditsUsed, featureKey, generationRef, 'Refund: story scene video failed', creditKeys.sceneVideo.refund(asset.id)).catch(() => {});
+      }
     }
     return {
       scene: await (ctx.prisma as any).storySceneSeed.findFirst({ where: { id: scene.id } }),
