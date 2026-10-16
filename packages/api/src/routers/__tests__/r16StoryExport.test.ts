@@ -161,7 +161,7 @@ describe('R16 story video export', () => {
     const err = await service.requestExport(prisma as any, r16Input()).catch((e) => e);
     expect(err).toBeInstanceOf(TRPCError);
     expect((err as TRPCError).code).toBe('PRECONDITION_FAILED');
-    expect((err as TRPCError).message).toMatch(/do not have a ready video/i);
+    expect((err as TRPCError).message).toMatch(/still need a finished video clip/i);
   });
 
   // ── 4. Failed scene video blocks export ────────────────────────────────────

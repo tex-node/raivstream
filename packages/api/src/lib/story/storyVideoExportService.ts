@@ -107,6 +107,9 @@ function serializeExport(row: {
 /** Prisma unique-constraint violation code. */
 const PRISMA_UNIQUE_CONFLICT = 'P2002';
 
+/** Exports left in GENERATING longer than this are treated as stuck/interrupted. */
+const STUCK_EXPORT_MS = 15 * 60 * 1000;
+
 export class StoryVideoExportService {
   /**
    * Request an R16 story video export.
@@ -172,18 +175,12 @@ export class StoryVideoExportService {
     }
     const sceneIdList = allScenes.map((s) => s.id);
 
-    // ── 4a. Educational: every scene must have narration audio ───────────────
-    //        narrationAudioUrl is read from the DB row — never from client input.
-    if (isEducational) {
-      const missingSpeech = allScenes.filter((s) => !s.narrationAudioUrl);
-      if (missingSpeech.length > 0) {
-        const labels = missingSpeech.map((s) => s.title ?? s.id).slice(0, 3);
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: `Educational scene(s) have no narration audio: ${labels.join(', ')}. Generate narration before exporting.`,
-        });
-      }
-    }
+    // ── 4a. Narration is OPTIONAL ─────────────────────────────────────────────
+    //        We only include narration audio when EVERY scene has a track (the
+    //        renderer's audio path is all-or-nothing). A missing or incomplete
+    //        narration track must NEVER block an export — we export video-only
+    //        instead. narrationAudioUrl is read from the DB row, never client.
+    const includeAudio = isEducational && allScenes.every((s) => !!s.narrationAudioUrl);
 
     // ── 5–10. Verify every scene has a READY VIDEO asset owned by this project.
     //          Ownership invariant: projectId + sceneId + assetType=VIDEO +
@@ -219,7 +216,7 @@ export class StoryVideoExportService {
         .slice(0, 3);
       throw new TRPCError({
         code: 'PRECONDITION_FAILED',
-        message: `${missingScenes.length} scene(s) do not have a ready video yet: ${sceneLabels.join(', ')}`,
+        message: `${missingScenes.length} scene(s) still need a finished video clip before export: ${sceneLabels.join(', ')}. Generate or regenerate the scene video, then export again.`,
       });
     }
 
@@ -234,7 +231,7 @@ export class StoryVideoExportService {
     const pairsBase = sceneIdList.map((sceneId) => ({
       sceneId,
       assetId: readyByScene.get(sceneId)!.id,
-      audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : null,
+      audioUrl: includeAudio ? (audioByScene.get(sceneId) ?? null) : null,
     }));
     // Include backgroundMusicUrl in hash as a synthetic trailing pair.
     const hashPayloadPairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }> = backgroundMusicUrl
@@ -288,7 +285,7 @@ export class StoryVideoExportService {
       const scenes: RenderScene[] = sceneIdList.map((sceneId) => ({
         sceneId,
         videoUrl: readyByScene.get(sceneId)!.assetUrl,
-        audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : undefined,
+        audioUrl: includeAudio ? (audioByScene.get(sceneId) ?? null) : undefined,
       }));
 
       const totalRuntimeSeconds = sceneIdList.reduce(
@@ -345,6 +342,33 @@ export class StoryVideoExportService {
     }
   }
 
+  /**
+   * Watchdog (D3): mark exports stuck in GENERATING as FAILED so the UI offers
+   * "Try Again" instead of a permanent spinner. The render is synchronous, so a
+   * process crash / restart mid-render can otherwise leave a row GENERATING
+   * forever. Idempotent and financially neutral (export assembly does not move
+   * credits). Called opportunistically by getLatestExport and by admin.
+   */
+  async failStuckExports(
+    prisma: PrismaClient,
+    olderThanMs: number = STUCK_EXPORT_MS,
+  ): Promise<{ scanned: number; failed: number }> {
+    const cutoff = new Date(Date.now() - olderThanMs);
+    const stuck = await prisma.storyVideoExport.findMany({
+      where: { status: 'GENERATING', createdAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    if (stuck.length === 0) return { scanned: 0, failed: 0 };
+    const result = await prisma.storyVideoExport.updateMany({
+      where: { id: { in: stuck.map((s) => s.id) }, status: 'GENERATING' },
+      data: {
+        status: 'FAILED',
+        errorMessage: 'Export timed out or was interrupted. Try again.',
+      },
+    });
+    return { scanned: stuck.length, failed: result.count };
+  }
+
   async getExport(
     prisma: PrismaClient,
     input: { userId: string; projectId: string; exportId: string },
@@ -368,6 +392,9 @@ export class StoryVideoExportService {
       where: { id: input.projectId, userId: input.userId },
     });
     if (!project) return null;
+
+    // Sweep stale GENERATING rows so the client never shows an eternal spinner.
+    await this.failStuckExports(prisma).catch(() => {});
 
     const row = await prisma.storyVideoExport.findFirst({
       where: { projectId: input.projectId },

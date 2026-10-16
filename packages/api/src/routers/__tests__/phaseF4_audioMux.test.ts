@@ -9,7 +9,7 @@
  * Coverage per spec F4.10:
  *  A. Audio supplied → FFmpeg receives video + audio per scene
  *  B. Educational export — all scenes have video + audio → READY
- *  C. Missing narration audio → PRECONDITION_FAILED (not silent video)
+ *  C. Missing narration audio → optional — video-only export (never blocked)
  *  D. Audio ownership — audioUrl is never accepted from client input
  *  E. Scene ordering — orderIndex ASC preserved in mux
  *  F. Non-educational regression — STORY exports unchanged (no audio)
@@ -21,7 +21,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile } from 'node:fs/promises';
 import { StoryVideoExportService } from '../../lib/story/storyVideoExportService';
-import { TRPCError } from '@trpc/server';
 import * as renderModule from '../../lib/creative/output/render';
 import { renderOutputDerivative } from '../../lib/creative/output/render';
 import { deriveOutput } from '../../lib/creative/output/derivation';
@@ -397,39 +396,39 @@ describe('F4 §B — StoryVideoExportService: educational export with full audio
 
 // ─── C. Missing narration audio → PRECONDITION_FAILED ─────────────────────────
 
-describe('F4 §C — StoryVideoExportService: missing narration audio blocks educational export', () => {
+describe('F4 §C — StoryVideoExportService: missing narration is OPTIONAL (never blocks export)', () => {
   let service: StoryVideoExportService;
   beforeEach(() => { service = new StoryVideoExportService(); });
 
-  it('educational export fails when one scene has no narrationAudioUrl', async () => {
+  it('exports video-only (no audio) when one scene lacks narrationAudioUrl', async () => {
+    const renderSpy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async (input: any) => {
+      expect(input.scenes.every((s: any) => !s.audioUrl)).toBe(true);
+      return { assetUrl: 'https://cdn/out.mp4', endCardApplied: false } as never;
+    });
     const prisma = makePrisma();
-    (prisma.storyProject.findFirst as any).mockResolvedValue(
-      makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'),
-    );
+    (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'));
     (prisma.storySceneSeed.findMany as any).mockResolvedValue([
-      makeScene('scene-1', 0, 'project-edu', AUDIO_URL),   // has audio
-      makeScene('scene-2', 1, 'project-edu', null),          // NO audio
+      makeScene('scene-1', 0, 'project-edu', AUDIO_URL), // has audio
+      makeScene('scene-2', 1, 'project-edu', null),       // NO audio
     ]);
     (prisma.storySceneAsset.findMany as any).mockResolvedValue([
       makeVideoAsset('asset-1', 'scene-1', 'project-edu'),
       makeVideoAsset('asset-2', 'scene-2', 'project-edu'),
     ]);
 
-    const err = await service
-      .requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true })
-      .catch((e) => e);
-
-    expect(err).toBeInstanceOf(TRPCError);
-    expect((err as TRPCError).code).toBe('PRECONDITION_FAILED');
-    expect((err as TRPCError).message).toMatch(/narration audio/i);
-    expect((err as TRPCError).message).toMatch(/Generate narration/i);
+    const res = await service.requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true });
+    expect(res.status).toBe('READY');
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    renderSpy.mockRestore();
   });
 
-  it('educational export fails when ALL scenes are missing narrationAudioUrl', async () => {
+  it('exports video-only (no audio) when ALL scenes lack narrationAudioUrl', async () => {
+    const renderSpy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async (input: any) => {
+      expect(input.scenes.every((s: any) => !s.audioUrl)).toBe(true);
+      return { assetUrl: 'https://cdn/out.mp4', endCardApplied: false } as never;
+    });
     const prisma = makePrisma();
-    (prisma.storyProject.findFirst as any).mockResolvedValue(
-      makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'),
-    );
+    (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'));
     (prisma.storySceneSeed.findMany as any).mockResolvedValue([
       makeScene('scene-1', 0, 'project-edu', null),
       makeScene('scene-2', 1, 'project-edu', null),
@@ -439,33 +438,30 @@ describe('F4 §C — StoryVideoExportService: missing narration audio blocks edu
       makeVideoAsset('asset-2', 'scene-2', 'project-edu'),
     ]);
 
-    const err = await service
-      .requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true })
-      .catch((e) => e);
-
-    expect(err).toBeInstanceOf(TRPCError);
-    expect((err as TRPCError).code).toBe('PRECONDITION_FAILED');
+    const res = await service.requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true });
+    expect(res.status).toBe('READY');
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    renderSpy.mockRestore();
   });
 
-  it('missing audio error fires BEFORE FFmpeg is ever called (no partial render)', async () => {
-    const renderSpy = vi.spyOn(renderModule, 'renderOutputDerivative');
-
+  it('includes narration audio when EVERY scene has narrationAudioUrl', async () => {
+    const renderSpy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async (input: any) => {
+      expect(input.scenes.every((s: any) => !!s.audioUrl)).toBe(true);
+      return { assetUrl: 'https://cdn/out.mp4', endCardApplied: false } as never;
+    });
     const prisma = makePrisma();
-    (prisma.storyProject.findFirst as any).mockResolvedValue(
-      makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'),
-    );
+    (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('project-edu', 'user-1', 'KIDS', 'EDUCATIONAL'));
     (prisma.storySceneSeed.findMany as any).mockResolvedValue([
-      makeScene('scene-1', 0, 'project-edu', null),
+      makeScene('scene-1', 0, 'project-edu', AUDIO_URL),
+      makeScene('scene-2', 1, 'project-edu', AUDIO_URL_2),
     ]);
     (prisma.storySceneAsset.findMany as any).mockResolvedValue([
       makeVideoAsset('asset-1', 'scene-1', 'project-edu'),
+      makeVideoAsset('asset-2', 'scene-2', 'project-edu'),
     ]);
 
-    await service
-      .requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true })
-      .catch(() => undefined);
-
-    expect(renderSpy).not.toHaveBeenCalled();
+    const res = await service.requestExport(prisma as any, { userId: 'user-1', projectId: 'project-edu', isR16: true });
+    expect(res.status).toBe('READY');
     renderSpy.mockRestore();
   });
 });

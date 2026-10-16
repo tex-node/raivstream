@@ -415,7 +415,9 @@ export default function StoryPlaygroundPage() {
   );
   const { data: myProjects, isLoading: myProjectsLoading } = trpc.story.listMyProjects.useQuery(
     { limit: 12 },
-    { enabled: isSignedIn },
+    // D5: refresh thumbnails/progress every time the list is (re)mounted, so
+    // newly generated scene images appear without a hard reload.
+    { enabled: isSignedIn, refetchOnMount: 'always' },
   );
 
   const createSpark = trpc.story.createSpark.useMutation({

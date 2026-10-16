@@ -165,6 +165,9 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
               <div>
                 <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">All scene videos are ready</p>
                 <p className="text-xs font-semibold text-[var(--noc-t4)]">Assemble the finished story video.</p>
+                {scenes.length > 8 && (
+                  <p className="text-xs font-semibold text-[var(--noc-t5)]">This story has {scenes.length} scenes — assembly can take a few minutes.</p>
+                )}
               </div>
               <button type="button" onClick={() => requestStoryVideoExport.mutate({ projectId })} disabled={requestStoryVideoExport.isPending} className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-6 py-3 font-black text-white disabled:opacity-50">Export Story</button>
             </div>

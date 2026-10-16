@@ -64,6 +64,7 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   const generateSceneNarration = trpc.story.generateSceneNarration.useMutation();
   const generateEducationalNarration = trpc.story.generateEducationalNarration.useMutation();
   const [narrationBusy, setNarrationBusy] = useState(false);
+  const [narrationError, setNarrationError] = useState<string | null>(null);
 
   // R16-04 — batch generation ("make all pictures").
   const sceneIds = scenes.map((s: any) => s.id);
@@ -94,6 +95,7 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
 
   const runNarration = async () => {
     setNarrationBusy(true);
+    setNarrationError(null);
     try {
       for (const scene of scenes) {
         if (isR16) {
@@ -103,6 +105,11 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
         }
       }
       utils.story.getWorkspace.invalidate({ projectId });
+    } catch (error) {
+      // Surface the real reason instead of silently doing nothing (D2). Common
+      // cases: educational scenes without narration text; TTS disabled; or the
+      // narration credit rate missing. Any partial charge is refunded server-side.
+      setNarrationError(error instanceof Error ? error.message : 'Narration generation failed.');
     } finally {
       setNarrationBusy(false);
     }
@@ -117,6 +124,11 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
             <h1 style={{ fontSize: 21, fontWeight: 500, textTransform: 'uppercase', color: 'var(--noc-t1)', margin: 0 }}>
               {scenes.length} scene{scenes.length === 1 ? '' : 's'}
             </h1>
+            {narrationError && (
+              <p role="alert" style={{ marginTop: 6, fontSize: 12.5, color: 'var(--noc-magenta)' }}>
+                {narrationError}
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={runNarration} disabled={narrationBusy || scenes.length === 0} className="noc-btn-outline" style={{ fontSize: 12.5, padding: '10px 14px' }}>

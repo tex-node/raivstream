@@ -9,6 +9,7 @@ import { TRPCError } from '@trpc/server';
 import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
+import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { recoverShareAttributionRetention } from '../lib/story/shareAttributionRetention';
@@ -1308,6 +1309,19 @@ export const adminRouter = router({
     ]);
     return { pending, approved, rejected, flagged };
   }),
+
+  /**
+   * D3 — fail story video exports stuck in GENERATING (interrupted renders).
+   * Read-mostly operational recovery; makes no credit changes.
+   */
+  sweepStuckExports: adminProcedure
+    .input(z.object({ olderThanMinutes: z.number().int().min(1).max(1440).default(15) }).optional())
+    .mutation(async ({ ctx, input }) => {
+      return storyVideoExportService.failStuckExports(
+        ctx.prisma,
+        (input?.olderThanMinutes ?? 15) * 60 * 1000,
+      );
+    }),
 
   // ─── Revenue / Transaction History ─────────────────────────────────────────
 

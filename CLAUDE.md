@@ -407,7 +407,8 @@ Loads env from `apps/web/.env.local` then `.env`. Useful for debugging new outpu
 - **Caddy**: /etc/caddy/Caddyfile — db.raivstream.com → :8000, app.raivstream.com → :3000, r16.raivstream.com → :3000
 - **App**: /root/raivstream — git pull + PM2 (`pm2 restart raivstream-web --update-env`)
 - **Deploy**: GitHub Actions `.github/workflows/deploy.yml` — SSH on push to main
-- **Env file**: /root/raivstream/.env (symlinked to apps/web/.env.local and packages/database/.env)
+- **Env files** (production, NOT symlinked): the web process reads `apps/web/.env.local` (Next.js loads it; the deploy sources it into PM2 env). Prisma CLI/cron read `/root/raivstream/.env`, reached in the web checkout via the `packages/database/.env` symlink. Web-facing flag changes go in `apps/web/.env.local`. See `docs/operations/environment-layout.md`.
+- **Health (prod):** `https://app.raivstream.com/api/health` (and `r16.raivstream.com/api/health`). The apex `raivstream.com` is not the app health endpoint.
 - **Manual rebuild**: `cd /root/raivstream && git pull && pnpm --filter @raivstream/web build && pm2 restart raivstream-web --update-env`
 
 ## Common Pitfalls (already fixed)
