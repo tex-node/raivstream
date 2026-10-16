@@ -18,6 +18,10 @@ const MAX_FAILED_ATTEMPTS = 10;
 // How long to lock an account after too many failures (ms)
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
+// A non-head refresh token presented within this window of the family's last
+// rotation is treated as a harmless concurrent-refresh race, not token reuse.
+const CONCURRENT_REFRESH_GRACE_MS = 15 * 1000; // 15 seconds
+
 // Fields safe to return in any API response (no passwordHash, no internal flags)
 export const SAFE_USER_SELECT = {
   id:             true,
@@ -281,6 +285,31 @@ export async function refreshTokens(prisma: PrismaClient, rawRefreshToken: strin
   const matches = await bcrypt.compare(rawRefreshToken, latest.tokenHash);
 
   if (!matches) {
+    // The presented token is not the current head of the family. Two very
+    // different situations produce this:
+    //
+    //   1. Replay / theft — a token that was rotated away is being reused long
+    //      after the fact. This is an attack: revoke the whole family.
+    //   2. Concurrent refresh — the client sent the *same still-valid* token
+    //      twice within a few milliseconds (several browser tabs share one
+    //      httpOnly `raiv_rt` cookie; clients also fire overlapping refreshes
+    //      when reconnecting after a server restart). The first call already
+    //      rotated the head; the second now sees a newer one. Not an attack —
+    //      nuking the session here logs the user out of every tab.
+    //
+    // Distinguish by recency: if the head was created within the grace window
+    // the family was just legitimately rotated, so treat this as (2) and let
+    // the caller retry with whatever token that first call handed back.
+    const rotatedWithinGrace =
+      Date.now() - latest.createdAt.getTime() < CONCURRENT_REFRESH_GRACE_MS;
+
+    if (rotatedWithinGrace) {
+      throw Object.assign(
+        new Error('Session was just refreshed by another request — please retry'),
+        { code: 'CONCURRENT_REFRESH' as const },
+      );
+    }
+
     // Token reuse detected — revoke entire family immediately (replay attack)
     await prisma.refreshToken.deleteMany({ where: { userId: payload.sub, family: payload.family } });
     throw Object.assign(new Error('Session invalidated — please sign in again'), { code: 'UNAUTHORIZED' as const });
@@ -293,14 +322,34 @@ export async function refreshTokens(prisma: PrismaClient, rawRefreshToken: strin
   const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: SAFE_USER_SELECT });
   if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' as const });
 
-  // Rotate: delete old, issue new in same family
-  await prisma.refreshToken.delete({ where: { id: latest.id } });
+  // Rotate: retire the old token and issue a new one in the same family.
+  //
+  // The delete is the concurrency gate. Two requests that both validated the
+  // same token above will both reach this point; using `deleteMany` (not
+  // `delete`) means the loser gets `count: 0` instead of Prisma throwing
+  // "Record to delete does not exist" (P2025) — the recurring startup-log
+  // error this guards against. Wrapping delete+create in one transaction also
+  // closes the sliver of time where a third concurrent refresh could see an
+  // empty family and get a spurious "Session not found".
+  const newRaw  = signRefreshToken(user.id, payload.family);
+  const newHash = await bcrypt.hash(newRaw, 10);
 
-  const newRaw    = signRefreshToken(user.id, payload.family);
-  const newHash   = await bcrypt.hash(newRaw, 10);
-  await prisma.refreshToken.create({
-    data: { userId: user.id, tokenHash: newHash, family: payload.family, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+  const rotated = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.refreshToken.deleteMany({ where: { id: latest.id } });
+    if (count === 0) return false;
+    await tx.refreshToken.create({
+      data: { userId: user.id, tokenHash: newHash, family: payload.family, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+    });
+    return true;
   });
+
+  if (!rotated) {
+    // A concurrent, equally-valid refresh rotated this token first.
+    throw Object.assign(
+      new Error('Session was just refreshed by another request — please retry'),
+      { code: 'CONCURRENT_REFRESH' as const },
+    );
+  }
 
   const newAccess = signAccessToken({ sub: user.id, email: user.email, username: user.username, role: user.role, premiumTier: user.premiumTier });
   return { accessToken: newAccess, refreshToken: newRaw, user };
