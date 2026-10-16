@@ -463,7 +463,7 @@ async function runSceneShotClipChain(
 
     const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
     const aspectRatio = '9:16';
-    const resolution = manifestScene?.resolution ?? '1080P';
+    const resolution = '480P'; // All story scenes at 480P — lowest cost tier; manifest resolution ignored.
     const featureKey = MODEL_FEATURE_KEY.H3_MAX as string | undefined;
 
     const existing = await (ctx.prisma as any).storySceneAsset.findMany({
@@ -3280,8 +3280,8 @@ async function generateSceneVideoAsset(
   const manifest = project.productionManifest as unknown as ProductionManifest | null;
   const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
   const duration = Math.min(15, Math.max(4, manifestScene?.duration_sec ?? input.duration ?? 5));
-  // R16 contract: KIDS stories always generate at 480P; non-R16 uses caller or manifest value.
-  const effectiveResolution = resolveSceneVideoResolution(audienceMode, input.resolution, manifestScene?.resolution);
+  // All story scene video generates at 480P (Oct 2026 cost fix). 768P/1080P reserved for AI Studio.
+  const effectiveResolution = '480P';
   // Phase 17 — I2V chain continuity: prefer the manifest's first frame, then the
   // LAST frame of the previous scene's clip (extracted via ffmpeg), then the
   // scene's own still as the opening frame.
