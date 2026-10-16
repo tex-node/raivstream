@@ -185,19 +185,17 @@ export async function deductCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ): Promise<number> {
   // 0. Idempotent pre-check runs BEFORE the rate lookup: a replay must return
   //    the original charge even if the rate was since changed/deactivated.
-  if (idempotencyKey) {
-    const existing = await prisma.creditTransaction.findUnique({
-      where:  { idempotencyKey },
-      select: { userId: true, featureKey: true, type: true, amount: true },
-    });
-    if (existing) {
-      assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
-      return Math.abs(existing.amount);
-    }
+  const existing = await prisma.creditTransaction.findUnique({
+    where:  { idempotencyKey },
+    select: { userId: true, featureKey: true, type: true, amount: true },
+  });
+  if (existing) {
+    assertIdempotentReplay(existing, { userId, featureKey, kind: 'USAGE' });
+    return Math.abs(existing.amount);
   }
 
   // 1. Look up the configured cost for this feature
@@ -249,7 +247,7 @@ export async function deductCredits(
           featureKey,
           description,
           referenceId,
-          idempotencyKey: idempotencyKey ?? null,
+          idempotencyKey,
           balanceBefore,
           balanceAfter,
         },
@@ -259,7 +257,7 @@ export async function deductCredits(
     // 5. Concurrent duplicate → unique-constraint race. The transaction has
     //    rolled back (including its decrement); return the winner's charge.
     const code = (error as { code?: string } | null)?.code;
-    if (idempotencyKey && code === 'P2002') {
+    if (code === 'P2002') {
       const existing = await prisma.creditTransaction.findUnique({
         where:  { idempotencyKey },
         select: { userId: true, featureKey: true, type: true, amount: true },
@@ -290,17 +288,15 @@ export async function refundCredits(
   featureKey:  string,
   referenceId: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ): Promise<void> {
-  if (idempotencyKey) {
-    const existing = await prisma.creditTransaction.findUnique({
-      where:  { idempotencyKey },
-      select: { userId: true, featureKey: true, type: true, amount: true },
-    });
-    if (existing) {
-      assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
-      return;
-    }
+  const existing = await prisma.creditTransaction.findUnique({
+    where:  { idempotencyKey },
+    select: { userId: true, featureKey: true, type: true, amount: true },
+  });
+  if (existing) {
+    assertIdempotentReplay(existing, { userId, featureKey, kind: 'REFUND' });
+    return;
   }
 
   try {
@@ -322,7 +318,7 @@ export async function refundCredits(
           featureKey,
           description,
           referenceId,
-          idempotencyKey: idempotencyKey ?? null,
+          idempotencyKey,
           balanceBefore,
           balanceAfter,
         },
@@ -331,7 +327,7 @@ export async function refundCredits(
   } catch (error) {
     // Concurrent duplicate → the transaction rolled back; treat as replayed.
     const code = (error as { code?: string } | null)?.code;
-    if (idempotencyKey && code === 'P2002') {
+    if (code === 'P2002') {
       const existing = await prisma.creditTransaction.findUnique({
         where:  { idempotencyKey },
         select: { userId: true, featureKey: true, type: true, amount: true },
@@ -463,6 +459,7 @@ export async function reserveCredits(
           featureKey:   input.featureKey,
           description:  input.description ?? 'Credit reservation',
           referenceId:  input.referenceId,
+          idempotencyKey: `ct:reserve:${input.idempotencyKey}`,
           balanceBefore,
           balanceAfter,
         },
@@ -532,6 +529,7 @@ export async function settleCredits(
           featureKey:   reservation.featureKey ?? undefined,
           description:  delta > 0 ? 'Credit settlement overage refund' : 'Credit settlement underage charge',
           referenceId:  reservation.referenceId ?? idempotencyKey,
+          idempotencyKey: `ct:settle:${idempotencyKey}`,
           balanceBefore: (updated!.balance) - delta,
           balanceAfter:  updated!.balance,
         },
@@ -575,6 +573,7 @@ export async function releaseCredits(
         featureKey:   reservation.featureKey ?? undefined,
         description:  'Credit reservation released',
         referenceId:  reservation.referenceId ?? idempotencyKey,
+        idempotencyKey: `ct:release:${idempotencyKey}`,
         balanceBefore,
         balanceAfter,
       },
