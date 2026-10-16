@@ -171,6 +171,12 @@ async function main() {
       description:    'Flux 2 (fal.ai) — high-quality text-to-image (₦80/gen)',
     },
     {
+      featureKey:     'generate:flux2_edit',
+      creditsPerUnit: 80,
+      unitLabel:      'request',
+      description:    'Flux 2 Edit (fal.ai) — image inpainting / editing (₦80/gen)',
+    },
+    {
       featureKey:     'generate:h3_max',
       creditsPerUnit: 200,
       unitLabel:      'request',
