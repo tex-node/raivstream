@@ -110,11 +110,14 @@ export type DirectedScene = z.infer<typeof directedSceneSchema>;
 
 // ─── Provider Interface ──────────────────────────────────────────────────────
 
+export type StoryLengthTier = 'SHORT' | 'MEDIUM';
+
 export type PlanStoryInput = {
   idea: string;
   answers: Array<{ questionText: string; selectedAnswer: string }>;
   audienceMode: StoryAudienceMode;
   existingCharacters?: Array<{ name: string; role?: string; visualDescription?: string }>;
+  storyLength?: StoryLengthTier | null;
 };
 
 export type EnhanceNarrativeInput = {
@@ -157,6 +160,7 @@ export type PlanSceneNarrationInput = {
   tone?: string | null;
   mood?: string | null;
   audienceMode: StoryAudienceMode;
+  wordBudget?: [number, number] | null;
 };
 
 export interface StoryIntelligenceProvider {
@@ -189,8 +193,23 @@ export class StoryIntelligenceError extends Error {
   }
 }
 
-// ─── Feature Flag ────────────────────────────────────────────────────────────
+// ─── Feature Flags ───────────────────────────────────────────────────────────
 
 export function isStoryIntelligenceEnabled(): boolean {
   return process.env.STORY_INTELLIGENCE_V1_ENABLED === 'true';
 }
+
+export function isStoryPaceEnabled(userId?: string): boolean {
+  if (process.env.STORY_PACE_ENABLED === 'true') return true;
+  if (userId) {
+    const ids = (process.env.STORY_PACE_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    return ids.includes(userId);
+  }
+  return false;
+}
+
+/** Beat count range for each tier, used in blueprint and narrative prompts. */
+export const STORY_PACE_CONFIG: Record<StoryLengthTier, { beatMin: number; beatMax: number; narrationWordMin: number; narrationWordMax: number; storyWordsPerScene: [number, number] }> = {
+  SHORT: { beatMin: 3, beatMax: 4, narrationWordMin: 12, narrationWordMax: 25, storyWordsPerScene: [50, 100] },
+  MEDIUM: { beatMin: 5, beatMax: 7, narrationWordMin: 20, narrationWordMax: 24, storyWordsPerScene: [80, 140] },
+};

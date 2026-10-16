@@ -39,14 +39,14 @@ Use these exact words. Never collapse them.
 | R16-03 | Character reference approval + continuity | Product | feat/raivstream-upgrade | — | upgrade §4 | TESTED | phase-2-release-evidence.md | Staging evidence | Multi-scene acceptance run | — |
 | R16-04 | Batch scene generation | Product | feat/raivstream-upgrade | — | upgrade §4 | TESTED | phase-2-release-evidence.md | Staging evidence | Partial-failure + credit reconciliation on staging | — |
 | R16-05 | Chapter version history | Product | feat/raivstream-upgrade | — | upgrade §4 | TESTED | phase-2-release-evidence.md | Staging evidence | Snapshot/restore on staging | — |
-| P3-ENDCARD | Two-second end card | Product | main | c85dd48 | `20261009110000` (endCardApplied col) | DEPLOYED | PR #43 + music-path fix in same PR | P3 real-export acceptance pending | Run P3 acceptance: music-path project, endCardApplied=true | — |
+| P3-ENDCARD | Two-second end card | Product | main | c85dd48 | `20261009110000` (endCardApplied col) | ACCEPTED | export cmv9ysnu40001n8xkzhwktjw6: 32.000s video=audio, endCardApplied=true, frame "Created on Raivstream / @fothlog" | — | — | — |
 | P4A-PUBLISH | R16 publication lifecycle | Product | feat/raivstream-upgrade | — | upgrade §4 | TESTED | phase-4-release-evidence.md | Privacy/permission tests on staging | Staging verification | — |
 | P4B-SHARE | Share links + per-click attribution (90-day, no IP) | Product | feat/raivstream-upgrade | — | upgrade §4 | TESTED | phase-4-release-evidence.md | Staging verification | Staging verification | — |
 | R16-EXPORT | R16 story video export (2A–2D) | Product | (confirm branch) | — | `20260925180000_story_video_export` | TESTED | SESSION.md 2026-09-25/26 | Migration + VPS acceptance (2H/2I) | Phase 2H real acceptance | — |
 | EDU-B | Educational intent/content contract | Product | (confirm branch) | — | `20260926120000_educational_contract` | TESTED | SESSION.md 2026-09-26 | Migration deploy | Deploy migration | — |
 | EDU-C-G | Educational narration, visuals, QA, prod test | Product | — | — | — | PROPOSED | — | EDU-B deployed | Design Phase C | — |
 | R16-STYLE-LOCK | R16 generation-time style enforcement (KIDS → CARTOON) | Engineering | main | 5556178 | — | DEPLOYED | PR #42 | — | — | — |
-| STORY-PACE | Story length/pacing choice (Short/Medium/Long, write-to-budget, beats=scenes) | Product | — | — | TBD | PROPOSED | docs/product/next-features.md | — | Phase A: pipeline map + baseline + design doc | — |
+| STORY-PACE | Story length/pacing choice (Short/Medium/Long, write-to-budget, beats=scenes) | Product | feat/story-pace | — | `20261015130000_story_length` | IMPLEMENTED | — | Staging run + 8-idea baseline | Phase B code done; staging run + one real Short R16 story | — |
 | MEDIA-LIB | Unified user media library (view, download, soft-delete, post to feed; R16 first) | Product | — | — | TBD | PROPOSED | docs/product/next-features.md | STORY-PACE Phase A | Phase A: inventory + design | — |
 | ADMIN-INSIGHTS | Per-user admin view (credit spend, purchases, media, engagement; CSV) | Product | — | — | TBD | PROPOSED | docs/product/next-features.md | — | Phase A: data inventory + design | — |
 | R16-AUDIO | R16 narration + music + FFmpeg mux | Product | main (unpushed?) | c188f76, 4330faa, 9d8ca17 | `20261009120000`, `20261009130000` | TESTED | r16-video-audio-phase-abc-verification.md | Staging S1–S11; speech rate seed | Staging acceptance | — |
@@ -66,3 +66,5 @@ Use these exact words. Never collapse them.
 | Date | ID | From → To | Evidence | By |
 |---|---|---|---|---|
 | 2026-10-15 | — | Tracker created | SESSION.md | Claude |
+| 2026-10-15 | P3-ENDCARD | DEPLOYED → ACCEPTED | export cmv9ysnu40001n8xkzhwktjw6, 32.000s, endCardApplied=true | Claude |
+| 2026-10-15 | STORY-PACE | PROPOSED → IMPLEMENTED | Phase B: schema, flag, blueprint, narrative engine, story.ts, 32 tests green; type-check clean | Claude |

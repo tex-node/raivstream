@@ -63,10 +63,14 @@ import { GENERATION_PROMPT_MAX_LENGTH, NEGATIVE_PROMPT_MAX_LENGTH } from './gene
 import {
   storyIntelligenceProvider,
   isStoryIntelligenceEnabled,
+  isStoryPaceEnabled,
+  STORY_PACE_CONFIG,
   type StoryBlueprint,
   type DirectedScene,
+  type StoryLengthTier,
   StoryIntelligenceError,
 } from '../lib/storyIntelligence';
+import { mergeBlueprintBeatsToMax, durationFromNarrationWords } from '../lib/storyIntelligence/storyPaceHelpers';
 import {
   composeV2,
   isVisualPromptComposerV2Enabled,
@@ -3316,7 +3320,22 @@ async function generateSceneVideoAsset(
   // Phase 16.5 — consume the persisted ProductionManifest for this scene.
   const manifest = project.productionManifest as unknown as ProductionManifest | null;
   const manifestScene = manifest?.scenes?.find((s) => s.scene_id === scene.orderIndex);
-  const duration = Math.min(15, Math.max(4, manifestScene?.duration_sec ?? input.duration ?? 5));
+  // STORY-PACE Phase B: compute duration from narrationScript when enabled AND storyLength is set.
+  // Legacy projects (storyLength=null) keep the 5s default even with the flag on.
+  const paceDuration = (() => {
+    if (!isStoryPaceEnabled(ctx.user.id)) return null;
+    const projectStoryLength = (project as unknown as { storyLength?: StoryLengthTier | null }).storyLength;
+    if (!projectStoryLength) return null;
+    const cfg = STORY_PACE_CONFIG[projectStoryLength];
+    const script = (scene as unknown as { narrationScript?: string | null }).narrationScript;
+    if (script) {
+      const wordCount = script.trim().split(/\s+/).filter(Boolean).length;
+      return durationFromNarrationWords(wordCount);
+    }
+    const midpointWords = Math.round((cfg.narrationWordMin + cfg.narrationWordMax) / 2);
+    return durationFromNarrationWords(midpointWords);
+  })();
+  const duration = Math.min(15, Math.max(4, paceDuration ?? manifestScene?.duration_sec ?? input.duration ?? 5));
   // All story scene video generates at 480P (Oct 2026 cost fix). 768P/1080P reserved for AI Studio.
   const effectiveResolution = '480P';
   // Phase 17 — I2V chain continuity: prefer the manifest's first frame, then the
@@ -3696,7 +3715,7 @@ function buildSimpleScenes(project: {
   audienceMode?: string;
   chapters: Array<{ title: string; summary: string; body: string }>;
   characterMemory?: CharacterMemoryRecord[];
-}) {
+}, count = 6) {
   const idea = (project.originalIdea ?? project.title).toLowerCase();
   const isSchoolStory = /\bschool|classroom|teacher|student|bus\b/i.test(idea);
   const characters = inferSceneCharacters(project);
@@ -3754,7 +3773,7 @@ function buildSimpleScenes(project: {
         mood: 'happy',
         characters,
       },
-    ];
+    ].slice(0, count);
   }
 
   return [
@@ -3806,8 +3825,9 @@ function buildSimpleScenes(project: {
       mood: 'happy',
       characters,
     },
-  ];
+  ].slice(0, count);
 }
+
 
 function textSegmentsFromChapters(chapters: Array<{ title: string; summary: string; body: string }>, pageCount: number) {
   const sentences = chapters
@@ -3944,6 +3964,7 @@ export const storyRouter = router({
       audienceMode: audienceModeSchema.optional(),
       storyType: storyTypeSchema.default('SHORT_STORY'),
       visualStyle: storyVisualStyleSchema.optional(),
+      storyLength: z.enum(['SHORT', 'MEDIUM']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const idea = input.idea.trim();
@@ -3963,6 +3984,10 @@ export const storyRouter = router({
       );
       assertR16VisualStyle(audienceMode, resolvedVisualStyle);
 
+      const effectiveStoryLength = isStoryPaceEnabled(ctx.user.id)
+        ? (input.storyLength ?? (audienceMode === 'KIDS' ? 'SHORT' : null))
+        : null;
+
       const project = await ctx.prisma.storyProject.create({
         data: {
           userId: ctx.user.id,
@@ -3977,6 +4002,7 @@ export const storyRouter = router({
           ...(input.storyType === 'EDUCATIONAL' ? { contentType: 'EDUCATIONAL' } : {}),
           visualStyle: resolvedVisualStyle,
           status: 'DRAFT',
+          ...(effectiveStoryLength ? { storyLength: effectiveStoryLength } : {}),
         },
         select: projectSelect,
       });
@@ -4117,6 +4143,7 @@ export const storyRouter = router({
 
       const audienceMode = resolveAudienceMode(ctx, project.audienceMode as StoryAudienceMode);
       const idea = project.originalIdea ?? project.logline ?? project.title;
+      const storyLength = isStoryPaceEnabled(ctx.user.id) ? ((project as unknown as { storyLength?: StoryLengthTier | null }).storyLength ?? null) : null;
       assertKidsSafeIdea(idea, audienceMode);
 
       const moderation = await moderatePrompt(idea);
@@ -4166,7 +4193,7 @@ export const storyRouter = router({
       let blueprint: StoryBlueprint | null = null;
       if (isStoryIntelligenceEnabled()) {
         try {
-          blueprint = await storyIntelligenceProvider.planStory({ idea, answers, audienceMode });
+          blueprint = await storyIntelligenceProvider.planStory({ idea, answers, audienceMode, storyLength });
           await trackStoryAnalytics(ctx, {
             event: 'story_playground_opened' as StoryAnalyticsEventName,
             projectId: project.id,
@@ -4181,7 +4208,7 @@ export const storyRouter = router({
       // F3.10: EDUCATIONAL content generates a lesson script, not a narrative.
       const story = (detectedContentType === 'EDUCATIONAL' && educationalContract)
         ? buildEducationalLessonBody(idea, educationalContract)
-        : await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id });
+        : await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id, storyLength });
       const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         await tx.storyChapter.deleteMany({ where: { projectId: project.id } });
@@ -4712,6 +4739,12 @@ export const storyRouter = router({
       };
       let sceneRecords: SceneRecord[];
       let directorProvider: string | undefined;
+      const simpleSceneCount = isStoryPaceEnabled(ctx.user.id)
+        ? (() => {
+            const len = (project as unknown as { storyLength?: StoryLengthTier | null }).storyLength;
+            return len ? (STORY_PACE_CONFIG[len]?.beatMin ?? 6) : 6;
+          })()
+        : 6;
 
       if (isStoryIntelligenceEnabled()) {
         const chapter = project.chapters[0];
@@ -4745,12 +4778,23 @@ export const storyRouter = router({
             mood: s.mood ?? undefined,
           }));
           const storyBody = chapter?.enhancedBody ?? chapter?.body ?? '';
+          const projectStoryLength = isStoryPaceEnabled(ctx.user.id)
+            ? ((project as unknown as { storyLength?: StoryLengthTier | null }).storyLength ?? null)
+            : null;
+          // Fix 2: clamp beat count to tier [min, max]; merge overflow beats so the ending is preserved.
+          const clampedBlueprint = (() => {
+            if (!projectStoryLength) return effectiveBlueprint;
+            const cfg = STORY_PACE_CONFIG[projectStoryLength];
+            return mergeBlueprintBeatsToMax(effectiveBlueprint, cfg.beatMax);
+          })();
           const sceneCount = educationalContractForScenes
             ? educationalContractForScenes.sceneProgression.length
-            : Math.max(effectiveBlueprint.beats.length, 6);
+            : projectStoryLength
+              ? Math.max(STORY_PACE_CONFIG[projectStoryLength].beatMin, clampedBlueprint.beats.length)
+              : Math.max(effectiveBlueprint.beats.length, 6);
           try {
             let directedScenes = await storyIntelligenceProvider.directScenes({
-              blueprint: effectiveBlueprint,
+              blueprint: clampedBlueprint,
               storyTitle: project.title ?? 'Untitled',
               storyBody,
               audienceMode: project.audienceMode as 'KIDS' | 'GENERAL',
@@ -4774,13 +4818,13 @@ export const storyRouter = router({
             directorProvider = storyIntelligenceProvider.name;
           } catch (error) {
             console.warn('[story.generateScenes] scene director failed — falling back to simple scenes:', error instanceof StoryIntelligenceError ? error.code : error);
-            sceneRecords = buildSimpleScenes(project);
+            sceneRecords = buildSimpleScenes(project, simpleSceneCount);
           }
         } else {
-          sceneRecords = buildSimpleScenes(project);
+          sceneRecords = buildSimpleScenes(project, simpleSceneCount);
         }
       } else {
-        sceneRecords = buildSimpleScenes(project);
+        sceneRecords = buildSimpleScenes(project, simpleSceneCount);
       }
 
       try {
@@ -8398,7 +8442,7 @@ export const storyRouter = router({
       const scene = await ctx.prisma.storySceneSeed.findFirst({
         where: { id: input.sceneId, projectId: input.projectId },
         include: {
-          project: { select: { contentType: true, genre: true, tone: true } },
+          project: { select: { contentType: true, genre: true, tone: true, storyLength: true } },
           chapter: { select: { body: true } },
         },
       });
@@ -8406,6 +8450,14 @@ export const storyRouter = router({
       if (scene.project?.contentType === 'EDUCATIONAL') {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Use generateEducationalNarration for educational stories.' });
       }
+
+      const narrationWordBudget = (() => {
+        if (!isStoryPaceEnabled(ctx.user.id)) return null;
+        const len = (scene.project as unknown as { storyLength?: StoryLengthTier | null })?.storyLength;
+        if (!len) return null;
+        const cfg = STORY_PACE_CONFIG[len];
+        return cfg ? [cfg.narrationWordMin, cfg.narrationWordMax] as [number, number] : null;
+      })();
 
       // Resolve or generate the narration script. The script is persisted only
       // AFTER moderation passes (see resolveNarrationScript) so a flagged script
@@ -8422,6 +8474,7 @@ export const storyRouter = router({
               tone: scene.project?.tone ?? null,
               mood: scene.mood ?? null,
               audienceMode: 'KIDS',
+              wordBudget: narrationWordBudget,
             }),
             moderate: (text) => moderatePrompt(text),
             rejectMessage: (moderation) => moderationRejectMessage(moderation, 'Narration script violates content guidelines.'),

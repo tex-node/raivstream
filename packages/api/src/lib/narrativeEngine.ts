@@ -22,6 +22,7 @@ import {
   normaliseGeneratedStoryPayload,
   parseJsonObject,
 } from './storyTextService';
+import { isStoryPaceEnabled } from './storyIntelligence/types';
 
 export const NARRATIVE_ENGINE_FLAG = 'STORY_NARRATIVE_ENGINE_ENABLED';
 // Sonnet-class default — the PRD's "Claude 3.5 Sonnet" maps to the current
@@ -107,6 +108,17 @@ const STAGE_1_SYSTEM = [
   'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
 ];
 
+const STAGE_1_SYSTEM_SHORT = [
+  'You are an award-winning screenwriter writing a SHORT, punchy children\'s story (3 to 4 scenes).',
+  'CRITICAL DIRECTIVES:',
+  '1. Write exactly 3 to 4 scenes — no more. Each scene must be tight, vivid, and purposeful.',
+  '2. Focus on sensory anchors: lighting, atmosphere, one clear physical action per scene.',
+  '3. Each scene: a single emotional beat. One idea, one emotion, one visual moment.',
+  '4. Output the story body with clear scene headings (SCENE 1, SCENE 2, ...) and crisp narrative prose — roughly 50–100 words per scene.',
+  '5. THE BODY MUST BE COMPLETE AND FINISHED: end the last scene with a satisfying closing sentence. NEVER stop mid-sentence.',
+  'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
+];
+
 const STAGE_1_CONTINUE_SYSTEM = [
   'You are an award-winning screenwriter continuing an ongoing Raivstream story.',
   'Preserve character names, tone, setting, unresolved events, and the established style.',
@@ -116,8 +128,13 @@ const STAGE_1_CONTINUE_SYSTEM = [
   'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
 ];
 
-export function buildNarrativeSystem(audienceMode: StoryAudienceMode, continuation = false): string {
-  const base = continuation ? STAGE_1_CONTINUE_SYSTEM : STAGE_1_SYSTEM;
+export function buildNarrativeSystem(audienceMode: StoryAudienceMode, continuation = false, storyLength?: string | null, userId?: string): string {
+  let base: string[];
+  if (!continuation && storyLength === 'SHORT' && isStoryPaceEnabled(userId)) {
+    base = STAGE_1_SYSTEM_SHORT;
+  } else {
+    base = continuation ? STAGE_1_CONTINUE_SYSTEM : STAGE_1_SYSTEM;
+  }
   return [...base, SAFETY_RULES[audienceMode]].join('\n');
 }
 
@@ -198,7 +215,7 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
     return this.fallback.generateGuidedQuestions(input, audienceMode);
   }
 
-  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null }): Promise<GeneratedStory> {
+  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null; storyLength?: string | null }): Promise<GeneratedStory> {
     // Canary: users outside the rollout (or when the engine is off) keep the
     // existing OpenAI/local chain — per-user, not global.
     if (!this.enabled || !shouldUseNarrativeEngine(opts?.userId, this.env)) {
@@ -211,12 +228,13 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
         `Answers: ${JSON.stringify(answers)}`,
         'Write the cinematic story. Weave lighting, atmosphere, physical action, and environmental sound cues into the prose and into each sceneHints description.',
       ].join('\n');
-      let content = await this.complete(buildNarrativeSystem(audienceMode), baseUser);
+      const system = buildNarrativeSystem(audienceMode, false, opts?.storyLength, opts?.userId ?? undefined);
+      let content = await this.complete(system, baseUser);
       try {
         return this.parseStory(content, input);
       } catch {
         // One bounded corrective retry (strict JSON), then fall back.
-        content = await this.complete(buildNarrativeSystem(audienceMode), baseUser, true);
+        content = await this.complete(system, baseUser, true);
         return this.parseStory(content, input);
       }
     } catch (error) {

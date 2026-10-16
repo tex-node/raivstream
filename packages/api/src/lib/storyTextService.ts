@@ -42,7 +42,7 @@ export type GeneratedStory = {
 
 export interface StoryTextProvider {
   generateGuidedQuestions(input: string, audienceMode: StoryAudienceMode): Promise<GuidedQuestion[]>;
-  generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null }): Promise<GeneratedStory>;
+  generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, opts?: { userId?: string | null; storyLength?: string | null }): Promise<GeneratedStory>;
   continueStory(params: {
     projectTitle: string;
     originalIdea: string;
@@ -504,7 +504,7 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
     }
   }
 
-  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, _opts?: { userId?: string | null }) {
+  async generateStory(input: string, answers: StoryAnswer[], audienceMode: StoryAudienceMode, _opts?: { userId?: string | null; storyLength?: string | null }) {
     if (!this.enabled) return this.fallback.generateStory(input, answers, audienceMode);
     try {
       const content = await this.complete(
