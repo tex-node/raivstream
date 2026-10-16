@@ -14,6 +14,34 @@ import os from 'node:os';
 import path from 'node:path';
 import { uploadBufferToR2 } from './r2';
 
+/**
+ * Returns the duration of a video in seconds via ffprobe, or null on any
+ * failure (network error, ffprobe not installed, non-video URL). Fail-soft
+ * so the settle path can fall back to the requested duration.
+ */
+export async function getVideoDurationSeconds(videoUrl: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    let stdout = '';
+    const child = spawn('ffprobe', [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_format',
+      videoUrl,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', (chunk: Buffer) => { stdout += String(chunk); });
+    child.on('error', () => resolve(null));
+    child.on('close', (code) => {
+      if (code !== 0) { resolve(null); return; }
+      try {
+        const dur = parseFloat((JSON.parse(stdout) as { format?: { duration?: string } }).format?.duration ?? '');
+        resolve(isFinite(dur) && dur > 0 ? dur : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });

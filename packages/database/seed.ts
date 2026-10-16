@@ -176,11 +176,91 @@ async function main() {
       unitLabel:      'request',
       description:    'MiniMax H3-Max (fal.ai) — image-to-video (₦200/gen)',
     },
+    // ── Per-second video pricing (VIDEO_PER_SECOND_PRICING flag) ────────────
+    // Rate = credits per second of generated video. ≥ 40% margin on Pro pack (₦0.80/cr).
+    // Rates set 2026-10-16 (owner decision). fal prices:
+    // H3 turbo:  480P $0.025/s → 80 cr/s; 768P $0.04/s → 128 cr/s; 1080P $0.08/s → 256 cr/s
+    // Recast:    768P $0.30/s → 850 cr/s; 1080P $0.45/s → 1,250 cr/s
+    // RTV:       480P $0.05/s → 140 cr/s; 768P $0.08/s → 225 cr/s; 1080P $0.16/s → 450 cr/s
+    // VEED Fabric: 480p $0.08/s → 225 cr/s; 720p $0.15/s → 420 cr/s
+    // VEED lipsync $0.07/s → 200 cr/s; VEED avatar $0.35/min → 20 cr/s (1,200/min flat)
+    {
+      featureKey:     'generate:h3_max_480p',
+      creditsPerUnit: 80,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 480P — per-second billing (80 cr/s)',
+    },
+    {
+      featureKey:     'generate:h3_max_768p',
+      creditsPerUnit: 128,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 768P — per-second billing (128 cr/s)',
+    },
+    {
+      featureKey:     'generate:h3_max_1080p',
+      creditsPerUnit: 256,
+      unitLabel:      'second',
+      description:    'MiniMax H3-Max 1080P — per-second billing (256 cr/s)',
+    },
+    {
+      featureKey:     'generate:minimax_recast_768p',
+      creditsPerUnit: 850,
+      unitLabel:      'second',
+      description:    'MiniMax video-recast 768P — per-second billing (850 cr/s)',
+    },
+    {
+      featureKey:     'generate:minimax_recast_1080p',
+      creditsPerUnit: 1250,
+      unitLabel:      'second',
+      description:    'MiniMax video-recast 1080P — per-second billing (1,250 cr/s)',
+    },
+    {
+      featureKey:     'generate:minimax_rtv_480p',
+      creditsPerUnit: 140,
+      unitLabel:      'second',
+      description:    'MiniMax reference-to-video 480P — per-second billing (140 cr/s)',
+    },
+    {
+      featureKey:     'generate:minimax_rtv_768p',
+      creditsPerUnit: 225,
+      unitLabel:      'second',
+      description:    'MiniMax reference-to-video 768P — per-second billing (225 cr/s)',
+    },
+    {
+      featureKey:     'generate:minimax_rtv_1080p',
+      creditsPerUnit: 450,
+      unitLabel:      'second',
+      description:    'MiniMax reference-to-video 1080P — per-second billing (450 cr/s)',
+    },
     {
       featureKey:     'generate:veed_fabric',
       creditsPerUnit: 300,
       unitLabel:      'request',
       description:    'VEED Fabric (fal.ai) — talking-video lip-sync (₦300/gen)',
+    },
+    {
+      featureKey:     'generate:veed_fabric_480p',
+      creditsPerUnit: 225,
+      unitLabel:      'second',
+      description:    'VEED Fabric 480p — per-second billing (225 cr/s)',
+    },
+    {
+      featureKey:     'generate:veed_fabric_720p',
+      creditsPerUnit: 420,
+      unitLabel:      'second',
+      description:    'VEED Fabric 720p — per-second billing (420 cr/s)',
+    },
+    {
+      featureKey:     'generate:veed_lipsync',
+      creditsPerUnit: 200,
+      unitLabel:      'second',
+      description:    'VEED lipsync — per-second billing (200 cr/s)',
+    },
+    {
+      featureKey:     'generate:veed_avatar',
+      creditsPerUnit: 20,
+      unitLabel:      'second',
+      description:    'VEED avatar — per-second billing (20 cr/s; ~1,200 cr/min)',
     },
     // ── Other AI features ───────────────────────────────────────────────────
     {

@@ -275,10 +275,11 @@ describe('fal model contract mapping', () => {
     expect(parseH3MaxOutput({ video: { url: 'https://fal/v.mp4' } }).urls).toEqual(['https://fal/v.mp4']);
   });
 
-  it('normalises H3-Max resolution to the provider enum and drops invalid values', () => {
+  it('normalises H3-Max resolution to the provider enum and throws on invalid values', () => {
     expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '1080p' }).resolution).toBe('1080P');
     expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '768P' }).resolution).toBe('768P');
-    expect(toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '720p' }).resolution).toBeUndefined();
+    // '720p' is not a valid H3-Max resolution — throws rather than silently dropping (PR #51 contract).
+    expect(() => toH3MaxInput({ prompt: 'p', imageUrl: 'https://in/a.png', resolution: '720p' })).toThrow(MediaProviderError);
   });
 
   it('maps VEED Fabric input and parses video output', () => {
@@ -409,7 +410,7 @@ describe('fal transport 403 → PROVIDER_DISABLED', () => {
     transport.submit.mockRejectedValue(lockedErr());
     const provider = createFalMediaProvider({ config: liveImageCfg(), transport });
     const thrown = await provider.video!.submitVideo(
-      { prompt: 'x', imageUrl: 'https://cdn.example.com/img.jpg', durationSeconds: 5, resolution: '720p' },
+      { prompt: 'x', imageUrl: 'https://cdn.example.com/img.jpg', durationSeconds: 5, resolution: '480P' },
       { idempotencyKey: 'k-403-vid' },
     ).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(MediaProviderError);
