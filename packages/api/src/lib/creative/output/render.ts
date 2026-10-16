@@ -449,16 +449,24 @@ export async function renderOutputDerivative(
         if (!aResp.ok) throw new Error(`Failed to fetch narration audio for scene ${scene.sceneId} (${aResp.status})`);
         await writeFile(aFile, Buffer.from(await aResp.arrayBuffer()));
 
-        // Per-scene mux: loop video infinitely, end when narration audio ends (-shortest).
-        // This handles narration longer than the clip (the common case for educational content)
-        // and adds silence if narration is shorter than the clip.
+        // Per-scene mux: loop video infinitely, end when narration audio ends.
+        // Use -t <narration_duration> (probed via ffprobe) instead of -shortest.
+        // -shortest is unreliable when -stream_loop -1 feeds a -filter_complex graph:
+        // stream_loop overrides the looped input's EOF so the filter graph never sees
+        // a finite boundary. Without -t, a 7.6 s narration produced an infinite encode
+        // (observed: 4 h 27 min / 20 GB in production — incident ca25).
         const sceneOut = path.join(dir, `scene-${i}.mp4`);
-        const vProbe = await doProbe(vFile).catch(() => ({ hasAudioStream: false, durationSeconds: null }) as MediaProbe);
+        const [vProbe, aProbe] = await Promise.all([
+          doProbe(vFile).catch(() => ({ hasAudioStream: false, durationSeconds: null }) as MediaProbe),
+          doProbe(aFile).catch(() => ({ hasAudioStream: true, durationSeconds: null }) as MediaProbe),
+        ]);
+        // Explicit duration cap; fall back to -shortest only if ffprobe fails.
+        const durationArgs: string[] = aProbe.durationSeconds !== null
+          ? ['-t', aProbe.durationSeconds.toFixed(3)]
+          : ['-shortest'];
         if (vProbe.hasAudioStream) {
           // E1 — keep the source clip's native audio (e.g. H3 SFX) alongside the
           // narration: amix them so the stitched export is not narration-only.
-          // `duration=shortest` + `-shortest` still end the scene at the narration
-          // length (the native track is looped, so it is effectively infinite).
           await doFfmpeg([
             '-stream_loop', '-1',
             '-i', vFile,
@@ -473,11 +481,11 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
-            '-shortest',
+            ...durationArgs,
             sceneOut,
           ]);
         } else {
-          // No native audio on the source clip — narration-only, exactly as before.
+          // No native audio on the source clip — narration-only.
           await doFfmpeg([
             '-stream_loop', '-1',
             '-i', vFile,
@@ -490,7 +498,7 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
-            '-shortest',
+            ...durationArgs,
             sceneOut,
           ]);
         }
