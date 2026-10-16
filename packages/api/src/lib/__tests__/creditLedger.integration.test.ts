@@ -142,15 +142,17 @@ describe('Phase 1 — credit ledger idempotency & concurrency (real DB)', () => 
     expect(await db!.creditTransaction.count({ where: { idempotencyKey: key } })).toBe(1);
   });
 
-  it('A1 — legacy rows with a NULL key remain valid (nullable unique)', async () => {
+  it('A1 — every write requires a key; sequential writes with distinct keys both land', async () => {
     await setBalance(userId, 5_000);
     const before = await balanceOf(userId);
+    const k1 = `test:seq:${Date.now()}:1`;
+    const k2 = `test:seq:${Date.now()}:2`;
 
-    await deductCredits(db!, userId, FEATURE_KEY, 'legacy-1', 'no key 1'); // idempotencyKey omitted → null
-    await deductCredits(db!, userId, FEATURE_KEY, 'legacy-2', 'no key 2');
+    await deductCredits(db!, userId, FEATURE_KEY, 'seq-1', 'keyed 1', k1);
+    await deductCredits(db!, userId, FEATURE_KEY, 'seq-2', 'keyed 2', k2);
 
     expect(await balanceOf(userId)).toBe(before - 2 * COST);
-    expect(await db!.creditTransaction.count({ where: { userId, type: 'USAGE' } })).toBeGreaterThanOrEqual(2);
+    expect(await db!.creditTransaction.count({ where: { idempotencyKey: { in: [k1, k2] } } })).toBe(2);
   });
 
   it('insufficient-credit race never drives the balance negative', async () => {
@@ -199,13 +201,13 @@ describe('Phase 1 — credit ledger idempotency & concurrency (real DB)', () => 
 
     // Purchase (as recorded by the payment webhook), grant, two charges, one refund.
     await db!.creditBalance.create({ data: { userId: u.id, balance: 1_000 } });
-    await db!.creditTransaction.create({ data: { userId: u.id, amount: 1_000, type: 'PURCHASE', referenceId: 'pay_1', balanceBefore: 0, balanceAfter: 1_000 } });
-    await db!.creditTransaction.create({ data: { userId: u.id, amount: 500, type: 'BONUS', description: 'grant', balanceBefore: 1_000, balanceAfter: 1_500 } });
+    await db!.creditTransaction.create({ data: { userId: u.id, amount: 1_000, type: 'PURCHASE', referenceId: 'pay_1', idempotencyKey: `test:purchase:${u.id}`, balanceBefore: 0, balanceAfter: 1_000 } });
+    await db!.creditTransaction.create({ data: { userId: u.id, amount: 500, type: 'BONUS', description: 'grant', idempotencyKey: `test:bonus:${u.id}`, balanceBefore: 1_000, balanceAfter: 1_500 } });
     await db!.creditBalance.update({ where: { userId: u.id }, data: { balance: 1_500 } });
 
-    await deductCredits(db!, u.id, FEATURE_KEY, 'mixed-1', 'charge 1');
-    await deductCredits(db!, u.id, FEATURE_KEY, 'mixed-2', 'charge 2');
-    await refundCredits(db!, u.id, COST, FEATURE_KEY, 'mixed-2', 'refund one');
+    await deductCredits(db!, u.id, FEATURE_KEY, 'mixed-1', 'charge 1', `test:deduct:${u.id}:1`);
+    await deductCredits(db!, u.id, FEATURE_KEY, 'mixed-2', 'charge 2', `test:deduct:${u.id}:2`);
+    await refundCredits(db!, u.id, COST, FEATURE_KEY, 'mixed-2', 'refund one', `test:refund:${u.id}:2`);
 
     const balance = await balanceOf(u.id);
     const sum     = await ledgerSum(u.id);
@@ -233,7 +235,7 @@ describe('Phase 1 — credit ledger idempotency & concurrency (real DB)', () => 
     await setBalance(userId, 10_000);
     // One charge, then two competing refund paths (cancel + failure) using the
     // SAME key — exactly one refund must land.
-    await deductCredits(db!, userId, FEATURE_KEY, 'job-9', 'attempt 0');
+    await deductCredits(db!, userId, FEATURE_KEY, 'job-9', 'attempt 0', `test:job9-charge:${Date.now()}`);
     const afterCharge = await balanceOf(userId);
     const key = `test:shared-refund:${Date.now()}`;
 
