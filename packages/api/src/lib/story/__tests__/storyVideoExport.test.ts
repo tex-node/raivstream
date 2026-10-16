@@ -297,3 +297,98 @@ describe('StoryVideoExportService — endCardApplied writer', () => {
     expect(result.status).toBe('READY');
   });
 });
+
+// ─── H: Scene count cap (regression: OOM on 45-scene single-chapter stories) ──
+
+describe('StoryVideoExportService — H: scene count cap (incident regression)', () => {
+  let svc: StoryVideoExportService;
+  beforeEach(() => { svc = new StoryVideoExportService(); });
+
+  it('rejects export when scene count exceeds MAX_EXPORT_SCENES (21 > 20)', async () => {
+    const scenes = Array.from({ length: 21 }, (_, i) => makeScene(`s${i}`, i));
+    const assets = scenes.map((s) => makeAsset(s.id));
+    const prisma = makePrisma(makeProject(), scenes, assets) as unknown as PrismaClient;
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, {}))
+      .rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: expect.stringContaining('21 scenes') });
+  });
+
+  it('allows export when scene count equals MAX_EXPORT_SCENES (20)', async () => {
+    const scenes = Array.from({ length: 20 }, (_, i) => makeScene(`s${i}`, i));
+    const assets = scenes.map((s) => makeAsset(s.id));
+    const prisma = makePrisma(makeProject(), scenes, assets) as unknown as PrismaClient;
+    const deps: OutputRenderDeps = {
+      fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
+      ffmpeg: vi.fn(async (args: string[]) => {
+        const outArg = [...args].reverse().find((a) => a.endsWith('.mp4'));
+        if (outArg) await writeFile(outArg, Buffer.alloc(8, 0x00));
+      }),
+      upload: vi.fn(async () => 'https://cdn.test/out.mp4'),
+    };
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps))
+      .resolves.toMatchObject({ status: 'READY' });
+  });
+
+  it('educational narration error message shows missing count and total', async () => {
+    const scenes = [
+      makeScene('s1', 0, { narrationAudioUrl: 'https://cdn.test/audio1.mp3' }),
+      makeScene('s2', 1),
+      makeScene('s3', 2),
+    ];
+    const assets = scenes.map((s) => makeAsset(s.id));
+    const prisma = makePrisma(makeProject({ contentType: 'EDUCATIONAL' }), scenes, assets) as unknown as PrismaClient;
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, {}))
+      .rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        message: expect.stringMatching(/2 of 3 scene\(s\) still need narration/),
+      });
+  });
+});
+
+// ─── I: Duration guard (regression: 9:42 single-scene OOM from uncapped narration) ─
+
+describe('StoryVideoExportService — I: duration guard', () => {
+  let svc: StoryVideoExportService;
+  beforeEach(() => { svc = new StoryVideoExportService(); });
+
+  it('rejects export when total video duration exceeds 5 minutes (301 s)', async () => {
+    const scenes = Array.from({ length: 3 }, (_, i) => makeScene(`s${i}`, i));
+    const assets = scenes.map((s) => ({ ...makeAsset(s.id), durationSeconds: 101 }));
+    const prisma = makePrisma(makeProject(), scenes, assets) as unknown as PrismaClient;
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, {}))
+      .rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: expect.stringContaining('minutes long') });
+  });
+
+  it('allows export when total duration is exactly 300 s', async () => {
+    const scenes = Array.from({ length: 3 }, (_, i) => makeScene(`s${i}`, i));
+    const assets = scenes.map((s) => ({ ...makeAsset(s.id), durationSeconds: 100 }));
+    const prisma = makePrisma(makeProject(), scenes, assets) as unknown as PrismaClient;
+    const deps: OutputRenderDeps = {
+      fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
+      ffmpeg: vi.fn(async (args: string[]) => {
+        const outArg = [...args].reverse().find((a) => a.endsWith('.mp4'));
+        if (outArg) await writeFile(outArg, Buffer.alloc(8, 0x00));
+      }),
+      upload: vi.fn(async () => 'https://cdn.test/out.mp4'),
+    };
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps))
+      .resolves.toMatchObject({ status: 'READY' });
+  });
+
+  it('educational stories with null durationSeconds are not blocked by duration guard', async () => {
+    const scenes = Array.from({ length: 6 }, (_, i) =>
+      makeScene(`s${i}`, i, { narrationAudioUrl: `https://cdn.test/audio${i}.mp3` }),
+    );
+    const assets = scenes.map((s) => ({ ...makeAsset(s.id), durationSeconds: null }));
+    const prisma = makePrisma(makeProject({ contentType: 'EDUCATIONAL' }), scenes, assets) as unknown as PrismaClient;
+    const deps: OutputRenderDeps = {
+      fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
+      ffmpeg: vi.fn(async (args: string[]) => {
+        const outArg = [...args].reverse().find((a) => a.endsWith('.mp4'));
+        if (outArg) await writeFile(outArg, Buffer.alloc(8, 0x00));
+      }),
+      upload: vi.fn(async () => 'https://cdn.test/out.mp4'),
+    };
+    await expect(svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps))
+      .resolves.toMatchObject({ status: 'READY' });
+  });
+});

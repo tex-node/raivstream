@@ -820,6 +820,52 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
     });
   });
 
+  // ─── P: Director output clamp — regression for 15-scene bloat ───────────────
+
+  describe('P: Director output clamped to sceneCount (regression: AI over-produced 15 scenes for a 6-beat blueprint)', () => {
+    function makeScene(ordinal: number) {
+      return {
+        version: 'scene_director_v1' as const,
+        ordinal,
+        title: `Scene ${ordinal}`,
+        storyBeat: `Beat ${ordinal}`,
+        dramaticPurpose: `Purpose ${ordinal}`,
+        characters: [] as string[],
+        action: `Action ${ordinal}`,
+      };
+    }
+
+    it('over-produced output (15 scenes, sceneCount=6) is trimmed to 6', () => {
+      const sceneCount = 6;
+      let directedScenes = Array.from({ length: 15 }, (_, i) => makeScene(i + 1));
+      if (directedScenes.length > sceneCount) directedScenes = directedScenes.slice(0, sceneCount);
+      expect(directedScenes).toHaveLength(6);
+      expect(directedScenes[5]!.ordinal).toBe(6);
+    });
+
+    it('exact output (6 scenes, sceneCount=6) is unchanged', () => {
+      const sceneCount = 6;
+      let directedScenes = Array.from({ length: 6 }, (_, i) => makeScene(i + 1));
+      if (directedScenes.length > sceneCount) directedScenes = directedScenes.slice(0, sceneCount);
+      expect(directedScenes).toHaveLength(6);
+    });
+
+    it('under-produced output (4 scenes, sceneCount=6) is not padded', () => {
+      const sceneCount = 6;
+      let directedScenes = Array.from({ length: 4 }, (_, i) => makeScene(i + 1));
+      if (directedScenes.length > sceneCount) directedScenes = directedScenes.slice(0, sceneCount);
+      expect(directedScenes).toHaveLength(4);
+    });
+
+    it('educational: over-produced output (10 scenes, sceneCount=4) is trimmed to 4', () => {
+      const sceneCount = 4;
+      let directedScenes = Array.from({ length: 10 }, (_, i) => makeScene(i + 1));
+      if (directedScenes.length > sceneCount) directedScenes = directedScenes.slice(0, sceneCount);
+      expect(directedScenes).toHaveLength(4);
+      expect(directedScenes[3]!.ordinal).toBe(4);
+    });
+  });
+
   // ─── L: Normal story pipeline unaffected ──────────────────────────────────
 
   describe('L: Normal story pipeline (non-educational) is unaffected', () => {

@@ -4807,6 +4807,10 @@ export const storyRouter = router({
             if (educationalContractForScenes) {
               directedScenes = validateAndFillEducationalNarration(directedScenes, educationalContractForScenes);
             }
+            // Clamp: the AI director may return more scenes than requested; trim to the computed cap.
+            if (directedScenes.length > sceneCount) {
+              directedScenes = directedScenes.slice(0, sceneCount);
+            }
             sceneRecords = directedScenes.map((ds) => ({
               title: ds.title,
               description: ds.action,
@@ -8358,7 +8362,7 @@ export const storyRouter = router({
       // ctx.isR16 guaranteed by r16Procedure
       await ensureProject(ctx, input.projectId);
       if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Voice narration is not available right now. Please try again later or contact support.' });
       }
       const scene = await ctx.prisma.storySceneSeed.findFirst({
         where: { id: input.sceneId, projectId: input.projectId },
@@ -8437,7 +8441,7 @@ export const storyRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ensureProject(ctx, input.projectId);
       if (!isElevenLabsTtsEnabled() || !elevenLabsApiKey()) {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Narration generation is not enabled.' });
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Voice narration is not available right now. Please try again later or contact support.' });
       }
       const scene = await ctx.prisma.storySceneSeed.findFirst({
         where: { id: input.sceneId, projectId: input.projectId },
@@ -8452,11 +8456,11 @@ export const storyRouter = router({
       }
 
       const narrationWordBudget = (() => {
-        if (!isStoryPaceEnabled(ctx.user.id)) return null;
         const len = (scene.project as unknown as { storyLength?: StoryLengthTier | null })?.storyLength;
-        if (!len) return null;
-        const cfg = STORY_PACE_CONFIG[len];
-        return cfg ? [cfg.narrationWordMin, cfg.narrationWordMax] as [number, number] : null;
+        const cfg = len ? STORY_PACE_CONFIG[len] : null;
+        // Always apply a word budget — prevents unconstrained TTS scripts that caused OOM (Incident 3).
+        // Fall back to [20, 40] for projects with no storyLength tier (~20s audio max).
+        return cfg ? [cfg.narrationWordMin, cfg.narrationWordMax] as [number, number] : [20, 40] as [number, number];
       })();
 
       // Resolve or generate the narration script. The script is persisted only

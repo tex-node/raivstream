@@ -57,13 +57,16 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   );
 
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
+  const contentType: string = (workspaceQuery.data as any)?.project?.contentType ?? '';
   const utils = trpc.useUtils();
   const addScene = trpc.story.addScene.useMutation({ onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }) });
-  // Phase C: R16 users use the educational narration path (no Sequence/Film-tab required);
-  // non-R16 users use the full generateSceneNarration path.
+  // Narration routing: R16+EDUCATIONAL → generateEducationalNarration,
+  // R16+STORY → generateStoryNarration, non-R16 → generateSceneNarration (Film-tab).
   const generateSceneNarration = trpc.story.generateSceneNarration.useMutation();
   const generateEducationalNarration = trpc.story.generateEducationalNarration.useMutation();
+  const generateStoryNarration = trpc.story.generateStoryNarration.useMutation();
   const [narrationBusy, setNarrationBusy] = useState(false);
+  const [narrationError, setNarrationError] = useState<string | null>(null);
 
   // R16-04 — batch generation ("make all pictures").
   const sceneIds = scenes.map((s: any) => s.id);
@@ -94,15 +97,20 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
 
   const runNarration = async () => {
     setNarrationBusy(true);
+    setNarrationError(null);
     try {
       for (const scene of scenes) {
-        if (isR16) {
+        if (isR16 && contentType === 'EDUCATIONAL') {
           await generateEducationalNarration.mutateAsync({ projectId, sceneId: scene.id });
+        } else if (isR16) {
+          await generateStoryNarration.mutateAsync({ projectId, sceneId: scene.id });
         } else {
           await generateSceneNarration.mutateAsync({ projectId, sceneId: scene.id });
         }
       }
       utils.story.getWorkspace.invalidate({ projectId });
+    } catch (err: unknown) {
+      setNarrationError((err as any)?.message ?? 'Narration failed. Please try again.');
     } finally {
       setNarrationBusy(false);
     }
@@ -130,6 +138,11 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
             </button>
           </div>
         </div>
+        {narrationError && (
+          <p style={{ gridColumn: '1 / -1', color: 'var(--noc-danger, #f44336)', margin: '4px 0 0', fontSize: 13 }}>
+            {narrationError}
+          </p>
+        )}
         {workspaceQuery.isLoading ? (
           <>
             <Skeleton height={200} radius={18} />

@@ -170,6 +170,16 @@ export class StoryVideoExportService {
     if (allScenes.length === 0) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'This story has no scenes.' });
     }
+
+    // ── 4b. Scene count cap — prevents OOM from excessively long stories ──────
+    const MAX_EXPORT_SCENES = 20;
+    if (allScenes.length > MAX_EXPORT_SCENES) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `This story has ${allScenes.length} scenes. Export supports up to ${MAX_EXPORT_SCENES} scenes. Start a new story for additional content.`,
+      });
+    }
+
     const sceneIdList = allScenes.map((s) => s.id);
 
     // ── 4a. Educational: every scene must have narration audio ───────────────
@@ -177,10 +187,12 @@ export class StoryVideoExportService {
     if (isEducational) {
       const missingSpeech = allScenes.filter((s) => !s.narrationAudioUrl);
       if (missingSpeech.length > 0) {
+        const missingCount = missingSpeech.length;
         const labels = missingSpeech.map((s) => s.title ?? s.id).slice(0, 3);
+        const andMore = missingCount > 3 ? ` and ${missingCount - 3} more` : '';
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: `Educational scene(s) have no narration audio: ${labels.join(', ')}. Generate narration before exporting.`,
+          message: `${missingCount} of ${allScenes.length} scene(s) still need narration: ${labels.join(', ')}${andMore}. Use "Generate Narration" on each scene before exporting.`,
         });
       }
     }
@@ -210,6 +222,23 @@ export class StoryVideoExportService {
           durationSeconds: asset.durationSeconds,
         });
       }
+    }
+
+    // ── 5b. Duration guard — blocks runaway encodes with known video durations ──
+    //        Only fires when assets carry measured durationSeconds (non-educational
+    //        scene clips). Educational still-image exports have null durations and
+    //        are protected by the scene count cap above instead.
+    const MAX_EXPORT_SECONDS = 300; // 5 minutes
+    const estimatedDuration = sceneIdList.reduce(
+      (sum, id) => sum + (readyByScene.get(id)?.durationSeconds ?? 0),
+      0,
+    );
+    if (estimatedDuration > MAX_EXPORT_SECONDS) {
+      const mins = Math.ceil(estimatedDuration / 60);
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `This story is approximately ${mins} minutes long. Export supports stories up to 5 minutes. Please reduce the number of scenes.`,
+      });
     }
 
     const missingScenes = sceneIdList.filter((id) => !readyByScene.has(id));

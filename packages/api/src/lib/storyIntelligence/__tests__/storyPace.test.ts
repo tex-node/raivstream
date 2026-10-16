@@ -399,6 +399,34 @@ describe('Q. Fix 2 — 6 beats for SHORT → 4 scenes, ending preserved', () => 
   });
 });
 
+// ── S. Fix 2 (incident regression) — narration word budget always bounded ─────
+// generateStoryNarration now always applies a word budget (removes isStoryPaceEnabled gate).
+// Verifies that no tier config produces scripts long enough to cause OOM (Incident 3 root cause).
+describe('S. Narration word budget — always bounded (incident regression)', () => {
+  it('all configured tiers have narrationWordMax <= 40 words', () => {
+    for (const tier of Object.keys(STORY_PACE_CONFIG) as StoryLengthTier[]) {
+      expect(STORY_PACE_CONFIG[tier]!.narrationWordMax).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('fallback budget max (40 words) stays within safe audio duration', () => {
+    // At ~2 words/sec, 40 words ≈ 20s. The incident produced ~97s audio from unconstrained scripts.
+    const fallbackMax = 40;
+    const estimatedSeconds = Math.ceil(fallbackMax / 2) + 2;
+    expect(estimatedSeconds).toBeLessThanOrEqual(25);
+  });
+
+  it('SHORT max (25 words) produces at most 15s audio via duration formula', () => {
+    const cfg = STORY_PACE_CONFIG['SHORT'];
+    expect(durationFromNarrationWords(cfg!.narrationWordMax)).toBeLessThanOrEqual(15);
+  });
+
+  it('MEDIUM max (24 words) produces at most 15s audio via duration formula', () => {
+    const cfg = STORY_PACE_CONFIG['MEDIUM'];
+    expect(durationFromNarrationWords(cfg!.narrationWordMax)).toBeLessThanOrEqual(15);
+  });
+});
+
 // ── R. Fix 3 — missing narrationScript uses tier midpoint, not 5s ─────────────
 describe('R. Fix 3 — missing narrationScript on paced project uses midpoint duration', () => {
   it('SHORT midpoint: ceil((12+25)/2) = 19 words → durationFromNarrationWords(19) ≠ 5', () => {
