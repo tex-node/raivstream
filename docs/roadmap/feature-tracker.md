@@ -2,6 +2,8 @@
 
 Single source of truth for feature status. Update on every status change and link from `SESSION.md`.
 
+> **Decisions & plans:** [`docs/decisions/DECISIONS.md`](../decisions/DECISIONS.md).
+
 Seeded 2026-10-15 from `SESSION.md` (latest entries 2026-10-12 / 2026-10-13). Verify each row against the repo, CI and the VPS before relying on it.
 
 ## Status ladder
