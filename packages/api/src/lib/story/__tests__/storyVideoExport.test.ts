@@ -378,7 +378,7 @@ describe('StoryVideoExportService — I: duration guard', () => {
     const scenes = Array.from({ length: 6 }, (_, i) =>
       makeScene(`s${i}`, i, { narrationAudioUrl: `https://cdn.test/audio${i}.mp3` }),
     );
-    const assets = scenes.map((s) => ({ ...makeAsset(s.id), durationSeconds: null }));
+    const assets = scenes.map((s) => ({ ...makeAsset(s.id), durationSeconds: null })) as unknown as ReturnType<typeof makeAsset>[];
     const prisma = makePrisma(makeProject({ contentType: 'EDUCATIONAL' }), scenes, assets) as unknown as PrismaClient;
     const deps: OutputRenderDeps = {
       fetch: vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } as unknown as Response)) as typeof fetch,
