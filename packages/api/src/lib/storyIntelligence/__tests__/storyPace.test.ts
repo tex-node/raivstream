@@ -84,6 +84,45 @@ describe('B. isStoryPaceEnabled — flag present', () => {
   });
 });
 
+// ── B2. Allowlist — flag OFF, user listed ─────────────────────────────────────
+describe('B2. isStoryPaceEnabled — STORY_PACE_USER_IDS allowlist', () => {
+  const LISTED = 'user-listed-123';
+  const UNLISTED = 'user-other-456';
+
+  beforeEach(() => {
+    delete process.env.STORY_PACE_ENABLED;
+    process.env.STORY_PACE_USER_IDS = LISTED;
+  });
+  afterEach(() => {
+    delete process.env.STORY_PACE_ENABLED;
+    delete process.env.STORY_PACE_USER_IDS;
+  });
+
+  it('returns true for a listed userId even when global flag is off', () => {
+    expect(isStoryPaceEnabled(LISTED)).toBe(true);
+  });
+
+  it('returns false for an unlisted userId when global flag is off', () => {
+    expect(isStoryPaceEnabled(UNLISTED)).toBe(false);
+  });
+
+  it('returns false when no userId is passed and flag is off', () => {
+    expect(isStoryPaceEnabled()).toBe(false);
+  });
+
+  it('handles comma-separated list', () => {
+    process.env.STORY_PACE_USER_IDS = `${LISTED},user-extra-789`;
+    expect(isStoryPaceEnabled(LISTED)).toBe(true);
+    expect(isStoryPaceEnabled('user-extra-789')).toBe(true);
+    expect(isStoryPaceEnabled(UNLISTED)).toBe(false);
+  });
+
+  it('returns true for any userId when global flag is on', () => {
+    process.env.STORY_PACE_ENABLED = 'true';
+    expect(isStoryPaceEnabled(UNLISTED)).toBe(true);
+  });
+});
+
 // ── C. SHORT config ────────────────────────────────────────────────────────────
 describe('C. STORY_PACE_CONFIG SHORT', () => {
   const cfg = STORY_PACE_CONFIG['SHORT'];

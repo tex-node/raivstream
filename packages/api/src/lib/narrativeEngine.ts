@@ -22,6 +22,7 @@ import {
   normaliseGeneratedStoryPayload,
   parseJsonObject,
 } from './storyTextService';
+import { isStoryPaceEnabled } from './storyIntelligence/types';
 
 export const NARRATIVE_ENGINE_FLAG = 'STORY_NARRATIVE_ENGINE_ENABLED';
 // Sonnet-class default — the PRD's "Claude 3.5 Sonnet" maps to the current
@@ -127,9 +128,9 @@ const STAGE_1_CONTINUE_SYSTEM = [
   'Return ONLY strict JSON matching this shape: title, summary, body, ageRange, mainCharacterName, supportingCharacters, theme, sceneHints (array of {title, description, locationType?, indoorOutdoor?, mood?, characters?}), characterMemory (array of {name, role?, species?, ageDescription?, gender?, visualDescription?, personality?}).',
 ];
 
-export function buildNarrativeSystem(audienceMode: StoryAudienceMode, continuation = false, storyLength?: string | null): string {
+export function buildNarrativeSystem(audienceMode: StoryAudienceMode, continuation = false, storyLength?: string | null, userId?: string): string {
   let base: string[];
-  if (!continuation && storyLength === 'SHORT' && process.env.STORY_PACE_ENABLED === 'true') {
+  if (!continuation && storyLength === 'SHORT' && isStoryPaceEnabled(userId)) {
     base = STAGE_1_SYSTEM_SHORT;
   } else {
     base = continuation ? STAGE_1_CONTINUE_SYSTEM : STAGE_1_SYSTEM;
@@ -227,7 +228,7 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
         `Answers: ${JSON.stringify(answers)}`,
         'Write the cinematic story. Weave lighting, atmosphere, physical action, and environmental sound cues into the prose and into each sceneHints description.',
       ].join('\n');
-      const system = buildNarrativeSystem(audienceMode, false, opts?.storyLength);
+      const system = buildNarrativeSystem(audienceMode, false, opts?.storyLength, opts?.userId ?? undefined);
       let content = await this.complete(system, baseUser);
       try {
         return this.parseStory(content, input);

@@ -199,8 +199,13 @@ export function isStoryIntelligenceEnabled(): boolean {
   return process.env.STORY_INTELLIGENCE_V1_ENABLED === 'true';
 }
 
-export function isStoryPaceEnabled(): boolean {
-  return process.env.STORY_PACE_ENABLED === 'true';
+export function isStoryPaceEnabled(userId?: string): boolean {
+  if (process.env.STORY_PACE_ENABLED === 'true') return true;
+  if (userId) {
+    const ids = (process.env.STORY_PACE_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    return ids.includes(userId);
+  }
+  return false;
 }
 
 /** Beat count range for each tier, used in blueprint and narrative prompts. */
