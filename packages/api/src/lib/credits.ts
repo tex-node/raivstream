@@ -382,6 +382,25 @@ export function veedFabricFeatureKey(resolution: string): string {
   return resolution.toLowerCase() === '720p' ? 'generate:veed_fabric_720p' : 'generate:veed_fabric_480p';
 }
 
+/** Resolve the per-resolution feature key for MiniMax video-recast (video-to-video). */
+export function minimaxRecastFeatureKey(resolution: string): string {
+  return resolution.toUpperCase() === '1080P' ? 'generate:minimax_recast_1080p' : 'generate:minimax_recast_768p';
+}
+
+/** Resolve the per-resolution feature key for MiniMax reference-to-video. */
+export function minimaxRtvFeatureKey(resolution: string): string {
+  const r = resolution.toUpperCase();
+  if (r === '768P') return 'generate:minimax_rtv_768p';
+  if (r === '1080P') return 'generate:minimax_rtv_1080p';
+  return 'generate:minimax_rtv_480p';
+}
+
+/** Feature key for VEED lipsync (no resolution variants — billed per second of output). */
+export const VEED_LIPSYNC_FEATURE_KEY = 'generate:veed_lipsync';
+
+/** Feature key for VEED avatar (no resolution variants — billed per second of output). */
+export const VEED_AVATAR_FEATURE_KEY = 'generate:veed_avatar';
+
 export interface ReserveCreditsInput {
   userId: string;
   featureKey: string;
