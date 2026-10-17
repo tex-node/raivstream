@@ -142,7 +142,10 @@ describe('renderOutputDerivative — Phase C background music', () => {
       const amixArgs = deps.ffmpegCalls[2]!.join(' ');
       expect(amixArgs).toContain('amix');
       expect(amixArgs).toContain('volume=0.3');
-      expect(amixArgs).toContain('-shortest');
+      // D-031: -shortest is forbidden; an explicit -t bound + -fs cap instead.
+      expect(amixArgs).not.toContain('-shortest');
+      expect(amixArgs).toMatch(/-t \d+/);
+      expect(amixArgs).toMatch(/-fs \d+G/);
     });
 
     it('fetches video, audio, and music', async () => {

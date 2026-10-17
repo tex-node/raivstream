@@ -67,16 +67,34 @@ async function probeWithFfprobe(filePath: string): Promise<MediaProbe> {
   });
 }
 
-async function runFfmpeg(args: string[]): Promise<void> {
+/** Wall-clock ceiling per ffmpeg spawn. A looped input can otherwise encode forever. */
+const FFMPEG_MIN_WALL_MS = 60_000;
+const FFMPEG_MAX_WALL_MS = 4 * 60 * 1000;
+
+async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('ffmpeg', ['-y', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn('ffmpeg', ['-y', '-threads', '2', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
+    let timedOut = false;
+    const timeoutMs = Math.min(
+      FFMPEG_MAX_WALL_MS,
+      Math.max(FFMPEG_MIN_WALL_MS, Math.round(expectedSeconds * 1000 * 4)),
+    );
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += String(chunk);
     });
-    child.on('error', reject);
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     child.on('close', (code) => {
-      if (code === 0) resolve();
+      clearTimeout(timer);
+      if (timedOut) reject(new Error(`ffmpeg timed out (killed) after ${timeoutMs}ms`));
+      else if (code === 0) resolve();
       else reject(new Error(`ffmpeg exited with ${code}: ${stderr.slice(-2000)}`));
     });
   });
@@ -277,12 +295,20 @@ async function muxNativeAudioBed(opts: {
     '-c:v', 'copy',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-shortest',
+    // D-031: explicit bound instead of -shortest (the video input is finite).
+    '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+    '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
     '-movflags', '+faststart',
     outputPath,
   ]);
   return outputPath;
 }
+
+import {
+  FFMPEG_MAX_DURATION_SECONDS,
+  FFMPEG_MAX_FILE_SIZE_CONCAT,
+  FFMPEG_MAX_FILE_SIZE_SCENE,
+} from '../../ffmpegSafety';
 
 export interface EndCardPreflightResult {
   /** ffmpeg was built with the drawtext filter (`--enable-libfreetype`). */
@@ -460,20 +486,26 @@ export async function renderOutputDerivative(
           doProbe(vFile).catch(() => ({ hasAudioStream: false, durationSeconds: null }) as MediaProbe),
           doProbe(aFile).catch(() => ({ hasAudioStream: true, durationSeconds: null }) as MediaProbe),
         ]);
-        // Explicit duration cap; fall back to -shortest only if ffprobe fails.
-        const durationArgs: string[] = aProbe.durationSeconds !== null
-          ? ['-t', aProbe.durationSeconds.toFixed(3)]
-          : ['-shortest'];
+        // Explicit duration cap. NEVER fall back to -shortest (unbounded with
+        // -stream_loop -1). If ffprobe failed, use a safe cap: the clip's own
+        // duration, else 15 s.
+        const safeCapSeconds = aProbe.durationSeconds ?? vProbe.durationSeconds ?? 15;
+        const durationArgs: string[] = ['-t', safeCapSeconds.toFixed(3)];
         if (vProbe.hasAudioStream) {
           // E1 — keep the source clip's native audio (e.g. H3 SFX) alongside the
           // narration: amix them so the stitched export is not narration-only.
           await doFfmpeg([
+            // Loop the VIDEO only. The clip is opened twice: input 0 is looped
+            // (video), input 1 is NOT looped and supplies the clip's own audio.
+            // -stream_loop -1 on a single input would loop its audio too, making
+            // the amix bed infinite (incident ca25: 4h27m / 20GB).
             '-stream_loop', '-1',
+            '-i', vFile,
             '-i', vFile,
             '-i', aFile,
             '-filter_complex',
               `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v];` +
-              `[0:a]volume=1[na];[1:a]volume=1[nr];[na][nr]amix=inputs=2:duration=shortest:normalize=0[aout]`,
+              `[1:a]volume=1[na];[2:a]volume=1[nr];[na][nr]amix=inputs=2:duration=longest:normalize=0[aout]`,
             '-map', '[v]',
             '-map', '[aout]',
             '-c:v', 'libx264',
@@ -481,6 +513,7 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
+            '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
             ...durationArgs,
             sceneOut,
           ]);
@@ -498,6 +531,7 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
+            '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
             ...durationArgs,
             sceneOut,
           ]);
@@ -519,6 +553,8 @@ export async function renderOutputDerivative(
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
         '-b:a', '128k',
+        '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+        '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
         '-movflags', '+faststart',
         concat,
       ]);
@@ -545,7 +581,10 @@ export async function renderOutputDerivative(
           '-c:v', 'copy',
           '-c:a', 'aac',
           '-b:a', '128k',
-          '-shortest',
+          // D-031: amix duration=first already bounds at the finite concat; the
+          // explicit caps are backstops instead of -shortest.
+          '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+          '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
           '-movflags', '+faststart',
           out,
         ]);
@@ -629,7 +668,9 @@ export async function renderOutputDerivative(
         '-c:v', 'copy',
         '-c:a', 'aac',
         '-b:a', '128k',
-        '-shortest',
+        // D-031: atrim already bounds at totalDur; caps replace -shortest.
+        '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+        '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
         '-movflags', '+faststart',
         out,
       ]);
