@@ -6957,10 +6957,22 @@ export const storyRouter = router({
 
       if (renderContext.creditCost > 0) {
         try {
-          const charged = await deductCredits(ctx.prisma, ctx.user.id, MOVIE_RENDER_FEATURE_KEY, job.id, 'Story movie render', creditKeys.movieRender.charge(job.id));
-          await (ctx.prisma as any).movieRenderJob.update({
-            where: { id: job.id },
-            data: { creditsCharged: charged },
+          // Atomic: deductCredits and creditsCharged must commit together.
+          // Prisma 5.x supports nested $transaction via savepoints, so passing
+          // the outer tx client into deductCredits is safe.
+          await ctx.prisma.$transaction(async (tx) => {
+            const c = await deductCredits(
+              tx as unknown as typeof ctx.prisma,
+              ctx.user.id,
+              MOVIE_RENDER_FEATURE_KEY,
+              job.id,
+              'Story movie render',
+              creditKeys.movieRender.charge(job.id),
+            );
+            await (tx as any).movieRenderJob.update({
+              where: { id: job.id },
+              data: { creditsCharged: c },
+            });
           });
         } catch (error) {
           await (ctx.prisma as any).movieRenderJob.update({
