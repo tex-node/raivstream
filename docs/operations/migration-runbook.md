@@ -86,6 +86,41 @@ any other shared-config edit must follow **backup → write a file → validate 
 unless explicitly approved. Full rules + the 2026-10-15 empty-crontab incident:
 `docs/operations/vps-change-rules.md`.
 
+## 1d. Check C-3 — Before any `docker compose` change, enumerate the reconcilers
+
+**Rule (learned 2026-10-17):** a compose file may be *overridden* by a reconciler
+(cron, systemd timer, or watchdog container) that runs `docker compose up -d` from a
+**different** directory. Editing the wrong compose does not persist.
+
+```bash
+# What is running?
+docker ps -a
+
+# What reconcilers exist?
+crontab -l | grep -iE 'docker|compose|watchdog'
+systemctl list-timers | grep -iE 'docker|compose|watchdog'
+ps aux | grep -iE 'watchdog|compose' | grep -v grep
+
+# Which compose files exist, and which directory does each reconciler use?
+find / -name 'docker-compose*.yml' 2>/dev/null | head -20
+grep -n 'COMPOSE_DIR\|cd ' /usr/local/bin/*watchdog*.sh 2>/dev/null
+```
+
+Before editing a compose file, identify the reconciler's source of truth
+(here: `COMPOSE_DIR=/opt/supabase-project`, **not** `/root/supabase/docker`).
+Either edit the reconciler's compose, or apply **defense-in-depth** that survives
+reconciliation (iptables `DOCKER-USER` runs before Docker's NAT chains and is
+orthogonal to `compose up`).
+
+**Rule:** host processes (e.g. the Next.js app) must reach containers via
+`127.0.0.1` + a **published loopback port** — never a Docker bridge IP. Bridge IPs
+are reassigned on container recreation; this was the root cause of the 2026-10-17
+incident (the app pointed at `172.18.0.2`, which became `supabase-imgproxy`).
+
+**Rule:** before any `docker compose up -d`, list every service that will be
+recreated and every host process that depends on the current container IPs or on a
+port that another service also binds (e.g. the pooler and the db both wanting 5432).
+
 ## 2. Rollback guidance
 
 - **Additive** migrations: no rollback needed; leave the columns/tables in place.
