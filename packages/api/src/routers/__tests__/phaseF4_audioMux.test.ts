@@ -134,7 +134,7 @@ describe('F4 §A — renderOutputDerivative: audio mux path', () => {
     expect(capturedArgLists).toHaveLength(4);
   });
 
-  it('per-scene FFmpeg args include -stream_loop -1 and -shortest (loop video to audio length)', async () => {
+  it('per-scene FFmpeg args: video-only loop, explicit -t, no -shortest, -fs cap (D-031)', async () => {
     const capturedArgLists: string[][] = [];
 
     const deps = {
@@ -158,9 +158,17 @@ describe('F4 §A — renderOutputDerivative: audio mux path', () => {
 
     // First call = per-scene mux
     const perSceneArgs = capturedArgLists[0]!;
+    // D-031: loop the VIDEO only (-stream_loop -1 present), NEVER -shortest.
     expect(perSceneArgs).toContain('-stream_loop');
     expect(perSceneArgs).toContain('-1');
-    expect(perSceneArgs).toContain('-shortest');
+    expect(perSceneArgs).not.toContain('-shortest');
+    // Explicit duration bound + size cap are mandatory.
+    const tIdx = perSceneArgs.indexOf('-t');
+    expect(tIdx).toBeGreaterThan(-1);
+    expect(Number(perSceneArgs[tIdx + 1])).toBeGreaterThan(0);
+    const fsIdx = perSceneArgs.indexOf('-fs');
+    expect(fsIdx).toBeGreaterThan(-1);
+    expect(perSceneArgs[fsIdx + 1]).toMatch(/^\d+M$/);
   });
 
   it('per-scene FFmpeg maps both video stream [v] and audio stream 1:a', async () => {

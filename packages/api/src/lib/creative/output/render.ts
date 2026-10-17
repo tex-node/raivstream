@@ -67,10 +67,6 @@ async function probeWithFfprobe(filePath: string): Promise<MediaProbe> {
   });
 }
 
-/** Output size caps (ffmpeg -fs), a backstop against a runaway encode. */
-export const SCENE_MAX_OUTPUT_BYTES = 500 * 1024 * 1024;
-export const CONCAT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024 * 1024;
-
 /** Wall-clock ceiling per ffmpeg spawn. A looped input can otherwise encode forever. */
 const FFMPEG_MIN_WALL_MS = 60_000;
 const FFMPEG_MAX_WALL_MS = 4 * 60 * 1000;
@@ -299,12 +295,20 @@ async function muxNativeAudioBed(opts: {
     '-c:v', 'copy',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-shortest',
+    // D-031: explicit bound instead of -shortest (the video input is finite).
+    '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+    '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
     '-movflags', '+faststart',
     outputPath,
   ]);
   return outputPath;
 }
+
+import {
+  FFMPEG_MAX_DURATION_SECONDS,
+  FFMPEG_MAX_FILE_SIZE_CONCAT,
+  FFMPEG_MAX_FILE_SIZE_SCENE,
+} from '../../ffmpegSafety';
 
 export interface EndCardPreflightResult {
   /** ffmpeg was built with the drawtext filter (`--enable-libfreetype`). */
@@ -509,7 +513,7 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
-            '-fs', String(SCENE_MAX_OUTPUT_BYTES),
+            '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
             ...durationArgs,
             sceneOut,
           ]);
@@ -527,6 +531,7 @@ export async function renderOutputDerivative(
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',
+            '-fs', String(FFMPEG_MAX_FILE_SIZE_SCENE),
             ...durationArgs,
             sceneOut,
           ]);
@@ -548,6 +553,8 @@ export async function renderOutputDerivative(
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
         '-b:a', '128k',
+        '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+        '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
         '-movflags', '+faststart',
         concat,
       ]);
@@ -574,7 +581,10 @@ export async function renderOutputDerivative(
           '-c:v', 'copy',
           '-c:a', 'aac',
           '-b:a', '128k',
-          '-shortest',
+          // D-031: amix duration=first already bounds at the finite concat; the
+          // explicit caps are backstops instead of -shortest.
+          '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+          '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
           '-movflags', '+faststart',
           out,
         ]);
@@ -658,7 +668,9 @@ export async function renderOutputDerivative(
         '-c:v', 'copy',
         '-c:a', 'aac',
         '-b:a', '128k',
-        '-shortest',
+        // D-031: atrim already bounds at totalDur; caps replace -shortest.
+        '-t', String(FFMPEG_MAX_DURATION_SECONDS),
+        '-fs', String(FFMPEG_MAX_FILE_SIZE_CONCAT),
         '-movflags', '+faststart',
         out,
       ]);
