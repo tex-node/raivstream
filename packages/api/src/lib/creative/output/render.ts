@@ -47,10 +47,22 @@ async function probeWithFfprobe(filePath: string): Promise<MediaProbe> {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
+    let timedOut = false;
+    // D-031: ffprobe reads a possibly-remote URL. Without a bound, a stalled
+    // socket hangs the export before ffmpeg is ever spawned.
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, FFMPEG_PROBE_TIMEOUT_MS);
     child.stdout.on('data', (chunk: Buffer) => { out += String(chunk); });
     child.stderr.on('data', (chunk: Buffer) => { err += String(chunk); });
-    child.on('error', reject);
+    child.on('error', (error) => { clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error(`ffprobe timed out after ${FFMPEG_PROBE_TIMEOUT_MS}ms`));
+        return;
+      }
       if (code !== 0) {
         reject(new Error(`ffprobe exited with ${code}: ${err.slice(-500)}`));
         return;
@@ -73,7 +85,10 @@ const FFMPEG_MAX_WALL_MS = 4 * 60 * 1000;
 
 async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('ffmpeg', ['-y', '-threads', '2', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    // D-031: every export ffmpeg gets -t/-fs/-threads inserted in front of its
+    // output. Call sites may set a tighter -t; this is the floor, applied once
+    // here instead of trusting ~10 hand-built argv arrays to stay in sync.
+    const child = spawn('ffmpeg', ['-y', ...applyFfmpegSafety(args)], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     let timedOut = false;
     const timeoutMs = Math.min(
@@ -305,9 +320,11 @@ async function muxNativeAudioBed(opts: {
 }
 
 import {
+  applyFfmpegSafety,
   FFMPEG_MAX_DURATION_SECONDS,
   FFMPEG_MAX_FILE_SIZE_CONCAT,
   FFMPEG_MAX_FILE_SIZE_SCENE,
+  FFMPEG_PROBE_TIMEOUT_MS,
 } from '../../ffmpegSafety';
 
 export interface EndCardPreflightResult {
@@ -336,11 +353,17 @@ async function runCapture(command: string, args: string[]): Promise<{ code: numb
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
+    // D-031: metadata/feature probes get the flat probe cap; a hung `ffmpeg
+    // -filters` or `fc-match` must not stall the end-card preflight forever.
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`${command} timed out after ${FFMPEG_PROBE_TIMEOUT_MS}ms`));
+    }, FFMPEG_PROBE_TIMEOUT_MS);
     child.stdout?.on('data', (chunk: Buffer) => {
       out += String(chunk);
     });
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ code: code ?? 1, out }));
+    child.on('error', (error) => { clearTimeout(timer); reject(error); });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ code: code ?? 1, out }); });
   });
 }
 

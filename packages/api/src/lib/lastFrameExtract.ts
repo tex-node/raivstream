@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { FFMPEG_PROBE_TIMEOUT_MS, ffmpegAbortSignal } from './ffmpegSafety';
 import { uploadBufferToR2 } from './r2';
 
 /**
@@ -22,15 +23,19 @@ import { uploadBufferToR2 } from './r2';
 export async function getVideoDurationSeconds(videoUrl: string): Promise<number | null> {
   return new Promise((resolve) => {
     let stdout = '';
+    // D-031: this probes a remote URL. Unbounded, a stalled socket held the
+    // settle path open indefinitely; the abort kills the child and fails soft.
+    const guard = ffmpegAbortSignal(FFMPEG_PROBE_TIMEOUT_MS);
     const child = spawn('ffprobe', [
       '-v', 'quiet',
       '-print_format', 'json',
       '-show_format',
       videoUrl,
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], signal: guard.signal });
     child.stdout.on('data', (chunk: Buffer) => { stdout += String(chunk); });
-    child.on('error', () => resolve(null));
+    child.on('error', () => { guard.cancel(); resolve(null); });
     child.on('close', (code) => {
+      guard.cancel();
       if (code !== 0) { resolve(null); return; }
       try {
         const dur = parseFloat((JSON.parse(stdout) as { format?: { duration?: string } }).format?.duration ?? '');
@@ -44,13 +49,15 @@ export async function getVideoDurationSeconds(videoUrl: string): Promise<number 
 
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const guard = ffmpegAbortSignal(FFMPEG_PROBE_TIMEOUT_MS);
+    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'], signal: guard.signal });
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += String(chunk);
     });
-    child.on('error', (error) => reject(error));
+    child.on('error', (error) => { guard.cancel(); reject(error); });
     child.on('close', (code) => {
+      guard.cancel();
       if (code === 0) resolve();
       else reject(new Error(`${command} exited with ${code}: ${stderr.slice(-2000)}`));
     });

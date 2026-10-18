@@ -19,6 +19,7 @@ import { getPublicUrlForKey, objectExistsInR2, removeFromR2, uploadBufferToR2 } 
 import { assertAudioReadyGate, buildMixedAudioTrack, muxAudioWithVideo, normalizeAudioInput, probeAudioAsset, probeAudioStream, type ResolvedCueSource } from './audioMixing';
 import type { AudioBlueprint, AudioBlueprintCue } from './audioPlanning';
 import { analytics } from './analytics';
+import { FFMPEG_THREADS } from './ffmpegSafety';
 
 const FINAL_STATUSES = new Set(['READY', 'FAILED', 'CANCELLED']);
 
@@ -41,8 +42,15 @@ export type MovieRenderWorkerOptions = {
 };
 
 function runCommand(command: string, args: string[]) {
+  // D-031 — cap encoder threads on the shared VPS. Injected here, at the single
+  // choke point, rather than in each of the ~10 argv arrays below: x264 otherwise
+  // takes every core, which is what starved UltraLeague and Powervend.
+  // Only the real runner adds it, so test-injected runners keep exact argv.
+  const argv = command === 'ffmpeg' && !args.includes('-threads')
+    ? ['-threads', String(FFMPEG_THREADS), ...args]
+    : args;
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(command, argv, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     const timeoutMs = Number(process.env.MOVIE_RENDER_COMMAND_TIMEOUT_MS ?? 300000);
@@ -758,16 +766,25 @@ export async function executeMovieRenderJob(
         // regardless of individual cue timing. Falls back to the render plan's
         // expected duration when a shot carries native audio but the project
         // has no audio blueprint (Phase 16.5).
+        const audioRuntimeSeconds = audioBlueprint?.runtimeSeconds ?? expectedDurationSeconds;
         await buildMixedAudioTrack({
           sources,
           duckingWindows: audioBlueprint?.duckingWindows ?? [],
-          canonicalRuntimeSeconds: audioBlueprint?.runtimeSeconds ?? expectedDurationSeconds,
+          canonicalRuntimeSeconds: audioRuntimeSeconds,
           outputPath: mixedAudioPath,
           run,
         });
 
         const muxedPath = path.join(tempDir, 'movie-with-audio.mp4');
-        await muxAudioWithVideo({ videoPath: outputPath, audioPath: mixedAudioPath, outputPath: muxedPath, run });
+        // D-031: the mux takes the canonical runtime instead of `-shortest`, so
+        // the bound is the runtime we promised, not whichever stream ends first.
+        await muxAudioWithVideo({
+          videoPath: outputPath,
+          audioPath: mixedAudioPath,
+          outputPath: muxedPath,
+          durationSeconds: audioRuntimeSeconds,
+          run,
+        });
 
         const audioProbe = await probeAudioStream(muxedPath, run);
         assertAudioReadyGate({ expectedAudio: true, probe: audioProbe, expectedVideoDurationSeconds: probe.durationSeconds });
