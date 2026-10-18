@@ -65,6 +65,9 @@ Use these exact words. Never collapse them.
 | P8-UNIVERSE | Voice, music, shared universes | Product | — | — | — | PROPOSED | — | AUDIO + WB-7A | Reconcile existing audio work | — |
 | SEC-RATELIMIT | API rate limiting (§1.4, Redis-backed, 11 buckets) | Engineering | main | 37a249b, 284218d, f317edc | — | DEPLOYED | PRs #68 / #69 (exec-shape fix) / #70 (logging); prod: 6 logins → 5×401 then 429 + Retry-After; health 100/100 | — | — | — |
 | SEC-RATELIMIT-2 | D-067 Phase 2 — read fail-open / write fail-closed under Redis outage | Engineering | — | — | — | PROPOSED | DECISIONS D-067 | Redis outage mitigation | Design the safety-class split | — |
+| SEC-CACHE | Redis-backed read cache (§1.5) — credit rates + feeds | Engineering | main | 94cdbda | — | DEPLOYED | PR #75; 42 trending requests → +1 `videos` seq_scan; cold 0.24 s / warm 0.05 s. Context user permanently excluded (D-069) | — | — | — |
+| SEC-CACHE-2 | D-070 — cache `story.getWorkspace` (per-user, 3–5 joins) | Engineering | — | — | — | PROPOSED | DECISIONS D-070 | Key + invalidation design | Design per-user keys | — |
+| SEC-CACHE-3 | D-072 — await `recomputeEngagementScore` (enables interaction invalidation) | Engineering | — | — | — | PROPOSED | DECISIONS D-072 | Fire-and-forget recompute | Make awaited before return | — |
 
 ## Change log
 
