@@ -199,9 +199,21 @@ jobs:
 
           echo "==> Restarting PM2 (web + export worker)..."
           set -a; source apps/web/.env.local 2>/dev/null || true; set +a
-          pm2 startOrReload ecosystem.config.cjs --update-env
-          sleep 3
+          # `startOrReload` mutates a live app object in place and does NOT replace
+          # its `script`. A stale object kept /usr/bin/bash while taking the new
+          # `start` arg: "/usr/bin/bash: start: No such file or directory",
+          # 727 restarts, app.raivstream.com 502. Delete the two named apps and
+          # start from the config so PM2 reads every field exactly.
+          # NEVER `pm2 delete all` — this VPS also runs other projects.
+          pm2 delete raivstream-web 2>/dev/null || true
+          pm2 delete raivstream-worker 2>/dev/null || true
+          pm2 start ecosystem.config.cjs --update-env
+          sleep 10
+          pm2 describe raivstream-web | grep -q online || (echo "Web offline" && exit 1)
           pm2 describe raivstream-worker | grep -q online || (echo "Worker offline" && exit 1)
+          # Persist the correct process list so a reboot restores THIS state,
+          # not the previous (broken) one.
+          pm2 save
 
           echo "==> Checking production health..."
           sleep 5
