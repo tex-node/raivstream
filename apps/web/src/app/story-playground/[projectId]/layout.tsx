@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
+import { partialNarrationWarning } from '@/lib/exportNarrationWarning';
 
 type VideoProgress = { current: number; total: number } | null;
 
@@ -69,12 +70,9 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
   const isGenerating = progress !== null;
   const exportStatus = storyVideoExport.data?.status;
 
-  // D-030 — narration is optional, and the export applies it only when every
-  // scene has it (all-or-nothing). Warn only in the partial case: zero scenes
-  // with narration is the normal clip-audio export, and a fully narrated
-  // project exports exactly as expected.
-  const scenesWithNarration = scenes.filter((scene) => Boolean(scene.narrationAudioUrl)).length;
-  const showNarrationWarning = scenesWithNarration > 0 && scenesWithNarration < scenes.length;
+  // D-030 — shared rule with the `story-playground/new` export surface, so the
+  // copy and the condition cannot drift. See lib/exportNarrationWarning.ts.
+  const narrationWarning = partialNarrationWarning(scenes);
 
   const generateAllSceneVideos = async () => {
     if (!projectId || isGenerating || !allScenesHaveStills) return;
@@ -122,9 +120,9 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
             </div>
           )}
 
-          {showNarrationWarning && (
+          {narrationWarning && (
             <div className="mb-2 rounded-xl bg-[rgba(217,70,168,0.10)] px-4 py-2 text-sm font-bold text-[var(--noc-magenta)]">
-              {scenesWithNarration} of {scenes.length} scenes have narration. Export will use clip audio only.
+              {narrationWarning}
             </div>
           )}
 

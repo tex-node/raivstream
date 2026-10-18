@@ -11,6 +11,7 @@ import { useUser } from '@/lib/auth';
 import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageModel } from '@/lib/sceneImageModels';
 import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 import { VISUAL_STYLE_OPTIONS, R16_STYLE_VALUES, stylesForAudience, type VisualStyleOption, type VisualStyleValue } from '@/lib/storyVisualStyleOptions';
+import { partialNarrationWarning } from '@/lib/exportNarrationWarning';
 
 type PlaygroundStep = 'spark' | 'questions' | 'story';
 
@@ -49,6 +50,8 @@ type StoryScene = {
   characters: unknown;
   imageUrl: string | null;
   imageStatus: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED' | null;
+  /** Set once narration was generated (D-030 partial-narration warning). */
+  narrationAudioUrl?: string | null;
   latestImageAssetId: string | null;
   assets?: StorySceneAsset[];
   prompts?: StoryScenePrompt[];
@@ -676,6 +679,10 @@ export default function StoryPlaygroundPage() {
   const scenes = useMemo(() => {
     return ((project?.sceneSeeds ?? []) as StoryScene[]).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   }, [project?.sceneSeeds]);
+
+  // D-030 — same rule and copy as the project layout bar (shared helper), shown
+  // only in the export-ready state, before the creator clicks Export Story.
+  const narrationWarning = partialNarrationWarning(scenes);
 
   const characterMemory = useMemo(() => {
     return ((project?.characterMemory ?? []) as StoryCharacterMemory[]).slice();
@@ -1621,6 +1628,11 @@ export default function StoryPlaygroundPage() {
                     ) : allScenesHaveReadyVideo ? (
                       <div className="flex flex-col gap-2">
                         <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-magenta)]">All scenes ready!</p>
+                        {narrationWarning && (
+                          <p className="rounded-lg bg-[rgba(217,70,168,0.10)] px-3 py-2 text-xs font-bold text-[var(--noc-magenta)]">
+                            {narrationWarning}
+                          </p>
+                        )}
                         <button
                           onClick={() => requestStoryVideoExport.mutate({ projectId })}
                           disabled={requestStoryVideoExport.isPending}
