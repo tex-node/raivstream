@@ -41,7 +41,7 @@ The single place to record **what was decided, why, and where it is implemented*
 |---|---|---|---|---|---|
 | D-020 | 2026-10-15 | **STORY-PACE**: scene count follows story length. Short = 3–4 scenes, 12–25 narration words each; Medium = 5–7 scenes. Scene duration = `ceil(words / 2) + 2`, clamped to 4–15 s. The old `Math.max(beats.length, 6)` and fixed 5 s default are removed. | Short stories were stretched into 6 rushed scenes. | `story.ts` (`docs/architecture/story-pace.md` planned — not yet in repo) | DEPLOYED behind flag |
 | D-021 | 2026-10-16 | STORY-PACE is gated by `STORY_PACE_ENABLED` plus the per-user allowlist `STORY_PACE_USER_IDS`. Only the allowlist is currently set (in `apps/web/.env.local`); the global `STORY_PACE_ENABLED` is unset. **Enabling it for everyone is an open decision.** | Controlled rollout. | `docs/operations/environment-layout.md` | OPEN: global enable |
-| D-022 | 2026-10-16 | **Maximum 10 scenes per episode.** Extra scenes become the next episode(s). Export works per episode. | Demo: projects reached 15–30+ scenes, and exports failed. | planned PR C (not opened) | IN PROGRESS |
+| D-022 | 2026-10-16 | **Maximum 10 scenes per episode** (product proposal). Extra scenes become the next episode(s); export works per episode. | **Not a demo fix.** The 2026-10-16 demo failure was the ca25 `-stream_loop -1` runaway (D-031) on a 9-scene project — not scene count. Evidence: 11–18 scene projects export successfully (7 READY exports across 5 projects); the three largest projects (50–55 scenes) have never been exported. Reclassified as a product proposal for UX and future scalability, not a bug fix. | planned PR C (not opened) | DEFERRED |
 | D-023 | 2026-10-15 | **Story scenes always generate at 480p.** | Cost and margin; matches the pricing model. | Generation + pricing | DECIDED |
 
 ## 4. Export
@@ -105,16 +105,15 @@ The single place to record **what was decided, why, and where it is implemented*
 
 1. **PR A**: safe FFmpeg export (D-031). **DONE** — PR #58 + PR #60 (`41eb27b`).
 2. **PR B**: combined hotfix: export without narration, R16 narration routing, FAILED rows (D-012, D-030, D-032). **In progress.**
-3. **PR C**: 10-scene episode cap with per-episode export (D-022).
-4. **Goodwill credits** (D-044), after owner approval.
-5. **EXPORT-WORKER** Phase A (D-033).
-6. **VPS migration** Phase A (D-050), once PR A and PR B are deployed.
-7. **Fix the reserve/settle flag coupling** (D-043) — **DONE** (PR #64). Next: **per-second pricing go-live** (D-040, D-041), now unblocked.
-8. **Model retirement** (D-001).
-9. **Avatar** Phase A (D-002).
-10. **MEDIA-LIB**, R16 first (D-004).
-11. **ADMIN-INSIGHTS** (D-005).
-12. **BG-JOBS** (D-006).
+3. **Goodwill credits** (D-044), after owner approval.
+4. **EXPORT-WORKER** Phase A (D-033).
+5. **VPS migration** Phase A (D-050), once PR A and PR B are deployed.
+6. **Fix the reserve/settle flag coupling** (D-043) — **DONE** (PR #64). Next: **per-second pricing go-live** (D-040, D-041), now unblocked.
+7. **Model retirement** (D-001).
+8. **Avatar** Phase A (D-002).
+9. **MEDIA-LIB**, R16 first (D-004).
+10. **ADMIN-INSIGHTS** (D-005).
+11. **BG-JOBS** (D-006).
 
 **Owner actions:** set the Cloudflare R2 lifecycle rules (may need the encrypted prefixes); review PR #44 (auth refresh race).
 
@@ -123,6 +122,22 @@ The single place to record **what was decided, why, and where it is implemented*
 - Enable STORY-PACE for everyone, or keep the allowlist? (D-021)
 - Set `narrationText` when scenes are created for EDUCATIONAL projects?
 - End card: fail-closed or best-effort when it can't render?
+
+## Product decisions (deferred)
+
+- **D-022 — 10-scene episode cap.** Deferred pending evidence. It is **not** a bug
+  fix: the 2026-10-16 demo failure was the ca25 `-stream_loop -1` runaway (D-031)
+  on a **9-scene** project, and 11–18 scene projects export successfully today.
+  Any implementation also carries a real behaviour change — `EPISODE_REQUIRED`
+  for multi-episode projects — which would break `scripts/f5_acceptance.mjs`
+  (a server-side caller), not just the UI.
+
+  > **Untested risk:** a 50+ input concat has never run in production. Real but
+  > untested — plausible concern (filter graph size, memory, the `-t 1800` cap,
+  > `-fs 2G`). Before any episode-cap implementation, the owner should validate by
+  > exporting a 15–30 scene project and confirming success. If it succeeds, D-022
+  > is pure UX and can be sized honestly. If it fails, the `errorMessage` reveals
+  > the actual mechanism (cap/memory/wall-clock) and the fix is aimed correctly.
 
 ## Code differs from a decision (verified 2026-10-16 @ `46dbf0c`)
 
