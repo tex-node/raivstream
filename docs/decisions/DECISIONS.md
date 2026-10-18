@@ -74,7 +74,7 @@ The single place to record **what was decided, why, and where it is implemented*
 | ID | Date | Decision | Where | Status |
 |---|---|---|---|---|
 | D-042 | 2026-10-15 | Credits use **reserve → settle → release** with a required (NOT NULL) `idempotencyKey` on every ledger write. | `credits.ts`, `schema.prisma`; PR #54 | DONE |
-| D-043 | 2026-10-16 | **Fix the flag coupling before pricing go-live**: settle currently runs only when `CREDIT_RESERVE_SETTLE_ENABLED` is also on, so jobs can be left with credits reserved. | `credits.ts` | OPEN BUG, blocks D-040 |
+| D-043 | 2026-10-16 | **Fix the flag coupling before pricing go-live**: compensation is now decided by the reservation's own state, not by `CREDIT_RESERVE_SETTLE_ENABLED` / `VIDEO_PER_SECOND_PRICING`. Terminal settle/release are unconditional (no-ops without a HELD row); failure compensation releases when a reservation exists and refunds otherwise (no double compensation). `releaseStuckReservations()` now runs once per web process as the safety net. | PR #64 `4927c08`; `credits.ts` (`compensateFailedGeneration`), `generation.ts`, `story.ts`, `app/api/trpc/[trpc]/route.ts` | DONE — unblocks D-040 |
 | D-044 | 2026-10-16 | **Goodwill credit of 5,000** each to the two users whose exports failed at the demo (oluwadarasimiopasina@gmail.com, emmanuelbalogun908@gmail.com). Production data change: confirm before running. | Admin action | PENDING approval |
 
 ## 6. Infrastructure & operations
@@ -109,7 +109,7 @@ The single place to record **what was decided, why, and where it is implemented*
 4. **Goodwill credits** (D-044), after owner approval.
 5. **EXPORT-WORKER** Phase A (D-033).
 6. **VPS migration** Phase A (D-050), once PR A and PR B are deployed.
-7. **Fix the reserve/settle flag coupling** (D-043), then **per-second pricing go-live** (D-040, D-041).
+7. **Fix the reserve/settle flag coupling** (D-043) — **DONE** (PR #64). Next: **per-second pricing go-live** (D-040, D-041), now unblocked.
 8. **Model retirement** (D-001).
 9. **Avatar** Phase A (D-002).
 10. **MEDIA-LIB**, R16 first (D-004).
