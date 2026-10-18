@@ -121,6 +121,30 @@ incident (the app pointed at `172.18.0.2`, which became `supabase-imgproxy`).
 recreated and every host process that depends on the current container IPs or on a
 port that another service also binds (e.g. the pooler and the db both wanting 5432).
 
+## 1e. PM2 env loading — `--update-env` does not read env files
+
+`pm2 restart <app> --update-env` refreshes the process environment from the
+**shell that runs the command**, not from `apps/web/.env.local`. A bare restart
+therefore picks up nothing, and the file can look correct while the running
+process never sees the change. That is the same class of failure as the
+2026-10-17 incident — trusting the file instead of the process. The deploy
+workflow sources the file first, so replicate that exactly:
+
+```bash
+cd /root/raivstream
+set -a; . apps/web/.env.local 2>/dev/null || true; set +a
+pm2 restart raivstream-web --update-env
+pm2 env 0 | grep -c '^UPSTASH_REDIS_'   # expect the number of vars you added
+```
+
+Diagnose env problems from `pm2 env <id>`, never from the file alone. Note the
+two formats differ: `pm2 env` prints `KEY: value`, so extract with
+`sed -E 's/^[^:]+: ?//'`, not `cut -d= -f2-`. Values only the Prisma CLI or cron
+needs belong in the root `.env`; anything the web app reads belongs in
+`apps/web/.env.local` (D-054). The deploy script backs up and restores
+`.env.local`, so edits there survive deploys; a `.env.local.bak-*` left behind
+after a manual change can be pruned once the app is verified healthy.
+
 ## 2. Rollback guidance
 
 - **Additive** migrations: no rollback needed; leave the columns/tables in place.

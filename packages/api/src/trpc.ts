@@ -2,12 +2,15 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 import { ZodError } from 'zod';
 import type { PrismaClient } from '@raivstream/database';
+import { enforceRateLimit } from './lib/resilience/rateLimitMiddleware';
 
 // Generic context shape — concrete context is created per-adapter (see apps/web/src/app/api/trpc)
 export interface Context {
   prisma: PrismaClient;
   userId: string | null;
   isR16?: boolean;
+  /** Client IP, resolved from x-forwarded-for / x-real-ip at the adapter. */
+  ip?: string | null;
   user: {
     id: string;
     email: string;
@@ -38,6 +41,12 @@ const t = initTRPC.context<Context>().create({
       cause && typeof cause === 'object' && cause.credit && typeof cause.credit === 'object'
         ? (cause.credit as { required: number; balance: number; shortfall: number; featureKey: string })
         : null;
+    // Rate-limit rejection (§1.4) — tRPC maps TOO_MANY_REQUESTS to HTTP 429 but
+    // cannot set Retry-After, so the backoff hint travels in the error body.
+    const rateLimit =
+      cause && typeof cause === 'object' && 'retryAfterMs' in cause && 'bucket' in cause
+        ? (cause as unknown as { bucket: string; retryAfterMs: number })
+        : null;
     return {
       ...shape,
       // Strip stack traces and internal messages in production (security: #9 on checklist)
@@ -50,6 +59,7 @@ const t = initTRPC.context<Context>().create({
         stack: IS_PROD ? undefined : shape.data?.stack,
         zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
         ...(credit ? { credit } : {}),
+        ...(rateLimit ? { rateLimit: { bucket: rateLimit.bucket, retryAfterMs: rateLimit.retryAfterMs } } : {}),
       },
     };
   },
@@ -121,12 +131,25 @@ const requireR16 = t.middleware(({ ctx, next }) => {
   return next();
 });
 
+// Rate limiting (operational patterns §1.4). Runs after the auth middleware in
+// every tier so `ctx.user` is populated; the bucket is chosen from the role and
+// the procedure path. State lives in Redis, shared with every process.
+const rateLimit = t.middleware(async ({ ctx, path, next }) => {
+  await enforceRateLimit({
+    path,
+    user: ctx.user ? { id: ctx.user.id, role: ctx.user.role } : null,
+    userId: ctx.userId,
+    ip: ctx.ip ?? null,
+  });
+  return next();
+});
+
 // Export reusable router and procedure helpers
 export const router = t.router;
-export const publicProcedure = t.procedure;
-export const protectedProcedure = t.procedure.use(isAuthed);
-export const creativeProcedure = t.procedure.use(isAuthed).use(isNotR16);
-export const r16Procedure = t.procedure.use(isAuthed).use(requireR16);
-export const adminProcedure = t.procedure.use(isAdmin);
-export const moderatorProcedure = t.procedure.use(isAdminOrModerator);
+export const publicProcedure = t.procedure.use(rateLimit);
+export const protectedProcedure = t.procedure.use(isAuthed).use(rateLimit);
+export const creativeProcedure = t.procedure.use(isAuthed).use(isNotR16).use(rateLimit);
+export const r16Procedure = t.procedure.use(isAuthed).use(requireR16).use(rateLimit);
+export const adminProcedure = t.procedure.use(isAdmin).use(rateLimit);
+export const moderatorProcedure = t.procedure.use(isAdminOrModerator).use(rateLimit);
 export const middleware = t.middleware;

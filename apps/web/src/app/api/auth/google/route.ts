@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '@raivstream/database';
 import { googleAuthUser } from '@raivstream/api/src/lib/authService';
-import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+import { rateLimitRoute } from '@/lib/rateLimit';
 import { buildAuthCookies, jsonResponse } from '@/lib/cookies';
 
 const schema = z.object({
@@ -9,11 +9,9 @@ const schema = z.object({
 });
 
 export async function POST(req: Request): Promise<Response> {
-  const ip = getClientIp(req);
-
   // ── Rate limit: 10 attempts per 15 minutes per IP ───────────────────────────
-  const limit = await rateLimit('google-login', ip, { max: 10, windowSec: 900 });
-  if (!limit.success) return rateLimitResponse(limit);
+  const limited = await rateLimitRoute(req, 'authGoogleLogin');
+  if (limited) return limited;
 
   // ── Parse and validate input ───────────────────────────────────────────────
   let body: unknown;

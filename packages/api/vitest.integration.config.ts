@@ -24,5 +24,6 @@ export default defineConfig({
     fileParallelism: false,
     hookTimeout: 60_000,
     testTimeout: 60_000,
+    setupFiles: ['src/test/setupRateLimit.ts'],
   },
 });
