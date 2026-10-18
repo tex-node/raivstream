@@ -40,6 +40,10 @@ export async function rateLimitRoute(req: Request, bucket: BucketName): Promise<
   const result = await checkLimit(`ip:${ip}`, bucket);
   if (result.allowed) return null;
 
+  // Credential endpoints are the most abuse-relevant surface, so a hit is
+  // logged here; the tRPC middleware logs its own rejections.
+  console.warn(`[ratelimit] exceeded bucket=${bucket} key=ip:${ip} retryAfterMs=${result.retryAfterMs}`);
+
   return new Response(
     JSON.stringify({ error: 'Too many requests — please try again later' }),
     {
