@@ -4,8 +4,9 @@ The single place to record **what was decided, why, and where it is implemented*
 
 **Repo location:** `docs/decisions/DECISIONS.md`
 **Owner:** one agent at a time (the agent that owns the change appends the entry in the same PR).
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-18
 **Verified against:** `origin/main` `46dbf0ce5f1b7c918848f7192c33d4582d4f148f` on 2026-10-16 (read-only pass — see “Code differs” at the end).
+**Re-verified:** `origin/main` `7678ba39` on 2026-10-18 — D-031 closed by PR #60 `41eb27b`; D-032 timeout path verified; see “Code differs” for what still differs.
 
 ## How to use this file
 
@@ -32,7 +33,7 @@ The single place to record **what was decided, why, and where it is implemented*
 |---|---|---|---|---|---|
 | D-010 | 2026-10-15 | **R16 is limited to Anime, 3D Animation and Cartoon styles.** Enforced on style change (`assertR16VisualStyle`) and again at generation time (`enforceR16Style`). | Safety and brand: no photoreal R16 content. | `storyVisualStyles.ts`, `story.ts`; PR #42 | DONE |
 | D-011 | 2026-10-15 | R16 access is guarded by `r16Procedure`; creative tools use `creativeProcedure` (`isNotR16`); sequences by `assertSequenceAllowed`. | Single choke points for R16 checks. | tRPC procedures | DONE |
-| D-012 | 2026-10-16 | Narration for **R16 STORY projects must use the story path, not the educational path.** | Demo bug: R16 narration was routed to the educational flow. | branch `wip/narration-fix-agent1` (PR B not opened) | IN PROGRESS |
+| D-012 | 2026-10-16 | Narration for **R16 STORY projects must use the story path, not the educational path.** | Demo bug: R16 narration was routed to the educational flow. | PR B (this turn); supersedes stale branch `wip/narration-fix-agent1` | OPEN |
 
 ## 3. Story & scene building
 
@@ -47,10 +48,10 @@ The single place to record **what was decided, why, and where it is implemented*
 
 | ID | Date | Decision | Reason | Where | Status |
 |---|---|---|---|---|---|
-| D-030 | 2026-10-16 | **Export must not require narration**, and must keep the clips' own audio (character dialogue). | Demo: exports blocked when narration was missing. | planned PR B (not opened) | IN PROGRESS |
-| D-031 | 2026-10-16 | **Safe FFmpeg rules**: never `-stream_loop -1` on a clip with its own audio; no `-shortest` fallback; use `-t`; a hard timeout; a `-fs` file-size cap; `-threads 2`; **one export at a time.** | A runaway export ran 4h27m, wrote 20 GB and starved the shared VPS. | planned PR A (not opened); `render.ts`, `storyVideoExportService.ts` | IN PROGRESS (top priority) |
-| D-032 | 2026-10-16 | A failed export must leave the row in `FAILED` state, never stuck "exporting". | Users stuck exporting for 15+ minutes. | PR #55 (open — FAILED-row reuse); stuck-export watchdog exists only on branch `wip/triage-local` | IN PROGRESS |
-| D-033 | 2026-10-16 | **EXPORT-WORKER**: move exports out of the `raivstream-web` process into an isolated worker. | One bad export must not take down the web app. | `docs/architecture/export-worker.md` (planned) | PLANNED, after PR A/B |
+| D-030 | 2026-10-16 | **Export must not require narration**, and must keep the clips' own audio (character dialogue). | Demo: exports blocked when narration was missing. | PR B (this turn) | OPEN |
+| D-031 | 2026-10-16 | **Safe FFmpeg rules**: never `-stream_loop -1` on a clip with its own audio; no `-shortest` fallback; use `-t`; a hard timeout; a `-fs` file-size cap; `-threads 2`; **one export at a time.** | A runaway export ran 4h27m, wrote 20 GB and starved the shared VPS. | PR #58 (incomplete) → PR #60 `41eb27b`; `ffmpegSafety.ts`, `render.ts`, `audioMixing.ts`, `movieRenderWorker.ts`, `lastFrameExtract.ts` | DONE (advisory lock deferred to D-033) |
+| D-032 | 2026-10-16 | A failed export must leave the row in `FAILED` state, never stuck "exporting". | Users stuck exporting for 15+ minutes. | PR #55 (FAILED-row reuse, merged) + PR #60 `41eb27b` (timeout → FAILED) | IN PROGRESS — timeout path verified in PR #60; crash-recovery sweep (stuck GENERATING rows on process death) ships with D-033 (worker startup sweep) |
+| D-033 | 2026-10-16 | **EXPORT-WORKER**: move exports out of the `raivstream-web` process into an isolated worker. | One bad export must not take down the web app. | `docs/architecture/export-worker.md` (planned) | PLANNED — next task after PR B. **Blocked by D-030**: the worker cannot deliver value while exports still require narration. |
 
 ## 5. Pricing & credits
 
@@ -102,8 +103,8 @@ The single place to record **what was decided, why, and where it is implemented*
 
 ## Current plan (order of work)
 
-1. **PR A**: safe FFmpeg export (D-031). Highest priority.
-2. **PR B**: combined hotfix: export without narration, R16 narration routing, FAILED rows (D-012, D-030, D-032).
+1. **PR A**: safe FFmpeg export (D-031). **DONE** — PR #58 + PR #60 (`41eb27b`).
+2. **PR B**: combined hotfix: export without narration, R16 narration routing, FAILED rows (D-012, D-030, D-032). **In progress.**
 3. **PR C**: 10-scene episode cap with per-episode export (D-022).
 4. **Goodwill credits** (D-044), after owner approval.
 5. **EXPORT-WORKER** Phase A (D-033).
@@ -128,6 +129,6 @@ The single place to record **what was decided, why, and where it is implemented*
 - **Code differs — D-001:** the model registry still exposes non-FLUX2/H3/VEED models. `enum GenerationModel` (`schema.prisma`) still contains `NANO_BANANA, GROK_IMAGINE, LTX2, WAN_25, KLING, KLING_I2V, KLING_R2V, HIGGSFIELD, VEO3, FLUX, HUNYUAN_VIDEO, COG_VIDEO_X, SEEDANCE` (plus `FLUX2, FLUX2_EDIT, H3_MAX, VEED_FABRIC`), and `MODEL_META` still defines several of them. Retirement not yet implemented (as stated).
 - **Code differs — D-020:** `Math.max(effectiveBlueprint.beats.length, 6)` is **still present** (`packages/api/src/routers/story.ts:4794`) as the fallback for `storyLength=null`, and the fixed 5 s duration fallback (`?? 5`) is still present in the scene-video duration expression. The tier limits and `ceil(words/2)+2` clamp themselves are implemented (`storyIntelligence/types.ts:213-214`, `storyPaceHelpers.ts:23-26`).
 - **Code differs — D-030:** on `main`, export still returns `PRECONDITION_FAILED` when an `EDUCATIONAL` project has scenes without `narrationAudioUrl` (`packages/api/src/lib/story/storyVideoExportService.ts:177-186`). The “export without narration” change is not yet on `main` (branch `wip/triage-local`).
-- **Code differs — D-031:** `render.ts` still uses `-stream_loop -1` (`packages/api/src/lib/creative/output/render.ts:215,463,482,528,616`) and `-shortest` (`…:280,476,493,540,624`); `audioMixing.ts:275` and `movieRenderWorker.ts:240,270` also use `-stream_loop`/`-shortest`. No `-t`-only path, `-fs` cap, hard timeout, `-threads 2`, or one-export-at-a-time guard is on `main`.
-- **Code differs — D-032:** no stuck-export watchdog exists on `main`; `requestExport` is synchronous and a crash mid-render can leave a row `GENERATING`. (A `failStuckExports()` watchdog + `admin.sweepStuckExports` exist only on branch `wip/triage-local`.)
+- **Code differs — D-031 (RESOLVED):** closed by PR #60 `41eb27b`. The caps are now inserted at the output section and wired into `runFfmpeg` as a single choke point, `-shortest` is gone from the audio mux (it takes the canonical runtime with an explicit `-t`), and probe spawns are bounded by `FFMPEG_PROBE_TIMEOUT_MS`. The **one-export-at-a-time** guard is the only part still unimplemented — it ships with D-033 as an advisory lock.
+- **Code differs — D-032:** the timeout path now marks the row `FAILED` (PR #60). Still missing: a crash-recovery sweep for rows left `GENERATING` when the process dies mid-render — deferred to D-033's worker startup sweep.
 - **Code differs — D-040 (config, not code):** `VIDEO_PER_SECOND_PRICING` is set in `/root/raivstream/.env` but **not** in `apps/web/.env.local`, so the running web process does not see it (`pm2 env 0` has no such var). The flag is effectively **off** in production even though the rates are seeded.
