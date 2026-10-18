@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PrismaClient } from '@raivstream/database';
-import { reserveCredits, settleCredits, releaseCredits, releaseStuckReservations, isReserveSettleEnabled } from '../credits';
+import { reserveCredits, settleCredits, releaseCredits, releaseStuckReservations, compensateFailedGeneration, isReserveSettleEnabled } from '../credits';
 
 type Reservation = {
   id: string;
@@ -83,7 +83,15 @@ function makeMockPrisma(seed?: { balances?: Record<string, number>; reservations
       },
     },
     creditTransaction: {
+      // refundCredits() is idempotent by looking the key up before writing.
+      findUnique: async ({ where }: { where: { idempotencyKey: string } }) =>
+        state.transactions.find((t) => t.idempotencyKey === where.idempotencyKey) ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (state.transactions.some((t) => t.idempotencyKey === data.idempotencyKey)) {
+          const err = new Error('unique constraint') as Error & { code?: string };
+          err.code = 'P2002';
+          throw err;
+        }
         state.transactions.push({ ...data });
         return data;
       },
@@ -219,5 +227,155 @@ describe('credit reserve/settle/release (flag-guarded)', () => {
     expect(state.balances.user1).toBe(80);
     expect(state.reservations.find((r) => r.idempotencyKey === 'reserve:job1')!.status).toBe('RELEASED');
     expect(state.reservations.find((r) => r.idempotencyKey === 'reserve:job2')!.status).toBe('HELD');
+  });
+});
+
+// ─── D-043: compensation follows the reservation, not the flag ────────────────
+//
+// The reserve flag decides whether a reservation is CREATED. It must not decide
+// how a terminal attempt is compensated: reserve and compensation usually happen
+// in different requests, so a flag flipped off (or missing from the running
+// process's env) used to strand HELD rows forever.
+
+function withFlagOff<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.CREDIT_RESERVE_SETTLE_ENABLED;
+  process.env.CREDIT_RESERVE_SETTLE_ENABLED = 'false';
+  return fn().finally(() => {
+    if (prev === undefined) delete process.env.CREDIT_RESERVE_SETTLE_ENABLED;
+    else process.env.CREDIT_RESERVE_SETTLE_ENABLED = prev;
+  });
+}
+
+describe('D-043 — settle/release ignore the reserve flag', () => {
+  it('1. settles a HELD reservation while the flag is OFF', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 100 } });
+    await reserveCredits(prisma, reserve(80));
+
+    const res = await withFlagOff(async () => {
+      expect(isReserveSettleEnabled()).toBe(false);
+      return settleCredits(prisma, 'reserve:job1', 80);
+    });
+
+    expect(res).toEqual({ settled: true, delta: 0 });
+    expect(state.reservations[0].status).toBe('SETTLED');
+  });
+
+  it('2. releases a HELD reservation while the flag is OFF', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 100 } });
+    await reserveCredits(prisma, reserve(80));
+
+    const res = await withFlagOff(async () => {
+      expect(isReserveSettleEnabled()).toBe(false);
+      return releaseCredits(prisma, 'reserve:job1');
+    });
+
+    expect(res).toEqual({ released: true });
+    expect(state.reservations[0].status).toBe('RELEASED');
+    expect(state.balances.user1).toBe(100);
+  });
+
+  it('3. settlement stays a no-op when no reservation exists (deduct path)', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 20 } });
+
+    const res = await settleCredits(prisma, 'reserve:never-created', 80);
+
+    expect(res).toEqual({ settled: false, delta: 0 });
+    expect(state.balances.user1).toBe(20);
+    expect(state.transactions).toHaveLength(0);
+  });
+});
+
+describe('D-043 — compensateFailedGeneration picks by reservation existence', () => {
+  const compensation = {
+    reservationKey: 'reserve:job1',
+    userId: 'user1',
+    creditsUsed: 80,
+    featureKey: 'generate:flux2',
+    referenceId: 'job1',
+    description: 'Refund: retry failed',
+    refundIdempotencyKey: 'refund:job1:1',
+  };
+  const refundCount = (tx: Record<string, unknown>[]) => tx.filter((t) => t.type === 'REFUND').length;
+
+  it('4. HELD reservation + flag ON → released, exactly one refund', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 100 } });
+    await reserveCredits(prisma, reserve(80));
+
+    const outcome = await compensateFailedGeneration(prisma, compensation);
+
+    expect(outcome).toBe('released');
+    expect(state.reservations[0].status).toBe('RELEASED');
+    expect(state.balances.user1).toBe(100);
+    expect(refundCount(state.transactions)).toBe(1);
+  });
+
+  it('5. HELD reservation + flag OFF → released, exactly one refund (no double compensation)', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 100 } });
+    await reserveCredits(prisma, reserve(80));
+
+    const outcome = await withFlagOff(() => compensateFailedGeneration(prisma, compensation));
+
+    expect(outcome).toBe('released');
+    expect(state.reservations[0].status).toBe('RELEASED');
+    // The critical guard: the deduct-path refund must NOT also fire.
+    expect(refundCount(state.transactions)).toBe(1);
+    expect(state.transactions.filter((t) => t.type === 'REFUND')[0]).toMatchObject({
+      description: 'Credit reservation released',
+    });
+    expect(state.balances.user1).toBe(100);
+  });
+
+  it('6. no reservation + flag ON → refunded', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 20 } });
+
+    const outcome = await compensateFailedGeneration(prisma, compensation);
+
+    expect(outcome).toBe('refunded');
+    expect(state.balances.user1).toBe(100);
+    expect(refundCount(state.transactions)).toBe(1);
+  });
+
+  it('7. no reservation + flag OFF → refunded', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 20 } });
+
+    const outcome = await withFlagOff(() => compensateFailedGeneration(prisma, compensation));
+
+    expect(outcome).toBe('refunded');
+    expect(state.balances.user1).toBe(100);
+    expect(refundCount(state.transactions)).toBe(1);
+  });
+
+  it('8. an already-terminal reservation releases nothing and is never refunded twice', async () => {
+    const { prisma, state } = makeMockPrisma({ balances: { user1: 100 } });
+    await reserveCredits(prisma, reserve(80));
+    await releaseCredits(prisma, 'reserve:job1');
+
+    const outcome = await compensateFailedGeneration(prisma, compensation);
+
+    expect(outcome).toBe('none');
+    expect(state.balances.user1).toBe(100);
+    expect(refundCount(state.transactions)).toBe(1);
+  });
+});
+
+describe('D-043 — releaseStuckReservations safety net', () => {
+  it('9. is idempotent across repeated sweeps', async () => {
+    const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const { prisma, state } = makeMockPrisma({
+      balances: { user1: 0 },
+      reservations: [
+        {
+          id: 'r1', idempotencyKey: 'reserve:job1', status: 'HELD', amount: 80, createdAt: old,
+          userId: 'user1', generationJobId: null, featureKey: 'generate:flux2', settledAmount: null,
+          referenceId: null, updatedAt: new Date(), settledAt: null, releasedAt: null,
+        },
+      ],
+    });
+
+    expect(await releaseStuckReservations(prisma, 24 * 60 * 60 * 1000)).toEqual({ scanned: 1, released: 1 });
+    expect(state.balances.user1).toBe(80);
+
+    expect(await releaseStuckReservations(prisma, 24 * 60 * 60 * 1000)).toEqual({ scanned: 0, released: 0 });
+    expect(state.balances.user1).toBe(80);
   });
 });

@@ -614,3 +614,54 @@ export async function releaseStuckReservations(
   }
   return { scanned: stuck.length, released };
 }
+
+export type CompensationOutcome = 'released' | 'refunded' | 'none';
+
+/**
+ * D-043 — compensate a failed generation attempt from the reservation's actual
+ * state, not from the reserve/settle flag.
+ *
+ * The flag decides whether a reservation is CREATED. It must not decide how we
+ * compensate, because reserve and compensation usually happen in different
+ * requests (submit vs. retry/poll): a flag turned off — or missing from the
+ * running process's env — used to strand the HELD row forever, and an off flag
+ * on a job that *had* reserved would then refund on top of an unreleased hold.
+ *
+ * Exactly one compensation happens: release the hold when a reservation row
+ * exists, otherwise refund the deduct-before-submit charge.
+ */
+export async function compensateFailedGeneration(
+  prisma: PrismaClient,
+  input: {
+    reservationKey: string;
+    userId: string;
+    creditsUsed: number;
+    featureKey: string;
+    referenceId: string;
+    description: string;
+    refundIdempotencyKey: string;
+  },
+): Promise<CompensationOutcome> {
+  const reservation = await prisma.creditReservation.findUnique({
+    where:  { idempotencyKey: input.reservationKey },
+    select: { status: true },
+  });
+
+  if (reservation) {
+    // A reservation already SETTLED/RELEASED releases nothing and must not be
+    // refunded on top — release() is the single source of truth for that.
+    const { released } = await releaseCredits(prisma, input.reservationKey);
+    return released ? 'released' : 'none';
+  }
+
+  await refundCredits(
+    prisma,
+    input.userId,
+    input.creditsUsed,
+    input.featureKey,
+    input.referenceId,
+    input.description,
+    input.refundIdempotencyKey,
+  );
+  return 'refunded';
+}
