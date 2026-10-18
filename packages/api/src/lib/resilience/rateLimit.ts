@@ -62,27 +62,12 @@ export interface RateLimitResult {
   bucket: BucketName;
 }
 
-let client: Redis | null = null;
-
-/** Lazy singleton — no connection at import time. Throws loudly if unconfigured. */
-function getRedis(): Redis {
-  if (!client) {
-    const url = process.env.UPSTASH_REDIS_URL;
-    const token = process.env.UPSTASH_REDIS_TOKEN;
-    if (!url || !token) {
-      throw new Error(
-        'Rate limiting requires UPSTASH_REDIS_URL and UPSTASH_REDIS_TOKEN. '
-        + 'They belong in apps/web/.env.local (the file PM2 sources), not the root .env.',
-      );
-    }
-    client = new Redis({ url, token });
-  }
-  return client;
-}
+// The client is shared with the read cache (§1.5) — see lib/redis.ts.
+import { getRedis, __setRedisClientForTests } from '../redis';
 
 /** Test seam — inject a fake client (see rateLimit.test.ts). */
 export function __setRateLimitRedisForTests(fake: unknown): void {
-  client = fake as Redis | null;
+  __setRedisClientForTests(fake);
 }
 
 /**

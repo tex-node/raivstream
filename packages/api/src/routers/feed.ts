@@ -1,5 +1,15 @@
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { z } from 'zod';
+import { cached } from '../lib/cache';
+
+/**
+ * §1.5 — cache key for a global feed. No user segment: `forYou` is not
+ * personalised (it orders by engagementScore), so one key serves everyone.
+ * Three dimensions only (cursor / limit / kidsOnly) — see D-071.
+ */
+function feedCacheKey(feed: 'forYou' | 'trending', input: { cursor?: string; limit: number; kidsOnly?: boolean }): string {
+  return `feed:${feed}:cursor=${input.cursor ?? 'null'}:limit=${input.limit}:kidsOnly=${input.kidsOnly ?? false}`;
+}
 
 // Shared select shape for video cards (includes cursor fields)
 const videoSelect = {
@@ -44,25 +54,27 @@ const nonKidsFilter = { moderationStatus: { not: 'REJECTED' as const }, withdraw
 export const feedRouter = router({
   // For You — recent public ready videos (MVP: ordered by publishedAt)
   forYou: publicProcedure.input(feedInput).query(async ({ ctx, input }) => {
-    const videos = await ctx.prisma.video.findMany({
-      where: {
-        status: 'READY',
-        isPublic: true,
-        ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
-        ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
-      },
-      orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
-      take: input.limit + 1,
-      select: videoSelect,
+    return cached(feedCacheKey('forYou', input), 30_000, async () => {
+      const videos = await ctx.prisma.video.findMany({
+        where: {
+          status: 'READY',
+          isPublic: true,
+          ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
+        },
+        orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
+        take: input.limit + 1,
+        select: videoSelect,
+      });
+
+      let nextCursor: string | undefined;
+      if (videos.length > input.limit) {
+        const last = videos.pop()!;
+        nextCursor = last.publishedAt?.toISOString();
+      }
+
+      return { videos, nextCursor };
     });
-
-    let nextCursor: string | undefined;
-    if (videos.length > input.limit) {
-      const last = videos.pop()!;
-      nextCursor = last.publishedAt?.toISOString();
-    }
-
-    return { videos, nextCursor };
   }),
 
   // Following — videos from creators the viewer follows
@@ -97,25 +109,27 @@ export const feedRouter = router({
 
   // Trending — highest engagement score
   trending: publicProcedure.input(feedInput).query(async ({ ctx, input }) => {
-    const videos = await ctx.prisma.video.findMany({
-      where: {
-        status: 'READY',
-        isPublic: true,
-        ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
-        ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
-      },
-      orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
-      take: input.limit + 1,
-      select: videoSelect,
+    return cached(feedCacheKey('trending', input), 30_000, async () => {
+      const videos = await ctx.prisma.video.findMany({
+        where: {
+          status: 'READY',
+          isPublic: true,
+          ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
+        },
+        orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
+        take: input.limit + 1,
+        select: videoSelect,
+      });
+
+      let nextCursor: string | undefined;
+      if (videos.length > input.limit) {
+        const last = videos.pop()!;
+        nextCursor = last.engagementScore?.toString();
+      }
+
+      return { videos, nextCursor };
     });
-
-    let nextCursor: string | undefined;
-    if (videos.length > input.limit) {
-      const last = videos.pop()!;
-      nextCursor = last.engagementScore?.toString();
-    }
-
-    return { videos, nextCursor };
   }),
 
   // Viewer's Pick — highest avg star rating with enough votes
