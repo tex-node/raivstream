@@ -68,6 +68,7 @@ Use these exact words. Never collapse them.
 | SEC-CACHE | Redis-backed read cache (§1.5) — credit rates + feeds | Engineering | main | 94cdbda | — | DEPLOYED | PR #75; 42 trending requests → +1 `videos` seq_scan; cold 0.24 s / warm 0.05 s. Context user permanently excluded (D-069) | — | — | — |
 | SEC-CACHE-2 | D-070 — cache `story.getWorkspace` (per-user, 3–5 joins) | Engineering | — | — | — | PROPOSED | DECISIONS D-070 | Key + invalidation design | Design per-user keys | — |
 | SEC-CACHE-3 | D-072 — await `recomputeEngagementScore` (enables interaction invalidation) | Engineering | — | — | — | PROPOSED | DECISIONS D-072 | Fire-and-forget recompute | Make awaited before return | — |
+| EXPORT-WORKER | D-033 — async story export via pg-boss worker | Engineering | main | eba6d67f, 607d4c78, 5aa8a8a8 | — | DEPLOYED | Queue pickup ~1 s; web restart mid-render survived (READY at 29 s); 0 orphaned ffmpeg on worker kill; crash recovery via pg-boss retry (80 s), sweep ignores rows <30 min. Client HTTP return (<2 s) pending browser check | Client-side return time unverified | Ask owner to verify in browser | — |
 
 ## Change log
 

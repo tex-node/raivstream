@@ -50,8 +50,8 @@ The single place to record **what was decided, why, and where it is implemented*
 |---|---|---|---|---|---|
 | D-030 | 2026-10-16 | **Export must not require narration**, and must keep the clips' own audio (character dialogue). | Demo: exports blocked when narration was missing. | PR B; `storyVideoExportService.ts` (gate removed, all-or-nothing audio mode), `layout.tsx` (partial-narration warning) | DONE (option a). **Follow-up (option b):** per-scene narration with silence/clip-audio for the gaps between narrated scenes — not implemented |
 | D-031 | 2026-10-16 | **Safe FFmpeg rules**: never `-stream_loop -1` on a clip with its own audio; no `-shortest` fallback; use `-t`; a hard timeout; a `-fs` file-size cap; `-threads 2`; **one export at a time.** | A runaway export ran 4h27m, wrote 20 GB and starved the shared VPS. | PR #58 (incomplete) → PR #60 `41eb27b`; `ffmpegSafety.ts`, `render.ts`, `audioMixing.ts`, `movieRenderWorker.ts`, `lastFrameExtract.ts` | DONE (advisory lock deferred to D-033) |
-| D-032 | 2026-10-16 | A failed export must leave the row in `FAILED` state, never stuck "exporting". | Users stuck exporting for 15+ minutes. | PR #55 (FAILED-row reuse, merged) + PR #60 `41eb27b` (timeout → FAILED) | IN PROGRESS — timeout path verified in PR #60; crash-recovery sweep (stuck GENERATING rows on process death) ships with D-033 (worker startup sweep) |
-| D-033 | 2026-10-16 | **EXPORT-WORKER**: move exports out of the `raivstream-web` process into an isolated worker. | One bad export must not take down the web app. | `docs/architecture/export-worker.md` (planned) | PLANNED — next task after PR B. **Blocked by D-030**: the worker cannot deliver value while exports still require narration. |
+| D-032 | 2026-10-16 | A failed export must leave the row in `FAILED` state, never stuck "exporting". | Users stuck exporting for 15+ minutes. | PR #55 (FAILED-row reuse) + PR #60 `41eb27b` (timeout → FAILED) + D-033 (crash recovery) | DONE — timeout path verified; crash recovery ships with the worker: pg-boss retry recovers a killed render in ~80 s, and the startup sweep catches rows older than 30 min |
+| D-033 | 2026-10-16 | **EXPORT-WORKER**: exports run in a dedicated PM2 process (`raivstream-worker`) via pg-boss. The web request validates, creates a `PENDING` row, enqueues, and returns immediately. Includes the two lifecycle fixes (wedged `FAILED` retry, wedged `GENERATING`), a startup sweep for crash-orphans, and `killAllChildren` on shutdown. | One bad export must not take down the web app (ca25). | PR #77 `eba6d67f` (worker), PR #78 `607d4c78` (PM2 deploy fix), PR #79 `5aa8a8a8` (D-073); `packages/api/src/lib/jobs/`, `worker/index.ts`, `ecosystem.config.cjs` | DEPLOYED — queue pickup ~1 s; web restart mid-render survived (**READY at 29 s**); **0 orphaned ffmpeg** on worker kill; crash recovery via pg-boss retry (~80 s), sweep correctly ignores rows <30 min. Client HTTP return time (<2 s) pending browser verification |
 
 ## 5. Pricing & credits
 
@@ -119,7 +119,7 @@ The single place to record **what was decided, why, and where it is implemented*
 1. **PR A**: safe FFmpeg export (D-031). **DONE** — PR #58 + PR #60 (`41eb27b`).
 2. **PR B**: combined hotfix: export without narration, R16 narration routing, FAILED rows (D-012, D-030, D-032). **In progress.**
 3. **Goodwill credits** (D-044), after owner approval.
-4. **EXPORT-WORKER** Phase A (D-033).
+4. **EXPORT-WORKER** Phase A (D-033) — **DONE** (PR #77, PM2 deploy fix #78, D-073 #79).
 5. **VPS migration** Phase A (D-050), once PR A and PR B are deployed.
 6. **Fix the reserve/settle flag coupling** (D-043) — **DONE** (PR #64). Next: **per-second pricing go-live** (D-040, D-041), now unblocked.
 7. **Model retirement** (D-001).
