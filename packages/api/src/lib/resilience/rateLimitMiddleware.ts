@@ -37,9 +37,9 @@ export function burstBucketFor(primary: BucketName): BucketName | null {
   }
 }
 
-export function buildRateLimitKey(subject: RateLimitSubject, bucket: BucketName): string {
-  if (subject.userId) return `user:${subject.userId}:${bucket}`;
-  return `ip:${subject.ip ?? 'unknown'}:${bucket}`;
+export function buildRateLimitKey(subject: RateLimitSubject): string {
+  if (subject.userId) return `user:${subject.userId}`;
+  return `ip:${subject.ip ?? 'unknown'}`;
 }
 
 let warnedMissingIp = false;
@@ -68,21 +68,21 @@ export async function enforceRateLimit(subject: RateLimitSubject): Promise<void>
 
   const primary = pickPrimaryBucket(subject);
 
-  const primaryResult = await checkLimit(buildRateLimitKey(subject, primary), primary);
+  const primaryResult = await checkLimit(buildRateLimitKey(subject), primary);
   if (!primaryResult.allowed) reject(primary, primaryResult.retryAfterMs);
 
   const burst = burstBucketFor(primary);
   if (burst) {
-    const burstResult = await checkLimit(buildRateLimitKey(subject, burst), burst);
+    const burstResult = await checkLimit(buildRateLimitKey(subject), burst);
     if (!burstResult.allowed) reject(burst, burstResult.retryAfterMs);
   }
 
   // Expensive work gets its own long + burst budget on top of the tier budget.
   if (subject.user && primary !== 'admin' && isExpensive(subject.path)) {
-    const expensive = await checkLimit(buildRateLimitKey(subject, 'expensive'), 'expensive');
+    const expensive = await checkLimit(buildRateLimitKey(subject), 'expensive');
     if (!expensive.allowed) reject('expensive', expensive.retryAfterMs);
 
-    const expensiveBurst = await checkLimit(buildRateLimitKey(subject, 'expensiveBurst'), 'expensiveBurst');
+    const expensiveBurst = await checkLimit(buildRateLimitKey(subject), 'expensiveBurst');
     if (!expensiveBurst.allowed) reject('expensiveBurst', expensiveBurst.retryAfterMs);
   }
 }

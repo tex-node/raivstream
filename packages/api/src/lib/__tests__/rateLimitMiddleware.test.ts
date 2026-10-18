@@ -40,7 +40,7 @@ describe('enforceRateLimit — bucket selection', () => {
     await enforceRateLimit({ path: 'feed.forYou', user: null, userId: null, ip: '203.0.113.9' });
 
     expect(bucketsChecked()).toEqual(['unauth', 'unauthBurst']);
-    expect(calls()[0]![0]).toBe('ip:203.0.113.9:unauth');
+    expect(calls()[0]![0]).toBe('ip:203.0.113.9');
   });
 
   it('8. authenticated requests use the user key and auth + authBurst', async () => {
@@ -52,7 +52,7 @@ describe('enforceRateLimit — bucket selection', () => {
     });
 
     expect(bucketsChecked()).toEqual(['auth', 'authBurst']);
-    expect(calls()[0]![0]).toBe('user:u1:auth');
+    expect(calls()[0]![0]).toBe('user:u1');
   });
 
   it('9. expensive procedures also hit the expensive buckets', async () => {
@@ -64,7 +64,7 @@ describe('enforceRateLimit — bucket selection', () => {
     });
 
     expect(bucketsChecked()).toEqual(['auth', 'authBurst', 'expensive', 'expensiveBurst']);
-    expect(calls()[2]![0]).toBe('user:u1:expensive');
+    expect(calls()[2]![0]).toBe('user:u1');
   });
 
   it('10. admins use the admin bucket only — no burst, no expensive', async () => {
@@ -76,7 +76,7 @@ describe('enforceRateLimit — bucket selection', () => {
     });
 
     expect(bucketsChecked()).toEqual(['admin']);
-    expect(calls()[0]![0]).toBe('user:admin1:admin');
+    expect(calls()[0]![0]).toBe('user:admin1');
   });
 
   it('11. over the limit throws TOO_MANY_REQUESTS with retryAfterMs in the cause', async () => {
@@ -106,7 +106,7 @@ describe('enforceRateLimit — bucket selection', () => {
     await enforceRateLimit({ path: 'feed.forYou', user: null, userId: null, ip: null });
     await enforceRateLimit({ path: 'feed.forYou', user: null, userId: null, ip: null });
 
-    expect(calls()[0]![0]).toBe('ip:unknown:unauth');
+    expect(calls()[0]![0]).toBe('ip:unknown');
     const ipWarnings = warn.mock.calls.filter((args) => String(args[0]).includes('ip_missing'));
     expect(ipWarnings).toHaveLength(1);
 

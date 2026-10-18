@@ -14,8 +14,9 @@ function alwaysAllowRedis() {
     incr: () => pipeline,
     expire: () => pipeline,
     get: () => pipeline,
-    // [incr, expire, get] results — one request counted, empty previous window.
-    exec: async () => [[null, 1], [null, 1], [null, 0]],
+    // Raw results, in pipeline order (the shape @upstash/redis v1.28 returns):
+    // one request counted, empty previous window.
+    exec: async () => [1, 1, 0],
   };
   return { pipeline: () => pipeline };
 }

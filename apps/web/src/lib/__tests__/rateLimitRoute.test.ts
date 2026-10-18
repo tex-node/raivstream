@@ -40,7 +40,7 @@ describe('rateLimitRoute', () => {
     const result = await rateLimitRoute(request(), 'authLogin');
 
     expect(result).toBeNull();
-    expect(checkLimitMock).toHaveBeenCalledWith('ip:203.0.113.7:authLogin', 'authLogin');
+    expect(checkLimitMock).toHaveBeenCalledWith('ip:203.0.113.7', 'authLogin');
   });
 
   it('14. returns 429 with Retry-After when over the limit', async () => {

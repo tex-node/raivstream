@@ -37,7 +37,7 @@ export async function rateLimitRoute(req: Request, bucket: BucketName): Promise<
   }
 
   const ip = getClientIp(req);
-  const result = await checkLimit(`ip:${ip}:${bucket}`, bucket);
+  const result = await checkLimit(`ip:${ip}`, bucket);
   if (result.allowed) return null;
 
   return new Response(

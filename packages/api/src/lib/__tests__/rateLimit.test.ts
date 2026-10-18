@@ -41,7 +41,8 @@ function makeFakeRedis() {
           return p;
         },
         async exec() {
-          return ops.map((op) => [null, op()]);
+          // @upstash/redis v1.28 returns raw results, in pipeline order.
+          return ops.map((op) => op());
         },
       };
       return p;
@@ -127,6 +128,39 @@ describe('checkLimit — sliding window', () => {
     const auth = await checkLimit('user:u1:b', 'auth');
     expect(auth.allowed).toBe(true);
     expect(auth.bucket).toBe('auth');
+  });
+
+  it('parses the [error, value] pair shape too (defensive)', async () => {
+    // The shipped bug: @upstash/redis v1.28 returns raw results, and reading
+    // only `[error, value]` pairs yielded `undefined` → count 0 → no limiting.
+    const store = new Map<string, number>();
+    const pairRedis = {
+      pipeline() {
+        const ops: Array<() => unknown> = [];
+        const p = {
+          incr(key: string) {
+            ops.push(() => {
+              const next = (store.get(key) ?? 0) + 1;
+              store.set(key, next);
+              return next;
+            });
+            return p;
+          },
+          expire() { ops.push(() => 1); return p; },
+          get(key: string) { ops.push(() => store.get(key) ?? null); return p; },
+          async exec() { return ops.map((op) => [null, op()]); },
+        };
+        return p;
+      },
+    };
+    __setRateLimitRedisForTests(pairRedis);
+
+    const first = await checkLimit('user:pair:test', 'expensive');
+    const second = await checkLimit('user:pair:test', 'expensive');
+
+    expect(first.allowed).toBe(true);
+    expect(first.remaining).toBe(BUCKETS.expensive.max - 1);
+    expect(second.remaining).toBe(BUCKETS.expensive.max - 2);
   });
 
   it('throws loudly when Redis is not configured', async () => {
