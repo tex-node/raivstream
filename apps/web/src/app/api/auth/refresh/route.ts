@@ -1,15 +1,13 @@
 import { prisma } from '@raivstream/database';
 import { refreshTokens } from '@raivstream/api/src/lib/authService';
-import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+import { rateLimitRoute } from '@/lib/rateLimit';
 import { buildAuthCookies, buildClearCookies, getCookieValue, jsonResponse, COOKIE_NAMES } from '@/lib/cookies';
 
 export async function POST(req: Request): Promise<Response> {
-  const ip = getClientIp(req);
-
   // ── Rate limit: 30 refreshes per 15 minutes per IP ───────────────────────
   // (generous limit since legitimate clients auto-refresh every 15 min)
-  const limit = await rateLimit('refresh', ip, { max: 30, windowSec: 900 });
-  if (!limit.success) return rateLimitResponse(limit);
+  const limited = await rateLimitRoute(req, 'authRefresh');
+  if (limited) return limited;
 
   // ── Read refresh token from httpOnly cookie ───────────────────────────────
   // (the raiv_rt cookie is scoped to Path=/api/auth/refresh so it's only sent here)

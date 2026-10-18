@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '@raivstream/database';
 import { registerUser } from '@raivstream/api/src/lib/authService';
-import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+import { rateLimitRoute } from '@/lib/rateLimit';
 import { buildAuthCookies, jsonResponse } from '@/lib/cookies';
 
 const schema = z.object({
@@ -15,11 +15,9 @@ const schema = z.object({
 });
 
 export async function POST(req: Request): Promise<Response> {
-  const ip = getClientIp(req);
-
   // ── Rate limit: 3 registrations per 15 minutes per IP ────────────────────
-  const limit = await rateLimit('register', ip, { max: 3, windowSec: 900 });
-  if (!limit.success) return rateLimitResponse(limit);
+  const limited = await rateLimitRoute(req, 'authRegister');
+  if (limited) return limited;
 
   let body: unknown;
   try {
