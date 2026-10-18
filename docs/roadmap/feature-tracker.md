@@ -62,6 +62,8 @@ Use these exact words. Never collapse them.
 | MOVIE-7C | Movie Builder from timeline | Product | — | — | — | PROPOSED | — | TL-7B | Design | — |
 | TRANS-7D | Scene transition generator | Product | — | — | — | PROPOSED | — | MOVIE-7C | Design | — |
 | P8-UNIVERSE | Voice, music, shared universes | Product | — | — | — | PROPOSED | — | AUDIO + WB-7A | Reconcile existing audio work | — |
+| SEC-RATELIMIT | API rate limiting (§1.4, Redis-backed, 11 buckets) | Engineering | main | 37a249b, 284218d, f317edc | — | DEPLOYED | PRs #68 / #69 (exec-shape fix) / #70 (logging); prod: 6 logins → 5×401 then 429 + Retry-After; health 100/100 | — | — | — |
+| SEC-RATELIMIT-2 | D-067 Phase 2 — read fail-open / write fail-closed under Redis outage | Engineering | — | — | — | PROPOSED | DECISIONS D-067 | Redis outage mitigation | Design the safety-class split | — |
 
 ## Change log
 
@@ -70,3 +72,5 @@ Use these exact words. Never collapse them.
 | 2026-10-15 | — | Tracker created | SESSION.md | Claude |
 | 2026-10-15 | P3-ENDCARD | DEPLOYED → ACCEPTED | export cmv9ysnu40001n8xkzhwktjw6, 32.000s, endCardApplied=true | Claude |
 | 2026-10-15 | STORY-PACE | PROPOSED → IMPLEMENTED | Phase B: schema, flag, blueprint, narrative engine, story.ts, 32 tests green; type-check clean | Claude |
+| 2026-10-18 | SEC-RATELIMIT | — → DEPLOYED | PRs #68 (Redis limiter), #69 (exec-shape fix — limiter was inert), #70 (auth-route logging); prod verification: 5×401 → 429 with Retry-After | agent |
+| 2026-10-18 | SEC-RATELIMIT-2 | — → PROPOSED | D-067 Phase 2 (read fail-open / write fail-closed) | agent |
