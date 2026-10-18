@@ -25,9 +25,10 @@ Use these exact words. Never collapse them.
 
 ## Release context
 
-- Production HEAD: `a9cb10f` (verify: `git -C /root/raivstream rev-parse HEAD`)
-- Upgrade branch: `feat/raivstream-upgrade` → Draft PR #4, HEAD `c8f4adb`, 34 commits on `a9cb10f`
-- CI on PR #4: `test-unit` PASS; `test-integration` 14/14 but job red on stale count assertion (4 → 14) in `.github/workflows/{ci,deploy}.yml`
+- Production HEAD: **`main`** — always verify with `git -C /root/raivstream rev-parse HEAD`; do not trust a SHA written here (last recorded at time of writing: `8969f6e`, 2026-10-18).
+- The bullets below are **historical (2026-10-15)** and describe the upgrade branch at that time. They are not current release state:
+  - Upgrade branch: `feat/raivstream-upgrade` → Draft PR #4, HEAD `c8f4adb`, 34 commits on `a9cb10f`
+  - CI on PR #4: `test-unit` PASS; `test-integration` 14/14 but job red on stale count assertion (4 → 14) in `.github/workflows/{ci,deploy}.yml`
 - Migrations: 9 upgrade migrations in **mixed** state after the 2026-10-13 incident (`…140000_not_null` applied then rolled back). Reconcile against `_prisma_migrations` before any apply. See `docs/operations/migration-runbook.md`.
 
 ## Features
