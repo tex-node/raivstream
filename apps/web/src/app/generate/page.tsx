@@ -21,7 +21,7 @@ const DEFAULT_VIDEO_MODEL = 'H3_MAX';
 // The studio is fal.ai-only: FLUX.2 for images and MiniMax H3 Turbo for video.
 // Every other (RunPod-backed) model is hidden here regardless of what
 // generation.listModels returns.
-const ALLOWED_MODELS       = ['FLUX2', 'H3_MAX'];
+const ALLOWED_MODELS       = ['FLUX2', 'H3_MAX', 'VEED_FABRIC'];
 const SLOW_MODELS         = ['LTX2', 'WAN_25', 'SEEDANCE', 'HUNYUAN_VIDEO', 'COG_VIDEO_X'];
 const HIDDEN_MODELS       = ['NANO_BANANA', 'VEO3'];
 const PROMPT_MAX_LENGTH   = 2000;
