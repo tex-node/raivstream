@@ -2,11 +2,34 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { appRouter } from '@raivstream/api';
 import { prisma } from '@raivstream/database';
 import { verifyAccessToken, extractBearerToken } from '@raivstream/api/src/lib/jwt';
+import { releaseStuckReservations } from '@raivstream/api/src/lib/credits';
 import { validateEnv, getAllowedOrigins } from '@/lib/env';
 import { COOKIE_NAMES, getCookieValue } from '@/lib/cookies';
 
 // Validate required environment variables on every cold start
 validateEnv();
+
+// ── D-043 safety net: release orphaned HELD credit reservations ──────────────
+// A process that dies between reserve and settle leaves a HELD row that no
+// request will ever revisit. This runs once per server process, fire-and-forget
+// (it must never delay or fail a request) and is idempotent — releaseCredits
+// no-ops on terminal rows. Skipped during `next build`, when Next.js imports
+// route modules but no server is serving traffic.
+const sweepGlobal = globalThis as typeof globalThis & { __rvStuckReservationSweepStarted?: boolean };
+if (
+  !sweepGlobal.__rvStuckReservationSweepStarted
+  && process.env.NODE_ENV !== 'test'
+  && process.env.NEXT_PHASE !== 'phase-production-build'
+) {
+  sweepGlobal.__rvStuckReservationSweepStarted = true;
+  void releaseStuckReservations(prisma)
+    .then(({ scanned, released }) => {
+      console.info(`[credits.sweep] scanned=${scanned} released=${released}`);
+    })
+    .catch((err: unknown) => {
+      console.error('[credits.sweep] failed:', err instanceof Error ? err.message : err);
+    });
+}
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 

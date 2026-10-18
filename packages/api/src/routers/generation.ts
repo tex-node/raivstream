@@ -8,6 +8,7 @@ import {
   reserveCredits,
   releaseCredits,
   settleCredits,
+  compensateFailedGeneration,
   resolveFeatureCreditRate,
   isReserveSettleEnabled,
   isVideoPerSecondPricingEnabled,
@@ -409,15 +410,14 @@ export const generationRouter = router({
           },
         });
 
-        // Reserve/settle lifecycle on a terminal transition (flag-guarded,
-        // idempotent). Actual-cost settlement awaits provider cost data.
-        if (isReserveSettleEnabled()) {
-          const rk = reserveKey(job.id, job.retryCount);
-          if (remote.status === 'completed') {
-            await settleCredits(ctx.prisma, rk, job.creditsUsed).catch(() => {});
-          } else if (remote.status === 'failed' || remote.status === 'cancelled') {
-            await releaseCredits(ctx.prisma, rk).catch(() => {});
-          }
+        // D-043 — compensate on the outcome, not on the flag. settle/release are
+        // no-ops unless a HELD reservation exists, and that hold may have been
+        // created in a different request (or by a process that saw the flag on).
+        const rk = reserveKey(job.id, job.retryCount);
+        if (remote.status === 'completed') {
+          await settleCredits(ctx.prisma, rk, job.creditsUsed).catch(() => {});
+        } else if (remote.status === 'failed' || remote.status === 'cancelled') {
+          await releaseCredits(ctx.prisma, rk).catch(() => {});
         }
 
         return { ...updated, creditBalance: await balanceOf(ctx.prisma, ctx.user.id) };
@@ -618,19 +618,18 @@ export const generationRouter = router({
           where: { id: job.id, status: { in: ['QUEUED', 'GENERATING'] } },
           data:  { status: 'FAILED', errorMessage: err instanceof Error ? err.message : 'Retry failed' },
         });
-        if (isReserveSettleEnabled()) {
-          await releaseCredits(ctx.prisma, reserveKey(job.id, attempt)).catch(() => {});
-        } else {
-          await refundCredits(
-            ctx.prisma,
-            ctx.user.id,
-            creditsUsed,
-            featureKey,
-            job.id,
-            `Refund: ${meta.label} retry failed`,
-            refundKey(job.id, attempt),
-          ).catch(() => {});
-        }
+        // D-043 — release the hold if one exists, otherwise refund the deduct.
+        // The flag no longer picks the strategy: picking by flag either stranded
+        // a hold (flag off, reservation present) or double-compensated.
+        await compensateFailedGeneration(ctx.prisma, {
+          reservationKey:       reserveKey(job.id, attempt),
+          userId:               ctx.user.id,
+          creditsUsed,
+          featureKey,
+          referenceId:          job.id,
+          description:          `Refund: ${meta.label} retry failed`,
+          refundIdempotencyKey: refundKey(job.id, attempt),
+        }).catch(() => {});
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: err instanceof Error ? err.message : 'Retry failed',

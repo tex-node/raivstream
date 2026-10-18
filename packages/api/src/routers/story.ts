@@ -603,13 +603,19 @@ async function runSceneShotClipChain(
 
         const providerOutputUrl = await waitForGenerationOutput('H3_MAX' as SupportedModel, submitted.providerJobId, submitted.outputUrl);
 
-        if (isPerSecond && creditsUsed > 0) {
+        // D-043 — settle from the reservation's own state, not from the pricing
+        // flag: a hold created while per-second pricing was on must settle even
+        // if the flag is off (or absent from the running process) by the time the
+        // job finishes. settleCredits no-ops when there is no HELD row, so the
+        // deduct-before-submit path is unaffected.
+        let settledShotAmt = creditsUsed;
+        if (isPerSecond) {
           const actualDur = await getVideoDurationSeconds(providerOutputUrl).catch(() => null);
-          const settledAmt = actualDur !== null
+          settledShotAmt = actualDur !== null
             ? perSecondCredits(Math.min(entry.durationSeconds, actualDur), ratePerSecond)
             : creditsUsed;
-          await settleCredits(ctx.prisma, shotReservationKey, settledAmt).catch(() => undefined);
         }
+        await settleCredits(ctx.prisma, shotReservationKey, settledShotAmt).catch(() => undefined);
 
         const r2Key = `story-projects/${project.id}/scenes/${scene.id}/shots/${entry.shotIndex}/clip-${asset.id}.mp4`;
         const assetUrl = providerOutputUrl.startsWith('data:')
@@ -3531,13 +3537,16 @@ async function generateSceneVideoAsset(
 
     const providerOutputUrl = await waitForGenerationOutput(input.model as SupportedModel, providerJobId, submitted.outputUrl);
 
-    if (isPerSecondVideo && creditsUsed > 0) {
+    // D-043 — see the shot-clip path: compensation follows the reservation, not
+    // the flag.
+    let settledVideoAmt = creditsUsed;
+    if (isPerSecondVideo) {
       const actualDur = await getVideoDurationSeconds(providerOutputUrl).catch(() => null);
-      const settledAmt = actualDur !== null
+      settledVideoAmt = actualDur !== null
         ? perSecondCredits(Math.min(duration, actualDur), videoRatePerSecond)
         : creditsUsed;
-      await settleCredits(ctx.prisma, videoReservationKey, settledAmt).catch(() => undefined);
     }
+    await settleCredits(ctx.prisma, videoReservationKey, settledVideoAmt).catch(() => undefined);
 
     const r2Key = `story-projects/${project.id}/scenes/${scene.id}/videos/${asset.id}.mp4`;
     const assetUrl = providerOutputUrl.startsWith('data:')
