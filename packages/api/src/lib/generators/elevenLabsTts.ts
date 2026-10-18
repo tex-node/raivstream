@@ -13,6 +13,8 @@
  * ffmpeg (`normalizeAudioInput`), so no re-encoding is needed here.
  */
 
+import { breakerFor } from '../resilience/circuitBreaker';
+
 export const ELEVENLABS_BASE_URL = 'https://api.elevenlabs.io/v1';
 
 export interface ElevenLabsSpeechInput {
@@ -73,10 +75,18 @@ export async function listElevenLabsVoices(deps: ElevenLabsSpeechDeps = {}): Pro
   const apiKey = elevenLabsApiKey(env);
   if (!apiKey) return [];
   try {
-    const res = await (deps.fetchImpl ?? fetch)(`${ELEVENLABS_BASE_URL}/voices`, {
-      headers: { 'xi-api-key': apiKey },
+    // D-067 — voices shares the TTS breaker: an account that is unhealthy for
+    // synthesis is unlikely to serve voices happily. A failure here still falls
+    // back to the curated list below.
+    const res = await breakerFor('elevenlabs').call(async () => {
+      const response = await (deps.fetchImpl ?? fetch)(`${ELEVENLABS_BASE_URL}/voices`, {
+        headers: { 'xi-api-key': apiKey },
+      });
+      if (!response.ok) {
+        throw Object.assign(new Error(`ElevenLabs voices error ${response.status}`), { status: response.status });
+      }
+      return response;
     });
-    if (!res.ok) return [];
     const payload = (await res.json()) as { voices?: Array<{ voice_id: string; name: string }> };
     return (payload.voices ?? []).map((voice) => ({ voiceId: voice.voice_id, name: voice.name }));
   } catch {
@@ -95,28 +105,35 @@ export async function synthesizeSpeech(
   const doFetch = deps.fetchImpl ?? fetch;
 
   const voiceId = input.voiceId || elevenLabsDefaultVoiceId(env);
-  const res = await doFetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${encodeURIComponent(voiceId)}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify({
-      text: input.text,
-      model_id: input.modelId ?? elevenLabsModelId(env),
-      voice_settings: {
-        stability: input.stability ?? 0.5,
-        similarity_boost: input.similarityBoost ?? 0.75,
-        ...(input.style !== undefined ? { style: input.style } : {}),
+  // D-067 — breaker around the provider call only; the !ok check lives inside so
+  // a 5xx counts as a health failure. 4xx/429 are ignored by the classifier.
+  const res = await breakerFor('elevenlabs').call(async () => {
+    const response = await doFetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
       },
-    }),
+      body: JSON.stringify({
+        text: input.text,
+        model_id: input.modelId ?? elevenLabsModelId(env),
+        voice_settings: {
+          stability: input.stability ?? 0.5,
+          similarity_boost: input.similarityBoost ?? 0.75,
+          ...(input.style !== undefined ? { style: input.style } : {}),
+        },
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw Object.assign(
+        new Error(`ElevenLabs TTS error ${response.status}: ${body.slice(0, 300)}`),
+        { status: response.status },
+      );
+    }
+    return response;
   });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`ElevenLabs TTS error ${res.status}: ${body.slice(0, 300)}`);
-  }
 
   return Buffer.from(await res.arrayBuffer());
 }
