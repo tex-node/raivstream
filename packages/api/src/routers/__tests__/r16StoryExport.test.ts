@@ -244,7 +244,12 @@ describe('R16 story video export', () => {
     (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('project-r16', 'user-1', 'KIDS'));
     (prisma.storySceneSeed.findMany as any).mockResolvedValue([makeScene('scene-1', 0, 'project-r16')]);
     (prisma.storySceneAsset.findMany as any).mockResolvedValue([makeVideoAsset('asset-1', 'scene-1', 'project-r16')]);
-    (prisma.storyVideoExport.findFirst as any).mockResolvedValue(makeExportRow('export-inflight', 'project-r16', 'some-hash', 'GENERATING'));
+    (prisma.storyVideoExport.findFirst as any).mockResolvedValue({
+      ...makeExportRow('export-inflight', 'project-r16', 'some-hash', 'GENERATING'),
+      // D-033: a GENERATING row is only "in flight" while it is younger than the
+      // 30-minute stuck threshold. Keep this fixture inside that window.
+      updatedAt: new Date(),
+    });
 
     const result = await service.requestExport(prisma as any, r16Input());
     expect(result.id).toBe('export-inflight');
@@ -311,7 +316,9 @@ describe('R16 story video export', () => {
     const result = await service.requestExport(prisma as any, r16Input());
 
     expect(result.assetUrl).toBe(r2Url);
-    const updateCall = (prisma.storyVideoExport.update as any).mock.calls[0][0];
+    // D-033: runExportJob writes GENERATING first, then the final READY row — the
+    // artifact fields land on the LAST update, not the first.
+    const updateCall = (prisma.storyVideoExport.update as any).mock.calls.at(-1)[0];
     expect(updateCall.data.assetUrl).toBe(r2Url);
     expect(updateCall.data.status).toBe('READY');
     spy.mockRestore();

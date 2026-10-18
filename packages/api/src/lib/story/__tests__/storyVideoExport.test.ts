@@ -272,7 +272,9 @@ describe('StoryVideoExportService — endCardApplied writer', () => {
 
     const result = await svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps);
 
-    const updateCall = updateSpy.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    // D-033: the first update is the GENERATING transition; endCardApplied lands
+    // on the final READY write.
+    const updateCall = updateSpy.mock.calls.at(-1)?.[0] as { data: Record<string, unknown> };
     expect(updateCall?.data.endCardApplied).toBe(true);
     expect(result.status).toBe('READY');
   });
@@ -291,7 +293,7 @@ describe('StoryVideoExportService — endCardApplied writer', () => {
 
     const result = await svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps);
 
-    const updateCall = updateSpy.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    const updateCall = updateSpy.mock.calls.at(-1)?.[0] as { data: Record<string, unknown> };
     expect(updateCall?.data.endCardApplied).toBe(false);
     expect(updateCall?.data.status).toBe('READY');
     expect(result.status).toBe('READY');
