@@ -13,6 +13,7 @@ import { mkdtemp, writeFile, readFile, rm, rename } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { uploadBufferToR2 } from '../../r2';
+import { trackChild } from '../../childProcesses';
 import type { OutputDerivation } from './derivation';
 
 export interface OutputRenderDeps {
@@ -89,6 +90,8 @@ async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
     // output. Call sites may set a tighter -t; this is the floor, applied once
     // here instead of trusting ~10 hand-built argv arrays to stay in sync.
     const child = spawn('ffmpeg', ['-y', ...applyFfmpegSafety(args)], { stdio: ['ignore', 'ignore', 'pipe'] });
+    // D-033 — track so the worker can reap encoders on shutdown.
+    trackChild(child);
     let stderr = '';
     let timedOut = false;
     const timeoutMs = Math.min(

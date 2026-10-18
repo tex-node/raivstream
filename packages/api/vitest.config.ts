@@ -11,7 +11,8 @@ export default defineConfig({
     globals: true,
     clearMocks: true,
     restoreMocks: true,
-    // Hermetic Redis fake for the rate-limit middleware (no live Upstash in CI).
-    setupFiles: ['src/test/setupRateLimit.ts'],
+    // Hermetic Redis fake for the rate-limit middleware (no live Upstash in CI),
+    // and an inline export runner so service tests do not need a live queue.
+    setupFiles: ['src/test/setupRateLimit.ts', 'src/test/setupExportRunner.ts'],
   },
 });

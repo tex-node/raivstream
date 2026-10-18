@@ -43,6 +43,7 @@ import type { PrismaClient } from '@raivstream/database';
 import { TRPCError } from '@trpc/server';
 import { deriveOutput } from '../creative/output/derivation';
 import { renderOutputDerivative, EXPORT_RENDERER_VERSION, type OutputRenderDeps, type RenderScene } from '../creative/output/render';
+import { EXPORT_STUCK_THRESHOLD_MS } from '../ffmpegSafety';
 
 export interface StoryVideoExportState {
   id: string;
@@ -106,6 +107,56 @@ function serializeExport(row: {
 
 /** Prisma unique-constraint violation code. */
 const PRISMA_UNIQUE_CONFLICT = 'P2002';
+
+type ExportRowShape = Parameters<typeof serializeExport>[0];
+
+/**
+ * Re-read the row after enqueueing. In production the worker has not run yet, so
+ * this returns PENDING (the client polls). Under the inline test runner the job
+ * has already finished, so the caller sees READY/FAILED — which keeps the
+ * existing service tests meaningful without a live queue.
+ */
+async function serializeFresh(prisma: PrismaClient, row: ExportRowShape): Promise<StoryVideoExportState> {
+  const fresh = await prisma.storyVideoExport.findFirst({ where: { id: row.id } });
+  return serializeExport((fresh ?? row) as ExportRowShape);
+}
+
+export type ExportRunner = (
+  prisma: PrismaClient,
+  row: ExportRowShape,
+  deps?: OutputRenderDeps,
+) => Promise<StoryVideoExportState | void>;
+
+let inlineExportRunner: ExportRunner | null = null;
+
+/**
+ * Test seam: execute the job inline instead of queueing it. Production never
+ * sets this — `runEnqueued` then goes through pg-boss (dynamic import, so the
+ * queue library never enters the web bundle).
+ */
+export function __setExportRunnerForTests(runner: ExportRunner | null): void {
+  inlineExportRunner = runner;
+}
+
+/**
+ * Hand the row to the worker, or run it inline under test. Returns the final
+ * state when the runner produced one (inline), else the freshly-read row —
+ * PENDING in production, which is what the client polls.
+ */
+async function runEnqueued(
+  prisma: PrismaClient,
+  row: ExportRowShape,
+  deps: OutputRenderDeps,
+): Promise<StoryVideoExportState> {
+  if (inlineExportRunner) {
+    const inlineResult = await inlineExportRunner(prisma, row, deps);
+    if (inlineResult) return inlineResult;
+  } else {
+    const { enqueueStoryExport } = await import('../jobs');
+    await enqueueStoryExport(row.id);
+  }
+  return serializeFresh(prisma, row);
+}
 
 export class StoryVideoExportService {
   /**
@@ -250,31 +301,57 @@ export class StoryVideoExportService {
       : pairsBase;
     const sourceHash = computeSourceHash(hashPayloadPairs);
 
-    // Check for existing non-FAILED export with same hash (optimistic read).
+    // One row per (projectId, sourceHash) artifact — see @@unique.
     const existing = await prisma.storyVideoExport.findFirst({
-      where: { projectId: input.projectId, sourceHash, status: { not: 'FAILED' } },
+      where: { projectId: input.projectId, sourceHash },
       orderBy: { createdAt: 'desc' },
     });
+
+    // ── D-033 lifecycle fixes ────────────────────────────────────────────────
+    // READY            → nothing to do.
+    // PENDING / fresh  → already queued or running; return as-is.
+    // FAILED, or a GENERATING row older than the stuck threshold → reuse the
+    //   row, reset it to PENDING and enqueue again. Without this, the unique
+    //   constraint made a failed or crash-orphaned export permanently wedged:
+    //   every retry returned the same dead row and never re-rendered.
     if (existing) {
-      return serializeExport(existing);
+      if (existing.status === 'READY') return serializeExport(existing);
+
+      const isStuck = existing.status === 'GENERATING'
+        && existing.updatedAt.getTime() < Date.now() - EXPORT_STUCK_THRESHOLD_MS;
+      const needsRetry = existing.status === 'FAILED' || isStuck;
+
+      if (!needsRetry) return serializeExport(existing);
+
+      const requeued = await prisma.storyVideoExport.update({
+        where: { id: existing.id },
+        data: {
+          status: 'PENDING',
+          errorMessage: null,
+          assetUrl: null,
+          r2Key: null,
+          completedAt: null,
+        },
+      });
+      return runEnqueued(prisma, requeued, deps);
+      return serializeFresh(prisma, requeued);
     }
 
-    // ── 7. Create export row directly in GENERATING state ────────────────────
-    //       (synchronous: assembly runs inline; PENDING is not used here)
+    // ── 7. Create the row in PENDING; the worker owns the render ─────────────
     let exportRow: Awaited<ReturnType<typeof prisma.storyVideoExport.create>>;
     try {
       exportRow = await prisma.storyVideoExport.create({
         data: {
           projectId: input.projectId,
           userId: input.userId,
-          status: 'GENERATING',
+          status: 'PENDING',
           sourceHash,
           sceneIds: sceneIdList as never,
         },
       });
     } catch (createErr: unknown) {
       // Concurrent request won the race and inserted the same (projectId,
-      // sourceHash) row — retrieve and return it rather than failing.
+      // sourceHash) row — apply the same retry rules to the winner.
       if (
         typeof createErr === 'object' &&
         createErr !== null &&
@@ -285,20 +362,104 @@ export class StoryVideoExportService {
           where: { projectId: input.projectId, sourceHash },
           orderBy: { createdAt: 'desc' },
         });
-        if (raceWinner) return serializeExport(raceWinner);
+        if (raceWinner) {
+          if (raceWinner.status !== 'FAILED' && raceWinner.status !== 'PENDING') {
+            return serializeExport(raceWinner);
+          }
+          const requeued = await prisma.storyVideoExport.update({
+            where: { id: raceWinner.id },
+            data: { status: 'PENDING', errorMessage: null },
+          });
+          return runEnqueued(prisma, requeued, deps);
+          return serializeFresh(prisma, requeued);
+        }
       }
       throw createErr;
     }
 
-    // ── 8. Assemble via renderOutputDerivative ───────────────────────────────
+    // ── 8. Hand off to the worker; return immediately (PENDING) ──────────────
+    // Pass the row *with the scene ids we hashed* rather than trusting the
+    // create() return value: the job must render exactly the scope the hash
+    // describes, even if the driver returns a partial row.
+    return runEnqueued(prisma, { ...exportRow, sceneIds: sceneIdList as never }, deps);
+  }
+
+  /**
+   * The slow half (D-033): load the row, render, persist the outcome.
+   *
+   * Runs in the export worker. Safe to call twice for the same export: a READY
+   * row is a no-op, and a retried job re-renders deterministically from the
+   * scene ids stored on the row.
+   */
+  async runExportJob(
+    prisma: PrismaClient,
+    input: { exportId: string },
+    deps: OutputRenderDeps = {},
+    preloadedRow?: ExportRowShape & { userId: string },
+  ): Promise<StoryVideoExportState> {
+    const row = preloadedRow ?? await prisma.storyVideoExport.findFirst({ where: { id: input.exportId } });
+    if (!row) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Export job not found.' });
+    }
+    // READY means done only when the artifact exists; a status-only READY row
+    // (older data / test doubles) still needs its render.
+    if (row.status === 'READY' && row.assetUrl) return serializeExport(row);
+
+    await prisma.storyVideoExport.update({
+      where: { id: row.id },
+      data: { status: 'GENERATING', errorMessage: null },
+    });
+
     try {
-      // audioUrl is derived from the validated DB row — never from client input.
-      // All-or-nothing (see 4a): undefined here means the renderer takes its
-      // video-only path and carries each clip's native audio instead.
+      const sceneIdList = Array.isArray(row.sceneIds) ? (row.sceneIds as string[]) : [];
+      // findFirst (not findUnique) so this matches the read pattern used by the
+      // request half and by the service's existing tests/mocks.
+      const project = await prisma.storyProject.findFirst({
+        where: { id: row.projectId },
+        select: { backgroundMusicUrl: true, contentType: true },
+      });
+      const backgroundMusicUrl = project?.backgroundMusicUrl ?? null;
+
+      const orderedScenes = await prisma.storySceneSeed.findMany({
+        where: { id: { in: sceneIdList } },
+        orderBy: { orderIndex: 'asc' },
+      });
+      const sceneById = new Map(orderedScenes.map((s) => [s.id, s]));
+      const hasNarrationForEveryScene = project?.contentType === 'EDUCATIONAL'
+        && sceneIdList.length > 0
+        && sceneIdList.every((id) => Boolean(sceneById.get(id)?.narrationAudioUrl));
+
+      const videoAssets = await prisma.storySceneAsset.findMany({
+        where: {
+          projectId: row.projectId,
+          sceneId: { in: sceneIdList },
+          assetType: 'VIDEO',
+          status: 'READY',
+          deletedAt: null,
+          isLatest: true,
+        },
+      });
+      const readyByScene = new Map<string, { id: string; assetUrl: string; durationSeconds: number | null }>();
+      for (const asset of videoAssets) {
+        if (!asset.assetUrl) continue;
+        if (!readyByScene.has(asset.sceneId)) {
+          readyByScene.set(asset.sceneId, {
+            id: asset.id,
+            assetUrl: asset.assetUrl,
+            durationSeconds: asset.durationSeconds,
+          });
+        }
+      }
+
+      const missing = sceneIdList.filter((id) => !readyByScene.has(id));
+      if (missing.length > 0) {
+        throw new Error(`Export source changed: ${missing.length} scene(s) no longer have a ready video.`);
+      }
+
       const scenes: RenderScene[] = sceneIdList.map((sceneId) => ({
         sceneId,
         videoUrl: readyByScene.get(sceneId)!.assetUrl,
-        audioUrl: hasNarrationForEveryScene ? (audioByScene.get(sceneId) ?? null) : undefined,
+        audioUrl: hasNarrationForEveryScene ? (sceneById.get(sceneId)?.narrationAudioUrl ?? null) : undefined,
       }));
 
       const totalRuntimeSeconds = sceneIdList.reduce(
@@ -307,12 +468,11 @@ export class StoryVideoExportService {
       );
       const derivation = deriveOutput('PORTRAIT', null, totalRuntimeSeconds);
 
-      // End-card attribution: the project owner's handle from trusted account data
-      // (never client input). Fail-soft — a missing username must not fail export.
+      // End-card attribution from trusted account data; fail-soft.
       let creatorHandle: string | null = null;
       try {
         const owner = await prisma.user.findUnique({
-          where: { id: input.userId },
+          where: { id: row.userId },
           select: { username: true },
         });
         creatorHandle = owner?.username ?? null;
@@ -324,28 +484,31 @@ export class StoryVideoExportService {
         {
           scenes,
           derivation,
-          r2Prefix: `story-exports/${input.projectId}/exports/${exportRow.id}`,
+          r2Prefix: `story-exports/${row.projectId}/exports/${row.id}`,
           backgroundMusicUrl,
           creatorHandle,
-          exportId: exportRow.id,
+          exportId: row.id,
         },
         deps,
       );
 
       const updated = await prisma.storyVideoExport.update({
-        where: { id: exportRow.id },
+        where: { id: row.id },
         data: {
           status: 'READY',
           assetUrl: rendered.assetUrl,
-          r2Key: `story-exports/${input.projectId}/exports/${exportRow.id}/out.mp4`,
+          r2Key: `story-exports/${row.projectId}/exports/${row.id}/out.mp4`,
           completedAt: new Date(),
           endCardApplied: rendered.endCardApplied,
+          errorMessage: null,
         },
       });
       return serializeExport(updated);
     } catch (error) {
+      // Deterministic failures are recorded, not retried forever: the user can
+      // retry now that a FAILED row is requeued instead of wedged (D-033).
       const updated = await prisma.storyVideoExport.update({
-        where: { id: exportRow.id },
+        where: { id: row.id },
         data: {
           status: 'FAILED',
           errorMessage: (error as Error).message.slice(0, 500),

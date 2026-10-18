@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
+    "worker": "tsx worker/index.ts",
     "share:retention": "tsx scripts/share-retention.ts"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "@upstash/redis": "^1.28.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
+    "pg-boss": "^12.38.0",
     "superjson": "^2.2.1",
     "zod": "^3.22.4"
   },
