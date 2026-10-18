@@ -86,6 +86,18 @@ export function __setRateLimitRedisForTests(fake: unknown): void {
 }
 
 /**
+ * Normalise one pipeline result.
+ *
+ * `@upstash/redis` v1.28 returns the raw results (`[1, 1, null]`); some typed
+ * APIs return `[error, result]` pairs. Reading only one shape yields
+ * `undefined`, which parses to 0 and silently disables the limiter — which is
+ * exactly what shipped in the first cut of this module. Both are accepted.
+ */
+function execValue(entry: unknown): unknown {
+  return Array.isArray(entry) ? entry[1] : entry;
+}
+
+/**
  * Count one request against `key`/`bucketName` and decide.
  *
  * Throws if Redis is unreachable or unconfigured — callers must not treat that
@@ -106,10 +118,10 @@ export async function checkLimit(key: string, bucketName: BucketName): Promise<R
   // TTL >= 2 windows so the previous window is still readable for weighting.
   pipeline.expire(currentKey, Math.ceil((bucket.windowMs * 2) / 1000));
   pipeline.get(previousKey);
-  const raw = (await pipeline.exec()) as unknown as Array<[unknown, unknown]>;
+  const raw = (await pipeline.exec()) as unknown as unknown[];
 
-  const currentCount = Number(raw[0]?.[1] ?? 0);
-  const previousCount = Number(raw[2]?.[1] ?? 0);
+  const currentCount = Number(execValue(raw[0]) ?? 0);
+  const previousCount = Number(execValue(raw[2]) ?? 0);
   const previousWeight = (bucket.windowMs - elapsedMs) / bucket.windowMs;
   const weighted = previousCount * previousWeight + currentCount;
 
