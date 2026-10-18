@@ -197,9 +197,11 @@ jobs:
           mv apps/web/.next-build apps/web/.next
           rm -rf apps/web/.next-old
 
-          echo "==> Restarting PM2..."
+          echo "==> Restarting PM2 (web + export worker)..."
           set -a; source apps/web/.env.local 2>/dev/null || true; set +a
-          pm2 restart raivstream-web --update-env
+          pm2 startOrReload ecosystem.config.cjs --update-env
+          sleep 3
+          pm2 describe raivstream-worker | grep -q online || (echo "Worker offline" && exit 1)
 
           echo "==> Checking production health..."
           sleep 5
