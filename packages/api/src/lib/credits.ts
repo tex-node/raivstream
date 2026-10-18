@@ -10,6 +10,7 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@raivstream/database';
 import type { SupportedModel } from './generators';
+import { cached } from './cache';
 
 // Map each generation model to its FeatureCreditRate featureKey (must match seed.ts)
 export const MODEL_FEATURE_KEY: Record<SupportedModel, string> = {
@@ -82,17 +83,21 @@ export async function resolveFeatureCreditRate(
   prisma: PrismaClient,
   featureKey: string,
 ): Promise<FeatureCreditRateResult> {
-  const rate = await prisma.featureCreditRate.findUnique({
-    where:  { featureKey },
-    select: { creditsPerUnit: true, isActive: true },
+  // §1.5 — static config read on every generation (6.6k calls/month). 60 s TTL;
+  // invalidated by admin.updateCreditRate / createCreditRate.
+  return cached(`feature:rate:${featureKey}`, 60_000, async () => {
+    const rate = await prisma.featureCreditRate.findUnique({
+      where:  { featureKey },
+      select: { creditsPerUnit: true, isActive: true },
+    });
+    if (!rate) {
+      return { configured: false, cost: 0, errorCode: 'RATE_MISSING' as const };
+    }
+    if (!rate.isActive || rate.creditsPerUnit <= 0) {
+      return { configured: false, cost: 0, errorCode: 'RATE_INVALID' as const };
+    }
+    return { configured: true, cost: rate.creditsPerUnit, errorCode: null };
   });
-  if (!rate) {
-    return { configured: false, cost: 0, errorCode: 'RATE_MISSING' };
-  }
-  if (!rate.isActive || rate.creditsPerUnit <= 0) {
-    return { configured: false, cost: 0, errorCode: 'RATE_INVALID' };
-  }
-  return { configured: true, cost: rate.creditsPerUnit, errorCode: null };
 }
 
 export async function getFeatureCreditCost(

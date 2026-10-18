@@ -11,6 +11,7 @@ import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
 import { allCircuitSnapshots } from '../lib/resilience/circuitBreaker';
+import { invalidate, invalidateFeedCaches } from '../lib/cache';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { recoverShareAttributionRetention } from '../lib/story/shareAttributionRetention';
 
@@ -1107,10 +1108,14 @@ export const adminRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      return ctx.prisma.featureCreditRate.update({
+      // §1.5 — the cache key is the featureKey, but this mutation takes the row id,
+      // so invalidate with the key from the returned row (never the input id).
+      const updated = await ctx.prisma.featureCreditRate.update({
         where: { id },
         data,
       });
+      await invalidate(`feature:rate:${updated.featureKey}`);
+      return updated;
     }),
 
   /**
@@ -1125,7 +1130,9 @@ export const adminRouter = router({
       isActive:      z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.featureCreditRate.create({ data: input });
+      const created = await ctx.prisma.featureCreditRate.create({ data: input });
+      await invalidate(`feature:rate:${created.featureKey}`);
+      return created;
     }),
 
   // ─── Generation Jobs ────────────────────────────────────────────────────────
@@ -1293,6 +1300,10 @@ export const adminRouter = router({
           },
         }),
       ]);
+
+      // §1.5 — moderation status/kids-safe gate feed membership; invalidate after
+      // the transaction commits (never before, never in a finally).
+      await invalidateFeedCaches();
 
       return { success: true, moderationStatus };
     }),

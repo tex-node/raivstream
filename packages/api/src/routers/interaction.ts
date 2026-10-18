@@ -73,6 +73,9 @@ export const interactionRouter = router({
       });
 
       // Fire-and-forget: engagement score + like notification
+      // D-071: no cache invalidation — recomputeEngagementScore is fire-and-forget,
+      // so feed order updates only after the cache's 30s TTL. (D-072 would make
+      // this awaited, which is the prerequisite for immediate invalidation.)
       recomputeEngagementScore(ctx.prisma, input.videoId).catch(() => {});
 
       if (!wasLiked) {
@@ -127,6 +130,9 @@ export const interactionRouter = router({
           : []),
       ]);
 
+      // D-071: no cache invalidation — recomputeEngagementScore is fire-and-forget,
+      // so feed order updates only after the cache's 30s TTL. (D-072 would make
+      // this awaited, which is the prerequisite for immediate invalidation.)
       recomputeEngagementScore(ctx.prisma, input.videoId).catch(() => {});
       return { disliked: !wasDisliked };
     }),
@@ -157,6 +163,9 @@ export const interactionRouter = router({
         },
       });
 
+      // D-071: no cache invalidation — recomputeEngagementScore is fire-and-forget,
+      // so feed order updates only after the cache's 30s TTL. (D-072 would make
+      // this awaited, which is the prerequisite for immediate invalidation.)
       recomputeEngagementScore(ctx.prisma, input.videoId).catch(() => {});
       return { rating: input.rating };
     }),
@@ -180,6 +189,9 @@ export const interactionRouter = router({
         data:  { viewCount: { increment: 1 } },
       });
 
+      // D-071: no cache invalidation — recomputeEngagementScore is fire-and-forget,
+      // so feed order updates only after the cache's 30s TTL. (D-072 would make
+      // this awaited, which is the prerequisite for immediate invalidation.)
       recomputeEngagementScore(ctx.prisma, input.videoId).catch(() => {});
       return { success: true };
     }),
@@ -250,6 +262,9 @@ export const interactionRouter = router({
       }
 
       // Recompute engagement score async — don't block the response
+      // D-071: no cache invalidation — recomputeEngagementScore is fire-and-forget,
+      // so feed order updates only after the cache's 30s TTL. (D-072 would make
+      // this awaited, which is the prerequisite for immediate invalidation.)
       recomputeEngagementScore(ctx.prisma, input.videoId).catch(() => {});
 
       return { success: true };

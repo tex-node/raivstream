@@ -5,6 +5,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 import { analytics } from '../lib/analytics';
+import { invalidateFeedCaches } from '../lib/cache';
 
 function getR2Client() {
   return new S3Client({
@@ -173,6 +174,9 @@ export const videoRouter = router({
         select: { id: true, title: true, status: true, thumbnailUrl: true, mp4Url: true },
       });
 
+      // §1.5 — metadata affects what the feeds return; invalidate after the write.
+      await invalidateFeedCaches();
+
       // Fire-and-forget content scan — does not block the response
       const scanUrl = updated.thumbnailUrl || updated.mp4Url;
       if (scanUrl) {
@@ -239,6 +243,9 @@ export const videoRouter = router({
         });
         await tx.video.delete({ where: { id: input.videoId } });
       });
+
+      // §1.5 — the video is gone; drop both feed caches after the delete commits.
+      await invalidateFeedCaches();
 
       return { success: true };
     }),
@@ -316,6 +323,8 @@ export const videoRouter = router({
         select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
       });
       await analytics.track(ctx.prisma, { event: 'video_submitted_for_publication', userId: ctx.user.id, properties: { videoId: video.id } });
+      // §1.5 — submission can move a video into the feeds.
+      await invalidateFeedCaches();
       return updated;
     }),
 
@@ -340,6 +349,8 @@ export const videoRouter = router({
         select: { id: true, moderationStatus: true, withdrawnAt: true },
       });
       await analytics.track(ctx.prisma, { event: 'video_publication_withdrawn', userId: ctx.user.id, properties: { videoId: video.id } });
+      // §1.5 — a withdrawn video must leave both feeds immediately.
+      await invalidateFeedCaches();
       return updated;
     }),
 
@@ -366,6 +377,8 @@ export const videoRouter = router({
         select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
       });
       await analytics.track(ctx.prisma, { event: 'video_publication_resubmitted', userId: ctx.user.id, properties: { videoId: video.id } });
+      // §1.5 — resubmission re-enters the review/feed path.
+      await invalidateFeedCaches();
       return updated;
     }),
 

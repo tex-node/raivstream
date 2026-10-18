@@ -2,6 +2,7 @@ import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { submitGenerationJob, pollJobStatus, cancelProviderJob, MODEL_META, MAX_JOB_RETRIES, type SupportedModel } from '../lib/generators';
+import { invalidateFeedCaches } from '../lib/cache';
 import {
   deductCredits,
   refundCredits,
@@ -679,6 +680,10 @@ export const generationRouter = router({
         where: { id: job.id },
         data: { videoId: video.id },
       });
+
+      // §1.5 — a published generation is a new feed member; invalidate after both
+      // writes resolve so the cache cannot repopulate from a partial state.
+      await invalidateFeedCaches();
 
       // Fire-and-forget content scan on the output image/video thumbnail
       const scanUrl = job.thumbnailUrl ?? job.outputUrl;
