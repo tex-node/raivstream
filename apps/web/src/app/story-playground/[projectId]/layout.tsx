@@ -7,6 +7,7 @@ import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
 import { partialNarrationWarning } from '@/lib/exportNarrationWarning';
+import { canExportStoryVideo } from '@/lib/exportEligibility';
 
 type VideoProgress = { current: number; total: number } | null;
 
@@ -104,6 +105,27 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
   };
 
   if (!isR16 || !isLoaded || !isSignedIn) return <>{children}</>;
+
+  // R16 export is KIDS-only server-side. On the R16 subdomain a GENERAL project
+  // must not offer an Export button that is guaranteed to 403 — show a note.
+  // Same rule as the `new` surface, via the shared helper (D-074).
+  if (
+    workspace.data?.project
+    && !canExportStoryVideo({ isR16, audienceMode: workspace.data.project.audienceMode })
+  ) {
+    return (
+      <>
+        {children}
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[90] flex justify-center px-4 pb-4">
+          <div className="pointer-events-auto w-full max-w-3xl rounded-2xl border border-[rgba(233,233,237,0.12)] bg-[rgba(15,16,25,0.96)] p-4 shadow-2xl backdrop-blur-xl">
+            <p className="text-xs font-semibold text-[var(--noc-t4)]">
+              Video export is only available for R16 (Kids) projects.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const showVideoEntry = allScenesHaveStills && exportStatus !== 'READY' && !allScenesHaveReadyVideo;
 

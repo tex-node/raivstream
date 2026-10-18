@@ -12,6 +12,7 @@ import { SCENE_IMAGE_MODEL_OPTIONS, DEFAULT_SCENE_IMAGE_MODEL, type SceneImageMo
 import { LowBalanceWarning } from '@/components/credits/LowBalanceWarning';
 import { VISUAL_STYLE_OPTIONS, R16_STYLE_VALUES, stylesForAudience, type VisualStyleOption, type VisualStyleValue } from '@/lib/storyVisualStyleOptions';
 import { partialNarrationWarning } from '@/lib/exportNarrationWarning';
+import { canExportStoryVideo } from '@/lib/exportEligibility';
 
 type PlaygroundStep = 'spark' | 'questions' | 'story';
 
@@ -679,6 +680,12 @@ export default function StoryPlaygroundPage() {
   const scenes = useMemo(() => {
     return ((project?.sceneSeeds ?? []) as StoryScene[]).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   }, [project?.sceneSeeds]);
+
+  // R16 export is KIDS-only on the server (`requestStoryVideoExport` →
+  // `requireR16` + the service's audienceMode check). Gate the UI on the same
+  // pair the server checks so a GENERAL project opened on the R16 subdomain
+  // never shows an Export button that is guaranteed to 403 (D-074).
+  const canExport = canExportStoryVideo({ isR16, audienceMode: project?.audienceMode });
 
   // D-030 — same rule and copy as the project layout bar (shared helper), shown
   // only in the export-ready state, before the creator clicks Export Story.
@@ -1581,7 +1588,12 @@ export default function StoryPlaygroundPage() {
                     {isR16 ? 'Read Story' : 'Read Storybook'}
                   </Link>
                 )}
-                {isR16 && projectId && scenes.length > 0 && (
+                {isR16 && projectId && scenes.length > 0 && !canExport && (
+                  <p className="px-1 text-xs font-semibold text-[var(--noc-t4)]">
+                    Video export is only available for R16 (Kids) projects.
+                  </p>
+                )}
+                {isR16 && projectId && scenes.length > 0 && canExport && (
                   <div className="rounded-xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] px-5 py-4">
                     {storyVideoExport.data?.status === 'READY' ? (
                       <div className="flex flex-col gap-2">
