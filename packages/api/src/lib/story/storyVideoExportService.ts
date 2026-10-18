@@ -172,18 +172,23 @@ export class StoryVideoExportService {
     }
     const sceneIdList = allScenes.map((s) => s.id);
 
-    // ── 4a. Educational: every scene must have narration audio ───────────────
+    // ── 4a. Audio mode — narration is optional (D-030) ───────────────────────
     //        narrationAudioUrl is read from the DB row — never from client input.
-    if (isEducational) {
-      const missingSpeech = allScenes.filter((s) => !s.narrationAudioUrl);
-      if (missingSpeech.length > 0) {
-        const labels = missingSpeech.map((s) => s.title ?? s.id).slice(0, 3);
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: `Educational scene(s) have no narration audio: ${labels.join(', ')}. Generate narration before exporting.`,
-        });
-      }
-    }
+    //
+    //        Export must not require narration: a story whose clips carry their
+    //        own audio (dialogue/SFX) is exportable with no narration at all,
+    //        via the E1 native-audio path in renderOutputDerivative.
+    //
+    //        Narration is used only when EVERY scene has it, because the
+    //        renderer's audio-mux path is all-or-nothing by construction (it
+    //        throws when only some scenes carry audio). Partial narration
+    //        therefore exports clip-audio only rather than failing outright —
+    //        the export UI warns the creator before they trigger it.
+    //
+    //        Non-educational projects have never passed narration into the
+    //        renderer, so they keep that behaviour.
+    const hasNarrationForEveryScene =
+      isEducational && allScenes.length > 0 && allScenes.every((s) => Boolean(s.narrationAudioUrl));
 
     // ── 5–10. Verify every scene has a READY VIDEO asset owned by this project.
     //          Ownership invariant: projectId + sceneId + assetType=VIDEO +
@@ -224,8 +229,11 @@ export class StoryVideoExportService {
     }
 
     // ── 6. Idempotency — compute sourceHash ──────────────────────────────────
-    // narrationAudioUrl is included in the hash so that adding audio after a
-    // video-only export produces a distinct export row (not a stale cache hit).
+    // narrationAudioUrl participates only when the export actually uses it, so
+    // the hash always describes the artifact that will be rendered: adding full
+    // narration later produces a distinct export row (not a stale cache hit),
+    // while a partially-narrated project keeps hashing as the clip-audio cut it
+    // really is.
     // backgroundMusicUrl is included so a music change invalidates the export.
     const audioByScene = new Map<string, string | null>(
       allScenes.map((s) => [s.id, s.narrationAudioUrl ?? null]),
@@ -234,7 +242,7 @@ export class StoryVideoExportService {
     const pairsBase = sceneIdList.map((sceneId) => ({
       sceneId,
       assetId: readyByScene.get(sceneId)!.id,
-      audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : null,
+      audioUrl: hasNarrationForEveryScene ? (audioByScene.get(sceneId) ?? null) : null,
     }));
     // Include backgroundMusicUrl in hash as a synthetic trailing pair.
     const hashPayloadPairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }> = backgroundMusicUrl
@@ -285,10 +293,12 @@ export class StoryVideoExportService {
     // ── 8. Assemble via renderOutputDerivative ───────────────────────────────
     try {
       // audioUrl is derived from the validated DB row — never from client input.
+      // All-or-nothing (see 4a): undefined here means the renderer takes its
+      // video-only path and carries each clip's native audio instead.
       const scenes: RenderScene[] = sceneIdList.map((sceneId) => ({
         sceneId,
         videoUrl: readyByScene.get(sceneId)!.assetUrl,
-        audioUrl: isEducational ? (audioByScene.get(sceneId) ?? null) : undefined,
+        audioUrl: hasNarrationForEveryScene ? (audioByScene.get(sceneId) ?? null) : undefined,
       }));
 
       const totalRuntimeSeconds = sceneIdList.reduce(

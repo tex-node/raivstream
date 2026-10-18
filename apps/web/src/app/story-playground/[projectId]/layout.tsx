@@ -12,6 +12,8 @@ type VideoProgress = { current: number; total: number } | null;
 type SceneLike = {
   id: string;
   imageUrl: string | null;
+  /** Present once narration was generated for this scene (D-030 warning). */
+  narrationAudioUrl?: string | null;
   assets?: Array<{
     assetType: 'IMAGE' | 'VIDEO';
     status: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
@@ -67,6 +69,13 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
   const isGenerating = progress !== null;
   const exportStatus = storyVideoExport.data?.status;
 
+  // D-030 — narration is optional, and the export applies it only when every
+  // scene has it (all-or-nothing). Warn only in the partial case: zero scenes
+  // with narration is the normal clip-audio export, and a fully narrated
+  // project exports exactly as expected.
+  const scenesWithNarration = scenes.filter((scene) => Boolean(scene.narrationAudioUrl)).length;
+  const showNarrationWarning = scenesWithNarration > 0 && scenesWithNarration < scenes.length;
+
   const generateAllSceneVideos = async () => {
     if (!projectId || isGenerating || !allScenesHaveStills) return;
     setMessage(null);
@@ -110,6 +119,12 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
             <div className="mb-2 flex items-center justify-between gap-3 rounded-xl bg-[rgba(217,70,168,0.10)] px-4 py-2 text-sm font-bold text-[var(--noc-magenta)]">
               <span>{message}</span>
               <button type="button" onClick={() => setMessage(null)} aria-label="Dismiss" className="p-1"><X size={16} /></button>
+            </div>
+          )}
+
+          {showNarrationWarning && (
+            <div className="mb-2 rounded-xl bg-[rgba(217,70,168,0.10)] px-4 py-2 text-sm font-bold text-[var(--noc-magenta)]">
+              {scenesWithNarration} of {scenes.length} scenes have narration. Export will use clip audio only.
             </div>
           )}
 

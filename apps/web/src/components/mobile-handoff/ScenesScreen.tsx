@@ -10,6 +10,7 @@ import { useR16 } from '@/lib/r16';
 import { useTrackTab } from './useTrackTab';
 import { useState } from 'react';
 import { canStartBatch, defaultResumeCap, summarizeBatch, describeBatchPanel } from '@/lib/batchGenerationUi';
+import { resolveNarrationPath } from '@/lib/narrationPath';
 
 /**
  * Scenes list — design_handoff_raivstream_mobile, screen 6 of 8.
@@ -57,12 +58,15 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   );
 
   const scenes: any[] = (workspaceQuery.data as any)?.project?.sceneSeeds ?? [];
+  const contentType: string | null = (workspaceQuery.data as any)?.project?.contentType ?? null;
   const utils = trpc.useUtils();
   const addScene = trpc.story.addScene.useMutation({ onSuccess: () => utils.story.getWorkspace.invalidate({ projectId }) });
-  // Phase C: R16 users use the educational narration path (no Sequence/Film-tab required);
-  // non-R16 users use the full generateSceneNarration path.
+  // D-012 — content type decides which narration procedure runs; `isR16` alone is
+  // not enough (it sent R16 story projects to the educational procedure, which the
+  // server rejects). See lib/narrationPath.ts for the three-way rule.
   const generateSceneNarration = trpc.story.generateSceneNarration.useMutation();
   const generateEducationalNarration = trpc.story.generateEducationalNarration.useMutation();
+  const generateStoryNarration = trpc.story.generateStoryNarration.useMutation();
   const [narrationBusy, setNarrationBusy] = useState(false);
 
   // R16-04 — batch generation ("make all pictures").
@@ -95,9 +99,12 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
   const runNarration = async () => {
     setNarrationBusy(true);
     try {
+      const path = resolveNarrationPath({ isR16, contentType });
       for (const scene of scenes) {
-        if (isR16) {
+        if (path === 'educational') {
           await generateEducationalNarration.mutateAsync({ projectId, sceneId: scene.id });
+        } else if (path === 'story') {
+          await generateStoryNarration.mutateAsync({ projectId, sceneId: scene.id });
         } else {
           await generateSceneNarration.mutateAsync({ projectId, sceneId: scene.id });
         }
