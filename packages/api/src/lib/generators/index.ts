@@ -32,6 +32,7 @@ import { submitFalH3Max, getFalH3MaxStatus, cancelFalH3Max } from './falH3Max';
 import { submitFalVeed, getFalVeedStatus, cancelFalVeed } from './falVeed';
 import type { GenerationJobError, GenerationJobState } from './jobModel';
 import { getDefaultProviderLimiter, providerIdForModel } from './providerRateLimit';
+import { breakerFor } from '../resilience/circuitBreaker';
 import { MediaProviderError } from '../mediaProviders';
 
 export { MAX_JOB_RETRIES } from './jobModel';
@@ -86,7 +87,10 @@ export async function submitGenerationJob(input: GenerateInput): Promise<Generat
     throw new MediaProviderError('RATE_LIMITED', `Provider ${provider} is busy: ${lease.reason}`, { retryable: true });
   }
   try {
-    return await dispatchSubmitGenerationJob(input);
+    // D-067 — circuit breaker INNER. The lease is acquired above, so a
+    // rate-limited rejection never reaches the breaker: throttling ourselves is
+    // not evidence that the provider is unhealthy.
+    return await breakerFor(provider).call(() => dispatchSubmitGenerationJob(input));
   } finally {
     lease.release();
   }

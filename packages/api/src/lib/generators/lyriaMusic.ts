@@ -13,6 +13,8 @@
  * (MP3 by default); the mix pipeline normalizes formats via ffmpeg.
  */
 
+import { breakerFor } from '../resilience/circuitBreaker';
+
 export const LYRIA_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export const LYRIA_DEFAULT_MODEL = 'lyria-3-clip-preview';
 
@@ -86,19 +88,25 @@ export async function generateMusic(
   const model = input.modelId ?? lyriaModelId(env);
   const prompt = input.negativePrompt ? `${input.prompt}. Avoid: ${input.negativePrompt}` : input.prompt;
 
-  const res = await doFetch(`${LYRIA_BASE_URL}/models/${model}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['AUDIO'] },
-    }),
+  // D-067 — breaker around the provider call only. A 4xx/429 does not count
+  // (see isCircuitFailure); 5xx, timeouts and network failures do.
+  const res = await breakerFor('lyria').call(async () => {
+    const response = await doFetch(`${LYRIA_BASE_URL}/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ['AUDIO'] },
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw Object.assign(new Error(`Lyria music error ${response.status}: ${body.slice(0, 300)}`), {
+        status: response.status,
+      });
+    }
+    return response;
   });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Lyria music error ${res.status}: ${body.slice(0, 300)}`);
-  }
 
   const data = await res.json();
   const part = findAudioPart(data);

@@ -87,8 +87,14 @@ The single place to record **what was decided, why, and where it is implemented*
 | D-053 | 2026-10-15 | **VPS change rules**: back up → write the file → validate → install once. Never pipe state-changing commands. Use the LF-only `ssh-remote.ps1` helper from Windows. Anything outside `/root/raivstream` is read-only unless the owner approves. | Crontab was wiped by a carriage-return bug. | `docs/operations/vps-change-rules.md` | DONE |
 | D-054 | 2026-10-15 | **Env layout**: the web app reads `apps/web/.env.local`; `/root/raivstream/.env` is for the Prisma CLI and cron only. | A flag was set in the wrong file. | `docs/operations/environment-layout.md` (on branch `wip/triage-local`; not yet on `main`) | IN PROGRESS |
 | D-055 | 2026-10-15 | **Migrations are expand/contract**, with runbook pre-flight and a backup before every apply. | 2026-10-13 mixed-state incident. | `docs/operations/migration-runbook.md` | DONE |
+| D-066 | 2026-10-18 | **Moderation is not circuit-broken.** `promptModeration` (Layer 2 OpenAI scan) and `contentScanner` (upload/publish image scan) must NOT be routed through a circuit breaker. When OpenAI moderation is unavailable the policy is **retry with backoff, then fail the specific operation with a typed error — never silently skip, never allow unmoderated content.** | A breaker failing open means unmoderated content flows to the feed; failing closed means the whole platform stalls on an OpenAI wobble. Neither is acceptable. This does NOT affect the seven billing/execution breakers (fal, runpod, xai, kling, gemini, elevenlabs, lyria), where breakers are correct. | `promptModeration.ts`, `contentScanner.ts`; alternate moderation path + review queue deferred to Phase 2 | DECIDED — not implemented |
 
 ## 7. How we work with agents
+
+> **Safety invariants are not circuit-breakable.** Moderation, credit deduction,
+> and audit logging are correctness boundaries, not performance optimizations. A
+> circuit breaker must never answer "what happens when this is down?" — that is a
+> policy decision, recorded in this file (see D-066).
 
 | ID | Date | Decision | Reason |
 |---|---|---|---|
