@@ -365,6 +365,7 @@ export const MODEL_META: Record<SupportedModel, {
     hidden:               true,
   },
   GROK_IMAGINE: {
+    hidden:               true, // D-001 — retired
     label:                'Grok Imagine',
     description:          'xAI\'s image generation — photorealistic quality from a single prompt.',
     badge:                'live',
@@ -390,6 +391,7 @@ export const MODEL_META: Record<SupportedModel, {
     hidden:               true,
   },
   WAN_25: {
+    hidden:               true, // D-001 — retired
     label:                'Wan 2.6',
     description:          'Alibaba\'s latest video model — text-to-video or image-to-video. Add a seed image to animate it, or leave blank for T2V.',
     badge:                'live',
@@ -402,6 +404,7 @@ export const MODEL_META: Record<SupportedModel, {
     mediaType:            'video',
   },
   KLING_I2V: {
+    hidden:               true, // D-001 — retired
     label:                'Kling I2V',
     description:          'Kuaishou Kling image-to-video — your image becomes the opening frame, extended into hyper-realistic motion.',
     badge:                'live',
@@ -415,6 +418,7 @@ export const MODEL_META: Record<SupportedModel, {
     mediaType:            'video',
   },
   KLING_R2V: {
+    hidden:               true, // D-001 — retired
     label:                'Kling R2V',
     description:          'Kling reference-to-video — attach a reference image to guide style and subject while text drives the scene.',
     badge:                'live',
@@ -427,6 +431,7 @@ export const MODEL_META: Record<SupportedModel, {
     mediaType:            'video',
   },
   HIGGSFIELD: {
+    hidden:               true, // D-001 — retired (never shipped)
     label:                'Higgsfield',
     description:          'Cinematic, character-consistent video generation — coming soon.',
     badge:                'coming-soon',
@@ -452,6 +457,7 @@ export const MODEL_META: Record<SupportedModel, {
     hidden:               true,
   },
   FLUX: {
+    hidden:               true, // D-001 — retired, superseded by FLUX2
     label:                'Flux.1 Dev',
     description:          'Black Forest Labs\' state-of-the-art image model — photorealistic quality via RunPod public endpoint.',
     badge:                'live',
@@ -464,6 +470,7 @@ export const MODEL_META: Record<SupportedModel, {
     mediaType:            'image',
   },
   HUNYUAN_VIDEO: {
+    hidden:               true, // D-001 — retired
     label:                'HunyuanVideo',
     description:          'Tencent\'s open-source video model — high-fidelity motion, 720p output on A100 GPU.',
     badge:                'beta',
@@ -489,6 +496,7 @@ export const MODEL_META: Record<SupportedModel, {
     hidden:               true,
   },
   SEEDANCE: {
+    hidden:               true, // D-001 — retired
     label:                'Seedance 1.5 Pro',
     description:          'ByteDance\'s latest I2V model — animate any image with realistic motion, optional audio synthesis, and camera control.',
     badge:                'live',
@@ -563,6 +571,8 @@ export const MODEL_META: Record<SupportedModel, {
     provider:             'fal.ai · VEED Fabric 1.0',
     providerUrl:          'https://fal.ai/models/veed/fabric-1.0',
     mediaType:            'video',
-    hidden:               true, // UGC consent/ownership/moderation controls not yet implemented
+    // D-001 — VEED is one of the three retained families, so it is visible.
+    // NOTE: UGC consent/ownership/moderation controls are still unimplemented;
+    // owner accepted that tradeoff when un-hiding it (see D-075).
   },
 };

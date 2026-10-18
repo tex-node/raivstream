@@ -22,13 +22,19 @@ import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProvi
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 
-const SUPPORTED_MODELS = [
-  'NANO_BANANA', 'GROK_IMAGINE', 'LTX2', 'WAN_25',
-  'KLING_I2V', 'KLING_R2V',
-  'HIGGSFIELD', 'VEO3',
-  'FLUX', 'HUNYUAN_VIDEO', 'COG_VIDEO_X', 'SEEDANCE',
-  'FLUX2', 'H3_MAX', 'VEED_FABRIC',
-] as const;
+/**
+ * D-001 — the only models that may create NEW jobs.
+ *
+ * This is the API boundary: `create` validates against this list, so a retired
+ * model is rejected by the schema before any handler runs. Retired ids stay in
+ * the `GenerationModel` enum (Postgres cannot drop values in place), in
+ * `MODEL_META` (hidden, for admin/history), and in `MODEL_FEATURE_KEY` (needed
+ * to refund historical jobs) — they simply cannot be selected any more.
+ *
+ * Retired: NANO_BANANA, GROK_IMAGINE, LTX2, WAN_25, KLING_I2V, KLING_R2V,
+ *          HIGGSFIELD, VEO3, FLUX, HUNYUAN_VIDEO, COG_VIDEO_X, SEEDANCE.
+ */
+export const SUPPORTED_MODELS = ['FLUX2', 'H3_MAX', 'VEED_FABRIC'] as const;
 
 export const GENERATION_PROMPT_MAX_LENGTH = 2000;
 export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
