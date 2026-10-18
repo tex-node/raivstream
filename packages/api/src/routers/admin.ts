@@ -10,6 +10,7 @@ import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
+import { allCircuitSnapshots } from '../lib/resilience/circuitBreaker';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { recoverShareAttributionRetention } from '../lib/story/shareAttributionRetention';
 
@@ -1490,4 +1491,12 @@ export const adminRouter = router({
         mutatesBalances: false,
       };
     }),
+
+  /**
+   * D-067 — per-provider circuit breaker state. Read-only, in-memory and
+   * per-process: the web process and the export worker keep independent state.
+   */
+  providerCircuitStates: adminProcedure.query(() => ({
+    states: allCircuitSnapshots(),
+  })),
 });
