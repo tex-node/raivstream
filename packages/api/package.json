@@ -19,6 +19,7 @@
     "@fal-ai/client": "^1.10.1",
     "@raivstream/database": "workspace:*",
     "@trpc/server": "^11.10.0",
+    "@upstash/redis": "^1.28.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "superjson": "^2.2.1",

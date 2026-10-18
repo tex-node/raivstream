@@ -57,6 +57,11 @@ const handler = (req: Request) => {
     req,
     router: appRouter,
     createContext: async () => {
+      // Client IP for the unauthenticated rate-limit bucket. Behind Caddy the
+      // real address is the first entry of x-forwarded-for.
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        || req.headers.get('x-real-ip')
+        || null;
       // ── Dual-surface token resolution ─────────────────────────────────────
       // Web (same-origin):  browser sends raiv_at as httpOnly cookie automatically
       // Mobile (cross-origin): client sends Authorization: Bearer <token>
@@ -93,7 +98,7 @@ const handler = (req: Request) => {
         }
       }
 
-      return { prisma, user, userId, isR16 };
+      return { prisma, user, userId, isR16, ip };
     },
     responseMeta() {
       return {

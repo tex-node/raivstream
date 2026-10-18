@@ -177,9 +177,6 @@ importers:
       '@trpc/server':
         specifier: ^11.10.0
         version: 11.10.0(typescript@5.9.3)
-      '@upstash/redis':
-        specifier: ^1.28.0
-        version: 1.37.0
       hls.js:
         specifier: ^1.5.1
         version: 1.6.15
@@ -259,6 +256,9 @@ importers:
       '@trpc/server':
         specifier: ^11.10.0
         version: 11.10.0(typescript@5.9.3)
+      '@upstash/redis':
+        specifier: ^1.28.0
+        version: 1.37.0
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
