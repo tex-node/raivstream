@@ -21,6 +21,7 @@
 import type { AudioBlueprint, AudioBlueprintCue, AudioBlueprintTrack, DuckingWindow } from './audioPlanning';
 import { DUCKABLE_TRACK_TYPES } from './audioPlanning';
 import { MOVIE_RENDER_DURATION_TOLERANCE_SECONDS, durationWithinTolerance } from './movieRenderPlanning';
+import { FFMPEG_MAX_FILE_SIZE_CONCAT, FFMPEG_MAX_FILE_SIZE_SCENE, FFMPEG_THREADS } from './ffmpegSafety';
 
 export type CommandResult = void | { stdout?: string; stderr?: string };
 export type CommandRunner = (command: string, args: string[]) => Promise<CommandResult>;
@@ -182,8 +183,9 @@ export function buildCueFilterChain(
  * change how long the mixed track is. Without this stage, `amix`'s own
  * `duration=longest` only reaches the longest *cue*, not the canonical
  * runtime — a single short speech cue on a long silent runtime would
- * previously produce a short mix, and `muxAudioWithVideo`'s `-shortest`
- * would then truncate the final video below the Film Blueprint runtime.
+ * previously produce a short mix, and the mux stage would then truncate the
+ * final video below the Film Blueprint runtime. (That mux stage carried
+ * `-shortest` at the time; it now takes an explicit `-t`, per D-031.)
  * This stage runs even for a single cue (no amix), which is exactly the
  * case that bug hit hardest.
  */
@@ -251,17 +253,33 @@ export async function buildMixedAudioTrack(input: {
     '-ac', String(AUDIO_MIX_DEFAULTS.channels),
     '-c:a', AUDIO_MIX_DEFAULTS.audioCodec,
     '-b:a', AUDIO_MIX_DEFAULTS.audioBitrate,
+    // D-031 — the same caps the video path gets: the graph is force-padded to
+    // the canonical runtime, so this should never trigger; it exists so a
+    // pathological filter graph cannot spin on the shared VPS.
+    '-t', String(Math.max(0.001, input.canonicalRuntimeSeconds).toFixed(3)),
+    '-threads', String(FFMPEG_THREADS),
+    '-fs', FFMPEG_MAX_FILE_SIZE_SCENE,
     input.outputPath,
   );
 
   await input.run('ffmpeg', args);
 }
 
-/** Stream-copies the silent video and the mixed audio track together. Never re-encodes video. */
+/**
+ * Stream-copies the silent video and the mixed audio track together. Never re-encodes video.
+ *
+ * D-031 — `-shortest` is forbidden here. It trims the output to whichever stream
+ * ends first, so a cue that started late shortened the finished movie even
+ * though the blueprint promised the full runtime (the Phase 9B.2B bug). The mix
+ * is now force-padded/trimmed to `durationSeconds`, and `-t` bounds the mux at
+ * that promised runtime: explicit, and independent of which stream ends first.
+ */
 export async function muxAudioWithVideo(input: {
   videoPath: string;
   audioPath: string;
   outputPath: string;
+  /** Canonical runtime: Film Blueprint = Audio Blueprint = final movie runtime. */
+  durationSeconds: number;
   run: CommandRunner;
 }): Promise<void> {
   await input.run('ffmpeg', [
@@ -272,7 +290,11 @@ export async function muxAudioWithVideo(input: {
     '-map', '1:a:0',
     '-c:v', 'copy',
     '-c:a', 'copy',
-    '-shortest',
+    '-t', Math.max(0.001, input.durationSeconds).toFixed(3),
+    '-threads', String(FFMPEG_THREADS),
+    // The mux writes the WHOLE movie, so it gets the concat cap, not the
+    // per-scene one (the audio-only mix above keeps the tighter scene cap).
+    '-fs', FFMPEG_MAX_FILE_SIZE_CONCAT,
     input.outputPath,
   ]);
 }

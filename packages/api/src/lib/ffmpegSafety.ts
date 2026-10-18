@@ -18,6 +18,13 @@ export const FFMPEG_TIMEOUT_MS = 25 * 60 * 1000; // 25 min wall-clock per spawn
 export const FFMPEG_MAX_FILE_SIZE_SCENE = '500M'; // -fs, per-scene mux (byte string form)
 export const FFMPEG_MAX_FILE_SIZE_CONCAT = '2G'; // -fs, final concat
 export const FFMPEG_THREADS = 2; // limit CPU on the shared VPS
+/**
+ * Wall-clock bound for probe/metadata spawns (ffprobe, `ffmpeg -filters`, single
+ * last-frame extraction). These are supposed to finish in milliseconds and have
+ * no output duration to scale a timeout from, so they get a flat cap — a hung
+ * probe reading a slow remote URL would otherwise block an export forever.
+ */
+export const FFMPEG_PROBE_TIMEOUT_MS = 60_000;
 export const EXPORT_STUCK_THRESHOLD_MS = 30 * 60 * 1000; // startup sweep
 
 export interface FfmpegSafetyOptions {
@@ -26,15 +33,39 @@ export interface FfmpegSafetyOptions {
 }
 
 /**
- * Append the D-031 safety flags to an ffmpeg argv array. Idempotent — a flag
- * already present is left untouched (callers may set a tighter -t).
+ * Insert the D-031 safety flags at the start of the OUTPUT section of an ffmpeg
+ * argv, i.e. after the last input.
+ *
+ * Two things this gets right that a naive version does not:
+ *
+ *  1. It inserts, never appends. An output option written after the output path
+ *     is parsed as an option for a *second* output that never arrives, so ffmpeg
+ *     rejects the command. Appending looks harmless and silently does nothing
+ *     useful — which is how the first cut of PR A shipped a helper no call site
+ *     could use.
+ *  2. It only inspects the output section. A `-t` before an `-i` is an INPUT
+ *     option (the end card sets `-t 2` on its lavfi inputs) and does not bound
+ *     the output at all, so counting it would drop the real output cap.
+ *
+ * Idempotent: a flag already in the output section is left untouched (callers
+ * may set a tighter -t, e.g. the per-scene narration duration).
  */
 export function applyFfmpegSafety(args: string[], opts: FfmpegSafetyOptions = {}): string[] {
   const out = [...args];
-  const has = (flag: string) => out.includes(flag);
-  if (!has('-t')) out.push('-t', String(FFMPEG_MAX_DURATION_SECONDS));
-  if (!has('-fs')) out.push('-fs', opts.maxFileSize ?? FFMPEG_MAX_FILE_SIZE_SCENE);
-  if (!has('-threads')) out.push('-threads', String(FFMPEG_THREADS));
+  let outputStart = 0;
+  for (let i = 0; i < out.length; i += 1) {
+    if (out[i] === '-i') outputStart = i + 2; // skip `-i` and its input path
+  }
+  const outputArgs = out.slice(outputStart);
+  const has = (flag: string) => outputArgs.includes(flag);
+
+  const additions: string[] = [];
+  if (!has('-t')) additions.push('-t', String(FFMPEG_MAX_DURATION_SECONDS));
+  if (!has('-fs')) additions.push('-fs', opts.maxFileSize ?? FFMPEG_MAX_FILE_SIZE_SCENE);
+  if (!has('-threads')) additions.push('-threads', String(FFMPEG_THREADS));
+  if (additions.length === 0) return out;
+
+  out.splice(Math.min(outputStart, out.length), 0, ...additions);
   return out;
 }
 
