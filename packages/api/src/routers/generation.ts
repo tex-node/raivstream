@@ -76,6 +76,7 @@ async function createWithReserveSettle(
   meta: (typeof MODEL_META)[SupportedModel],
   featureKey: string,
   unitCount = 1,
+  veedGate: { image: string; audioSeconds: number | null; audioVerdict: 'allowed' | 'unknown'; audioReason?: string; transcriptHash?: string; transcriptEmpty?: boolean } | null = null,
 ) {
   const rate = await resolveFeatureCreditRate(ctx.prisma, featureKey);
   if (!rate.configured) {
@@ -97,6 +98,26 @@ async function createWithReserveSettle(
       status:         'QUEUED',
     },
   });
+
+  // D-076 - audit with the REAL job id. The gate runs before the row exists (so
+  // rejected media never creates a job), so its result is buffered and logged here.
+  if (input.model === 'VEED_FABRIC' && veedGate) {
+    logVeedAudit({
+      userId: ctx.user.id,
+      jobId: job.id,
+      imageHash: hashUrl(input.seedImageUrl!),
+      audioHash: hashUrl(input.audioUrl!),
+      hashKind: 'url',
+      consent: true,
+      consentAt: new Date().toISOString(),
+      verdict: 'allowed',
+      detail: `path=per-second image=${veedGate.image} audioSeconds=${veedGate.audioSeconds ?? 'unknown'}`,
+      audioVerdict: veedGate.audioVerdict,
+      audioReason: veedGate.audioReason,
+      transcriptHash: veedGate.transcriptHash,
+      transcriptEmpty: veedGate.transcriptEmpty,
+    });
+  }
 
   const reservationKey = reserveKey(job.id, 0);
   let creditsUsed: number;
@@ -267,28 +288,15 @@ export const generationRouter = router({
       // VIDEO_PER_SECOND_PRICING is on, so that return bypassed every Fabric
       // safety check (consent, file types, image, Whisper). Gate the per-second
       // path explicitly so a pricing flag can never disable moderation.
+      let perSecondGate: Awaited<ReturnType<typeof gateVeedFabricInputs>> | null = null;
       if (input.model === 'VEED_FABRIC' && isVideoPerSecondPricingEnabled()) {
-        const gate = await gateVeedFabricInputs({
+        perSecondGate = await gateVeedFabricInputs({
           consent: input.consent,
           seedImageUrl: input.seedImageUrl!,
           audioUrl: input.audioUrl!,
           userId: ctx.user.id,
         });
-        logVeedAudit({
-          userId: ctx.user.id,
-          jobId: 'pre-create',
-          imageHash: hashUrl(input.seedImageUrl!),
-          audioHash: hashUrl(input.audioUrl!),
-          hashKind: 'url',
-          consent: true,
-          consentAt: new Date().toISOString(),
-          verdict: 'allowed',
-          detail: `path=per-second image=${gate.image} audioSeconds=${gate.audioSeconds ?? 'unknown'}`,
-          audioVerdict: gate.audioVerdict,
-          audioReason: gate.audioReason,
-          transcriptHash: gate.transcriptHash,
-          transcriptEmpty: gate.transcriptEmpty,
-        });
+
       }
       const isPerSecond = isVideoPerSecondPricingEnabled();
       if (isPerSecond && (input.model === 'H3_MAX' || input.model === 'VEED_FABRIC')) {
@@ -306,6 +314,7 @@ export const generationRouter = router({
           meta,
           perSecKey,
           unitCount,
+          perSecondGate,
         );
       }
 
