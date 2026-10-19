@@ -346,7 +346,7 @@ export default function GeneratePage() {
                   <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">
                     Seed Image URL
                     {currentModel?.requiresSeedImage
-                      ? <span className="text-[var(--noc-magenta)] ml-1 normal-case">* required for {currentModel.label}</span>
+                      ? <span className="text-[var(--noc-magenta)] ml-1 normal-case">* required for {isFabric ? 'VEED_FABRIC' : currentModel.label}</span>
                       : <span className="text-[var(--noc-t6)] ml-1 normal-case">(optional)</span>}
                   </label>
                   <input
@@ -369,7 +369,36 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              {/* Aspect ratio - hidden for Fabric (output follows the image) */}
+                            {/* D-076 - Fabric media inputs (below the presenter image) */}
+              {isFabric && (
+                <div className="rounded-xl border border-[rgba(233,233,237,0.12)] bg-[rgba(233,233,237,0.04)] px-4 py-3">
+                  <p className="mb-2 text-xs font-semibold text-[var(--noc-t4)]">
+                    Fabric (Avatar) is in Beta. Uploading unauthorized third-party media is prohibited.
+                  </p>
+                  <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">
+                    Audio URL (paste a link to an mp3, wav, etc.)
+                    <span className="text-[var(--noc-magenta)] ml-1 normal-case">* required</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={fabricAudioUrl}
+                    onChange={(e) => setFabricAudioUrl(e.target.value)}
+                    placeholder="https://example.com/audio.mp3"
+                    className="mb-3 w-full rounded-lg bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)] outline-none"
+                  />
+                  <span className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">Consent</span>
+                  <label className="flex items-start gap-2 text-sm font-semibold text-[var(--noc-t1)]">
+                    <input
+                      type="checkbox"
+                      checked={fabricConsent}
+                      onChange={(e) => setFabricConsent(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>I confirm I have the rights and consent to use this image and audio.</span>
+                  </label>
+                </div>
+              )}
+{/* Aspect ratio - hidden for Fabric (output follows the image) */}
               {form.showFormat && (
               <div>
                 <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">Format</label>
@@ -435,33 +464,6 @@ export default function GeneratePage() {
               )}
 
               {/* D-076 — VEED Fabric consent + audio input */}
-        {isFabric && (
-          <div className="mb-3 rounded-xl border border-[rgba(233,233,237,0.12)] bg-[rgba(233,233,237,0.04)] px-4 py-3">
-            <p className="mb-2 text-xs font-semibold text-[var(--noc-t4)]">
-              Fabric (Avatar) is in Beta. Uploading unauthorized third-party media is prohibited.
-            </p>
-            <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">
-              Audio URL <span className="text-[var(--noc-magenta)] ml-1 normal-case">* required for VEED_FABRIC</span>
-            </label>
-            <input
-              type="url"
-              value={fabricAudioUrl}
-              onChange={(e) => setFabricAudioUrl(e.target.value)}
-              placeholder="Audio URL (mp3, ogg, wav, m4a, aac — max 60s)"
-              className="mb-3 w-full rounded-lg bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)] outline-none"
-            />
-            <span className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">Consent</span>
-            <label className="flex items-start gap-2 text-sm font-semibold text-[var(--noc-t1)]">
-              <input
-                type="checkbox"
-                checked={fabricConsent}
-                onChange={(e) => setFabricConsent(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>I confirm I have the rights and consent to use this image and audio.</span>
-            </label>
-          </div>
-        )}
 
         {/* Generate */}
               <LowBalanceWarning />
