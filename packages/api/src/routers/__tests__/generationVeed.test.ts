@@ -160,3 +160,35 @@ describe('generation.create — VEED Fabric wiring', () => {
     expect(spies.submit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('generation.create — per-second pricing path (production config)', () => {
+  it('gates VEED_FABRIC before the per-second branch that returns early', async () => {
+    // Production runs with VIDEO_PER_SECOND_PRICING on. That branch returns via
+    // createWithReserveSettle BEFORE the main gate, so an unflagged gate here
+    // means moderation never runs - which is exactly what shipped in #84..#89.
+    vi.stubEnv('VIDEO_PER_SECOND_PRICING', '1');
+    __setVeedGateDepsForTests({
+      moderateImage: vi.fn(async () => ({ verdict: 'flagged' as const, reason: 'violence', categories: ['violence'] })),
+      probe: vi.fn(async () => 12),
+      log: vi.fn(),
+      transcribe: vi.fn(async () => 'hello world'),
+      moderateText: vi.fn(async () => ({ allowed: true })),
+    });
+
+    const prisma = makePrisma();
+    const caller = appRouter.createCaller(makeCtx(prisma));
+
+    await expect(
+      caller.generation.create({
+        model: 'VEED_FABRIC',
+        seedImageUrl: IMAGE,
+        audioUrl: AUDIO,
+        consent: true,
+      }),
+    ).rejects.toThrow(/CONTENT_REJECTED/);
+
+    expect(spies.deduct).not.toHaveBeenCalled();
+    expect(spies.submit).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+});
