@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { generateFormShape, canSubmitGenerateForm } from '@/lib/generateFormShape';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { useUser } from '@/lib/auth';
@@ -65,7 +66,16 @@ export default function GeneratePage() {
   const currentModel  = visibleModels.find((m) => m.id === selectedModel)
     ?? visibleModels[0];
 
-  const needsSeedImage = currentModel?.requiresSeedImage && !seedImageUrl.trim();
+  // D-076 - Fabric is media-driven: no prompt, no format, no duration.
+  const form = generateFormShape({
+    modelId: selectedModel,
+    requiresSeedImage: currentModel?.requiresSeedImage,
+    requiresAudioUrl: currentModel?.requiresAudioUrl,
+  });
+  const needsSeedImage = form.requireSeedImage && !seedImageUrl.trim();
+  const canSubmit = canSubmitGenerateForm(form, {
+    prompt, seedImageUrl, audioUrl: fabricAudioUrl, consent: fabricConsent,
+  });
   const pollInterval   = SLOW_MODELS.includes(selectedModel) ? 10_000 : 4_000;
 
   const switchMode = (mode: GenerationMode) => {
@@ -166,14 +176,14 @@ export default function GeneratePage() {
   }, [activeJob, savedStoryboardOutputId, storyboardShotId, storyProjectId, updateStoryboardShot]);
 
   const handleGenerate = () => {
-    if (!prompt.trim() || needsSeedImage || isGenerating) return;
-    // Fabric is blocked until the rights/consent attestation is checked.
-    if (isFabric && (!fabricConsent || !fabricAudioUrl.trim())) return;
+    if (isGenerating || !canSubmit) return;
     setActiveJobId(null);
     setShowPublish(false);
     createJob.mutate({
       model:          selectedModel as never,
-      prompt:         prompt.trim(),
+      // Fabric has no prompt: send undefined so the server applies its canned
+      // default. An empty string would fail z.string().min(3) instead.
+      prompt:         prompt.trim() || undefined,
       negativePrompt: negativePrompt.trim() || undefined,
       duration:       generationMode === 'video' ? duration : undefined,
       aspectRatio,
@@ -343,7 +353,7 @@ export default function GeneratePage() {
                     type="url"
                     value={seedImageUrl}
                     onChange={(e) => setSeedImageUrl(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
+                    placeholder={currentModel?.requiresSeedImage ? 'https://example.com/presenter.jpg' : 'https://example.com/image.jpg'}
                     className={`w-full bg-[var(--noc-card)] border rounded-xl px-4 py-2.5 text-[var(--noc-t1)] placeholder-[var(--noc-t6)] text-sm focus:outline-none transition-colors ${
                       needsSeedImage ? 'border-[var(--noc-magenta)]/70' : 'border-[var(--noc-hairline)] focus:border-[var(--noc-magenta)]/60'
                     }`}
@@ -353,13 +363,14 @@ export default function GeneratePage() {
                       <svg className="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                       </svg>
-                      Wan 2.5 is image-to-video and requires a seed image. Switch to Seedance for text-to-video.
+                      {currentModel?.label} needs a starting image.
                     </p>
                   )}
                 </div>
               )}
 
-              {/* Aspect ratio */}
+              {/* Aspect ratio - hidden for Fabric (output follows the image) */}
+              {form.showFormat && (
               <div>
                 <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">Format</label>
                 <div className="flex gap-2">
@@ -379,9 +390,10 @@ export default function GeneratePage() {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Duration — video only */}
-              {generationMode === 'video' && (
+              {generationMode === 'video' && !form.isFabric && (
                 <div>
                   <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">
                     Duration — {duration}s
@@ -428,6 +440,9 @@ export default function GeneratePage() {
             <p className="mb-2 text-xs font-semibold text-[var(--noc-t4)]">
               Fabric (Avatar) is in Beta. Uploading unauthorized third-party media is prohibited.
             </p>
+            <label className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">
+              Audio URL <span className="text-[var(--noc-magenta)] ml-1 normal-case">* required for VEED_FABRIC</span>
+            </label>
             <input
               type="url"
               value={fabricAudioUrl}
@@ -435,6 +450,7 @@ export default function GeneratePage() {
               placeholder="Audio URL (mp3, ogg, wav, m4a, aac — max 60s)"
               className="mb-3 w-full rounded-lg bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)] outline-none"
             />
+            <span className="text-xs text-[var(--noc-t5)] font-medium uppercase tracking-wider block mb-2">Consent</span>
             <label className="flex items-start gap-2 text-sm font-semibold text-[var(--noc-t1)]">
               <input
                 type="checkbox"
@@ -452,7 +468,7 @@ export default function GeneratePage() {
 
               <button
                 onClick={handleGenerate}
-                disabled={!prompt.trim() || isGenerating || !!needsSeedImage || (isFabric && (!fabricConsent || !fabricAudioUrl.trim()))}
+                disabled={isGenerating || !canSubmit}
                 className="w-full py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-[var(--noc-magenta)] to-[var(--noc-purple)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
               >
                 {isGenerating ? (
