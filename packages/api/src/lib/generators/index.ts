@@ -350,6 +350,7 @@ export const MODEL_META: Record<SupportedModel, {
   mediaType:            'image' | 'video';
   hidden?:              true;       // hide from UI entirely
   requiresSeedImage?:   true;       // model requires a seed image (I2V only)
+  requiresAudioUrl?:    true;       // model requires an audio track (lip-sync)
 }> = {
   NANO_BANANA: {
     label:                'Nano Banana',
