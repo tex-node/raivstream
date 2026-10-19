@@ -262,6 +262,34 @@ export const generationRouter = router({
       // ── Per-second pricing path (VIDEO_PER_SECOND_PRICING flag, default OFF) ──
       // For H3_MAX and VEED_FABRIC, derive the per-resolution feature key and
       // compute the reserve amount from requested duration × rate/second.
+      // D-076 - the per-second branch below returns early through
+      // createWithReserveSettle, BEFORE the main Fabric gate. In production
+      // VIDEO_PER_SECOND_PRICING is on, so that return bypassed every Fabric
+      // safety check (consent, file types, image, Whisper). Gate the per-second
+      // path explicitly so a pricing flag can never disable moderation.
+      if (input.model === 'VEED_FABRIC' && isVideoPerSecondPricingEnabled()) {
+        const gate = await gateVeedFabricInputs({
+          consent: input.consent,
+          seedImageUrl: input.seedImageUrl!,
+          audioUrl: input.audioUrl!,
+          userId: ctx.user.id,
+        });
+        logVeedAudit({
+          userId: ctx.user.id,
+          jobId: 'pre-create',
+          imageHash: hashUrl(input.seedImageUrl!),
+          audioHash: hashUrl(input.audioUrl!),
+          hashKind: 'url',
+          consent: true,
+          consentAt: new Date().toISOString(),
+          verdict: 'allowed',
+          detail: `path=per-second image=${gate.image} audioSeconds=${gate.audioSeconds ?? 'unknown'}`,
+          audioVerdict: gate.audioVerdict,
+          audioReason: gate.audioReason,
+          transcriptHash: gate.transcriptHash,
+          transcriptEmpty: gate.transcriptEmpty,
+        });
+      }
       const isPerSecond = isVideoPerSecondPricingEnabled();
       if (isPerSecond && (input.model === 'H3_MAX' || input.model === 'VEED_FABRIC')) {
         const effectiveResolution =
