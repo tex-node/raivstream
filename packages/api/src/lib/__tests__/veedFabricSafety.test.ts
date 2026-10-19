@@ -24,6 +24,8 @@ function deps(overrides: Partial<Parameters<typeof gateVeedFabricInputs>[1]> = {
     moderateImage: vi.fn(async () => ({ verdict: 'allowed' as const })),
     probe: vi.fn(async () => 12),
     log: vi.fn(),
+    transcribe: vi.fn(async () => 'hello world'),
+    moderateText: vi.fn(async () => ({ allowed: true })),
     ...overrides,
   };
 }
@@ -129,5 +131,59 @@ describe('D-076 — VEED Fabric gate', () => {
     expect(payload).toMatchObject({ jobId: 'job-1', consent: true, hashKind: 'url', verdict: 'allowed' });
     expect(payload.imageHash).toMatch(/^[a-f0-9]{64}$/);
     spy.mockRestore();
+  });
+});
+
+describe('D-076 — audio content moderation (step 4b)', () => {
+  const base = { consent: true as const, seedImageUrl: IMAGE, audioUrl: AUDIO, userId: 'u1' };
+
+  it('1. clean transcript passes and records a hash', async () => {
+    const d = deps({ transcribe: vi.fn(async () => 'Hello world') });
+    const result = await gateVeedFabricInputs(base, d);
+
+    expect(result.audioVerdict).toBe('allowed');
+    expect(result.transcriptEmpty).toBe(false);
+    expect(result.transcriptHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(d.moderateText).toHaveBeenCalledWith('Hello world');
+  });
+
+  it('2. flagged transcript throws CONTENT_REJECTED', async () => {
+    const d = deps({
+      transcribe: vi.fn(async () => 'something violating the policy'),
+      moderateText: vi.fn(async () => ({ allowed: false, reason: 'violence' })),
+    });
+
+    await expect(gateVeedFabricInputs(base, d)).rejects.toThrow(/CONTENT_REJECTED/);
+  });
+
+  it('3. transcription failure fails open with a countable reason', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const d = deps({ transcribe: vi.fn(async () => { throw new Error('fal whisper timed out after 10000ms'); }) });
+
+    const result = await gateVeedFabricInputs(base, d);
+
+    expect(result.audioVerdict).toBe('unknown');
+    expect(result.audioReason).toBe('transcription_unavailable');
+    expect(d.moderateText).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[veed.audit] transcription_failed', expect.objectContaining({ reason: expect.stringMatching(/timed out/) }));
+    warn.mockRestore();
+  });
+
+  it('4. empty transcript passes without calling the text moderator', async () => {
+    const d = deps({ transcribe: vi.fn(async () => '   ') });
+    const result = await gateVeedFabricInputs(base, d);
+
+    expect(result.audioVerdict).toBe('allowed');
+    expect(result.transcriptEmpty).toBe(true);
+    expect(d.moderateText).not.toHaveBeenCalled();
+  });
+
+  it('5. transcription runs after the duration probe and is the last gate step', async () => {
+    const d = deps();
+    await gateVeedFabricInputs(base, d);
+
+    // Order: probe (duration) → transcribe → moderateText.
+    expect((d.probe as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!).toBeLessThan((d.transcribe as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!);
+    expect((d.transcribe as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!).toBeLessThan((d.moderateText as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!);
   });
 });

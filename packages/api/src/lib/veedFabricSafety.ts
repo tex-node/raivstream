@@ -18,6 +18,8 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { TRPCError } from '@trpc/server';
 import { moderateImage } from './contentScanner';
+import { transcribeAudio } from './mediaProviders/fal/falWhisper';
+import { moderatePrompt } from './promptModeration';
 
 export const VEED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif'] as const;
 export const VEED_AUDIO_EXTENSIONS = ['mp3', 'ogg', 'wav', 'm4a', 'aac'] as const;
@@ -135,6 +137,11 @@ export interface VeedAuditEntry {
   verdict: 'allowed' | 'flagged' | 'rejected' | 'unknown';
   reason?: string;
   detail?: string;
+  /** Step 4b — audio content gate. Never contains raw transcript text. */
+  audioVerdict?: 'allowed' | 'flagged' | 'unknown';
+  audioReason?: string;
+  transcriptHash?: string;
+  transcriptEmpty?: boolean;
 }
 
 /** Structured audit line — the audit trail for now (no DB table in D-076). */
@@ -145,18 +152,27 @@ export function logVeedAudit(entry: VeedAuditEntry): void {
 export interface VeedGateResult {
   image: 'allowed' | 'unknown';
   audioSeconds: number | null;
+  /** Step 4b outcome. `unknown` = transcription unavailable (fail-open). */
+  audioVerdict: 'allowed' | 'unknown';
+  audioReason?: string;
+  transcriptHash?: string;
+  transcriptEmpty?: boolean;
 }
 
 export interface VeedGateDeps {
   moderateImage: typeof moderateImage;
   probe: (url: string) => Promise<number | null>;
   log: (entry: VeedAuditEntry) => void;
+  transcribe: (url: string) => Promise<string>;
+  moderateText: (text: string) => Promise<{ allowed: boolean; reason?: string }>;
 }
 
 const defaultGateDeps: VeedGateDeps = {
   moderateImage,
   probe: probeRemoteAudioSeconds,
   log: logVeedAudit,
+  transcribe: transcribeAudio,
+  moderateText: (text: string) => moderatePrompt(text),
 };
 
 /**
@@ -223,7 +239,53 @@ export async function gateVeedFabricInputs(
     });
   }
 
-  return { image: verdict.verdict === 'allowed' ? 'allowed' : 'unknown', audioSeconds };
+  // 4b. Transcribe the audio and moderate the words.
+  // Policy (c): fail OPEN with a countable audit trail. If Whisper is down the
+  // job proceeds, but `audioVerdict: 'unknown'` makes the blind spot visible.
+  // A content rejection is the only hard stop.
+  let audioVerdict: 'allowed' | 'unknown' = 'unknown';
+  let audioReason: string | undefined;
+  let transcriptHash: string | undefined;
+  let transcriptEmpty: boolean | undefined;
+
+  try {
+    const transcript = await d.transcribe(input.audioUrl);
+    const trimmed = (transcript ?? '').trim();
+    transcriptEmpty = trimmed.length === 0;
+    transcriptHash = createHash('sha256').update(transcript ?? '').digest('hex');
+
+    // Silent / music-only audio has nothing to moderate; still recorded so the
+    // audit shows "allowed because empty", not "allowed because checked".
+    if (!transcriptEmpty) {
+      const textVerdict = await d.moderateText(trimmed);
+      if (!textVerdict.allowed) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `CONTENT_REJECTED: the audio track violates our content guidelines${textVerdict.reason ? ` (${textVerdict.reason})` : ''}.`,
+        });
+      }
+    }
+
+    audioVerdict = 'allowed';
+  } catch (error) {
+    // A moderation rejection is a decision, not an infrastructure failure.
+    if (error instanceof TRPCError) throw error;
+
+    audioVerdict = 'unknown';
+    audioReason = 'transcription_unavailable';
+    console.warn('[veed.audit] transcription_failed', {
+      reason: (error as Error).message,
+    });
+  }
+
+  return {
+    image: verdict.verdict === 'allowed' ? 'allowed' : 'unknown',
+    audioSeconds,
+    audioVerdict,
+    audioReason,
+    transcriptHash,
+    transcriptEmpty,
+  };
 }
 
 /**

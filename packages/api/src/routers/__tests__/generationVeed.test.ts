@@ -76,6 +76,8 @@ beforeEach(() => {
     moderateImage: vi.fn(async () => ({ verdict: 'allowed' as const })),
     probe: vi.fn(async () => 12),
     log: vi.fn(),
+    transcribe: vi.fn(async () => 'hello world'),
+    moderateText: vi.fn(async () => ({ allowed: true })),
   });
 });
 
@@ -127,6 +129,8 @@ describe('generation.create — VEED Fabric wiring', () => {
       moderateImage: vi.fn(async () => ({ verdict: 'flagged' as const, reason: 'violence', categories: ['violence'] })),
       probe: vi.fn(async () => 12),
       log: vi.fn(),
+      transcribe: vi.fn(async () => 'hello world'),
+      moderateText: vi.fn(async () => ({ allowed: true })),
     });
 
     const prisma = makePrisma();
