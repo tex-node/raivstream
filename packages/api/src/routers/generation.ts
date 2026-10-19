@@ -286,7 +286,7 @@ export const generationRouter = router({
       // are the entire safety surface. Order: consent → file types → image →
       // audio → (job) → credits → submit. Runs before BOTH billing paths, so a
       // rejected request creates no job and charges nothing.
-      let veedGate: { image: string; audioSeconds: number | null } | null = null;
+      let veedGate: Awaited<ReturnType<typeof gateVeedFabricInputs>> | null = null;
       if (input.model === 'VEED_FABRIC') {
         veedGate = await gateVeedFabricInputs({
           consent: input.consent,
@@ -336,6 +336,10 @@ export const generationRouter = router({
           consentAt: new Date().toISOString(),
           verdict: 'allowed',
           detail: `image=${veedGate.image} audioSeconds=${veedGate.audioSeconds ?? 'unknown'}`,
+          audioVerdict: veedGate.audioVerdict,
+          audioReason: veedGate.audioReason,
+          transcriptHash: veedGate.transcriptHash,
+          transcriptEmpty: veedGate.transcriptEmpty,
         });
       }
 
