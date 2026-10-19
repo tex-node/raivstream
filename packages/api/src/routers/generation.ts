@@ -21,6 +21,12 @@ import {
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
+import {
+  gateVeedFabricInputs,
+  hashUrl,
+  logVeedAudit,
+  scanVeedFabricOutput,
+} from '../lib/veedFabricSafety';
 
 /**
  * D-001 — the only models that may create NEW jobs.
@@ -192,6 +198,11 @@ export const generationRouter = router({
       seedImageUrl:   z.string().url().optional(),
       audioUrl:       z.string().url().optional(),
       resolution:     z.string().max(20).optional(),
+      /**
+       * D-076 — required for VEED_FABRIC. Set only by the UI consent checkbox
+       * ("I confirm I have the rights and consent to use this image and audio").
+       */
+      consent:        z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // Check model availability
@@ -270,6 +281,22 @@ export const generationRouter = router({
         );
       }
 
+      // ── D-076 VEED Fabric input gate ─────────────────────────────────────────
+      // Fabric is media-driven (no text prompt), so the uploaded image and audio
+      // are the entire safety surface. Order: consent → file types → image →
+      // audio → (job) → credits → submit. Runs before BOTH billing paths, so a
+      // rejected request creates no job and charges nothing.
+      let veedGate: { image: string; audioSeconds: number | null } | null = null;
+      if (input.model === 'VEED_FABRIC') {
+        veedGate = await gateVeedFabricInputs({
+          consent: input.consent,
+          seedImageUrl: input.seedImageUrl!,
+          audioUrl: input.audioUrl!,
+          userId: ctx.user.id,
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       // ── Reserve/settle path (flag-guarded, default OFF) ─────────────────────
       // Requires the financial policy decision; until then the deduct-first path
       // below remains the default.
@@ -296,6 +323,21 @@ export const generationRouter = router({
           status:         'QUEUED',
         },
       });
+
+      // D-076 — audit trail for every Fabric job that passed the gate.
+      if (input.model === 'VEED_FABRIC' && veedGate) {
+        logVeedAudit({
+          userId: ctx.user.id,
+          jobId: job.id,
+          imageHash: hashUrl(input.seedImageUrl!),
+          audioHash: hashUrl(input.audioUrl!),
+          hashKind: 'url',
+          consent: true,
+          consentAt: new Date().toISOString(),
+          verdict: 'allowed',
+          detail: `image=${veedGate.image} audioSeconds=${veedGate.audioSeconds ?? 'unknown'}`,
+        });
+      }
 
       // ── Credit gate ──────────────────────────────────────────────────────────
       // Charge BEFORE submitting so the user sees the balance updated immediately
@@ -423,6 +465,16 @@ export const generationRouter = router({
         const rk = reserveKey(job.id, job.retryCount);
         if (remote.status === 'completed') {
           await settleCredits(ctx.prisma, rk, job.creditsUsed).catch(() => {});
+
+          // D-076 — best-effort output scan for Fabric. Fire-and-forget: the job
+          // is already COMPLETED and charged, so this only informs review.
+          if (job.model === 'VEED_FABRIC') {
+            void scanVeedFabricOutput({
+              videoUrl: updated.outputUrl ?? job.outputUrl ?? null,
+              jobId: job.id,
+              userId: ctx.user.id,
+            });
+          }
         } else if (remote.status === 'failed' || remote.status === 'cancelled') {
           await releaseCredits(ctx.prisma, rk).catch(() => {});
         }

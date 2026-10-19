@@ -33,6 +33,10 @@ export default function GeneratePage() {
 
   const [generationMode, setGenerationMode] = useState<GenerationMode>('video');
   const [selectedModel,  setSelectedModel]  = useState<string>(DEFAULT_VIDEO_MODEL);
+  // D-076 — VEED Fabric is media-driven and needs an explicit consent attestation.
+  const [fabricConsent,  setFabricConsent]  = useState(false);
+  const [fabricAudioUrl, setFabricAudioUrl] = useState('');
+  const isFabric = selectedModel === 'VEED_FABRIC';
   const [prompt,         setPrompt]         = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [seedImageUrl,   setSeedImageUrl]   = useState('');
@@ -163,6 +167,8 @@ export default function GeneratePage() {
 
   const handleGenerate = () => {
     if (!prompt.trim() || needsSeedImage || isGenerating) return;
+    // Fabric is blocked until the rights/consent attestation is checked.
+    if (isFabric && (!fabricConsent || !fabricAudioUrl.trim())) return;
     setActiveJobId(null);
     setShowPublish(false);
     createJob.mutate({
@@ -172,6 +178,9 @@ export default function GeneratePage() {
       duration:       generationMode === 'video' ? duration : undefined,
       aspectRatio,
       seedImageUrl:   seedImageUrl.trim() || undefined,
+      ...(isFabric
+        ? { audioUrl: fabricAudioUrl.trim(), consent: true as const }
+        : {}),
     });
   };
 
@@ -413,12 +422,37 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              {/* Generate */}
+              {/* D-076 — VEED Fabric consent + audio input */}
+        {isFabric && (
+          <div className="mb-3 rounded-xl border border-[rgba(233,233,237,0.12)] bg-[rgba(233,233,237,0.04)] px-4 py-3">
+            <p className="mb-2 text-xs font-semibold text-[var(--noc-t4)]">
+              Fabric (Avatar) is in Beta. Uploading unauthorized third-party media is prohibited.
+            </p>
+            <input
+              type="url"
+              value={fabricAudioUrl}
+              onChange={(e) => setFabricAudioUrl(e.target.value)}
+              placeholder="Audio URL (mp3, ogg, wav, m4a, aac — max 60s)"
+              className="mb-3 w-full rounded-lg bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)] outline-none"
+            />
+            <label className="flex items-start gap-2 text-sm font-semibold text-[var(--noc-t1)]">
+              <input
+                type="checkbox"
+                checked={fabricConsent}
+                onChange={(e) => setFabricConsent(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I confirm I have the rights and consent to use this image and audio.</span>
+            </label>
+          </div>
+        )}
+
+        {/* Generate */}
               <LowBalanceWarning />
 
               <button
                 onClick={handleGenerate}
-                disabled={!prompt.trim() || isGenerating || !!needsSeedImage}
+                disabled={!prompt.trim() || isGenerating || !!needsSeedImage || (isFabric && (!fabricConsent || !fabricAudioUrl.trim()))}
                 className="w-full py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-[var(--noc-magenta)] to-[var(--noc-purple)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
               >
                 {isGenerating ? (
