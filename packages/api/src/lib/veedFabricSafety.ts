@@ -166,11 +166,22 @@ const defaultGateDeps: VeedGateDeps = {
  * would be moderating after charging, or charging after a rejected image.
  * Throws TRPCError for every rejection, so nothing downstream runs.
  */
+let gateDepsOverride: Partial<VeedGateDeps> | null = null;
+
+/**
+ * Test seam: substitute the gate's I/O (image moderator, ffprobe) without
+ * replacing the gate itself — so tests exercise the real ordering logic while a
+ * router wiring test can still drive `generation.create` end to end.
+ */
+export function __setVeedGateDepsForTests(deps: Partial<VeedGateDeps> | null): void {
+  gateDepsOverride = deps;
+}
+
 export async function gateVeedFabricInputs(
   input: { consent?: boolean; seedImageUrl: string; audioUrl: string; userId: string },
   deps: Partial<VeedGateDeps> = {},
 ): Promise<VeedGateResult> {
-  const d: VeedGateDeps = { ...defaultGateDeps, ...deps };
+  const d: VeedGateDeps = { ...defaultGateDeps, ...(gateDepsOverride ?? {}), ...deps };
 
   // 1. Consent — cheapest gate, no I/O.
   if (input.consent !== true) {
