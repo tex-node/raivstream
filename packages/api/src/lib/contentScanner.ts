@@ -26,14 +26,53 @@ interface OpenAIModerationResponse {
   results: OpenAIModerationResult[];
 }
 
+// ─── Reusable image moderation (D-076 / VEED Fabric gate) ────────────────────
+
+export type ImageModerationVerdict = {
+  /** `unknown` = API unavailable / unsupported URL — callers decide how to fail. */
+  verdict: 'allowed' | 'flagged' | 'unknown';
+  reason?: string;
+  categories?: string[];
+};
+
+/**
+ * Moderate a single image by URL or by `data:` URL (base64). Reuses the same
+ * omni-moderation endpoint and decision helper as the post-publish scanner, but
+ * returns a verdict instead of writing a Video row — so a request path can gate
+ * on it before spending credits.
+ *
+ * Fail-open by design: an OpenAI outage returns `unknown`, never `flagged`.
+ * A moderation provider being down must not block legitimate uploads.
+ */
+export async function moderateImage(input: { url?: string; dataUrl?: string }): Promise<ImageModerationVerdict> {
+  const target = input.dataUrl ?? input.url;
+  if (!target) return { verdict: 'unknown', reason: 'no image provided' };
+
+  const result = await scanImageUrl(target);
+  const decision = decideModerationStatus(result);
+
+  if (decision.status === 'PENDING') return { verdict: 'unknown' };
+  if (decision.status === 'APPROVED') return { verdict: 'allowed' };
+
+  return {
+    verdict: 'flagged',
+    reason: decision.reason,
+    categories: Object.entries(result?.categories ?? {})
+      .filter(([, flagged]) => flagged)
+      .map(([category]) => category),
+  };
+}
+
 // ─── Core scanner ─────────────────────────────────────────────────────────────
 
 async function scanImageUrl(imageUrl: string): Promise<OpenAIModerationResult | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  // Only scan publicly accessible URLs — skip R2 private / localhost
-  if (!imageUrl.startsWith('https://')) return null;
+  // Only scan publicly accessible URLs — skip R2 private / localhost.
+  // `data:` URLs are accepted: OpenAI moderations supports inline base64 images,
+  // which is how the VEED Fabric output-frame scan passes a video frame.
+  if (!imageUrl.startsWith('https://') && !imageUrl.startsWith('data:image/')) return null;
 
   try {
     const res = await fetch('https://api.openai.com/v1/moderations', {
