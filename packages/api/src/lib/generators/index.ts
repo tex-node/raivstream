@@ -570,6 +570,9 @@ export const MODEL_META: Record<SupportedModel, {
     maxDuration:          0,
     supportsImageToVideo: false,
     provider:             'fal.ai · VEED Fabric 1.0',
+    // D-076 - Fabric cannot run without both media inputs.
+    requiresSeedImage:    true,
+    requiresAudioUrl:     true,
     providerUrl:          'https://fal.ai/models/veed/fabric-1.0',
     mediaType:            'video',
     // D-001 — VEED is one of the three retained families, so it is visible.
