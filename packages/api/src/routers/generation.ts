@@ -21,6 +21,7 @@ import {
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
+import { estimateModelCreditCost } from '../lib/generationCost';
 import {
   gateVeedFabricInputs,
   hashUrl,
@@ -199,7 +200,13 @@ export const generationRouter = router({
         return {
           id,
           ...meta,
-          creditCost: rateMap[MODEL_FEATURE_KEY[id as SupportedModel]] ?? null,
+          // Per-second models are billed at a resolution-specific rate; mirror the
+          // charge path (flag included) so the UI cannot under-report.
+          creditCost: estimateModelCreditCost({
+            model: id as SupportedModel,
+            rateMap,
+            perSecondEnabled: isVideoPerSecondPricingEnabled(),
+          }),
           ...(availability ? { available: availability.available, unavailableReason: availability.reason ?? null } : {}),
         };
       });

@@ -61,6 +61,8 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-1">
           {[
             { href: '/create',   label: 'Create'    },
+            { href: '/avatar',   label: 'Avatar'    },
+            { href: '/generate', label: 'AI Studio' },
             { href: '/pricing',  label: 'Pricing'   },
             { href: '/story-playground', label: 'Story Playground' },
             { href: '/director', label: 'Director' },
@@ -180,6 +182,8 @@ export function Navbar() {
                       { href: '/academy', label: 'Academy' },
                     ] : []),
                     ...(!isR16 ? [
+                      { href: '/avatar',   label: '🎭 Avatar'     },
+                      { href: '/generate', label: '✨ AI Studio'  },
                       { href: '/upload',   label: '📤 Upload'     },
                       { href: '/analytics',label: 'Analytics'     },
                       { href: '/story-studio', label: 'Advanced Story Studio' },
