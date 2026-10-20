@@ -6,6 +6,12 @@ import { analytics, STORY_ANALYTICS_EVENTS } from '../lib/analytics';
 const storyAnalyticsEventSchema = z.enum(STORY_ANALYTICS_EVENTS);
 const analyticsPropertiesSchema = z.record(z.unknown()).default({});
 
+/** D-002 - product-event namespaces this router will accept. */
+const PRODUCT_EVENT_PREFIXES = ['avatar_'] as const;
+
+/** Only these property keys are persisted - never media URLs or prompts. */
+const SAFE_EVENT_PROPERTY_KEYS = new Set(['jobId', 'model', 'resolution', 'durationSeconds']);
+
 export const analyticsRouter = router({
   trackStoryEvent: protectedProcedure
     .input(z.object({
@@ -22,6 +28,36 @@ export const analyticsRouter = router({
           ...input.properties,
           audienceMode: ctx.isR16 ? 'KIDS' : input.properties.audienceMode,
         },
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * D-002 - generic product event. `trackStoryEvent` is enum-locked to story
+   * events; this accepts a namespaced product event (currently `avatar_*`).
+   *
+   * Properties are filtered server-side: a client must not be able to smuggle
+   * prompts, media URLs or transcripts into analytics.
+   */
+  track: protectedProcedure
+    .input(z.object({
+      event: z.string().trim().min(3).max(120).regex(/^[a-z][a-z0-9_]*$/),
+      properties: analyticsPropertiesSchema,
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!PRODUCT_EVENT_PREFIXES.some((prefix) => input.event.startsWith(prefix))) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown product event.' });
+      }
+
+      const safeProperties = Object.fromEntries(
+        Object.entries(input.properties).filter(([key]) => SAFE_EVENT_PROPERTY_KEYS.has(key)),
+      );
+
+      await analytics.track(ctx.prisma, {
+        event: input.event,
+        userId: ctx.user.id,
+        properties: safeProperties,
       });
 
       return { success: true };

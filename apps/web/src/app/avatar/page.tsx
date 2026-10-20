@@ -12,10 +12,11 @@
  * Studio cannot disagree about what is required.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { trpc } from '@/lib/trpc';
 import { generateFormShape, canSubmitGenerateForm } from '@/lib/generateFormShape';
+import { useUser } from '@/lib/auth';
 
 const MODEL = 'VEED_FABRIC';
 const POLL_INTERVAL_MS = 4_000;
@@ -40,15 +41,32 @@ export default function AvatarPage() {
   const fabric = (models.data ?? []).find((m) => m.id === MODEL);
   const creditCost = fabric?.creditCost ?? null;
 
+  // Server-side analytics: a client console.log is invisible to adoption counts.
+  const { isSignedIn } = useUser();
+  const track = trpc.analytics.track.useMutation();
+  const trackedView = useRef(false);
+
   useEffect(() => {
-    console.log('[analytics] avatar_page_view');
-  }, []);
+    if (!isSignedIn || trackedView.current) return; // strict-mode / re-render guard
+    trackedView.current = true;
+    track.mutate({ event: 'avatar_page_view', properties: {} });
+  }, [isSignedIn, track]);
 
   const createJob = trpc.generation.create.useMutation({
     onSuccess: (job) => {
-      console.log('[analytics] avatar_job_submitted', { jobId: job.id });
       setActiveJobId(job.id);
       setPollEnabled(job.status !== 'COMPLETED');
+
+      // No prompt, no media URLs, no transcript - only counts and identifiers.
+      track.mutate({
+        event: 'avatar_job_submitted',
+        properties: {
+          jobId: job.id,
+          model: 'VEED_FABRIC',
+          resolution: (job as { resolution?: string | null }).resolution ?? '720p',
+          durationSeconds: (job as { duration?: number | null }).duration ?? 5,
+        },
+      });
     },
   });
 
