@@ -177,7 +177,7 @@ export default function AvatarPage() {
             />
             <p className="mt-1.5 text-xs text-[var(--noc-t6)]">
               MP3, WAV, or M4A (max 10 MB, 60s).
-              {uploading && ' Uploading…'}
+              {uploading && ' Uploading...'}
               {audioUrl && !uploading && ' Uploaded.'}
             </p>
             {uploadError && (
@@ -216,7 +216,7 @@ export default function AvatarPage() {
                   }`}
                 >
                   {value === '480p' ? '480p (Standard)' : '720p (HD)'}
-                  {costByResolution?.[value] != null ? ` — ${costByResolution[value]} credits` : ''}
+                  {costByResolution?.[value] != null ? ` - ${costByResolution[value]} credits` : ''}
                 </button>
               ))}
             </div>
