@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { estimateModelCreditCost, PER_SECOND_DEFAULT_SECONDS } from '../generationCost';
+import { estimateModelCreditCost, estimatePerSecondCosts, PER_SECOND_DEFAULT_SECONDS } from '../generationCost';
 
 /**
  * D-002 - the UI advertised `creditCost` from the FLAT key (300 for Fabric) while
@@ -47,5 +47,23 @@ describe('estimateModelCreditCost', () => {
 
   it('returns null when no rate is configured', () => {
     expect(estimateModelCreditCost({ model: 'VEED_FABRIC', rateMap: {}, perSecondEnabled: true })).toBeNull();
+  });
+});
+
+describe('estimatePerSecondCosts', () => {
+  it('returns every resolution price for VEED_FABRIC', () => {
+    const costs = estimatePerSecondCosts({ model: 'VEED_FABRIC', rateMap: RATES });
+    expect(costs).toEqual({ '480p': 225 * 5, '720p': 420 * 5 });
+    expect(costs?.['480p']).toBe(1125);
+    expect(costs?.['720p']).toBe(2100);
+  });
+
+  it('returns null for flat-rate models', () => {
+    expect(estimatePerSecondCosts({ model: 'FLUX2', rateMap: RATES })).toBeNull();
+  });
+
+  it('omits resolutions with no configured rate', () => {
+    const costs = estimatePerSecondCosts({ model: 'H3_MAX', rateMap: { 'generate:h3_max_768p': 128 } });
+    expect(costs).toEqual({ '768P': 640 });
   });
 });

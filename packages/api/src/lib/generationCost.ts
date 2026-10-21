@@ -53,3 +53,32 @@ export function estimateModelCreditCost(input: {
 
   return input.rateMap[MODEL_FEATURE_KEY[input.model]] ?? null;
 }
+
+/** Resolutions each per-second model can be billed at. */
+export const PER_SECOND_RESOLUTIONS: Record<string, readonly string[]> = {
+  VEED_FABRIC: ['480p', '720p'],
+  H3_MAX: ['480P', '768P', '1080P'],
+};
+
+/**
+ * Every resolution's price for a per-second model - the Avatar picker needs the
+ * whole set, not just the default.
+ */
+export function estimatePerSecondCosts(input: {
+  model: CostModel;
+  rateMap: Record<string, number>;
+  seconds?: number;
+}): Record<string, number> | null {
+  const resolutions = PER_SECOND_RESOLUTIONS[input.model];
+  if (!resolutions) return null;
+
+  const seconds = input.seconds ?? PER_SECOND_DEFAULT_SECONDS;
+  const costs: Record<string, number> = {};
+  for (const resolution of resolutions) {
+    const key = perSecondFeatureKey(input.model, resolution);
+    const rate = key ? input.rateMap[key] : undefined;
+    if (rate != null) costs[resolution] = Math.ceil(rate * seconds);
+  }
+
+  return Object.keys(costs).length > 0 ? costs : null;
+}

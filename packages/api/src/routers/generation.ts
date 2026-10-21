@@ -21,7 +21,11 @@ import {
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
-import { estimateModelCreditCost } from '../lib/generationCost';
+import { estimateModelCreditCost, estimatePerSecondCosts } from '../lib/generationCost';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'node:crypto';
+import { getPublicUrlForKey } from '../lib/r2';
 import {
   gateVeedFabricInputs,
   hashUrl,
@@ -56,6 +60,24 @@ export const NEGATIVE_PROMPT_MAX_LENGTH = 500;
 const chargeKey  = (jobId: string, attempt: number) => `gen:charge:${jobId}:${attempt}`;
 const refundKey  = (jobId: string, attempt: number) => `gen:refund:${jobId}:${attempt}`;
 const reserveKey = (jobId: string, attempt: number) => `reserve:${jobId}:${attempt}`;
+
+/**
+ * D-002 B.1 - R2 client for presigning (mirrors the local helper in video.ts).
+ * Endpoint/credentials are read lazily so importing this module never throws.
+ */
+function getR2Client(): S3Client {
+  const account = process.env.R2_ACCOUNT_ID ?? '';
+  return new S3Client({
+    region: 'auto',
+    endpoint: 'https://' + account + '.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  });
+}
 
 async function balanceOf(prisma: any, userId: string): Promise<number> {
   const row = await prisma.creditBalance.findUnique({
@@ -207,10 +229,53 @@ export const generationRouter = router({
             rateMap,
             perSecondEnabled: isVideoPerSecondPricingEnabled(),
           }),
+          // D-002 B.1 - every resolution's price so the Avatar picker shows the
+          // real number before the user picks one.
+          ...(isVideoPerSecondPricingEnabled()
+            ? { creditCostByResolution: estimatePerSecondCosts({ model: id as SupportedModel, rateMap }) }
+            : {}),
           ...(availability ? { available: availability.available, unavailableReason: availability.reason ?? null } : {}),
         };
       });
   }),
+
+  /**
+   * D-002 B.1 - presigned audio upload for the Avatar surface.
+   *
+   * Pasting a URL is not a creator workflow. The client PUTs straight to R2 so
+   * the file never passes through the API. The key is per-user and the extension
+   * is allowlisted, so a caller cannot land an arbitrary object type in the bucket.
+   */
+  requestAudioUpload: protectedProcedure
+    .input(z.object({
+      filename: z.string().min(1).max(200),
+      contentType: z.string().max(100),
+      fileSizeBytes: z.number().positive().max(10 * 1024 * 1024),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const ext = (input.filename.split('.').pop() ?? '').toLowerCase();
+      const allowed = ['mp3', 'wav', 'm4a', 'aac', 'ogg'];
+      if (!allowed.includes(ext)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Audio must be one of: ${allowed.join(', ')}.`,
+        });
+      }
+
+      const key = `avatar-audio/${ctx.user.id}/${randomUUID()}.${ext}`;
+      const client = getR2Client();
+      const uploadUrl = await getSignedUrl(
+        client,
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME!,
+          Key: key,
+          ContentType: input.contentType,
+        }),
+        { expiresIn: 900 },
+      );
+
+      return { key, uploadUrl, publicUrl: getPublicUrlForKey(key) };
+    }),
 
   /** Submit a new AI generation job */
   create: protectedProcedure
