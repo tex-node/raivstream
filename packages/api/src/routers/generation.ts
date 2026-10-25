@@ -66,10 +66,21 @@ const reserveKey = (jobId: string, attempt: number) => `reserve:${jobId}:${attem
  * Endpoint/credentials are read lazily so importing this module never throws.
  */
 function getR2Client(): S3Client {
-  const account = process.env.R2_ACCOUNT_ID ?? '';
+  // Same env var the working video upload uses. An earlier version derived the
+  // endpoint from R2_ACCOUNT_ID, which is not set in production: that produced
+  // "https://.r2.cloudflarestorage.com" and an immediate browser "Failed to
+  // fetch" (DNS failure) rather than a signature error.
+  const endpoint = process.env.R2_ENDPOINT;
+  if (!endpoint) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'R2_ENDPOINT is not configured.',
+    });
+  }
+
   return new S3Client({
     region: 'auto',
-    endpoint: 'https://' + account + '.r2.cloudflarestorage.com',
+    endpoint,
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
