@@ -129,10 +129,10 @@ export async function extractFirstFrameJpeg(videoUrl: string): Promise<Buffer | 
 export interface VeedAuditEntry {
   userId: string;
   jobId: string;
-  imageHash: string;
-  audioHash: string;
+  imageHash?: string;
+  audioHash?: string;
   hashKind: 'url';
-  consent: true;
+  consent: boolean; // false only on consent_missing
   consentAt: string;
   verdict: 'allowed' | 'flagged' | 'rejected' | 'unknown';
   reason?: string;
@@ -199,31 +199,52 @@ export async function gateVeedFabricInputs(
 ): Promise<VeedGateResult> {
   const d: VeedGateDeps = { ...defaultGateDeps, ...(gateDepsOverride ?? {}), ...deps };
 
-  // 1. Consent — cheapest gate, no I/O.
+  // A rejection must be as traceable as an approval. Every throw below audits
+  // first, with `jobId: 'pre-create'` because the gate runs before the row
+  // exists (rejected media must never create a job).
+  type RejectReason =
+    | 'consent_missing'
+    | 'file_type_invalid'
+    | 'image_flagged'
+    | 'audio_too_long'
+    | 'transcript_flagged';
+
+  const auditRejection = (reason: RejectReason, detail?: string, consent = true): void => {
+    d.log({
+      userId: input.userId,
+      jobId: 'pre-create',
+      ...(input.seedImageUrl ? { imageHash: hashUrl(input.seedImageUrl) } : {}),
+      ...(input.audioUrl ? { audioHash: hashUrl(input.audioUrl) } : {}),
+      hashKind: 'url',
+      consent,
+      consentAt: new Date().toISOString(),
+      verdict: 'rejected',
+      reason,
+      detail,
+    });
+  };
+
+  // 1. Consent - cheapest gate, no I/O.
   if (input.consent !== true) {
+    auditRejection('consent_missing', 'consent flag not set', false);
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'Consent attestation is required for VEED Fabric.',
     });
   }
 
-  // 2. File types — no I/O.
-  assertVeedMediaTypes(input.seedImageUrl, input.audioUrl);
+  // 2. File types - no I/O.
+  try {
+    assertVeedMediaTypes(input.seedImageUrl, input.audioUrl);
+  } catch (error) {
+    auditRejection('file_type_invalid', (error as Error).message.slice(0, 200));
+    throw error;
+  }
 
   // 3. Image moderation. `unknown` (API down) passes: fail-open.
   const verdict = await d.moderateImage({ url: input.seedImageUrl });
   if (verdict.verdict === 'flagged') {
-    d.log({
-      userId: input.userId,
-      jobId: 'pre-create',
-      imageHash: hashUrl(input.seedImageUrl),
-      audioHash: hashUrl(input.audioUrl),
-      hashKind: 'url',
-      consent: true,
-      consentAt: new Date().toISOString(),
-      verdict: 'rejected',
-      reason: verdict.reason,
-    });
+    auditRejection('image_flagged', `imageVerdict=flagged reason=${verdict.reason ?? 'n/a'}`);
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'CONTENT_REJECTED: the presenter image violates our content guidelines.',
@@ -233,6 +254,7 @@ export async function gateVeedFabricInputs(
   // 4. Audio duration. Null (probe failed) passes and is logged as unknown.
   const audioSeconds = await d.probe(input.audioUrl);
   if (audioSeconds !== null && audioSeconds > VEED_MAX_AUDIO_SECONDS) {
+    auditRejection('audio_too_long', `receivedSeconds: ${Math.round(audioSeconds)}`);
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: `VEED Fabric audio must be ${VEED_MAX_AUDIO_SECONDS}s or shorter (received ${Math.round(audioSeconds)}s).`,
@@ -259,6 +281,7 @@ export async function gateVeedFabricInputs(
     if (!transcriptEmpty) {
       const textVerdict = await d.moderateText(trimmed);
       if (!textVerdict.allowed) {
+        auditRejection('transcript_flagged', `transcriptionRejected reason=${textVerdict.reason ?? 'n/a'}`);
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: `CONTENT_REJECTED: the audio track violates our content guidelines${textVerdict.reason ? ` (${textVerdict.reason})` : ''}.`,
