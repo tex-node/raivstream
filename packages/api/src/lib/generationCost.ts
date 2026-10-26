@@ -56,7 +56,7 @@ export function estimateModelCreditCost(input: {
 
 /** Resolutions each per-second model can be billed at. */
 export const PER_SECOND_RESOLUTIONS: Record<string, readonly string[]> = {
-  VEED_FABRIC: ['480p', '720p'],
+  VEED_FABRIC: ['480p', '720p', '1080p'],
   H3_MAX: ['480P', '768P', '1080P'],
 };
 

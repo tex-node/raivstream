@@ -1,7 +1,8 @@
-import { router, protectedProcedure } from '../trpc';
+import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { analytics, STORY_ANALYTICS_EVENTS } from '../lib/analytics';
+import { enforceRateLimit } from '../lib/resilience/rateLimitMiddleware';
 
 const storyAnalyticsEventSchema = z.enum(STORY_ANALYTICS_EVENTS);
 const analyticsPropertiesSchema = z.record(z.unknown()).default({});
@@ -58,6 +59,33 @@ export const analyticsRouter = router({
         event: input.event,
         userId: ctx.user.id,
         properties: safeProperties,
+      });
+
+      return { success: true };
+    }),
+
+  /**
+   * D-002 - public page-view tracking. Signed-out visitors are the majority of
+   * first-touch traffic, and `track` is auth-only, so those views were invisible.
+   *
+   * Strict allowlist (one event, no properties) plus the unauthenticated rate
+   * bucket: this is an unauthenticated write endpoint and must stay as small and
+   * as cheap to reject as possible.
+   */
+  trackPublicEvent: publicProcedure
+    .input(z.object({ event: z.enum(['avatar_page_view']) }))
+    .mutation(async ({ ctx, input }) => {
+      await enforceRateLimit({
+        path: 'analytics.trackPublicEvent',
+        user: null,
+        userId: null,
+        ip: ctx.ip ?? null,
+      });
+
+      await analytics.track(ctx.prisma, {
+        event: input.event,
+        userId: null,
+        properties: {},
       });
 
       return { success: true };
