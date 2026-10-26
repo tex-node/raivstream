@@ -187,3 +187,54 @@ describe('D-076 — audio content moderation (step 4b)', () => {
     expect((d.transcribe as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!).toBeLessThan((d.moderateText as unknown as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0]!);
   });
 });
+
+describe('D-076 - rejection audit trail', () => {
+  const base = { seedImageUrl: IMAGE, audioUrl: AUDIO, userId: 'u1' };
+
+  function lastLog(d: ReturnType<typeof deps>) {
+    const calls = (d.log as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    return calls[calls.length - 1]?.[0] as Record<string, unknown>;
+  }
+
+  it('audits a missing consent with consent: false', async () => {
+    const d = deps();
+    await expect(gateVeedFabricInputs({ ...base, consent: false }, d)).rejects.toThrow(/Consent attestation/);
+    expect(lastLog(d)).toMatchObject({ verdict: 'rejected', reason: 'consent_missing', consent: false, jobId: 'pre-create' });
+  });
+
+  it('audits an invalid file type', async () => {
+    const d = deps();
+    await expect(
+      gateVeedFabricInputs({ ...base, consent: true, seedImageUrl: 'https://cdn.test/presenter.bmp' }, d),
+    ).rejects.toThrow(/image ending in one of/);
+    const entry = lastLog(d);
+    expect(entry).toMatchObject({ verdict: 'rejected', reason: 'file_type_invalid' });
+    expect(String(entry.detail)).toMatch(/image ending in one of/);
+  });
+
+  it('audits a flagged image with the moderator reason', async () => {
+    const d = deps({ moderateImage: vi.fn(async () => ({ verdict: 'flagged' as const, reason: 'violence' })) });
+    await expect(gateVeedFabricInputs({ ...base, consent: true }, d)).rejects.toThrow(/CONTENT_REJECTED/);
+    const entry = lastLog(d);
+    expect(entry).toMatchObject({ verdict: 'rejected', reason: 'image_flagged' });
+    expect(String(entry.detail)).toMatch(/violence/);
+  });
+
+  it('audits audio over the limit with the received seconds', async () => {
+    const d = deps({ probe: vi.fn(async () => 359) });
+    await expect(gateVeedFabricInputs({ ...base, consent: true }, d)).rejects.toThrow(/60s or shorter \(received 359s\)/);
+    const entry = lastLog(d);
+    expect(entry).toMatchObject({ verdict: 'rejected', reason: 'audio_too_long' });
+    expect(String(entry.detail)).toMatch(/359/);
+  });
+
+  it('audits a flagged transcript', async () => {
+    const d = deps({
+      transcribe: vi.fn(async () => 'something violating policy'),
+      moderateText: vi.fn(async () => ({ allowed: false, reason: 'violence' })),
+    });
+    await expect(gateVeedFabricInputs({ ...base, consent: true }, d)).rejects.toThrow(/CONTENT_REJECTED/);
+    const entry = lastLog(d);
+    expect(entry).toMatchObject({ verdict: 'rejected', reason: 'transcript_flagged' });
+  });
+});
