@@ -1,4 +1,4 @@
-﻿# Raivstream â€” Decisions & Plans
+# Raivstream â€” Decisions & Plans
 
 The single place to record **what was decided, why, and where it is implemented**. Status of individual features lives in `docs/roadmap/feature-tracker.md`; the session-by-session work log lives in `SESSION.md`. This file is for decisions.
 
@@ -60,7 +60,7 @@ The single place to record **what was decided, why, and where it is implemented*
 | ID | Date | Decision | Where | Status |
 |---|---|---|---|---|
 | D-040 | 2026-10-15 | **Video is charged per second** (`VIDEO_PER_SECOND_PRICING` flag). | PR #51; seed | IMPLEMENTED; go-live blocked by D-043 |
-| D-041 | 2026-10-15 | **Rates, in credits per second:** | seed + `docs/architecture/story-pace-pricing.md` (requested) | DECIDED |
+| D-041 | 2026-10-15 | **Rates, in credits per second.** VEED Fabric tiers: **480p 225/s** (1,125 for 5 s) · **720p 420/s** (2,100) · **1080p 600/s** (3,000). 1080p pricing rationale: pixel-proportional would be ~945/s (2.25x the 720p rate), but at that price a 5 s clip costs more than an H3_MAX 1080p video (1,280) and users revert to 720p; 600/s is a +43% premium step that stays defensible against the rest of the catalogue. **Implementation note:** `listModels.creditCost` returns the **default 720p tier** (2,100 for 5 s) for VEED_FABRIC because the shared AI Studio form defaults to 720p - it is NOT a "starting at" price. Use `creditCostByResolution` to display tier-specific pricing; 480p is the cheapest option at 1,125. | seed + `docs/architecture/story-pace-pricing.md` (requested) | DECIDED |
 
 | Product | Resolution | Credits / second |
 |---|---|---|
