@@ -276,7 +276,11 @@ export default function AvatarPage() {
               <div className="text-center">
                 <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[var(--noc-hairline)] border-t-[var(--noc-magenta)]" />
                 <p className="text-sm font-semibold text-[var(--noc-t4)]">Generating your avatar…</p>
-                <p className="mt-1 text-xs text-[var(--noc-t6)]">This usually takes 15-30 seconds.</p>
+                {/* Measured across all three tiers: 480p 71 s, 720p 25 s,
+                    1080p 59.9 s. Time is dominated by fal queueing, not
+                    resolution, so this estimate is deliberately generous - a
+                    tight number reads as "frozen" when the queue is busy. */}
+                <p className="mt-1 text-xs text-[var(--noc-t6)]">This usually takes 45-90 seconds.</p>
               </div>
             ) : (
               <p className="max-w-xs text-center text-sm text-[var(--noc-t5)]">

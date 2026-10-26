@@ -163,3 +163,31 @@ after a manual change can be pruned once the app is verified healthy.
 ## 4. Applied-migration checksum discipline
 
 **Never edit a migration file that has been applied.** Prisma records its checksum; editing makes `migrate deploy` refuse (and `prisma migrate status` report a mismatch). If a change is needed, **add a new migration file** (e.g. `20261013120000_…`), never modify an applied one.
+
+## Manual `feature_credit_rates` inserts need an explicit `id`
+
+`feature_credit_rates.id` has **no database default** — Prisma generates it
+application-side (`@default(uuid())` in the Prisma layer, not in Postgres). A
+plain `INSERT` without `id` therefore fails:
+
+```
+ERROR: null value in column "id" of relation "feature_credit_rates"
+       violates not-null constraint
+```
+
+Seeding a rate by hand (e.g. `generate:veed_fabric_1080p` at 600 cr/s on
+2026-10-26), supply it explicitly and keep the idempotency guard:
+
+```sql
+INSERT INTO feature_credit_rates
+  (id, "featureKey", "creditsPerUnit", "unitLabel", "description", "isActive", "createdAt", "updatedAt")
+VALUES
+  (gen_random_uuid()::text, 'generate:veed_fabric_1080p', 600, 'second',
+   'VEED Fabric 1080p - per-second (600 cr/s)', true, now(), now())
+ON CONFLICT ("featureKey") DO UPDATE
+  SET "creditsPerUnit" = 600, "isActive" = true, "updatedAt" = now();
+```
+
+Rates are data, not code: a seeded tier becomes available to the UI on the next
+`listModels` call with **no deploy** (the Avatar picker derives its options from
+`creditCostByResolution`).
