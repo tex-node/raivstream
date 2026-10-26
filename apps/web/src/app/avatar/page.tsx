@@ -26,7 +26,7 @@ export default function AvatarPage() {
   const [audioUrl, setAudioUrl] = useState('');
   const [consent, setConsent] = useState(false);
   // Phase B.1 - resolution drives price; audio upload beats pasting a URL.
-  const [resolution, setResolution] = useState<'480p' | '720p'>('720p');
+  const [resolution, setResolution] = useState<'480p' | '720p' | '1080p'>('720p');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [manualAudio, setManualAudio] = useState(false);
@@ -47,17 +47,30 @@ export default function AvatarPage() {
   const costByResolution = (fabric as { creditCostByResolution?: Record<string, number> } | undefined)
     ?.creditCostByResolution;
   const creditCost = costByResolution?.[resolution] ?? fabric?.creditCost ?? null;
+  // A tier only appears once its rate is configured - seeding the 1080p rate is
+  // what enables the option, with no further deploy.
+  const resolutionOptions = (Object.keys(costByResolution ?? {}).length > 0
+    ? Object.keys(costByResolution as Record<string, number>)
+    : ['480p', '720p']) as Array<'480p' | '720p' | '1080p'>;
 
   // Server-side analytics: a client console.log is invisible to adoption counts.
-  const { isSignedIn } = useUser();
+  const { isSignedIn, isLoaded } = useUser();
   const track = trpc.analytics.track.useMutation();
+  const trackPublic = trpc.analytics.trackPublicEvent.useMutation();
   const trackedView = useRef(false);
 
   useEffect(() => {
-    if (!isSignedIn || trackedView.current) return; // strict-mode / re-render guard
+    // Wait for auth to resolve, else a signed-in visitor is counted as signed-out
+    // on first paint. The ref also guards strict-mode double-invoke.
+    if (!isLoaded || trackedView.current) return;
     trackedView.current = true;
-    track.mutate({ event: 'avatar_page_view', properties: {} });
-  }, [isSignedIn, track]);
+
+    if (isSignedIn) {
+      track.mutate({ event: 'avatar_page_view', properties: {} });
+    } else {
+      trackPublic.mutate({ event: 'avatar_page_view' });
+    }
+  }, [isLoaded, isSignedIn, track, trackPublic]);
 
   const createJob = trpc.generation.create.useMutation({
     onSuccess: (job) => {
@@ -204,7 +217,7 @@ export default function AvatarPage() {
               Resolution
             </span>
             <div className="flex gap-2">
-              {(['480p', '720p'] as const).map((value) => (
+              {resolutionOptions.map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -215,7 +228,7 @@ export default function AvatarPage() {
                       : 'border-[var(--noc-hairline)] bg-[var(--noc-page)] text-[var(--noc-t5)]'
                   }`}
                 >
-                  {value === '480p' ? '480p (Standard)' : '720p (HD)'}
+                  {value === '480p' ? '480p (Standard)' : value === '720p' ? '720p (HD)' : '1080p (Ultra HD)'}
                   {costByResolution?.[value] != null ? ` - ${costByResolution[value]} credits` : ''}
                 </button>
               ))}

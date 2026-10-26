@@ -380,7 +380,12 @@ export function h3MaxFeatureKey(resolution: string): string {
 
 /** Resolve the per-resolution feature key for VEED Fabric. */
 export function veedFabricFeatureKey(resolution: string): string {
-  return resolution.toLowerCase() === '720p' ? 'generate:veed_fabric_720p' : 'generate:veed_fabric_480p';
+  const r = resolution.toLowerCase();
+  // Anything unrecognised used to fall through to 480p, which would silently
+  // undercharge a higher tier. Each tier is explicit now.
+  if (r === '1080p') return 'generate:veed_fabric_1080p';
+  if (r === '720p') return 'generate:veed_fabric_720p';
+  return 'generate:veed_fabric_480p';
 }
 
 /** Resolve the per-resolution feature key for MiniMax video-recast (video-to-video). */

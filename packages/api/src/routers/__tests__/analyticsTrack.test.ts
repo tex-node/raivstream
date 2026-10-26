@@ -86,3 +86,33 @@ describe('analytics.track', () => {
     expect(prisma.created[0]!.eventName).toBe('avatar_page_view');
   });
 });
+
+describe('analytics.trackPublicEvent', () => {
+  const anonCtx = (prisma: ReturnType<typeof makePrisma>) =>
+    ({ prisma: prisma as never, userId: null, user: null }) as never;
+
+  it('records avatar_page_view without authentication and with no properties', async () => {
+    const prisma = makePrisma();
+    const caller = appRouter.createCaller(anonCtx(prisma));
+
+    await caller.analytics.trackPublicEvent({ event: 'avatar_page_view' });
+
+    expect(prisma.analyticsEvent.create).toHaveBeenCalledTimes(1);
+    const row = prisma.created[0]!;
+    expect(row.eventName).toBe('avatar_page_view');
+    expect(row.userId).toBeNull();
+    expect(row.properties).toEqual({});
+  });
+
+  it('rejects any event outside the single-entry allowlist', async () => {
+    const prisma = makePrisma();
+    const caller = appRouter.createCaller(anonCtx(prisma));
+
+    await expect(
+      // @ts-expect-error - deliberately outside the enum
+      caller.analytics.trackPublicEvent({ event: 'avatar_job_submitted' }),
+    ).rejects.toBeTruthy();
+
+    expect(prisma.analyticsEvent.create).not.toHaveBeenCalled();
+  });
+});
