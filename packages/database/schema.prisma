@@ -2749,19 +2749,19 @@ model CreativeStudioAsset {
 
 // ─── D-004 Phase 1: organizations (R16 training cohorts) ─────────────────────
 
-enum OrganizationType {
+enum RaivOrganizationType {
   SCHOOL
   INSTITUTION
   PROGRAM
 }
 
-enum OrgMemberRole {
+enum RaivOrgMemberRole {
   ORG_ADMIN      // manages the org, invites others, sees everything
   ORG_MODERATOR  // views students + videos (nominations in Phase 2)
   STUDENT        // creates R16 content
 }
 
-enum OrgMemberStatus {
+enum RaivOrgMemberStatus {
   ACTIVE
   INVITED
   REMOVED
@@ -2771,21 +2771,21 @@ model Organization {
   id        String           @id @default(cuid())
   name      String
   slug      String           @unique
-  type      OrganizationType @default(SCHOOL)
+  type      RaivOrganizationType @default(SCHOOL)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   members   OrganizationMember[]
 
-  @@map("organizations")
+  @@map("raivstream_organizations")
 }
 
 model OrganizationMember {
   id             String          @id @default(cuid())
   organizationId String
   userId         String
-  role           OrgMemberRole
-  status         OrgMemberStatus @default(ACTIVE)
+  role           RaivOrgMemberRole
+  status         RaivOrgMemberStatus @default(ACTIVE)
   invitedBy      String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -2795,5 +2795,5 @@ model OrganizationMember {
 
   @@unique([organizationId, userId])
   @@index([userId, status])
-  @@map("organization_members")
+  @@map("raivstream_organization_members")
 }
