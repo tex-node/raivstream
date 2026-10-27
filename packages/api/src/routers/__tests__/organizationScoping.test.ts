@@ -192,3 +192,67 @@ describe('org self-service (ORG_ADMIN only)', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
+describe('organization invite codes', () => {
+  function prismaFor(opts: {
+    orgExists?: boolean;
+    membership?: { role: string; status: string } | null;
+  } = {}) {
+    const { orgExists = true, membership = null } = opts;
+    return {
+      organization: {
+        // Two different lookups share this method: slug availability (must be
+        // null or createOrganization refuses) and invite-code redemption.
+        findUnique: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+          if ('slug' in where) return null;
+          return orgExists ? { id: 'org-1', name: 'Test School', slug: 'test-school' } : null;
+        }),
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'org-new', ...data })),
+      },
+      organizationMember: {
+        findUnique: vi.fn(async () => membership),
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'm1', ...data })),
+        update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'm1', ...data })),
+      },
+    };
+  }
+
+  function asCaller(prisma: ReturnType<typeof prismaFor>, role: 'ADMIN' | 'CREATOR' = 'CREATOR') {
+    return appRouter.createCaller({
+      prisma: prisma as never,
+      userId: 'u1',
+      user: { id: 'u1', email: 'a@b.test', username: 'u', displayName: 'U', role },
+    } as never);
+  }
+
+  it('makes the creating admin an ORG_ADMIN in the same write', async () => {
+    const prisma = prismaFor();
+    await asCaller(prisma, 'ADMIN').admin.createOrganization({ name: 'Test School', slug: 'test-school', type: 'SCHOOL' });
+
+    const data = (prisma.organization.create.mock.calls[0] as [{ data: { members?: { create?: Record<string, unknown> } } }])[0].data;
+    expect(data.members?.create).toMatchObject({ userId: 'u1', role: 'ORG_ADMIN', status: 'ACTIVE' });
+  });
+
+  it('rejects an unknown invite code', async () => {
+    const prisma = prismaFor({ orgExists: false });
+    await expect(asCaller(prisma).organization.joinWithCode({ code: 'nope-nope' }))
+      .rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('joins as a STUDENT and is idempotent', async () => {
+    const prisma = prismaFor();
+    const first = await asCaller(prisma).organization.joinWithCode({ code: 'abc12345' });
+
+    expect(first).toMatchObject({ slug: 'test-school', joined: true, role: 'STUDENT' });
+    expect(prisma.organizationMember.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ role: 'STUDENT', status: 'ACTIVE' }),
+    }));
+  });
+
+  it('does not resurrect a removed membership', async () => {
+    const prisma = prismaFor({ membership: { role: 'STUDENT', status: 'REMOVED' } });
+    await expect(asCaller(prisma).organization.joinWithCode({ code: 'abc12345' }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(prisma.organizationMember.update).not.toHaveBeenCalled();
+  });
+});
