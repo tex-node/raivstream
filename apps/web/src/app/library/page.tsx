@@ -23,6 +23,25 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'audio', label: 'Audio' },
 ];
 
+const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
+  all: {
+    title: 'Nothing here yet.',
+    body: 'Generate a story scene, upload a video, or make an avatar and it will appear here.',
+  },
+  image: {
+    title: 'No images yet.',
+    body: 'Generate scene stills in the Story Playground and they will appear here.',
+  },
+  video: {
+    title: 'No videos yet.',
+    body: 'Animate a scene in the Studio (H3_MAX) or export a story to see videos here.',
+  },
+  audio: {
+    title: 'No audio yet.',
+    body: 'Narration and generated audio will appear here once you create some.',
+  },
+};
+
 const SOURCE_LABELS: Record<string, string> = {
   story: 'Story',
   studio: 'Studio',
@@ -33,9 +52,11 @@ const SOURCE_LABELS: Record<string, string> = {
 export default function LibraryPage() {
   const [filter, setFilter] = useState<Filter>('all');
 
+  // An explicit `type` (undefined for All) so the query key changes with the tab
+  // and the request is unambiguous in the network panel.
   const query = trpc.library.getAssets.useQuery({
     limit: 30,
-    ...(filter === 'all' ? {} : { type: filter }),
+    type: filter === 'all' ? undefined : filter,
   });
 
   const assets = query.data?.items ?? [];
@@ -76,14 +97,19 @@ export default function LibraryPage() {
 
         {!query.isLoading && !query.error && assets.length === 0 && (
           <div className="mt-10 rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-6 py-12 text-center">
-            <p className="text-sm font-semibold text-[var(--noc-t3)]">Nothing here yet.</p>
-            <p className="mt-1 text-xs text-[var(--noc-t5)]">
-              Generate a story scene, upload a video, or make an avatar and it will appear here.
-            </p>
+            <p className="text-sm font-semibold text-[var(--noc-t3)]">{EMPTY_COPY[filter].title}</p>
+            <p className="mt-1 text-xs text-[var(--noc-t5)]">{EMPTY_COPY[filter].body}</p>
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {!query.isLoading && !query.error && assets.length > 0 && (
+          <p className="mt-4 text-xs text-[var(--noc-t6)]">
+            {assets.length} item{assets.length === 1 ? '' : 's'}
+            {filter === 'all' ? '' : ` · ${filter}`}
+          </p>
+        )}
+
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {assets.map((asset) => {
             const processing = asset.status === 'PROCESSING';
             return (
@@ -104,6 +130,16 @@ export default function LibraryPage() {
                     />
                   )}
 
+                  {asset.type === 'video' && !processing && (
+                    <span
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-sm text-white">
+                        ▶
+                      </span>
+                    </span>
+                  )}
                   {processing && (
                     <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
                       Processing…
