@@ -50,6 +50,10 @@ export interface CircuitSnapshot {
   lastFailureAt: string | null;
   openedAt: string | null;
   nextProbeAt: string | null;
+  /** From the most recent health failure - distinguishes an account 403 from a transient 5xx. */
+  lastFailureCode?: string | null;
+  lastFailureMessage?: string | null;
+  lastFailureWasAuth?: boolean | null;
 }
 
 export interface CircuitBreakerOptions {
@@ -91,6 +95,26 @@ const HEALTH_CODES = new Set(['TIMEOUT', 'PROVIDER_ERROR', 'RESULT_INVALID']);
  * Classify a thrown error: does it say something about provider health?
  * Exported so the rules are testable in isolation from the state machine.
  */
+/** 401/403 - the credential or the account is unusable, not the network. */
+export function isAuthFailure(error: unknown): boolean {
+  const e = error as { status?: unknown; statusCode?: unknown; providerStatus?: unknown; response?: { status?: unknown }; message?: unknown } | null;
+  if (!e || typeof e !== 'object') return false;
+
+  const numeric = (v: unknown): number | null =>
+    typeof v === 'number' ? v : typeof v === 'string' && /^\d{3}$/.test(v) ? Number(v) : null;
+
+  const status =
+    numeric(e.status) ??
+    numeric(e.statusCode) ??
+    numeric(e.providerStatus) ??
+    numeric(e.response?.status);
+
+  if (status === 401 || status === 403) return true;
+
+  const message = typeof e.message === 'string' ? e.message : '';
+  return /\b(401|403)\b/.test(message);
+}
+
 export function isCircuitFailure(error: unknown): boolean {
   if (error instanceof CircuitOpenError) return false;
   if (!error || typeof error !== 'object') return true;
@@ -159,6 +183,8 @@ export class CircuitBreaker {
   private openedAt: number | null = null;
   private nextProbeAt: number | null = null;
   private probeInFlight = false;
+  /** Last health-relevant failure, for the admin dashboard. */
+  private lastFailure: { at: number; code: string | null; message: string; auth: boolean } | null = null;
 
   constructor(opts: CircuitBreakerOptions) {
     this.name = opts.name;
@@ -213,10 +239,14 @@ export class CircuitBreaker {
       if (isCircuitFailure(error)) {
         this.failures.push(now);
         this.prune(now);
-        if (this.failures.length >= this.threshold) {
+        this.recordFailure(error, now);
+        // Auth failures mean the credential or account is unusable - retrying
+        // cannot help, so trip on the FIRST one rather than charging and
+        // refunding the user `threshold` times to prove the same thing.
+        if (isAuthFailure(error) || this.failures.length >= this.threshold) {
           this.open(now);
           console.warn(
-            `[circuit] open provider=${this.name} failureCount=${this.failures.length} window=${this.windowMs}ms`,
+            `[circuit] open provider=${this.name} failureCount=${this.failures.length} window=${this.windowMs}ms${isAuthFailure(error) ? ' reason=auth' : ''}`,
           );
         }
       }
@@ -232,8 +262,21 @@ export class CircuitBreaker {
       state: this.state,
       failureCount: this.failures.length,
       lastFailureAt: this.failures.length > 0 ? new Date(this.failures[this.failures.length - 1]!).toISOString() : null,
+      lastFailureCode: this.lastFailure?.code ?? null,
+      lastFailureMessage: this.lastFailure?.message ?? null,
+      lastFailureWasAuth: this.lastFailure?.auth ?? null,
       openedAt: this.openedAt !== null ? new Date(this.openedAt).toISOString() : null,
       nextProbeAt: this.nextProbeAt !== null ? new Date(this.nextProbeAt).toISOString() : null,
+    };
+  }
+
+  private recordFailure(error: unknown, at: number): void {
+    const e = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown };
+    this.lastFailure = {
+      at,
+      code: typeof e?.code === 'string' ? e.code : null,
+      message: typeof e?.message === 'string' ? e.message.slice(0, 300) : 'unknown',
+      auth: isAuthFailure(error),
     };
   }
 
