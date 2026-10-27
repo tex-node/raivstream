@@ -384,6 +384,7 @@ model User {
   movieRenderJobs    MovieRenderJob[]
   audioAssets        AudioAsset[]
   organizationMemberships OrganizationMember[]
+  awardNominations      AwardNomination[]
   storyProjects       StoryProject[]
   academyCoursesOwned AcademyCourse[] @relation("AcademyCourseOwner")
   academyClassesInstructing AcademyClass[] @relation("AcademyClassInstructor")
@@ -445,6 +446,7 @@ model Video {
   id                String        @id @default(cuid())
   creatorId         String
   creator           User          @relation("CreatorVideos", fields: [creatorId], references: [id], onDelete: Cascade)
+  awardNominations  AwardNomination[]
   
   // Metadata
   title             String
@@ -1552,6 +1554,7 @@ model StoryVideoExport {
   id            String                 @id @default(cuid())
   projectId     String
   project       StoryProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  awardNominations AwardNomination[]
   userId        String
 
   status        StoryVideoExportStatus @default(PENDING)
@@ -2776,6 +2779,7 @@ model Organization {
   updatedAt DateTime         @updatedAt
 
   members   OrganizationMember[]
+  awardNominations AwardNomination[]
 
   @@map("raivstream_organizations")
 }
@@ -2796,4 +2800,56 @@ model OrganizationMember {
   @@unique([organizationId, userId])
   @@index([userId, status])
   @@map("raivstream_organization_members")
+}
+
+// ─── D-004 Phase 2: award categories + nominations (additive) ────────────────
+
+enum RaivAwardNominationStatus {
+  PENDING
+  SHORTLISTED
+  WINNER
+  REJECTED
+}
+
+enum RaivAwardNominationTargetType {
+  VIDEO
+  EXPORT
+}
+
+model AwardCategory {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nominations AwardNomination[]
+
+  @@map("raivstream_award_categories")
+}
+
+model AwardNomination {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  categoryId         String
+  targetType         RaivAwardNominationTargetType
+  videoId            String?
+  storyVideoExportId String?
+  nominatedByUserId  String
+  notes              String?  @db.Text
+  status             RaivAwardNominationStatus @default(PENDING)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category         AwardCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  video            Video?           @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  storyVideoExport StoryVideoExport? @relation(fields: [storyVideoExportId], references: [id], onDelete: Cascade)
+  nominatedBy      User             @relation(fields: [nominatedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, videoId])
+  @@unique([categoryId, storyVideoExportId])
+  @@index([organizationId, status])
+  @@map("raivstream_award_nominations")
 }
