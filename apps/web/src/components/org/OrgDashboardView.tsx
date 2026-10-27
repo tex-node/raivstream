@@ -29,9 +29,10 @@ export interface OrgDashboardViewProps {
   type: string;
   role?: string;
   adminMode?: boolean;
+  inviteCode?: string;
 }
 
-export function OrgDashboardView({ orgId, name, type, role, adminMode = false }: OrgDashboardViewProps) {
+export function OrgDashboardView({ orgId, name, type, role, adminMode = false, inviteCode }: OrgDashboardViewProps) {
   // Members is org-admin (or Raivstream admin) only: an ORG_MODERATOR is view-only.
   const canManageMembers = adminMode || role === 'ORG_ADMIN';
   const [tab, setTab] = useState<Tab>('overview');
@@ -77,7 +78,9 @@ export function OrgDashboardView({ orgId, name, type, role, adminMode = false }:
         <Videos orgId={orgId} moderation={moderation} onModerationChange={setModeration} />
       )}
       {tab === 'nominations' && <Nominations orgId={orgId} />}
-      {tab === 'members' && canManageMembers && <Members orgId={orgId} mode={adminMode ? 'admin' : 'org'} />}
+      {tab === 'members' && canManageMembers && (
+        <Members orgId={orgId} mode={adminMode ? 'admin' : 'org'} inviteCode={inviteCode} />
+      )}
     </>
   );
 }
@@ -280,7 +283,7 @@ const ROLE_LABELS: Record<OrgRole, string> = {
  * ORG_ADMIN server-side). The roster query differs for the same reason - an
  * admin is usually not a member of the org they are inspecting.
  */
-function Members({ orgId, mode }: { orgId: string; mode: 'admin' | 'org' }) {
+function Members({ orgId, mode, inviteCode }: { orgId: string; mode: 'admin' | 'org'; inviteCode?: string }) {
   const utils = trpc.useUtils();
   const isAdminMode = mode === 'admin';
 
@@ -344,7 +347,8 @@ function Members({ orgId, mode }: { orgId: string; mode: 'admin' | 'org' }) {
 
   return (
     <>
-      <div className="mt-6 rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-4">
+      <InviteCodeCard orgId={orgId} initialCode={inviteCode} />
+      <div className="mt-4 rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-4">
         <p className="text-xs font-bold uppercase tracking-wider text-[var(--noc-t4)]">Add member</p>
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="min-w-[220px] flex-1">
@@ -574,6 +578,68 @@ function NominateModal({
           </>
         )}
       </div>
+    </div>
+  );
+}
+/**
+ * Join code with copy + rotate. Rotating invalidates every distributed copy, so
+ * it asks first: a coordinator who rotates by accident locks out a class.
+ */
+function InviteCodeCard({ orgId, initialCode }: { orgId: string; initialCode?: string }) {
+  const utils = trpc.useUtils();
+  const [code, setCode] = useState(initialCode ?? '');
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const regenerate = trpc.organization.regenerateInviteCode.useMutation({
+    onSuccess: async (result) => {
+      setCode(result.inviteCode);
+      setConfirming(false);
+      setError(null);
+      await utils.admin.listOrganizations.invalidate();
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Could not copy - select the code and copy it manually.');
+    }
+  };
+
+  if (!code) return null;
+
+  return (
+    <div className="mt-6 rounded-xl border border-[rgba(217,70,168,0.35)] bg-[rgba(217,70,168,0.08)] p-4">
+      <p className="text-[10px] uppercase tracking-wider text-[var(--noc-t5)]">Join code</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <code className="rounded-md bg-[var(--noc-page)] px-3 py-1.5 font-mono text-sm text-[var(--noc-t1)]">{code}</code>
+        <button type="button" onClick={copy} className="rounded-md border border-[var(--noc-hairline)] px-2.5 py-1 text-[11px] font-bold text-[var(--noc-t3)]">
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+        {!confirming ? (
+          <button type="button" onClick={() => setConfirming(true)} className="text-[11px] font-bold text-[var(--noc-magenta)]">
+            Regenerate code
+          </button>
+        ) : (
+          <span className="flex items-center gap-2 text-[11px]">
+            <span className="text-[var(--noc-t4)]">Invalidate the current code?</span>
+            <button type="button" onClick={() => regenerate.mutate({ orgId })} disabled={regenerate.isPending} className="font-bold text-[var(--noc-magenta)]">
+              {regenerate.isPending ? 'Rotating…' : 'Yes, regenerate'}
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className="text-[var(--noc-t5)]">Cancel</button>
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-[10px] text-[var(--noc-t6)]">
+        Students redeem this at <code>/join</code>. Anyone holding the old code is rejected after a rotation.
+      </p>
+      {error && <p className="mt-2 text-xs font-semibold text-[var(--noc-magenta)]">{error}</p>}
     </div>
   );
 }

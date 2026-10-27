@@ -40,6 +40,7 @@ export default function AdminOrganizationDetailPage() {
           orgId={data.org.id}
           name={data.org.name}
           type={data.org.type}
+          inviteCode={data.org.inviteCode}
           adminMode
         />
       </div>
