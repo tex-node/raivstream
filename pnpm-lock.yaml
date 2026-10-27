@@ -74,6 +74,9 @@ importers:
       expo-device:
         specifier: ~5.9.0
         version: 5.9.4(expo@50.0.21)
+      expo-document-picker:
+        specifier: ~11.10.0
+        version: 11.10.1(expo@50.0.21)
       expo-file-system:
         specifier: ~16.0.9
         version: 16.0.9(expo@50.0.21)
@@ -8121,6 +8124,14 @@ packages:
     dependencies:
       expo: 50.0.21(@babel/core@7.29.0)(@react-native/babel-preset@0.84.0)(react-native@0.73.0)(react@18.2.0)
       ua-parser-js: 0.7.41
+    dev: false
+
+  /expo-document-picker@11.10.1(expo@50.0.21):
+    resolution: {integrity: sha512-A1MiLfyXQ+KxanRO5lYxYQy3ryV+25JHe5Ai/BLV+FJU0QXByUF+Y/dn35WVPx5gpdZXC8UJ4ejg5SKSoeconw==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 50.0.21(@babel/core@7.29.0)(@react-native/babel-preset@0.84.0)(react-native@0.73.0)(react@18.2.0)
     dev: false
 
   /expo-eas-client@0.11.2:

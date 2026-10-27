@@ -61,6 +61,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="avatar"
+        options={{
+          title: 'Avatar',
+          tabBarIcon: ({ color }) => <TabSymbol color={color} icon="🎭" />,
+        }}
+      />
+      <Tabs.Screen
         name="upload"
         options={{
           title: 'Upload',
