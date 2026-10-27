@@ -47,8 +47,8 @@ async function main() {
 
   await prisma.organizationMember.upsert({
     where: { organizationId_userId: { organizationId: org.id, userId: student.id } },
-    update: { role: 'STUDENT', status: 'ACTIVE' },
-    create: { organizationId: org.id, userId: student.id, role: 'STUDENT', status: 'ACTIVE' },
+    update: { role: 'ORG_ADMIN', status: 'ACTIVE' },
+    create: { organizationId: org.id, userId: student.id, role: 'ORG_ADMIN', status: 'ACTIVE' },
   });
 
   let moderator = await prisma.user.findUnique({ where: { email: moderatorEmail }, select: { id: true, username: true } });
@@ -72,6 +72,31 @@ async function main() {
     update: { role: 'ORG_MODERATOR', status: 'ACTIVE' },
     create: { organizationId: org.id, userId: moderator.id, role: 'ORG_MODERATOR', status: 'ACTIVE' },
   });
+
+  // Two disposable students: the dashboard should have student work to show even
+  // when the coordinator signs in as ORG_ADMIN.
+  const testStudentEmails = ['student1@test-school.com', 'student2@test-school.com'];
+  for (const studentEmail of testStudentEmails) {
+    let testStudent = await prisma.user.findUnique({ where: { email: studentEmail }, select: { id: true, username: true } });
+    if (!testStudent) {
+      const base = studentEmail.split('@')[0]!.replace(/[^a-z0-9_]/gi, '');
+      testStudent = await prisma.user.create({
+        data: {
+          email: studentEmail,
+          username: base,
+          displayName: `Test ${base}`,
+          passwordHash: devPasswordHash(studentEmail),
+          role: 'CREATOR',
+        },
+        select: { id: true, username: true },
+      });
+    }
+    await prisma.organizationMember.upsert({
+      where: { organizationId_userId: { organizationId: org.id, userId: testStudent.id } },
+      update: { role: 'STUDENT', status: 'ACTIVE' },
+      create: { organizationId: org.id, userId: testStudent.id, role: 'STUDENT', status: 'ACTIVE' },
+    });
+  }
 
   console.log('');
   console.log('[seed] NOTE: accounts created here have a placeholder password hash and cannot sign in.');

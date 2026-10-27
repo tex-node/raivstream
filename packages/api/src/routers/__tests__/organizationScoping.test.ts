@@ -121,7 +121,7 @@ describe('organization scoping', () => {
 
     expect(result.stats.publishedCount).toBe(3);
     expect(result.stats.exportCount).toBe(7);
-    expect(result.stats.studentCount).toBe(1);
+    expect(result.stats.memberCount).toBe(1);
   });
 
   it('admin procedures are admin-gated, not open to creators', async () => {
@@ -129,5 +129,66 @@ describe('organization scoping', () => {
 
     await expect(caller(prisma, 'CREATOR').admin.listOrganizations())
       .rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('org self-service (ORG_ADMIN only)', () => {
+  function prismaFor(role: 'ORG_ADMIN' | 'ORG_MODERATOR' | 'STUDENT', userExists = true) {
+    return {
+      calls: [] as unknown[],
+      organizationMember: {
+        findFirst: vi.fn(async (args: unknown) => {
+          (prismaFor as unknown as { lastArgs?: unknown }).lastArgs = args;
+          return role === 'ORG_ADMIN' ? { role } : null;
+        }),
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'm-new', ...data })),
+        update: vi.fn(async () => ({ id: 'm1', status: 'REMOVED' })),
+      },
+      user: {
+        findUnique: vi.fn(async () => (userExists ? { id: 'u2', username: 'newbie', email: 'new@school.test' } : null)),
+      },
+    };
+  }
+
+  function asCaller(prisma: ReturnType<typeof prismaFor>) {
+    return appRouter.createCaller({
+      prisma: prisma as never,
+      userId: 'u1',
+      user: { id: 'u1', email: 'a@b.test', username: 'u', displayName: 'U', role: 'CREATOR' as const },
+    } as never);
+  }
+
+  it('rejects an ORG_MODERATOR - managing members is admin-level', async () => {
+    const prisma = prismaFor('ORG_MODERATOR');
+    await expect(
+      asCaller(prisma).organization.addMember({ orgId: 'org-1', email: 'new@school.test', role: 'STUDENT' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('allows an ORG_ADMIN to add a member', async () => {
+    const prisma = prismaFor('ORG_ADMIN');
+    const result = await asCaller(prisma).organization.addMember({
+      orgId: 'org-1', email: 'new@school.test', role: 'STUDENT',
+    });
+
+    expect(result.created).toBe(true);
+    expect(prisma.organizationMember.create).toHaveBeenCalled();
+  });
+
+  it('does not create accounts for unknown emails', async () => {
+    const prisma = prismaFor('ORG_ADMIN', false);
+    await expect(
+      asCaller(prisma).organization.addMember({ orgId: 'org-1', email: 'ghost@school.test', role: 'STUDENT' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    expect(prisma.organizationMember.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses to let an admin remove themselves', async () => {
+    const prisma = prismaFor('ORG_ADMIN');
+    await expect(
+      asCaller(prisma).organization.removeMember({ orgId: 'org-1', userId: 'u1' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
