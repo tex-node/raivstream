@@ -7,6 +7,11 @@
  *
  * Usage:
  *   pnpm tsx scripts/seed-test-org.ts [student-email] [moderator-email]
+ *
+ * IMPORTANT: an account created by this script gets a placeholder password hash
+ * and CANNOT sign in. To exercise the moderator view, pass an existing user's
+ * email as the moderator argument, or reset that account's password through the
+ * app afterwards. The same applies to students: this script never creates them.
  */
 
 import { createHash } from 'node:crypto';
@@ -68,6 +73,9 @@ async function main() {
     create: { organizationId: org.id, userId: moderator.id, role: 'ORG_MODERATOR', status: 'ACTIVE' },
   });
 
+  console.log('');
+  console.log('[seed] NOTE: accounts created here have a placeholder password hash and cannot sign in.');
+  console.log('[seed] To test the moderator view, pass an existing user email or reset the password in the app.');
   console.log('');
   console.log('=== D-004 test organization ready ===');
   console.log(`org:        ${org.name} (${org.slug})`);
