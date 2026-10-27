@@ -12,6 +12,7 @@ import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
 import { getProviderRegistry, type ProviderId } from '../lib/mediaProviders/registry';
 import { adminOrganizationProcedures } from './organization';
+import { adminAwardProcedures } from './awards';
 import { allCircuitSnapshots } from '../lib/resilience/circuitBreaker';
 import { invalidate, invalidateFeedCaches } from '../lib/cache';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
@@ -20,6 +21,8 @@ import { recoverShareAttributionRetention } from '../lib/story/shareAttributionR
 export const adminRouter = router({
   // D-004 Phase 1 - organization procedures (cross-org, adminProcedure).
   ...adminOrganizationProcedures,
+  // D-004 Phase 2 - awards (cross-org, adminProcedure).
+  ...adminAwardProcedures,
   // ─── Overview Stats ────────────────────────────────────────────────────────
 
   /**

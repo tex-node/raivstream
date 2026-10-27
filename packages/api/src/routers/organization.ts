@@ -17,6 +17,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure, adminProcedure, orgModeratorProcedure } from '../trpc';
+import { orgAwardProcedures } from './awards';
 
 const orgIdSchema = z.object({ orgId: z.string().min(1) });
 const cursorSchema = z.object({ createdAt: z.string().min(1), id: z.string().min(1) });
@@ -87,6 +88,8 @@ function compareMedia(a: UnifiedMedia, b: UnifiedMedia): number {
 }
 
 export const organizationRouter = router({
+  // D-004 Phase 2 - awards (org-scoped).
+  ...orgAwardProcedures,
   /** Bootstrap the UI from the URL slug: org identity + the caller's own role. */
   resolveSlug: protectedProcedure
     .input(z.object({ slug: z.string().min(1) }))
