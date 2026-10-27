@@ -10,7 +10,8 @@
  */
 
 import { createHash } from 'node:crypto';
-// Use the workspace client so the generated schema is the one the API uses.\nimport { prisma } from '@raivstream/database';
+// Use the workspace client so the generated schema is the one the API uses.
+import { prisma } from '@raivstream/database';
 
 const ORG_SLUG = 'test-school';
 const DEFAULT_STUDENT = 'texdevices@gmail.com';
