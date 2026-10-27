@@ -11,6 +11,8 @@ export interface Context {
   isR16?: boolean;
   /** Client IP, resolved from x-forwarded-for / x-real-ip at the adapter. */
   ip?: string | null;
+  /** Populated by orgModeratorProcedure for org-scoped requests. */
+  orgMembership?: { id: string; organizationId: string; userId: string; role: 'ORG_ADMIN' | 'ORG_MODERATOR' };
   user: {
     id: string;
     email: string;
@@ -152,4 +154,58 @@ export const creativeProcedure = t.procedure.use(isAuthed).use(isNotR16).use(rat
 export const r16Procedure = t.procedure.use(isAuthed).use(requireR16).use(rateLimit);
 export const adminProcedure = t.procedure.use(isAdmin).use(rateLimit);
 export const moderatorProcedure = t.procedure.use(isAdminOrModerator).use(rateLimit);
+
+/**
+ * D-004 - org-scoped access.
+ *
+ * Every org-scoped procedure must carry `input.orgId`; this reads it from the
+ * input rather than a header so the check cannot be bypassed by calling a
+ * different route, and so the org is always explicit at the call site.
+ *
+ * Only ORG_ADMIN / ORG_MODERATOR with ACTIVE status pass: a STUDENT is a member
+ * but must not see the roster or other students' work.
+ */
+const hasOrgRole = t.middleware(async ({ ctx, next, input }) => {
+  if (!ctx.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not authenticated' });
+  }
+
+  const orgId = (input as { orgId?: unknown } | undefined)?.orgId;
+  if (typeof orgId !== 'string' || orgId.length === 0) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'orgId is required' });
+  }
+
+  const membership = await ctx.prisma.organizationMember.findFirst({
+    where: {
+      organizationId: orgId,
+      userId: ctx.user.id,
+      status: 'ACTIVE',
+      role: { in: ['ORG_ADMIN', 'ORG_MODERATOR'] },
+    },
+    select: { id: true, organizationId: true, userId: true, role: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Organization access required' });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+      orgMembership: {
+        ...membership,
+        role: membership.role as 'ORG_ADMIN' | 'ORG_MODERATOR',
+      },
+    },
+  });
+});
+
+// A passthrough input parser runs BEFORE the guard, so `input.orgId` is populated
+// inside the middleware. Without it, `.use()` middlewares can observe `input` as
+// undefined when the caller supplies its schema via a later `.input(...)`.
+export const orgModeratorProcedure = t.procedure
+  .input((raw: unknown) => raw as { orgId?: string })
+  .use(hasOrgRole)
+  .use(rateLimit);
 export const middleware = t.middleware;

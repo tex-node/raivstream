@@ -13,6 +13,7 @@ import { userRouter } from './routers/user';
 import { analyticsRouter } from './routers/analytics';
 import { generationRouter } from './routers/generation';
 import { libraryRouter } from './routers/library';
+import { organizationRouter } from './routers/organization';
 import { runpodRouter } from './routers/runpod';
 import { providersRouter } from './routers/providers';
 import { adminRouter } from './routers/admin';
@@ -32,6 +33,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   generation: generationRouter,
   library: libraryRouter,
+  organization: organizationRouter,
   runpod: runpodRouter,
   providers: providersRouter,
   admin: adminRouter,
