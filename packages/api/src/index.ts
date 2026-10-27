@@ -12,6 +12,7 @@ import { interactionRouter } from './routers/interaction';
 import { userRouter } from './routers/user';
 import { analyticsRouter } from './routers/analytics';
 import { generationRouter } from './routers/generation';
+import { libraryRouter } from './routers/library';
 import { runpodRouter } from './routers/runpod';
 import { providersRouter } from './routers/providers';
 import { adminRouter } from './routers/admin';
@@ -30,6 +31,7 @@ export const appRouter = router({
   user: userRouter,
   analytics: analyticsRouter,
   generation: generationRouter,
+  library: libraryRouter,
   runpod: runpodRouter,
   providers: providersRouter,
   admin: adminRouter,
