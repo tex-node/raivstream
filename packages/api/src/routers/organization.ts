@@ -172,6 +172,49 @@ export const organizationRouter = router({
       return { success: true as const };
     }),
 
+  /**
+   * Self-service onboarding: a student redeems an invite code and becomes a
+   * STUDENT member. Deliberately cannot join twice, and cannot resurrect a
+   * membership an admin removed.
+   */
+  joinWithCode: protectedProcedure
+    .input(z.object({ code: z.string().min(4).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      const code = input.code.trim();
+
+      const org = await ctx.prisma.organization.findUnique({
+        where: { inviteCode: code },
+        select: { id: true, name: true, slug: true },
+      });
+      if (!org) throw new TRPCError({ code: 'NOT_FOUND', message: 'That invite code is not valid.' });
+
+      const existing = await ctx.prisma.organizationMember.findUnique({
+        where: { organizationId_userId: { organizationId: org.id, userId: ctx.user.id } },
+        select: { role: true, status: true },
+      });
+
+      if (existing?.status === 'ACTIVE') {
+        return { orgId: org.id, name: org.name, slug: org.slug, role: existing.role, joined: false };
+      }
+      if (existing?.status === 'REMOVED') {
+        // Re-joining by code would quietly undo an admin's removal.
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You were removed from this organization. Ask an admin to re-add you.' });
+      }
+
+      const membership = existing
+        ? await ctx.prisma.organizationMember.update({
+            where: { organizationId_userId: { organizationId: org.id, userId: ctx.user.id } },
+            data: { status: 'ACTIVE', role: 'STUDENT' },
+            select: { role: true },
+          })
+        : await ctx.prisma.organizationMember.create({
+            data: { organizationId: org.id, userId: ctx.user.id, role: 'STUDENT', status: 'ACTIVE' },
+            select: { role: true },
+          });
+
+      return { orgId: org.id, name: org.name, slug: org.slug, role: membership.role, joined: true };
+    }),
+
   getDashboard: orgModeratorProcedure
     .input(orgIdSchema)
     .query(async ({ ctx, input }) => {
@@ -437,7 +480,7 @@ export const adminOrganizationProcedures = {
     .query(async ({ ctx, input }) => {
       const org = await ctx.prisma.organization.findUnique({
         where: { id: input.orgId },
-        select: { id: true, name: true, slug: true, type: true, createdAt: true },
+        select: { id: true, name: true, slug: true, type: true, createdAt: true, inviteCode: true },
       });
       if (!org) throw new TRPCError({ code: 'NOT_FOUND', message: 'Organization not found' });
 
@@ -463,9 +506,19 @@ export const adminOrganizationProcedures = {
       const existing = await ctx.prisma.organization.findUnique({ where: { slug: input.slug }, select: { id: true } });
       if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'That slug is already taken.' });
 
+      // The creator is the first ORG_ADMIN, created in the same statement: an org
+      // with no admin is unreachable, and a two-step create could leave one behind
+      // if the membership write failed.
       return ctx.prisma.organization.create({
-        data: { name: input.name, slug: input.slug, type: input.type },
-        select: { id: true, name: true, slug: true, type: true },
+        data: {
+          name: input.name,
+          slug: input.slug,
+          type: input.type,
+          members: {
+            create: { userId: ctx.user.id, role: 'ORG_ADMIN', status: 'ACTIVE' },
+          },
+        },
+        select: { id: true, name: true, slug: true, type: true, inviteCode: true },
       });
     }),
 
