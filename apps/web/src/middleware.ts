@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // UX-only redirect — actual security is enforced server-side by tRPC protectedProcedure.
 // The JWT in the raiv_at httpOnly cookie is validated on every API call.
 const PROTECTED_ROUTES = [
+  '/org',
   '/upload',
   '/analytics',
   '/settings',

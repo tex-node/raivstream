@@ -12,6 +12,7 @@ const NAV = [
   { href: '/admin/credits',            label: 'Credits',            icon: '⚡' },
   { href: '/admin/jobs',               label: 'AI Jobs',            icon: '🎬' },
   { href: '/admin/providers',           label: 'Providers',          icon: '▲' },
+  { href: '/admin/organizations',       label: 'Organizations',      icon: '🏫' },
   { href: '/admin/story-analytics',    label: 'Story Analytics',    icon: 'A' },
   { href: '/admin/prompt-quality',     label: 'Prompt Quality',     icon: 'P' },
   { href: '/admin/character-insights', label: 'Character Insights', icon: 'C' },

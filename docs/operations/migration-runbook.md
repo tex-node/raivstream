@@ -191,3 +191,20 @@ ON CONFLICT ("featureKey") DO UPDATE
 Rates are data, not code: a seeded tier becomes available to the UI on the next
 `listModels` call with **no deploy** (the Avatar picker derives its options from
 `creditCostByResolution`).
+### Shared Postgres Prefix Rule
+
+This Postgres instance is shared with **UltraLeague** and **Powervend**.
+
+- **Never** create a table with a generic name (`organizations`, `users`, `events`).
+- All new tables created by Raivstream must use the `raivstream_` prefix.
+- In `schema.prisma`, use `@@map("raivstream_your_table")` and prefix any new Postgres enums with `Raiv`.
+- Before writing a migration, verify the name is free:
+
+```sql
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = 'your_table';
+```
+
+**Why this exists:** the D-004 organizations migration failed with
+`42P07 relation "organizations" already exists` — `public.organizations` belongs to
+another tenant (`id uuid`, snake_case timestamps). A failed migration then blocked
+*every* subsequent deploy until it was resolved with `prisma migrate resolve --rolled-back`.
