@@ -44,17 +44,40 @@ async function usernamesFor(prisma: unknown, userIds: string[]): Promise<Map<str
   return new Map(users.map((u) => [u.id, u.username]));
 }
 
-/** Active STUDENT user ids for an org - the scope boundary for every query. */
-async function studentIdsFor(prisma: unknown, orgId: string): Promise<string[]> {
+/**
+ * Active member user ids for an org - the scope boundary for every query.
+ *
+ * EVERY role counts: an ORG_ADMIN or ORG_MODERATOR may also be a creator, and
+ * scoping to STUDENT only made a coordinator's own work vanish from the
+ * dashboard the moment they were promoted (found in the Phase 1 walkthrough).
+ */
+async function memberIdsFor(prisma: unknown, orgId: string): Promise<string[]> {
   const rows = await (prisma as {
     organizationMember: {
       findMany: (args: unknown) => Promise<Array<{ userId: string }>>;
     };
   }).organizationMember.findMany({
-    where: { organizationId: orgId, role: 'STUDENT', status: 'ACTIVE' },
+    where: { organizationId: orgId, status: 'ACTIVE' },
     select: { userId: true },
   });
   return rows.map((row) => row.userId);
+}
+
+/** ORG_ADMIN of this org, ACTIVE - or FORBIDDEN. Stricter than the view guard. */
+async function assertOrgAdmin(
+  ctx: { prisma: unknown; user: { id: string } },
+  orgId: string,
+): Promise<void> {
+  const membership = await (ctx.prisma as {
+    organizationMember: { findFirst: (args: unknown) => Promise<{ role: string } | null> };
+  }).organizationMember.findFirst({
+    where: { organizationId: orgId, userId: ctx.user.id, status: 'ACTIVE', role: 'ORG_ADMIN' },
+    select: { role: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Organization admin access required' });
+  }
 }
 
 function compareMedia(a: UnifiedMedia, b: UnifiedMedia): number {
@@ -91,6 +114,61 @@ export const organizationRouter = router({
       return { orgId: org.id, name: org.name, slug: org.slug, type: org.type, role: membership.role };
     }),
 
+  /**
+   * D-004 - org-admin self-service. A school coordinator must be able to onboard
+   * their own people without a Raivstream admin in the loop; ORG_MODERATOR is
+   * view-only by design, so this guard is stricter than orgModeratorProcedure.
+   */
+  addMember: protectedProcedure
+    .input(z.object({
+      orgId: z.string().min(1),
+      email: z.string().email(),
+      role: z.enum(['ORG_ADMIN', 'ORG_MODERATOR', 'STUDENT']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdmin(ctx, input.orgId);
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { email: input.email },
+        select: { id: true, username: true, email: true },
+      });
+      // Same Phase 1 rule as the admin path: never mint an account from a typo.
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'No account with that email.' });
+
+      const existing = await ctx.prisma.organizationMember.findUnique({
+        where: { organizationId_userId: { organizationId: input.orgId, userId: user.id } },
+        select: { id: true, role: true, status: true },
+      });
+      if (existing) return { ...existing, user, created: false };
+
+      const created = await ctx.prisma.organizationMember.create({
+        data: { organizationId: input.orgId, userId: user.id, role: input.role, status: 'ACTIVE', invitedBy: ctx.user.id },
+        select: { id: true, role: true, status: true },
+      });
+
+      return { ...created, user, created: true };
+    }),
+
+  removeMember: protectedProcedure
+    .input(z.object({ orgId: z.string().min(1), userId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOrgAdmin(ctx, input.orgId);
+
+      // Removing yourself would leave an org nobody can administer.
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot remove yourself from the organization.' });
+      }
+
+      const membership = await ctx.prisma.organizationMember.findUnique({
+        where: { organizationId_userId: { organizationId: input.orgId, userId: input.userId } },
+        select: { id: true },
+      });
+      if (!membership) throw new TRPCError({ code: 'NOT_FOUND', message: 'Membership not found.' });
+
+      await ctx.prisma.organizationMember.update({ where: { id: membership.id }, data: { status: 'REMOVED' } });
+      return { success: true as const };
+    }),
+
   getDashboard: orgModeratorProcedure
     .input(orgIdSchema)
     .query(async ({ ctx, input }) => {
@@ -100,7 +178,7 @@ export const organizationRouter = router({
       });
       if (!org) throw new TRPCError({ code: 'NOT_FOUND', message: 'Organization not found' });
 
-      const studentIds = await studentIdsFor(ctx.prisma, input.orgId);
+      const studentIds = await memberIdsFor(ctx.prisma, input.orgId);
 
       const [publishedCount, exportCount, approvedCount, pendingCount, videos, exports] = await Promise.all([
         ctx.prisma.video.count({ where: { creatorId: { in: studentIds } } }),
@@ -158,7 +236,7 @@ export const organizationRouter = router({
       return {
         org,
         stats: {
-          studentCount: studentIds.length,
+          memberCount: studentIds.length,
           publishedCount,
           exportCount,
           approvedCount,
@@ -179,13 +257,12 @@ export const organizationRouter = router({
       const members = await ctx.prisma.organizationMember.findMany({
         where: {
           organizationId: input.orgId,
-          role: 'STUDENT',
           status: 'ACTIVE',
           ...(before ? { createdAt: { lt: before } } : {}),
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: input.limit + 1,
-        select: { id: true, createdAt: true, user: { select: { id: true, username: true, email: true } } },
+        select: { id: true, createdAt: true, role: true, user: { select: { id: true, username: true, email: true } } },
       });
 
       const page = members.slice(0, input.limit);
@@ -196,6 +273,7 @@ export const organizationRouter = router({
           userId: m.user.id,
           username: m.user.username,
           email: m.user.email,
+          role: m.role,
           joinedAt: m.createdAt,
         })),
         nextCursor:
@@ -220,7 +298,7 @@ export const organizationRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid cursor.' });
       }
 
-      const studentIds = await studentIdsFor(ctx.prisma, input.orgId);
+      const studentIds = await memberIdsFor(ctx.prisma, input.orgId);
       if (studentIds.length === 0) return { items: [], nextCursor: null };
 
       const take = input.limit + 1;

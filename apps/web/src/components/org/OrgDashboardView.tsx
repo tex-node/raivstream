@@ -32,10 +32,12 @@ export interface OrgDashboardViewProps {
 }
 
 export function OrgDashboardView({ orgId, name, type, role, adminMode = false }: OrgDashboardViewProps) {
+  // Members is org-admin (or Raivstream admin) only: an ORG_MODERATOR is view-only.
+  const canManageMembers = adminMode || role === 'ORG_ADMIN';
   const [tab, setTab] = useState<Tab>('overview');
   const [moderation, setModeration] = useState<ModerationFilter>('all');
 
-  const tabs: Tab[] = adminMode
+  const tabs: Tab[] = canManageMembers
     ? ['overview', 'students', 'videos', 'members']
     : ['overview', 'students', 'videos'];
 
@@ -72,7 +74,7 @@ export function OrgDashboardView({ orgId, name, type, role, adminMode = false }:
       {tab === 'videos' && (
         <Videos orgId={orgId} moderation={moderation} onModerationChange={setModeration} />
       )}
-      {tab === 'members' && adminMode && <Members orgId={orgId} />}
+      {tab === 'members' && canManageMembers && <Members orgId={orgId} mode={adminMode ? 'admin' : 'org'} />}
     </>
   );
 }
@@ -85,7 +87,7 @@ function Overview({ orgId }: { orgId: string }) {
   if (!data) return null;
 
   const cards = [
-    { label: 'Students', value: data.stats.studentCount },
+    { label: 'Members', value: data.stats.memberCount },
     { label: 'Published', value: data.stats.publishedCount },
     { label: 'Completed exports', value: data.stats.exportCount },
     { label: 'Approved', value: data.stats.approvedCount },
@@ -145,8 +147,9 @@ function Students({ orgId }: { orgId: string }) {
       <table className="w-full text-left text-sm">
         <thead className="bg-[var(--noc-card)] text-[10px] uppercase tracking-wider text-[var(--noc-t5)]">
           <tr>
-            <th className="px-4 py-3">Student</th>
+            <th className="px-4 py-3">Member</th>
             <th className="px-4 py-3">Email</th>
+            <th className="px-4 py-3">Role</th>
             <th className="px-4 py-3">Joined</th>
           </tr>
         </thead>
@@ -155,6 +158,7 @@ function Students({ orgId }: { orgId: string }) {
             <tr key={student.userId} className="border-t border-[var(--noc-hairline)]">
               <td className="px-4 py-3 text-[var(--noc-t1)]">{student.username}</td>
               <td className="px-4 py-3 text-[var(--noc-t4)]">{student.email}</td>
+              <td className="px-4 py-3 text-[var(--noc-t4)]">{(student as { role?: string }).role?.toLowerCase() ?? 'student'}</td>
               <td className="px-4 py-3 text-[var(--noc-t4)]">
                 {new Date(student.joinedAt).toLocaleDateString()}
               </td>
@@ -249,33 +253,75 @@ const ROLE_LABELS: Record<OrgRole, string> = {
   STUDENT: 'Student',
 };
 
-function Members({ orgId }: { orgId: string }) {
+/**
+ * Member management, shared by both surfaces.
+ *
+ * `mode` selects the API, not just the label: a Raivstream admin acts cross-org
+ * (`admin.*`), an org admin acts on their own org (`org.*`, which enforces
+ * ORG_ADMIN server-side). The roster query differs for the same reason - an
+ * admin is usually not a member of the org they are inspecting.
+ */
+function Members({ orgId, mode }: { orgId: string; mode: 'admin' | 'org' }) {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.admin.getOrganization.useQuery({ orgId });
+  const isAdminMode = mode === 'admin';
+
+  const adminData = trpc.admin.getOrganization.useQuery({ orgId }, { enabled: isAdminMode });
+  const orgRoster = trpc.organization.listStudents.useQuery({ orgId, limit: 100 }, { enabled: !isAdminMode });
+
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<OrgRole>('STUDENT');
   const [formError, setFormError] = useState<string | null>(null);
 
-  const addMember = trpc.admin.addOrgMember.useMutation({
-    onSuccess: async () => {
-      setEmail('');
-      setFormError(null);
+  const refresh = async () => {
+    if (isAdminMode) {
       await utils.admin.getOrganization.invalidate({ orgId });
-    },
-    // The API returns NOT_FOUND for an unknown email - surfaced verbatim rather
-    // than auto-inviting an account, which Phase 1 deliberately does not do.
+      return;
+    }
+    await utils.organization.listStudents.invalidate({ orgId, limit: 100 });
+    await utils.organization.getDashboard.invalidate({ orgId });
+  };
+
+  const adminAdd = trpc.admin.addOrgMember.useMutation({
+    onSuccess: async () => { setEmail(''); setFormError(null); await refresh(); },
+    onError: (err) => setFormError(err.message),
+  });
+  const orgAdd = trpc.organization.addMember.useMutation({
+    onSuccess: async () => { setEmail(''); setFormError(null); await refresh(); },
+    onError: (err) => setFormError(err.message),
+  });
+  const adminRemove = trpc.admin.removeOrgMember.useMutation({ onSuccess: refresh });
+  const orgRemove = trpc.organization.removeMember.useMutation({
+    onSuccess: refresh,
     onError: (err) => setFormError(err.message),
   });
 
-  const removeMember = trpc.admin.removeOrgMember.useMutation({
-    onSuccess: async () => {
-      await utils.admin.getOrganization.invalidate({ orgId });
-    },
-  });
+  const isLoading = isAdminMode ? adminData.isLoading : orgRoster.isLoading;
+  const error = isAdminMode ? adminData.error : orgRoster.error;
+
+  const members = isAdminMode
+    ? (adminData.data?.members ?? []).map((m) => ({
+        id: m.id,
+        userId: m.user.id,
+        username: m.user.username,
+        email: m.user.email,
+        role: m.role as OrgRole,
+        status: String(m.status),
+        createdAt: m.createdAt,
+      }))
+    : (orgRoster.data?.items ?? []).map((m) => ({
+        id: m.userId,
+        userId: m.userId,
+        username: m.username,
+        email: m.email,
+        role: ((m as { role?: string }).role ?? 'STUDENT') as OrgRole,
+        status: 'ACTIVE',
+        createdAt: m.joinedAt,
+      }));
+
+  const submitting = adminAdd.isPending || orgAdd.isPending;
 
   if (isLoading) return <p className="mt-8 text-sm text-[var(--noc-t4)]">Loading members…</p>;
   if (error) return <p className="mt-8 text-sm text-[var(--noc-magenta)]">{error.message}</p>;
-  if (!data) return null;
 
   return (
     <>
@@ -306,14 +352,21 @@ function Members({ orgId }: { orgId: string }) {
           </div>
           <button
             type="button"
-            disabled={!email.trim() || addMember.isPending}
-            onClick={() => addMember.mutate({ orgId, email: email.trim(), role })}
+            disabled={!email.trim() || submitting}
+            onClick={() => {
+              const payload = { orgId, email: email.trim(), role };
+              if (isAdminMode) adminAdd.mutate(payload);
+              else orgAdd.mutate(payload);
+            }}
             className="rounded-lg bg-[rgba(217,70,168,0.9)] px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
           >
-            {addMember.isPending ? 'Adding…' : 'Add member'}
+            {submitting ? 'Adding…' : 'Add member'}
           </button>
         </div>
         {formError && <p className="mt-2 text-xs font-semibold text-[var(--noc-magenta)]">{formError}</p>}
+        <p className="mt-2 text-[10px] text-[var(--noc-t6)]">
+          The account must already exist - an unknown email returns “No account with that email”.
+        </p>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-[var(--noc-hairline)]">
@@ -328,20 +381,22 @@ function Members({ orgId }: { orgId: string }) {
             </tr>
           </thead>
           <tbody>
-            {data.members.map((member) => (
+            {members.map((member) => (
               <tr key={member.id} className="border-t border-[var(--noc-hairline)]">
                 <td className="px-4 py-3">
-                  <span className="block text-[var(--noc-t1)]">{member.user.username}</span>
-                  <span className="block text-xs text-[var(--noc-t5)]">{member.user.email}</span>
+                  <span className="block text-[var(--noc-t1)]">{member.username}</span>
+                  <span className="block text-xs text-[var(--noc-t5)]">{member.email}</span>
                 </td>
-                <td className="px-4 py-3 text-[var(--noc-t4)]">{ROLE_LABELS[member.role as OrgRole] ?? member.role}</td>
+                <td className="px-4 py-3 text-[var(--noc-t4)]">{ROLE_LABELS[member.role] ?? member.role}</td>
                 <td className="px-4 py-3 text-[var(--noc-t4)]">{member.status.toLowerCase()}</td>
                 <td className="px-4 py-3 text-[var(--noc-t4)]">{new Date(member.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3 text-right">
                   {member.status === 'ACTIVE' && (
                     <button
                       type="button"
-                      onClick={() => removeMember.mutate({ orgId, userId: member.user.id })}
+                      onClick={() => (isAdminMode
+                        ? adminRemove.mutate({ orgId, userId: member.userId })
+                        : orgRemove.mutate({ orgId, userId: member.userId }))}
                       className="text-xs font-bold text-[var(--noc-magenta)]"
                     >
                       Remove
