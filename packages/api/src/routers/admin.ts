@@ -10,6 +10,7 @@ import { ffmpegAvailable } from '../lib/movieRenderWorker';
 import { detectRefundRecoveryAlerts, getRefundOperationsOverview } from '../lib/mediaProviders';
 import { MAX_JOB_RETRIES } from '../lib/generators/jobModel';
 import { reconcileRows, type BalanceLedgerRow } from '../lib/creditReporting';
+import { getProviderRegistry, type ProviderId } from '../lib/mediaProviders/registry';
 import { allCircuitSnapshots } from '../lib/resilience/circuitBreaker';
 import { invalidate, invalidateFeedCaches } from '../lib/cache';
 import { creditKeys } from '../lib/credits/idempotencyKeys';
@@ -23,6 +24,44 @@ export const adminRouter = router({
    * total users, new today, total credit balance, total view hours,
    * total videos, total generation jobs, total revenue (credit purchases)
    */
+  /**
+   * D-084 - provider health for the admin dashboard.
+   *
+   * Two failure modes are surfaced separately because they need different
+   * remedies: `circuit_open` (transient - wait or investigate the provider) and
+   * `accountStatus: "locked"` (a 401/403 - the key or the balance is dead, and
+   * only a human topping up or unlocking can fix it).
+   */
+  providerHealth: moderatorProcedure.query(async () => {
+    const registry = new Map(getProviderRegistry().map((provider) => [provider.id, provider]));
+
+    const providers = allCircuitSnapshots().map((snapshot) => {
+      const provider = registry.get(snapshot.provider as ProviderId);
+      const wasAuth = snapshot.lastFailureWasAuth === true;
+      const message = snapshot.lastFailureMessage ?? '';
+      const looksLocked = wasAuth && /403|lock|disabled|balance|quota/i.test(message);
+
+      return {
+        id: snapshot.provider as ProviderId,
+        state: snapshot.state,
+        failureCount: snapshot.failureCount,
+        lastFailureAt: snapshot.lastFailureAt,
+        lastFailureCode: snapshot.lastFailureCode ?? null,
+        lastFailureWasAuth: wasAuth,
+        configEnabled: provider?.configured ?? false,
+        accountStatus: looksLocked ? ('locked' as const) : null,
+      };
+    });
+
+    return {
+      providers,
+      summary: {
+        unavailable: providers.filter((row) => row.state === 'open').length,
+        locked: providers.filter((row) => row.accountStatus === 'locked').length,
+      },
+    };
+  }),
+
   getOverview: adminProcedure.query(async ({ ctx }) => {
     const now = new Date();
     const startOfToday = new Date(now);

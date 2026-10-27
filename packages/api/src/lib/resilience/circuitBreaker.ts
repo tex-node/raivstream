@@ -271,10 +271,17 @@ export class CircuitBreaker {
   }
 
   private recordFailure(error: unknown, at: number): void {
-    const e = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown };
+    const e = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown; response?: { status?: unknown } };
+    // Prefer a provider-neutral code, but fall back to the HTTP status: a 403
+    // with a null code renders as "unknown" on the dashboard, which is exactly
+    // the case an operator needs to read.
+    const status = typeof e?.status === 'number' ? e.status
+      : typeof e?.statusCode === 'number' ? e.statusCode
+      : typeof e?.response?.status === 'number' ? e.response.status
+      : null;
     this.lastFailure = {
       at,
-      code: typeof e?.code === 'string' ? e.code : null,
+      code: typeof e?.code === 'string' ? e.code : status !== null ? `HTTP_${status}` : null,
       message: typeof e?.message === 'string' ? e.message.slice(0, 300) : 'unknown',
       auth: isAuthFailure(error),
     };
