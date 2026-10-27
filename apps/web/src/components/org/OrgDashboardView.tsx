@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { MediaThumb } from '@/components/video/MediaThumb';
 
-type Tab = 'overview' | 'students' | 'videos' | 'members';
+type Tab = 'overview' | 'students' | 'videos' | 'nominations' | 'members';
 type ModerationFilter = 'all' | 'APPROVED' | 'PENDING' | 'REJECTED';
 type OrgRole = 'ORG_ADMIN' | 'ORG_MODERATOR' | 'STUDENT';
 
@@ -37,9 +37,11 @@ export function OrgDashboardView({ orgId, name, type, role, adminMode = false }:
   const [tab, setTab] = useState<Tab>('overview');
   const [moderation, setModeration] = useState<ModerationFilter>('all');
 
+  // Nominations are visible to admins AND moderators - nominating is a moderator's
+  // job; only roster management is admin-level.
   const tabs: Tab[] = canManageMembers
-    ? ['overview', 'students', 'videos', 'members']
-    : ['overview', 'students', 'videos'];
+    ? ['overview', 'students', 'videos', 'nominations', 'members']
+    : ['overview', 'students', 'videos', 'nominations'];
 
   return (
     <>
@@ -74,6 +76,7 @@ export function OrgDashboardView({ orgId, name, type, role, adminMode = false }:
       {tab === 'videos' && (
         <Videos orgId={orgId} moderation={moderation} onModerationChange={setModeration} />
       )}
+      {tab === 'nominations' && <Nominations orgId={orgId} />}
       {tab === 'members' && canManageMembers && <Members orgId={orgId} mode={adminMode ? 'admin' : 'org'} />}
     </>
   );
@@ -186,6 +189,7 @@ function Videos({
   });
 
   const items = data?.items ?? [];
+  const [nominateTarget, setNominateTarget] = useState<{ id: string; title: string; targetType: "VIDEO" | "EXPORT" } | null>(null);
 
   return (
     <>
@@ -239,10 +243,25 @@ function Videos({
                   <span className="text-[var(--noc-t6)]">export</span>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => setNominateTarget({ id: item.id, title: item.title, targetType: item.source === "published" ? "VIDEO" : "EXPORT" })}
+                className="mt-1.5 w-full rounded-md border border-[var(--noc-hairline)] py-1 text-[10px] font-bold text-[var(--noc-t4)] hover:text-[var(--noc-t1)]"
+              >
+                Nominate
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {nominateTarget && (
+        <NominateModal
+          orgId={orgId}
+          target={nominateTarget}
+          onClose={() => setNominateTarget(null)}
+        />
+      )}
     </>
   );
 }
@@ -409,5 +428,152 @@ function Members({ orgId, mode }: { orgId: string; mode: 'admin' | 'org' }) {
         </table>
       </div>
     </>
+  );
+}
+function Nominations({ orgId }: { orgId: string }) {
+  const { data, isLoading, error } = trpc.organization.listNominations.useQuery({ orgId });
+  const rows = data ?? [];
+
+  if (isLoading) return <p className="mt-8 text-sm text-[var(--noc-t4)]">Loading nominations…</p>;
+  if (error) return <p className="mt-8 text-sm text-[var(--noc-magenta)]">{error.message}</p>;
+
+  if (rows.length === 0) {
+    return (
+      <div className="mt-8 rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] px-6 py-12 text-center">
+        <p className="text-sm font-semibold text-[var(--noc-t3)]">Nothing nominated yet.</p>
+        <p className="mt-1 text-xs text-[var(--noc-t5)]">
+          Open the Videos tab and use Nominate on a piece worth an award.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 overflow-x-auto rounded-xl border border-[var(--noc-hairline)]">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-[var(--noc-card)] text-[10px] uppercase tracking-wider text-[var(--noc-t5)]">
+          <tr>
+            <th className="px-4 py-3">Item</th>
+            <th className="px-4 py-3">Category</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Nominated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="border-t border-[var(--noc-hairline)]">
+              <td className="px-4 py-3">
+                <span className="block text-[var(--noc-t1)]">{row.title}</span>
+                <span className="block text-[10px] uppercase tracking-wide text-[var(--noc-t6)]">
+                  {row.targetType.toLowerCase()}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-[var(--noc-t3)]">{row.categoryName}</td>
+              <td className="px-4 py-3 text-[var(--noc-t4)]">{row.status.toLowerCase()}</td>
+              <td className="px-4 py-3 text-[var(--noc-t4)]">
+                {new Date(row.createdAt).toLocaleDateString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function NominateModal({
+  orgId,
+  target,
+  onClose,
+}: {
+  orgId: string;
+  target: { id: string; title: string; targetType: 'VIDEO' | 'EXPORT' };
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const categories = trpc.organization.getAwardCategories.useQuery({ orgId });
+  const [categoryId, setCategoryId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const nominate = trpc.organization.nominate.useMutation({
+    onSuccess: async () => {
+      setDone(true);
+      await utils.organization.listNominations.invalidate({ orgId });
+    },
+    onError: (err) => setError(err.message),
+  });
+
+  const options = categories.data ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-black text-[var(--noc-t1)]">Nominate</h2>
+            <p className="mt-1 text-xs text-[var(--noc-t5)]">{target.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-xs text-[var(--noc-t5)]">Close</button>
+        </div>
+
+        {done ? (
+          <div className="mt-4">
+            <p className="text-sm text-[#34d399]">Nominated.</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 rounded-lg bg-[rgba(217,70,168,0.9)] px-4 py-2 text-sm font-bold text-white"
+            >
+              Done
+            </button>
+          </div>
+        ) : options.length === 0 ? (
+          <p className="mt-4 text-xs text-[var(--noc-t5)]">
+            No award categories are open yet. A Raivstream admin needs to create one first.
+          </p>
+        ) : (
+          <>
+            <label className="mt-4 block text-[10px] uppercase tracking-wider text-[var(--noc-t5)]">Category</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)]"
+            >
+              <option value="">Choose a category</option>
+              {options.map((option) => (
+                <option key={option.id} value={option.id}>{option.name}</option>
+              ))}
+            </select>
+
+            <label className="mt-3 block text-[10px] uppercase tracking-wider text-[var(--noc-t5)]">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-[var(--noc-hairline)] bg-[var(--noc-page)] px-3 py-2 text-sm text-[var(--noc-t1)] outline-none"
+            />
+
+            {error && <p className="mt-2 text-xs font-semibold text-[var(--noc-magenta)]">{error}</p>}
+
+            <button
+              type="button"
+              disabled={!categoryId || nominate.isPending}
+              onClick={() => nominate.mutate({
+                orgId,
+                categoryId,
+                targetType: target.targetType,
+                targetId: target.id,
+                ...(notes.trim() ? { notes: notes.trim() } : {}),
+              })}
+              className="mt-4 w-full rounded-lg bg-[rgba(217,70,168,0.9)] px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+            >
+              {nominate.isPending ? 'Nominating…' : 'Submit nomination'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
