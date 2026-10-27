@@ -100,6 +100,8 @@ export default function SettingsPage() {
           ))}
         </div>
 
+        <OrganizationSection isSignedIn={Boolean(isSignedIn)} />
+
         {/* Profile tab */}
         {activeTab === 'profile' && (
           <form onSubmit={handleSaveProfile} className="flex flex-col gap-6">
@@ -256,6 +258,65 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Permanent organization entry point. The feed banner is dismissible, so without
+ * this a student who dismissed it has no route back to /join.
+ */
+function OrganizationSection({ isSignedIn }: { isSignedIn: boolean }) {
+  const memberships = trpc.organization.myOrganizations.useQuery(undefined, {
+    enabled: isSignedIn,
+  });
+
+  if (!isSignedIn) return null;
+
+  const orgs = memberships.data ?? [];
+
+  return (
+    <div
+      className="mb-8 rounded-2xl p-4"
+      style={{ background: 'var(--noc-card)', border: '1px solid var(--noc-hairline)' }}
+    >
+      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--noc-t5)' }}>
+        Organization
+      </p>
+
+      {memberships.isLoading && (
+        <p className="mt-2 text-sm" style={{ color: 'var(--noc-t4)' }}>Loading…</p>
+      )}
+
+      {!memberships.isLoading && orgs.length === 0 && (
+        <>
+          <p className="mt-2 text-sm" style={{ color: 'var(--noc-t4)' }}>
+            You are not part of an organization yet.
+          </p>
+          <a
+            href="/join"
+            className="mt-3 inline-block rounded-lg px-4 py-2 text-sm font-bold text-white"
+            style={{ background: 'rgba(217,70,168,0.9)' }}
+          >
+            Join an Organization
+          </a>
+        </>
+      )}
+
+      {orgs.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-2">
+          {orgs.map((org) => (
+            <li key={org.id} className="flex items-center justify-between gap-3">
+              <a href={`/org/${org.slug}`} className="text-sm font-semibold underline" style={{ color: 'var(--noc-t1)' }}>
+                {org.name}
+              </a>
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--noc-t5)' }}>
+                {String(org.role).replace('_', ' ').toLowerCase()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -628,7 +628,7 @@ function InviteCodeCard({ orgId, initialCode }: { orgId: string; initialCode?: s
           </button>
         ) : (
           <span className="flex items-center gap-2 text-[11px]">
-            <span className="text-[var(--noc-t4)]">Invalidate the current code?</span>
+            <span className="text-[var(--noc-t4)]">This will invalidate the current code. Anyone trying to use the old code will be rejected. Proceed?</span>
             <button type="button" onClick={() => regenerate.mutate({ orgId })} disabled={regenerate.isPending} className="font-bold text-[var(--noc-magenta)]">
               {regenerate.isPending ? 'Rotating…' : 'Yes, regenerate'}
             </button>
