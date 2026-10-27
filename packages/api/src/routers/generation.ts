@@ -19,6 +19,7 @@ import {
   MODEL_FEATURE_KEY,
 } from '../lib/credits';
 import { getProviderRegistry, resolveModelAvailability } from '../lib/mediaProviders/registry';
+import { assertProviderAvailable, evaluateProviderGate } from '../lib/resilience/providerGate';
 import { moderatePrompt, moderationRejectMessage } from '../lib/promptModeration';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 import { estimateModelCreditCost, estimatePerSecondCosts } from '../lib/generationCost';
@@ -245,7 +246,16 @@ export const generationRouter = router({
           ...(isVideoPerSecondPricingEnabled()
             ? { creditCostByResolution: estimatePerSecondCosts({ model: id as SupportedModel, rateMap }) }
             : {}),
-          ...(availability ? { available: availability.available, unavailableReason: availability.reason ?? null } : {}),
+          // D-084 - configuration availability OR an open circuit. Closed and
+          // half-open behave exactly as before; only an open breaker changes it.
+          ...(availability || evaluateProviderGate(id).blocked
+            ? {
+                available: (availability?.available ?? true) && !evaluateProviderGate(id).blocked,
+                unavailableReason: evaluateProviderGate(id).blocked
+                  ? `circuit_open:${evaluateProviderGate(id).lastFailureAt ?? 'unknown'}`
+                  : (availability?.reason ?? null),
+              }
+            : {}),
         };
       });
   }),
@@ -416,6 +426,12 @@ export const generationRouter = router({
         });
       }
       // ─────────────────────────────────────────────────────────────────────────
+
+      // ── D-084 pre-charge provider gate ───────────────────────────────────────
+      // Above the job row and above both billing paths: a provider whose circuit
+      // is open never charges, never refunds, never creates a row. Half-open is
+      // allowed through - it is the recovery probe.
+      assertProviderAvailable(input.model);
 
       // ── Reserve/settle path (flag-guarded, default OFF) ─────────────────────
       // Requires the financial policy decision; until then the deduct-first path
