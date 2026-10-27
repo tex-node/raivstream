@@ -40,6 +40,21 @@ export interface ProviderGateDecision {
   blocked: boolean;
 }
 
+/**
+ * Test seam: pin the snapshot a provider resolves to. Breaker state is real
+ * in-process state and half-open depends on wall-clock cooldown, which a test
+ * cannot reach without waiting. Replacing the input keeps the decision logic
+ * (blocked === state 'open') under test.
+ */
+type Snapshot = ReturnType<ReturnType<typeof breakerFor>['snapshot']>;
+let snapshotOverride: ((providerId: string) => Snapshot | null) | null = null;
+
+export function __setProviderGateSnapshotForTests(
+  fn: ((providerId: string) => Snapshot | null) | null,
+): void {
+  snapshotOverride = fn;
+}
+
 /** Pure decision, so the routing/state rules are testable without throwing. */
 export function evaluateProviderGate(model: string): ProviderGateDecision {
   const providerId = providerIdForModel(model);
@@ -47,7 +62,7 @@ export function evaluateProviderGate(model: string): ProviderGateDecision {
     return { providerId: null, state: null, lastFailureAt: null, blocked: false };
   }
 
-  const snapshot = breakerFor(providerId).snapshot();
+  const snapshot = snapshotOverride?.(providerId) ?? breakerFor(providerId).snapshot();
   return {
     providerId,
     state: snapshot.state,

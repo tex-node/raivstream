@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { breakerFor } from '../circuitBreaker';
-import { assertProviderAvailable, evaluateProviderGate, providerIdForModel } from '../providerGate';
+import { assertProviderAvailable, evaluateProviderGate, providerIdForModel, __setProviderGateSnapshotForTests } from '../providerGate';
 import * as creditsModule from '../../credits';
 import * as generatorsModule from '../../generators';
 import { appRouter } from '../../../index';
@@ -46,6 +46,7 @@ describe('providerGate', () => {
 
     const snapshot = breakerFor('fal').snapshot();
     expect(snapshot.lastFailureWasAuth).toBe(true);
+    expect(snapshot.lastFailureCode).toBe('HTTP_403');
     expect(snapshot.lastFailureMessage).toMatch(/403/);
 
     expect(() => assertProviderAvailable('VEED_FABRIC')).toThrow(/temporarily unavailable/);
@@ -82,5 +83,76 @@ describe('providerGate', () => {
     expect(deduct).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(created).toHaveLength(0);
+  });
+});
+
+describe('providerGate - state handling', () => {
+  function snap(state: 'closed' | 'open' | 'half-open') {
+    return (id: string) => ({
+      provider: id,
+      state,
+      failureCount: state === 'closed' ? 0 : 1,
+      lastFailureAt: state === 'closed' ? null : new Date().toISOString(),
+      openedAt: state === 'open' ? new Date().toISOString() : null,
+      nextProbeAt: null,
+      lastFailureCode: state === 'closed' ? null : '403',
+      lastFailureMessage: state === 'closed' ? null : 'account locked (HTTP 403)',
+      lastFailureWasAuth: state !== 'closed',
+    });
+  }
+
+  afterEach(() => __setProviderGateSnapshotForTests(null));
+
+  it('blocks only when open', () => {
+    __setProviderGateSnapshotForTests(snap('open'));
+    expect(evaluateProviderGate('FLUX2').blocked).toBe(true);
+    expect(() => assertProviderAvailable('FLUX2')).toThrow(/temporarily unavailable/);
+  });
+
+  it('allows half-open so recovery is never starved', () => {
+    __setProviderGateSnapshotForTests(snap('half-open'));
+    expect(evaluateProviderGate('FLUX2').blocked).toBe(false);
+    expect(() => assertProviderAvailable('FLUX2')).not.toThrow();
+  });
+
+  it('allows closed', () => {
+    __setProviderGateSnapshotForTests(snap('closed'));
+    expect(() => assertProviderAvailable('FLUX2')).not.toThrow();
+  });
+});
+
+describe('admin.providerHealth', () => {
+  it('returns all seven providers and synthesises a locked account', async () => {
+    __setProviderGateSnapshotForTests((id) => ({
+      provider: id,
+      state: id === 'fal' ? 'open' : 'closed',
+      failureCount: id === 'fal' ? 1 : 0,
+      lastFailureAt: id === 'fal' ? new Date().toISOString() : null,
+      openedAt: id === 'fal' ? new Date().toISOString() : null,
+      nextProbeAt: null,
+      lastFailureCode: id === 'fal' ? '403' : null,
+      lastFailureMessage: id === 'fal' ? 'fal ugc disabled: account locked (HTTP 403)' : null,
+      lastFailureWasAuth: id === 'fal',
+    }));
+
+    const caller = appRouter.createCaller({
+      prisma: {} as never,
+      userId: 'admin-1',
+      user: { id: 'admin-1', email: 'a@b.test', username: 'admin', displayName: 'A', role: 'MODERATOR' as const },
+    } as never);
+
+    const result = await caller.admin.providerHealth();
+
+    expect(result.providers).toHaveLength(7);
+    expect(result.summary.unavailable).toBe(1);
+    expect(result.summary.locked).toBe(1);
+    expect(result.providers.find((p) => p.id === 'fal')).toMatchObject({
+      state: 'open',
+      accountStatus: 'locked',
+      lastFailureWasAuth: true,
+      lastFailureCode: 'HTTP_403',
+    });
+
+    __setProviderGateSnapshotForTests(null);
   });
 });
