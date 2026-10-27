@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { OrgJoinBanner } from '@/components/org/OrgJoinBanner';
 import { Navbar } from '@/components/layout/Navbar';
 import { FeedTabs } from '@/components/feed/FeedTabs';
 import { VideoFeed } from '@/components/feed/VideoFeed';
@@ -22,7 +23,9 @@ export default function HomePage() {
   }
 
   return (
-    <main className="h-screen bg-black lg:bg-[var(--noc-page)] flex flex-col overflow-hidden">
+    <>
+      <OrgJoinBanner />
+      <main className="h-screen bg-black lg:bg-[var(--noc-page)] flex flex-col overflow-hidden">
       {/* Floating header — transparent, overlays the feed */}
       <div className="absolute top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 pb-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <div className="pointer-events-auto w-full">
@@ -85,6 +88,7 @@ export default function HomePage() {
           </div>
         </div>
       )}
-    </main>
+      </main>
+    </>
   );
 }

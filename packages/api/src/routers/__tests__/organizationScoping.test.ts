@@ -256,3 +256,46 @@ describe('organization invite codes', () => {
     expect(prisma.organizationMember.update).not.toHaveBeenCalled();
   });
 });
+describe('invite code rotation', () => {
+  function prismaFor(isAdmin: boolean) {
+    return {
+      organizationMember: {
+        findFirst: vi.fn(async () => (isAdmin ? { role: 'ORG_ADMIN' } : null)),
+      },
+      organization: {
+        update: vi.fn(async ({ data }: { data: { inviteCode: string } }) => ({ inviteCode: data.inviteCode })),
+      },
+    };
+  }
+
+  function asCaller(prisma: ReturnType<typeof prismaFor>, role: 'ADMIN' | 'CREATOR' = 'CREATOR') {
+    return appRouter.createCaller({
+      prisma: prisma as never,
+      userId: 'u1',
+      user: { id: 'u1', email: 'a@b.test', username: 'u', displayName: 'U', role },
+    } as never);
+  }
+
+  it('lets an ORG_ADMIN rotate the code to a new 12-char hex value', async () => {
+    const prisma = prismaFor(true);
+    const { inviteCode } = await asCaller(prisma).organization.regenerateInviteCode({ orgId: 'org-1' });
+
+    expect(inviteCode).toMatch(/^[0-9a-f]{12}$/);
+    expect(prisma.organization.update).toHaveBeenCalled();
+  });
+
+  it('lets a platform admin rotate a code for an org they do not belong to', async () => {
+    const prisma = prismaFor(false);
+    const { inviteCode } = await asCaller(prisma, 'ADMIN').organization.regenerateInviteCode({ orgId: 'org-1' });
+
+    expect(inviteCode).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('rejects a plain member', async () => {
+    const prisma = prismaFor(false);
+    await expect(asCaller(prisma).organization.regenerateInviteCode({ orgId: 'org-1' }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(prisma.organization.update).not.toHaveBeenCalled();
+  });
+});

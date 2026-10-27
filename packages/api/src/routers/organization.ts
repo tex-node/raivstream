@@ -96,7 +96,7 @@ export const organizationRouter = router({
     .query(async ({ ctx, input }) => {
       const org = await ctx.prisma.organization.findUnique({
         where: { slug: input.slug },
-        select: { id: true, name: true, type: true, slug: true },
+        select: { id: true, name: true, type: true, slug: true, inviteCode: true },
       });
 
       // Deliberately the same error for "no such org" and "not a member": telling
@@ -114,7 +114,14 @@ export const organizationRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Organization not available' });
       }
 
-      return { orgId: org.id, name: org.name, slug: org.slug, type: org.type, role: membership.role };
+      return {
+        orgId: org.id,
+        name: org.name,
+        slug: org.slug,
+        type: org.type,
+        role: membership.role,
+        inviteCode: org.inviteCode,
+      };
     }),
 
   /**
@@ -213,6 +220,45 @@ export const organizationRouter = router({
           });
 
       return { orgId: org.id, name: org.name, slug: org.slug, role: membership.role, joined: true };
+    }),
+
+  /**
+   * The caller's active memberships. Used by the feed banner: "are you part of a
+   * school program?" only makes sense for someone who is not in one yet.
+   */
+  myOrganizations: protectedProcedure.query(async ({ ctx }) => {
+    const memberships = await ctx.prisma.organizationMember.findMany({
+      where: { userId: ctx.user.id, status: 'ACTIVE' },
+      select: {
+        role: true,
+        organization: { select: { id: true, name: true, slug: true, type: true } },
+      },
+    });
+
+    return memberships.map((m) => ({ ...m.organization, role: m.role }));
+  }),
+
+  /**
+   * Rotate the join code. ORG_ADMIN of this org, or a Raivstream admin acting
+   * cross-org (admins are usually not members of the org they administer).
+   * Invalidates every copy of the old code immediately.
+   */
+  regenerateInviteCode: protectedProcedure
+    .input(z.object({ orgId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const isPlatformAdmin = ctx.user.role === 'ADMIN';
+      if (!isPlatformAdmin) await assertOrgAdmin(ctx, input.orgId);
+
+      const { randomBytes } = await import('node:crypto');
+      const inviteCode = randomBytes(6).toString('hex'); // 12 hex chars
+
+      const updated = await ctx.prisma.organization.update({
+        where: { id: input.orgId },
+        data: { inviteCode },
+        select: { inviteCode: true },
+      });
+
+      return { inviteCode: updated.inviteCode };
     }),
 
   getDashboard: orgModeratorProcedure

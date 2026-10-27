@@ -36,13 +36,13 @@ export default function OrgDashboardPage() {
     );
   }
 
-  const { orgId, name, type, role } = resolved.data;
+  const { orgId, name, type, role, inviteCode } = resolved.data;
 
   return (
     <div className="min-h-screen bg-[var(--noc-page)]">
       <Navbar />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <OrgDashboardView orgId={orgId} name={name} type={type} role={role} />
+        <OrgDashboardView orgId={orgId} name={name} type={type} role={role} inviteCode={inviteCode} />
       </main>
     </div>
   );
