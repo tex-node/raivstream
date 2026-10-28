@@ -845,6 +845,7 @@ export const generationRouter = router({
       tags:          z.array(z.string()).max(10).optional(),
       isPublic:      z.boolean().default(true),
       isPremiumOnly: z.boolean().default(false),
+      isKidsSafe:    z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
       const job = await ctx.prisma.generationJob.findFirst({
@@ -868,6 +869,11 @@ export const generationRouter = router({
           status:       'READY',
           isPublic:     input.isPublic,
           isPremiumOnly: input.isPremiumOnly,
+          // Explicit, not inherited from the column default: the feed gate and
+          // the admin queue both read this, and an implicit default is invisible
+          // at the call site.
+          moderationStatus: 'PENDING',
+          isKidsSafe:   input.isKidsSafe,
           publishedAt:  new Date(),
         },
         select: { id: true, title: true, mp4Url: true, thumbnailUrl: true },
