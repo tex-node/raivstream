@@ -79,8 +79,9 @@ export async function reconcileStuckJobs(deps: ReconcileDeps): Promise<Reconcile
       model: true,
       providerJobId: true,
       userId: true,
-      featureKey: true,
-      costCredits: true,
+      // GenerationJob has no featureKey column; the debit that paid for it does,
+      // so the refund callback looks that up rather than guessing a feature key.
+      creditsUsed: true,
     },
   });
 
