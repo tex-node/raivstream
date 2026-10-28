@@ -23,6 +23,34 @@ export const adminRouter = router({
   ...adminOrganizationProcedures,
   // D-004 Phase 2 - awards (cross-org, adminProcedure).
   ...adminAwardProcedures,
+
+  /**
+   * Repair jobs stranded in GENERATING (provider finished, we never recorded it).
+   * Safe to run repeatedly: it only touches rows older than 15 minutes and only
+   * mirrors what the provider reports as COMPLETED.
+   */
+  reconcileStuckJobs: adminProcedure.mutation(async ({ ctx }) => {
+    const { reconcileStuckJobs } = await import('../lib/jobReconciliation');
+    const { refundCredits } = await import('../lib/credits');
+
+    return reconcileStuckJobs({
+      prisma: ctx.prisma as never,
+      refund: async (job) => {
+        const cost = Number(job.costCredits ?? 0);
+        const featureKey = typeof job.featureKey === 'string' ? job.featureKey : null;
+        if (!featureKey || cost <= 0) return;
+        await refundCredits(
+          ctx.prisma,
+          String(job.userId),
+          cost,
+          featureKey,
+          String(job.id),
+          'Refund: render failed (reconciled)',
+          `reconcile-refund-${job.id}`,
+        );
+      },
+    });
+  }),
   // ─── Overview Stats ────────────────────────────────────────────────────────
 
   /**
