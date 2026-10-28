@@ -56,11 +56,11 @@ export function VideoLightbox({
 
         <video src={videoUrl} controls autoPlay className="max-h-[80vh] w-full rounded-xl bg-black" />
 
+        {/* Through the proxy so the response is same-origin and the browser
+            honours `download`; a direct R2 link ignores it and opens a tab. */}
         <a
-          href={videoUrl}
+          href={`/api/download?url=${encodeURIComponent(videoUrl)}&filename=${encodeURIComponent(safeName)}`}
           download={`${safeName}.mp4`}
-          target="_blank"
-          rel="noopener noreferrer"
           className="mt-3 block w-full rounded-xl bg-[rgba(217,70,168,0.9)] px-4 py-2.5 text-center text-sm font-bold text-white"
         >
           Download Video
