@@ -111,7 +111,12 @@ export default function AdminUserDetailPage() {
 
 function Media({ userId }: { userId: string }) {
   const [selected, setSelected] = useState<{ url: string; title: string } | null>(null);
-  const { data, isLoading, error } = trpc.admin.getUserMedia.useQuery({ userId, limit: 60 });
+  const [exportsOnly, setExportsOnly] = useState(false);
+  const { data, isLoading, error } = trpc.admin.getUserMedia.useQuery({
+    userId,
+    limit: 100,
+    ...(exportsOnly ? { source: 'export' as const } : {}),
+  });
   const items = data?.items ?? [];
 
   if (isLoading) return <p className="mt-6 text-sm text-[var(--noc-t4)]">Loading media…</p>;
@@ -127,7 +132,24 @@ function Media({ userId }: { userId: string }) {
 
   return (
     <>
-    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="mt-4 flex gap-2">
+      {[{ label: 'All', value: false }, { label: 'Exports', value: true }].map((option) => (
+        <button
+          key={option.label}
+          type="button"
+          onClick={() => setExportsOnly(option.value)}
+          className={`rounded-full px-3 py-1 text-[11px] font-bold ${
+            exportsOnly === option.value
+              ? 'bg-[rgba(217,70,168,0.2)] text-[var(--noc-t1)]'
+              : 'bg-[var(--noc-card)] text-[var(--noc-t5)]'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+
+    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {items.map((asset) => (
         <div
           key={`${asset.source}-${asset.id}`}

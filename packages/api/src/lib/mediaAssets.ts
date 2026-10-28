@@ -26,6 +26,8 @@ export type OwnedAsset = {
 
 export type OwnedAssetsInput = {
   type?: 'image' | 'video' | 'audio';
+  /** Narrow to a single origin, e.g. only stitched final exports. */
+  source?: 'export';
   cursor?: { createdAt: string; id: string };
   limit: number;
 };
@@ -52,9 +54,11 @@ export async function fetchOwnedAssets(
   }
   const createdAtFilter = before ? { lt: before } : undefined;
 
-  const wantImages = !input.type || input.type === 'image';
-  const wantVideos = !input.type || input.type === 'video';
-  const wantAudio = !input.type || input.type === 'audio';
+  // A source filter overrides the type filter: 'export' lives inside 'video'.
+  const exportsOnly = input.source === 'export';
+  const wantImages = !exportsOnly && (!input.type || input.type === 'image');
+  const wantVideos = !exportsOnly && (!input.type || input.type === 'video');
+  const wantAudio = !exportsOnly && (!input.type || input.type === 'audio');
 
   const [storyAssets, videos, audioAssets, exports] = await Promise.all([
     wantImages || wantVideos
@@ -102,8 +106,9 @@ export async function fetchOwnedAssets(
           select: { id: true, publicUrl: true, projectId: true, createdAt: true },
         })
       : Promise.resolve([]),
-    // Final stitched exports - the submission artefact.
-    wantVideos
+    // Final stitched exports - the submission artefact. Also the only source
+    // when the caller filters to exports.
+    exportsOnly || wantVideos
       ? client.storyVideoExport.findMany({
           where: { userId: ownerUserId, status: 'READY', assetUrl: { not: null }, ...(createdAtFilter ? { createdAt: createdAtFilter } : {}) },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

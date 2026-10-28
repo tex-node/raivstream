@@ -95,6 +95,7 @@ export const libraryRouter = router({
         cursor: cursorSchema.optional(),
         limit: z.number().int().min(1).max(100).default(30),
         type: z.enum(['image', 'video', 'audio']).optional(),
+        source: z.enum(['export']).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
