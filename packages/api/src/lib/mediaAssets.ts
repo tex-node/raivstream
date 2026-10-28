@@ -104,7 +104,9 @@ export async function fetchOwnedAssets(
   }
 
   for (const video of videos as Array<Record<string, unknown>>) {
-    const url = (video.hlsMasterUrl ?? video.mp4Url) as string | null;
+    // MP4 first: an HLS manifest is not a downloadable file, and the admin grid
+    // exists partly so an operator can save the raw video.
+    const url = (video.mp4Url ?? video.hlsMasterUrl) as string | null;
     if (!url) continue;
     merged.push({
       id: String(video.id),
