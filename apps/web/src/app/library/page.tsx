@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { Navbar } from '@/components/layout/Navbar';
 import { MediaThumb } from '@/components/video/MediaThumb';
+import { PublishModal } from '@/components/media/PublishModal';
 
 type AssetType = 'image' | 'video' | 'audio';
 type Filter = 'all' | AssetType;
@@ -60,6 +61,19 @@ export default function LibraryPage() {
   });
 
   const assets = query.data?.items ?? [];
+  const [publishTarget, setPublishTarget] = useState<{ id: string; title: string } | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [published, setPublished] = useState(false);
+  const utils = trpc.useUtils();
+
+  const publishAsset = trpc.library.publishAsset.useMutation({
+    onSuccess: async () => {
+      setPublished(true);
+      setPublishError(null);
+      await utils.library.getAssets.invalidate();
+    },
+    onError: (err) => setPublishError(err.message),
+  });
 
   return (
     <div className="min-h-screen bg-[var(--noc-page)]">
@@ -162,6 +176,15 @@ export default function LibraryPage() {
                   </span>
                   <span>{new Date(asset.createdAt).toLocaleDateString()}</span>
                 </div>
+                {asset.type === "video" && asset.source === "story" && (
+                  <button
+                    type="button"
+                    onClick={() => { setPublished(false); setPublishError(null); setPublishTarget({ id: asset.id, title: `Story ${new Date(asset.createdAt).toLocaleDateString()}` }); }}
+                    className="w-full border-t border-[var(--noc-hairline)] py-1.5 text-[10px] font-bold text-[var(--noc-t4)] hover:text-[var(--noc-t1)]"
+                  >
+                    Publish to Feed
+                  </button>
+                )}
               </div>
             );
           })}
@@ -172,6 +195,19 @@ export default function LibraryPage() {
             Showing the newest {assets.length}. Paging lands in Phase 1.1.
           </p>
         )}
+        <PublishModal
+          open={Boolean(publishTarget)}
+          defaultTitle={publishTarget?.title}
+          pending={publishAsset.isPending}
+          error={publishError}
+          published={published}
+          onClose={() => { setPublishTarget(null); setPublishError(null); setPublished(false); }}
+          onSubmit={(values) => {
+            if (!publishTarget) return;
+            setPublishError(null);
+            publishAsset.mutate({ assetId: publishTarget.id, ...values });
+          }}
+        />
       </main>
     </div>
   );

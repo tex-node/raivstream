@@ -17,6 +17,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { trpc } from '@/lib/trpc';
 import { generateFormShape, canSubmitGenerateForm } from '@/lib/generateFormShape';
 import { useUser } from '@/lib/auth';
+import { PublishModal } from '@/components/media/PublishModal';
 
 const MODEL = 'VEED_FABRIC';
 const POLL_INTERVAL_MS = 4_000;
@@ -32,6 +33,10 @@ export default function AvatarPage() {
   const [manualAudio, setManualAudio] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [pollEnabled, setPollEnabled] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [published, setPublished] = useState(false);
+  const publishJob = trpc.generation.publish.useMutation();
 
   // Same shape the router uses - Fabric requires image + audio, never a prompt.
   const form = useMemo(
@@ -264,13 +269,22 @@ export default function AvatarPage() {
             ) : outputUrl ? (
               <div className="w-full">
                 <video src={outputUrl} controls className="w-full rounded-xl" />
-                <a
-                  href={outputUrl}
-                  download="raivstream-avatar.mp4"
-                  className="mt-3 block w-full rounded-xl bg-[var(--noc-page)] px-4 py-2.5 text-center text-sm font-bold text-[var(--noc-t1)]"
-                >
-                  Download
-                </a>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <a
+                    href={outputUrl}
+                    download="raivstream-avatar.mp4"
+                    className="block rounded-xl bg-[var(--noc-page)] px-4 py-2.5 text-center text-sm font-bold text-[var(--noc-t1)]"
+                  >
+                    Download
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPublishOpen(true)}
+                    className="rounded-xl bg-[rgba(217,70,168,0.9)] px-4 py-2.5 text-sm font-bold text-white"
+                  >
+                    Publish to Feed
+                  </button>
+                </div>
               </div>
             ) : isGenerating ? (
               <div className="text-center">
@@ -289,6 +303,26 @@ export default function AvatarPage() {
             )}
           </section>
         </div>
+
+        <PublishModal
+          open={publishOpen}
+          defaultTitle="My avatar"
+          pending={publishJob.isPending}
+          error={publishError}
+          published={published}
+          onClose={() => { setPublishOpen(false); setPublishError(null); }}
+          onSubmit={(values) => {
+            if (!activeJobId) return;
+            setPublishError(null);
+            publishJob.mutate(
+              { jobId: activeJobId, ...values },
+              {
+                onSuccess: () => setPublished(true),
+                onError: (err) => setPublishError(err.message),
+              },
+            );
+          }}
+        />
       </main>
     </div>
   );
