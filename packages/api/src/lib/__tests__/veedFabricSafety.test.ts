@@ -163,9 +163,22 @@ describe('D-076 — audio content moderation (step 4b)', () => {
     const result = await gateVeedFabricInputs(base, d);
 
     expect(result.audioVerdict).toBe('unknown');
-    expect(result.audioReason).toBe('transcription_unavailable');
+    // A timeout is distinguishable from a refusal: only the timeout is a budget
+    // problem we can size for, and it was previously indistinguishable.
+    expect(result.audioReason).toBe('transcription_timeout');
     expect(d.moderateText).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith('[veed.audit] transcription_failed', expect.objectContaining({ reason: expect.stringMatching(/timed out/) }));
+    warn.mockRestore();
+  });
+
+  it('3b. a provider refusal stays transcription_unavailable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const d = deps({ transcribe: vi.fn(async () => { throw new Error('Forbidden'); }) });
+
+    const result = await gateVeedFabricInputs(base, d);
+
+    expect(result.audioVerdict).toBe('unknown');
+    expect(result.audioReason).toBe('transcription_unavailable');
     warn.mockRestore();
   });
 

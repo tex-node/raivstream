@@ -14,7 +14,9 @@
  */
 
 const ENDPOINT = 'fal-ai/whisper';
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
+const MIN_TIMEOUT_MS = 30_000;
+const MS_PER_AUDIO_SECOND = 1_500;
 const POLL_INTERVAL_MS = 400;
 
 interface FalQueueLike {
@@ -46,13 +48,32 @@ export function extractTranscript(data: unknown): string {
 }
 
 /**
+ * Timeout budget for a clip. Scales with duration (1.5 s of wall clock per second
+ * of audio, 30 s floor) because Whisper must download the file before it can
+ * transcribe it, so even a short clip pays a fixed cost. A flat 10 s was too
+ * short for the 90 s clips the Avatar page accepts, and because the gate fails
+ * open, a timeout silently skipped audio moderation.
+ */
+export function timeoutForDuration(audioDurationSeconds?: number | null): number {
+  if (
+    typeof audioDurationSeconds !== 'number' ||
+    !Number.isFinite(audioDurationSeconds) ||
+    audioDurationSeconds <= 0
+  ) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.max(MIN_TIMEOUT_MS, Math.round(audioDurationSeconds * MS_PER_AUDIO_SECOND));
+}
+
+/**
  * Transcribe a remote audio URL. Throws on timeout/failure — the caller
- * (Fabric gate) treats any throw as `transcription_unavailable` and fails open.
+ * (Fabric gate) records why it failed open.
  */
 export async function transcribeAudio(
   audioUrl: string,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  audioDurationSeconds?: number | null,
 ): Promise<string> {
+  const timeoutMs = timeoutForDuration(audioDurationSeconds);
   const mod = await import('@fal-ai/client');
   const fal = (mod as unknown as { fal: FalQueueLike }).fal;
 
