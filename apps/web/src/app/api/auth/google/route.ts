@@ -40,7 +40,21 @@ export async function POST(req: Request): Promise<Response> {
     if (e.code === 'TOO_MANY_REQUESTS') {
       return jsonResponse({ error: e.message }, 429);
     }
-    // Generic message — never reveal whether an account exists
-    return jsonResponse({ error: 'Google sign-in failed — please try again' }, 401);
+    // Log the real reason server-side. The generic message the user sees is
+    // correct (never reveal whether an account exists), but without this line we
+    // are blind — the earlier failures had to be diagnosed by guesswork.
+    console.warn('[auth.google] sign-in failed', { code: e.code ?? 'unknown', message: e.message });
+
+    // A reason code lets the UI say something useful without leaking internals.
+    const reason =
+      e.code === 'INVALID_TOKEN' || /token/i.test(e.message) ? 'invalid_token'
+      : /audience|aud/i.test(e.message) ? 'audience_mismatch'
+      : /email|verif/i.test(e.message) ? 'email_unverified'
+      : 'unknown';
+
+    return jsonResponse(
+      { error: 'Google sign-in failed. Please try again, or use email and password.', reason },
+      401,
+    );
   }
 }
