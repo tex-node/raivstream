@@ -208,3 +208,34 @@ SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = 'you
 `42P07 relation "organizations" already exists` — `public.organizations` belongs to
 another tenant (`id uuid`, snake_case timestamps). A failed migration then blocked
 *every* subsequent deploy until it was resolved with `prisma migrate resolve --rolled-back`.
+### Docker log growth can take the database down
+
+On 2026-10-28 the host hit **193G/193G (0 bytes free)**. The cause was not our
+builds: a single container log for another tenant's service
+(`/var/lib/docker/containers/<id>/<id>-json.log`) had grown to **61 GB** because
+Docker's `json-file` driver has **no size limit by default**. Postgres exited,
+the API returned 503, and a paid render sat in `GENERATING` for seven hours until
+it was reconciled.
+
+Stopgap in place: `scripts/truncate-runaway-logs.sh` truncates any container log
+over 5 GB, installed in root's crontab at 03:00 daily.
+
+```bash
+crontab -l | grep truncate-runaway-logs   # confirm it is installed
+/root/raivstream/scripts/truncate-runaway-logs.sh   # run manually
+```
+
+**Replace it with real rotation** when the owning tenant allows a container
+restart:
+
+```yaml
+logging:
+  driver: json-file
+  options: { max-size: "50m", max-file: "3" }
+```
+
+or `docker run --log-opt max-size=50m --log-opt max-file=3 ...`. Truncation loses
+the log history; rotation keeps a bounded window, which is strictly better.
+
+Check disk before every deploy: `df -h /`. A deploy needs several GB of
+headroom for the build, and running out mid-deploy leaves a half-written `.next`.

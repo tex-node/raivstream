@@ -59,9 +59,15 @@ export function GoogleSignInButton({
                   headers:     { 'Content-Type': 'application/json' },
                   body:        JSON.stringify({ idToken: response.credential }),
                 });
-                const data = (await res.json()) as { user?: AuthUser; error?: string };
+                const data = (await res.json()) as { user?: AuthUser; error?: string; reason?: string };
                 if (!res.ok || !data.user) {
-                  callbacksRef.current.onError(data.error ?? 'Google sign-in failed — please try again');
+                  // Include the reason and status so the message is actionable
+                  // instead of a fixed string that hides the cause.
+                  const detail = [data.reason, res.status ? `HTTP ${res.status}` : null]
+                    .filter(Boolean)
+                    .join(' · ');
+                  const base = data.error ?? 'Google sign-in failed. Please try again.';
+                  callbacksRef.current.onError(detail ? `${base} (${detail})` : base);
                   return;
                 }
                 callbacksRef.current.onSuccess(data.user);
