@@ -36,8 +36,14 @@ export const adminRouter = router({
     return reconcileStuckJobs({
       prisma: ctx.prisma as never,
       refund: async (job) => {
-        const cost = Number(job.costCredits ?? 0);
-        const featureKey = typeof job.featureKey === 'string' ? job.featureKey : null;
+        // The debit that paid for this job carries the amount and feature key;
+        // GenerationJob itself has neither column.
+        const debit = await ctx.prisma.creditTransaction.findFirst({
+          where: { referenceId: String(job.id), amount: { lt: 0 } },
+          select: { amount: true, featureKey: true },
+        });
+        const cost = Math.abs(debit?.amount ?? Number(job.creditsUsed ?? 0));
+        const featureKey = debit?.featureKey ?? null;
         if (!featureKey || cost <= 0) return;
         await refundCredits(
           ctx.prisma,
