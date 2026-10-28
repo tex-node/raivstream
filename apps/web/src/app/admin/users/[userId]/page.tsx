@@ -133,7 +133,7 @@ function Media({ userId }: { userId: string }) {
           key={`${asset.source}-${asset.id}`}
           onClick={() => {
             if (asset.type === "video") {
-              setSelected({ url: asset.url, title: `${asset.source} ${new Date(asset.createdAt).toLocaleDateString()}` });
+              setSelected({ url: asset.url, title: asset.title });
             }
           }}
           className={`overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] ${asset.type === "video" ? "cursor-pointer" : ""}`}
@@ -157,7 +157,13 @@ function Media({ userId }: { userId: string }) {
             )}
           </div>
           <div className="flex items-center justify-between px-2 py-1.5 text-[10px] text-[var(--noc-t5)]">
-            <span className="uppercase tracking-wide text-[var(--noc-t4)]">{asset.source}</span>
+            <span className="truncate">
+              {asset.source === "export" ? (
+                <span className="rounded-full bg-[rgba(139,92,246,0.2)] px-1.5 py-0.5 font-bold text-[#a78bfa]">Final Export</span>
+              ) : (
+                <span className="uppercase tracking-wide text-[var(--noc-t4)]">{asset.source}</span>
+              )}
+            </span>
             <span>{new Date(asset.createdAt).toLocaleDateString()}</span>
           </div>
         </div>
@@ -169,6 +175,7 @@ function Media({ userId }: { userId: string }) {
         onClose={() => setSelected(null)}
         videoUrl={selected?.url ?? null}
         title={selected?.title}
+        downloadFileName={selected?.title}
       />
     </>
   );

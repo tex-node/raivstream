@@ -19,11 +19,14 @@ export function VideoLightbox({
   onClose,
   videoUrl,
   title,
+  downloadFileName,
 }: {
   isOpen: boolean;
   onClose: () => void;
   videoUrl: string | null;
   title?: string;
+  /** Readable filename for the saved file, e.g. "Wings of Dawn - Scene 3". */
+  downloadFileName?: string;
 }) {
   useEffect(() => {
     if (!isOpen) return;
@@ -36,7 +39,7 @@ export function VideoLightbox({
 
   if (!isOpen || !videoUrl) return null;
 
-  const safeName = (title ?? 'video').replace(/[^\w\s-]/g, '').trim() || 'video';
+  const safeName = (downloadFileName ?? title ?? 'video').replace(/[^\w\s-]/g, '').trim() || 'video';
 
   return (
     <div
