@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useAuth } from '@/lib/auth';
 import { AdminSpinner, AdminError } from '../AdminShell';
@@ -145,6 +146,7 @@ function RoleSelect({ userId, currentRole }: { userId: string; currentRole: stri
 }
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [search,          setSearch]          = useState('');
   const [role,            setRole]            = useState<Role | undefined>();
   const [page,            setPage]            = useState(1);
@@ -226,7 +228,11 @@ export default function AdminUsersPage() {
             </thead>
             <tbody>
               {data?.users.map((u, i) => (
-                <tr key={u.id} className={`border-t border-[var(--noc-hairline)] ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
+                <tr
+                  key={u.id}
+                  onClick={() => router.push(`/admin/users/${u.id}`)}
+                  className={`cursor-pointer border-t border-[var(--noc-hairline)] hover:bg-[rgba(217,70,168,0.06)] ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}
+                >
                   <td className="px-5 py-3">
                     <div className="font-medium text-[var(--noc-t1)]">{u.displayName}</div>
                     <div className="text-xs text-[var(--noc-t4)]">@{u.username} · {u.email}</div>

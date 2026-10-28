@@ -23,6 +23,100 @@ export const adminRouter = router({
   ...adminOrganizationProcedures,
   // D-004 Phase 2 - awards (cross-org, adminProcedure).
   ...adminAwardProcedures,
+  /** Track C - one user's profile, usage totals and activity counts. */
+  getUserDetail: adminProcedure
+    .input(z.object({ userId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, email: true, username: true, role: true, createdAt: true },
+      });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found.' });
+
+      const [bought, used, balance, storiesCreated, videosPublished, assets, audio] = await Promise.all([
+        ctx.prisma.creditTransaction.aggregate({
+          where: { userId: input.userId, amount: { gt: 0 } },
+          _sum: { amount: true },
+        }),
+        ctx.prisma.creditTransaction.aggregate({
+          where: { userId: input.userId, type: 'USAGE' },
+          _sum: { amount: true },
+        }),
+        ctx.prisma.creditBalance.findUnique({ where: { userId: input.userId }, select: { balance: true } }),
+        ctx.prisma.storyProject.count({ where: { userId: input.userId } }),
+        ctx.prisma.video.count({ where: { creatorId: input.userId } }),
+        ctx.prisma.storySceneAsset.count({ where: { userId: input.userId } }),
+        ctx.prisma.audioAsset.count({ where: { userId: input.userId } }),
+      ]);
+
+      return {
+        user,
+        usage: {
+          // USAGE rows are stored negative; report the magnitude so the UI does
+          // not have to decide on a sign convention.
+          creditsBought: bought._sum.amount ?? 0,
+          creditsUsed: Math.abs(used._sum.amount ?? 0),
+          currentBalance: balance?.balance ?? 0,
+          storiesCreated,
+          videosPublished,
+          mediaCount: assets + audio + videosPublished,
+        },
+      };
+    }),
+
+  /** Same grid as the user's own library, for a target user. */
+  getUserMedia: adminProcedure
+    .input(z.object({
+      userId: z.string().min(1),
+      type: z.enum(['image', 'video', 'audio']).optional(),
+      cursor: z.object({ createdAt: z.string().min(1), id: z.string().min(1) }).optional(),
+      limit: z.number().int().min(1).max(100).default(30),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { fetchOwnedAssets } = await import('../lib/mediaAssets');
+      return fetchOwnedAssets(ctx.prisma, input.userId, {
+        ...(input.type ? { type: input.type } : {}),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        limit: input.limit,
+      });
+    }),
+
+  getUserTransactions: adminProcedure
+    .input(z.object({
+      userId: z.string().min(1),
+      cursor: z.object({ createdAt: z.string().min(1), id: z.string().min(1) }).optional(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const before = input.cursor ? new Date(input.cursor.createdAt) : null;
+      if (before && Number.isNaN(before.getTime())) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid cursor.' });
+      }
+
+      const rows = await ctx.prisma.creditTransaction.findMany({
+        where: {
+          userId: input.userId,
+          ...(before ? { createdAt: { lt: before } } : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: input.limit + 1,
+        select: {
+          id: true, amount: true, type: true, featureKey: true,
+          balanceBefore: true, balanceAfter: true, createdAt: true,
+        },
+      });
+
+      const page = rows.slice(0, input.limit);
+      const last = page[page.length - 1];
+
+      return {
+        items: page,
+        nextCursor:
+          rows.length > input.limit && last
+            ? { createdAt: last.createdAt.toISOString(), id: last.id }
+            : null,
+      };
+    }),
 
   /**
    * Repair jobs stranded in GENERATING (provider finished, we never recorded it).
