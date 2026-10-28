@@ -13,6 +13,7 @@ import { trpc } from '@/lib/trpc';
 import { Navbar } from '@/components/layout/Navbar';
 import { MediaThumb } from '@/components/video/MediaThumb';
 import { PublishModal } from '@/components/media/PublishModal';
+import { VideoLightbox } from '@/components/video/VideoLightbox';
 
 type AssetType = 'image' | 'video' | 'audio';
 type Filter = 'all' | AssetType;
@@ -64,6 +65,7 @@ export default function LibraryPage() {
   const [publishTarget, setPublishTarget] = useState<{ id: string; title: string } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
+  const [playing, setPlaying] = useState<{ url: string; title: string } | null>(null);
   const utils = trpc.useUtils();
 
   const publishAsset = trpc.library.publishAsset.useMutation({
@@ -129,7 +131,12 @@ export default function LibraryPage() {
             return (
               <div
                 key={asset.id}
-                className="overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)]"
+                onClick={() => {
+                  if (asset.type === "video") {
+                    setPlaying({ url: asset.url, title: `${SOURCE_LABELS[asset.source] ?? asset.source} ${new Date(asset.createdAt).toLocaleDateString()}` });
+                  }
+                }}
+                className={`overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] ${asset.type === "video" ? "cursor-pointer" : ""}`}
               >
                 <div className="relative aspect-square">
                   {asset.type === 'audio' ? (
@@ -195,6 +202,13 @@ export default function LibraryPage() {
             Showing the newest {assets.length}. Paging lands in Phase 1.1.
           </p>
         )}
+        <VideoLightbox
+          isOpen={Boolean(playing)}
+          onClose={() => setPlaying(null)}
+          videoUrl={playing?.url ?? null}
+          title={playing?.title}
+        />
+
         <PublishModal
           open={Boolean(publishTarget)}
           defaultTitle={publishTarget?.title}

@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { MediaThumb } from '@/components/video/MediaThumb';
+import { VideoLightbox } from '@/components/video/VideoLightbox';
 
 type Tab = 'media' | 'ledger';
 
@@ -109,6 +110,7 @@ export default function AdminUserDetailPage() {
 }
 
 function Media({ userId }: { userId: string }) {
+  const [selected, setSelected] = useState<{ url: string; title: string } | null>(null);
   const { data, isLoading, error } = trpc.admin.getUserMedia.useQuery({ userId, limit: 60 });
   const items = data?.items ?? [];
 
@@ -124,9 +126,18 @@ function Media({ userId }: { userId: string }) {
   }
 
   return (
+    <>
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {items.map((asset) => (
-        <div key={`${asset.source}-${asset.id}`} className="overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)]">
+        <div
+          key={`${asset.source}-${asset.id}`}
+          onClick={() => {
+            if (asset.type === "video") {
+              setSelected({ url: asset.url, title: `${asset.source} ${new Date(asset.createdAt).toLocaleDateString()}` });
+            }
+          }}
+          className={`overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] ${asset.type === "video" ? "cursor-pointer" : ""}`}
+        >
           <div className="relative aspect-square">
             {asset.type === 'audio' ? (
               <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800">
@@ -152,6 +163,14 @@ function Media({ userId }: { userId: string }) {
         </div>
       ))}
     </div>
+
+      <VideoLightbox
+        isOpen={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        videoUrl={selected?.url ?? null}
+        title={selected?.title}
+      />
+    </>
   );
 }
 

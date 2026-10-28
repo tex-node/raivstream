@@ -202,7 +202,8 @@ export const libraryRouter = router({
       }
 
       for (const video of videos) {
-        const url = video.hlsMasterUrl ?? video.mp4Url;
+        // MP4 first: HLS manifests cannot be downloaded as a playable file.
+        const url = video.mp4Url ?? video.hlsMasterUrl;
         if (!url) continue;
         merged.push({
           id: video.id,
