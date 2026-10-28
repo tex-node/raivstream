@@ -1,10 +1,13 @@
 /**
- * Track C - owned media listing, shared shape with `library.getAssets`.
+ * Owned media listing for admin views.
  *
- * DEBT, recorded honestly: this duplicates the merge logic in
- * `routers/library.ts#getAssets` rather than extracting it. The extraction needs
- * the procedure body moved wholesale; doing that and shipping a UI in one pass
- * was the wrong risk trade. Both paths must stay in sync until they are merged.
+ * DEBT, still open: `routers/library.ts#getAssets` keeps its own copy of this
+ * merge. Both were extended for StoryVideoExport here and there; they must be
+ * collapsed. Marked rather than silently duplicated.
+ *
+ * Includes **StoryVideoExport** rows: the stitched final MP4 is what a school
+ * actually submits, and it was previously invisible everywhere except the story
+ * workspace.
  */
 
 export type OwnedAsset = {
@@ -12,8 +15,10 @@ export type OwnedAsset = {
   type: 'image' | 'video' | 'audio';
   url: string;
   thumbnailUrl?: string;
+  /** Human-readable name, used for the download filename. */
+  title: string;
   createdAt: Date;
-  source: 'story' | 'studio' | 'upload' | 'generated';
+  source: 'story' | 'studio' | 'upload' | 'generated' | 'export';
   status?: string;
 };
 
@@ -34,11 +39,7 @@ export async function fetchOwnedAssets(
   ownerUserId: string,
   input: OwnedAssetsInput,
 ): Promise<{ items: OwnedAsset[]; nextCursor: { createdAt: string; id: string } | null }> {
-  const client = prisma as {
-    storySceneAsset: { findMany: (args: unknown) => Promise<Array<Record<string, never>>> };
-    video: { findMany: (args: unknown) => Promise<Array<Record<string, never>>> };
-    audioAsset: { findMany: (args: unknown) => Promise<Array<Record<string, never>>> };
-  };
+  const client = prisma as unknown as Record<string, { findMany: (args: unknown) => Promise<Array<Record<string, never>>> }>;
 
   const take = input.limit + 1;
   const before = input.cursor ? new Date(input.cursor.createdAt) : null;
@@ -48,7 +49,7 @@ export async function fetchOwnedAssets(
   const wantVideos = !input.type || input.type === 'video';
   const wantAudio = !input.type || input.type === 'audio';
 
-  const [storyAssets, videos, audioAssets] = await Promise.all([
+  const [storyAssets, videos, audioAssets, exports] = await Promise.all([
     wantImages || wantVideos
       ? client.storySceneAsset.findMany({
           where: {
@@ -61,7 +62,11 @@ export async function fetchOwnedAssets(
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take,
-          select: { id: true, assetUrl: true, thumbnailUrl: true, assetType: true, createdAt: true },
+          select: {
+            id: true, assetUrl: true, thumbnailUrl: true, assetType: true, createdAt: true,
+            scene: { select: { orderIndex: true } },
+            project: { select: { title: true } },
+          },
         })
       : Promise.resolve([]),
     wantVideos
@@ -75,7 +80,7 @@ export async function fetchOwnedAssets(
           take,
           select: {
             id: true, mp4Url: true, hlsMasterUrl: true, thumbnailUrl: true,
-            status: true, createdAt: true, generationJob: { select: { id: true } },
+            title: true, status: true, createdAt: true, generationJob: { select: { id: true } },
           },
         })
       : Promise.resolve([]),
@@ -87,25 +92,38 @@ export async function fetchOwnedAssets(
           select: { id: true, publicUrl: true, projectId: true, createdAt: true },
         })
       : Promise.resolve([]),
+    // Final stitched exports - the submission artefact.
+    wantVideos
+      ? client.storyVideoExport.findMany({
+          where: { userId: ownerUserId, status: 'READY', assetUrl: { not: null }, ...(createdAtFilter ? { createdAt: createdAtFilter } : {}) },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+          select: { id: true, assetUrl: true, createdAt: true, durationSeconds: true, project: { select: { title: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const merged: OwnedAsset[] = [];
 
-  for (const asset of storyAssets as Array<Record<string, string | null | Date>>) {
+  for (const asset of storyAssets as Array<Record<string, never>>) {
     if (!asset.assetUrl) continue;
+    const sceneOrder = (asset.scene as { orderIndex?: number } | null)?.orderIndex;
+    const projectTitle = (asset.project as { title?: string } | null)?.title;
     merged.push({
       id: String(asset.id),
       type: asset.assetType === 'VIDEO' ? 'video' : 'image',
       url: String(asset.assetUrl),
       ...(asset.thumbnailUrl ? { thumbnailUrl: String(asset.thumbnailUrl) } : {}),
-      createdAt: asset.createdAt as Date,
+      title: projectTitle
+        ? (typeof sceneOrder === 'number' ? `${projectTitle} - Scene ${sceneOrder}` : projectTitle)
+        : `Scene ${typeof sceneOrder === 'number' ? sceneOrder : 'clip'}`,
+      createdAt: asset.createdAt as unknown as Date,
       source: 'story',
     });
   }
 
-  for (const video of videos as Array<Record<string, unknown>>) {
-    // MP4 first: an HLS manifest is not a downloadable file, and the admin grid
-    // exists partly so an operator can save the raw video.
+  for (const video of videos as Array<Record<string, never>>) {
+    // MP4 first: an HLS manifest is not a downloadable file.
     const url = (video.mp4Url ?? video.hlsMasterUrl) as string | null;
     if (!url) continue;
     merged.push({
@@ -113,20 +131,35 @@ export async function fetchOwnedAssets(
       type: 'video',
       url,
       ...(video.thumbnailUrl ? { thumbnailUrl: String(video.thumbnailUrl) } : {}),
-      createdAt: video.createdAt as Date,
+      title: (video.title as string) ?? 'Video',
+      createdAt: video.createdAt as unknown as Date,
       source: video.generationJob ? 'generated' : 'upload',
       ...(video.status === 'PROCESSING' ? { status: 'PROCESSING' } : {}),
     });
   }
 
-  for (const audio of audioAssets as Array<Record<string, unknown>>) {
+  for (const audio of audioAssets as Array<Record<string, never>>) {
     if (!audio.publicUrl) continue;
     merged.push({
       id: String(audio.id),
       type: 'audio',
       url: String(audio.publicUrl),
-      createdAt: audio.createdAt as Date,
+      title: 'Audio',
+      createdAt: audio.createdAt as unknown as Date,
       source: audio.projectId ? 'story' : 'studio',
+    });
+  }
+
+  for (const exported of exports as Array<Record<string, never>>) {
+    if (!exported.assetUrl) continue;
+    const projectTitle = (exported.project as { title?: string } | null)?.title;
+    merged.push({
+      id: String(exported.id),
+      type: 'video',
+      url: String(exported.assetUrl),
+      title: projectTitle ?? 'Final export',
+      createdAt: exported.createdAt as unknown as Date,
+      source: 'export',
     });
   }
 
