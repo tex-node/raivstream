@@ -44,11 +44,16 @@ const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
   },
 };
 
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   story: 'Story',
   studio: 'Studio',
   upload: 'Upload',
   generated: 'Generated',
+  export: 'Final Export',
 };
 
 export default function LibraryPage() {
@@ -133,7 +138,7 @@ export default function LibraryPage() {
                 key={asset.id}
                 onClick={() => {
                   if (asset.type === "video") {
-                    setPlaying({ url: asset.url, title: `${SOURCE_LABELS[asset.source] ?? asset.source} ${new Date(asset.createdAt).toLocaleDateString()}` });
+                    setPlaying({ url: asset.url, title: asset.title });
                   }
                 }}
                 className={`overflow-hidden rounded-xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] ${asset.type === "video" ? "cursor-pointer" : ""}`}
@@ -178,9 +183,13 @@ export default function LibraryPage() {
                   )}
                 </div>
                 <div className="flex items-center justify-between px-2.5 py-2 text-[10px] text-[var(--noc-t5)]">
-                  <span className="font-bold uppercase tracking-wide text-[var(--noc-t4)]">
-                    {SOURCE_LABELS[asset.source] ?? asset.source}
-                  </span>
+                  {asset.source === "export" ? (
+                    <span className="rounded-full bg-[rgba(139,92,246,0.2)] px-1.5 py-0.5 font-bold text-[#a78bfa]">Final Export</span>
+                  ) : (
+                    <span className="font-bold uppercase tracking-wide text-[var(--noc-t4)]">
+                      {sourceLabel(asset.source)}
+                    </span>
+                  )}
                   <span>{new Date(asset.createdAt).toLocaleDateString()}</span>
                 </div>
                 {asset.type === "video" && asset.source === "story" && (
@@ -207,6 +216,7 @@ export default function LibraryPage() {
           onClose={() => setPlaying(null)}
           videoUrl={playing?.url ?? null}
           title={playing?.title}
+          downloadFileName={playing?.title}
         />
 
         <PublishModal
