@@ -71,8 +71,11 @@ export async function fetchOwnedAssets(
           take,
           select: {
             id: true, assetUrl: true, thumbnailUrl: true, assetType: true, createdAt: true,
-            scene: { select: { orderIndex: true } },
-            project: { select: { title: true } },
+            // Title comes through `scene`: StorySceneAsset has a projectId column
+            // but NO `project` relation, so selecting `project` here is a Prisma
+            // validation error ("Unknown field `project`") and surfaced as a 500
+            // with a null stack. StorySceneSeed does have the relation.
+            scene: { select: { orderIndex: true, project: { select: { title: true } } } },
           },
         })
       : Promise.resolve([]),
@@ -114,8 +117,9 @@ export async function fetchOwnedAssets(
 
   for (const asset of storyAssets as Array<Record<string, never>>) {
     if (!asset.assetUrl) continue;
-    const sceneOrder = (asset.scene as { orderIndex?: number } | null)?.orderIndex;
-    const projectTitle = (asset.project as { title?: string } | null)?.title;
+    const scene = asset.scene as { orderIndex?: number; project?: { title?: string } | null } | null;
+    const sceneOrder = scene?.orderIndex;
+    const projectTitle = scene?.project?.title;
     merged.push({
       id: String(asset.id),
       type: asset.assetType === 'VIDEO' ? 'video' : 'image',
