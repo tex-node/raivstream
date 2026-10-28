@@ -1,3 +1,5 @@
+import { TRPCError } from '@trpc/server';
+
 /**
  * Owned media listing for admin views.
  *
@@ -43,6 +45,11 @@ export async function fetchOwnedAssets(
 
   const take = input.limit + 1;
   const before = input.cursor ? new Date(input.cursor.createdAt) : null;
+  // An unparseable cursor must fail loudly: silently returning page one hides a
+  // client bug and re-serves the same rows forever.
+  if (before && Number.isNaN(before.getTime())) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid cursor.' });
+  }
   const createdAtFilter = before ? { lt: before } : undefined;
 
   const wantImages = !input.type || input.type === 'image';

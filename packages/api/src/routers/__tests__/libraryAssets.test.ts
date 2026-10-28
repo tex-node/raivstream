@@ -9,8 +9,8 @@ import { appRouter } from '../../index';
  * card is worse than a shorter library).
  */
 
-function makePrisma(overrides: Partial<Record<'story' | 'video' | 'audio', unknown[]>> = {}) {
-  const calls = { story: [] as unknown[], video: [] as unknown[], audio: [] as unknown[] };
+function makePrisma(overrides: Partial<Record<'story' | 'video' | 'audio' | 'export', unknown[]>> = {}) {
+  const calls = { story: [] as unknown[], video: [] as unknown[], audio: [] as unknown[], export: [] as unknown[] };
 
   return {
     calls,
@@ -30,6 +30,12 @@ function makePrisma(overrides: Partial<Record<'story' | 'video' | 'audio', unkno
       findMany: vi.fn(async (args: unknown) => {
         calls.audio.push(args);
         return overrides.audio ?? [];
+      }),
+    },
+    storyVideoExport: {
+      findMany: vi.fn(async (args: unknown) => {
+        calls.export.push(args);
+        return overrides.export ?? [];
       }),
     },
   };
@@ -117,5 +123,25 @@ describe('library.getAssets', () => {
     expect(prisma.calls.story).toHaveLength(0);
     expect(prisma.calls.video).toHaveLength(0);
     expect(prisma.calls.audio).toHaveLength(1);
+  });
+});
+
+describe('library.getAssets - final exports', () => {
+  it('includes StoryVideoExport rows with the project title', async () => {
+    const prisma = makePrisma({
+      export: [
+        { id: 'exp1', assetUrl: 'https://cdn/final.mp4', createdAt: new Date('2026-10-20'), durationSeconds: 12, project: { title: 'Wings of Dawn' } },
+      ],
+    });
+
+    const result = await caller(prisma).library.getAssets({ limit: 10 });
+
+    expect(result.items[0]).toMatchObject({
+      id: 'exp1',
+      type: 'video',
+      source: 'export',
+      title: 'Wings of Dawn',
+      url: 'https://cdn/final.mp4',
+    });
   });
 });
