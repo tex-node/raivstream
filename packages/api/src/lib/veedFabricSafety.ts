@@ -163,7 +163,7 @@ export interface VeedGateDeps {
   moderateImage: typeof moderateImage;
   probe: (url: string) => Promise<number | null>;
   log: (entry: VeedAuditEntry) => void;
-  transcribe: (url: string) => Promise<string>;
+  transcribe: (url: string, audioDurationSeconds?: number | null) => Promise<string>;
   moderateText: (text: string) => Promise<{ allowed: boolean; reason?: string }>;
 }
 
@@ -271,7 +271,7 @@ export async function gateVeedFabricInputs(
   let transcriptEmpty: boolean | undefined;
 
   try {
-    const transcript = await d.transcribe(input.audioUrl);
+    const transcript = await d.transcribe(input.audioUrl, audioSeconds);
     const trimmed = (transcript ?? '').trim();
     transcriptEmpty = trimmed.length === 0;
     transcriptHash = createHash('sha256').update(transcript ?? '').digest('hex');
@@ -295,7 +295,11 @@ export async function gateVeedFabricInputs(
     if (error instanceof TRPCError) throw error;
 
     audioVerdict = 'unknown';
-    audioReason = 'transcription_unavailable';
+    // Distinguish "we ran out of time" from "the provider refused": a timeout on
+    // long audio is a capacity problem we can size for, a refusal is not.
+    audioReason = /timed out/i.test((error as Error).message)
+      ? 'transcription_timeout'
+      : 'transcription_unavailable';
     console.warn('[veed.audit] transcription_failed', {
       reason: (error as Error).message,
     });
