@@ -69,6 +69,7 @@ export const adminRouter = router({
     .input(z.object({
       userId: z.string().min(1),
       type: z.enum(['image', 'video', 'audio']).optional(),
+      source: z.enum(['export']).optional(),
       cursor: z.object({ createdAt: z.string().min(1), id: z.string().min(1) }).optional(),
       limit: z.number().int().min(1).max(100).default(30),
     }))
@@ -76,6 +77,7 @@ export const adminRouter = router({
       const { fetchOwnedAssets } = await import('../lib/mediaAssets');
       return fetchOwnedAssets(ctx.prisma, input.userId, {
         ...(input.type ? { type: input.type } : {}),
+        ...(input.source ? { source: input.source } : {}),
         ...(input.cursor ? { cursor: input.cursor } : {}),
         limit: input.limit,
       });

@@ -16,13 +16,15 @@ import { PublishModal } from '@/components/media/PublishModal';
 import { VideoLightbox } from '@/components/video/VideoLightbox';
 
 type AssetType = 'image' | 'video' | 'audio';
-type Filter = 'all' | AssetType;
+/** 'export' is a source inside the video set, not a media type of its own. */
+type Filter = 'all' | AssetType | 'export';
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'image', label: 'Images' },
   { value: 'video', label: 'Videos' },
   { value: 'audio', label: 'Audio' },
+  { value: 'export', label: 'Exports' },
 ];
 
 const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
@@ -41,6 +43,10 @@ const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
   audio: {
     title: 'No audio yet.',
     body: 'Narration and generated audio will appear here once you create some.',
+  },
+  export: {
+    title: 'No final exports yet.',
+    body: 'Export a story to a finished video and it will appear here, ready to download.',
   },
 };
 
@@ -62,8 +68,10 @@ export default function LibraryPage() {
   // An explicit `type` (undefined for All) so the query key changes with the tab
   // and the request is unambiguous in the network panel.
   const query = trpc.library.getAssets.useQuery({
-    limit: 30,
-    type: filter === 'all' ? undefined : filter,
+    limit: 100,
+    ...(filter === 'export'
+      ? { source: 'export' as const }
+      : { type: filter === 'all' ? undefined : filter }),
   });
 
   const assets = query.data?.items ?? [];
