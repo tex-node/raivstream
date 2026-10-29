@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Shell } from '@/components/layout/Shell';
+import { EnableCinematicButton } from '@/components/story/EnableCinematicButton';
 import { Pill, Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
@@ -136,6 +137,11 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
               {addScene.isPending ? 'Adding…' : '+ Add Scene'}
             </button>
           </div>
+        </div>
+        {/* Manifest entry point: without this the scene cards have no shot grid,
+            so "Generate shots" never appears. Hidden once a manifest exists. */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <EnableCinematicButton projectId={projectId} />
         </div>
         {workspaceQuery.isLoading ? (
           <>

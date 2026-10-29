@@ -58,7 +58,7 @@ export function EnableCinematicButton({ projectId }: { projectId: string }) {
         <div>
           <p className="text-sm font-black text-[var(--noc-t1)]">Cinematic Multi-Shot</p>
           <p className="mt-0.5 text-[11px] font-semibold text-[var(--noc-t5)]">
-            Up to {data?.shotsPerScene ?? 5} continuous shots per scene for smoother motion.
+            Split your scenes into 4-5 continuous shots for cinematic quality.
           </p>
         </div>
         <button
