@@ -32,9 +32,16 @@ export async function handleStoryExportJob(
 }
 
 export function registerExportJob(boss: PgBoss, prisma: PrismaClient): void {
-  void boss.work<StoryExportJobData>(STORY_EXPORT_QUEUE, async (jobs: Array<{ data: StoryExportJobData }>) => {
-    for (const job of jobs) {
-      await handleStoryExportJob(prisma, job.data);
-    }
-  });
+  // Bound to 1 export at a time to prevent concurrent FFmpeg renders from
+  // exhausting memory on the shared VPS. Explicit rather than inherited: the
+  // library default is not a promise about this deployment.
+  void boss.work<StoryExportJobData>(
+    STORY_EXPORT_QUEUE,
+    { batchSize: 1, localConcurrency: 1 },
+    async (jobs: Array<{ data: StoryExportJobData }>) => {
+      for (const job of jobs) {
+        await handleStoryExportJob(prisma, job.data);
+      }
+    },
+  );
 }

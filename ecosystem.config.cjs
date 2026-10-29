@@ -17,6 +17,11 @@ module.exports = {
       cwd: './apps/web',
       script: 'pnpm',
       args: 'start',
+      // Hard ceiling on the shared box: max_memory_restart is PM2's kill/restart
+      // trigger, node_args is the real cap that makes V8 GC instead of growing
+      // until the kernel OOM killer picks a victim - possibly Postgres or Caddy.
+      max_memory_restart: '1G',
+      node_args: '--max-old-space-size=900',
     },
     {
       name: 'raivstream-worker',
@@ -26,6 +31,10 @@ module.exports = {
       env_file: '../../.env',
       max_restarts: 5,
       restart_delay: 5000,
+      // More headroom than web: FFmpeg children are not V8 heap, but this Node
+      // process balloons while assembling large exports.
+      max_memory_restart: '3G',
+      node_args: '--max-old-space-size=2800',
     },
   ],
 };
