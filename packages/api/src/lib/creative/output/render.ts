@@ -9,7 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, readFile, rm, rename } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, rename , stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { uploadBufferToR2 } from '../../r2';
@@ -637,7 +637,11 @@ export async function renderOutputDerivative(
       if (!url) continue;
       const file = path.join(dir, `src-${inputs.length}.bin`);
       const response = await doFetch(url);
-      if (!response.ok) continue;
+      // A skipped input used to `continue`, which left the filter graph and the
+      // concat count disagreeing - the silent "holds the last frame" failure.
+      if (!response.ok) {
+        throw new Error(`[export.concat] fetch failed for scene ${scene.sceneId}: HTTP ${response.status}`);
+      }
       await writeFile(file, Buffer.from(await response.arrayBuffer()));
       inputs.push(file);
     }
@@ -666,6 +670,18 @@ export async function renderOutputDerivative(
     const labels = inputs.map((_, index) => `[v${index}]`).join('');
     const concat = `${labels}concat=n=${inputs.length}:v=1:a=0[vout]`;
     const filter = [...parts, concat].join(';');
+
+    // Diagnostic: the concat count must equal the labels it is actually fed. A
+    // silent hold-frame is exactly what a mismatch looks like from the outside.
+    const labelRefs = (filter.match(/\[v\d+\]/g) ?? []).length;
+    console.info(
+      `[export.concat] scenes=${input.scenes.length} inputs=${inputs.length} n=${inputs.length} labels=${labelRefs}`,
+    );
+    for (let i = 0; i < inputs.length; i++) {
+      const info = await doProbe(inputs[i]!).catch(() => ({ durationSeconds: null }) as MediaProbe);
+      const bytes = await stat(inputs[i]!).then((s) => s.size).catch(() => -1);
+      console.info(`[export.concat] input ${i} bytes=${bytes} duration=${info.durationSeconds ?? 'null'}`);
+    }
 
     if (input.backgroundMusicUrl) {
       // Video-only path + background music: produce a video+audio output.
@@ -758,6 +774,10 @@ export async function renderOutputDerivative(
     const measured = await doProbe(card.path).catch(() => ({ durationSeconds: null }));
     return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
   } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    if (process.env.KEEP_EXPORT_TMP === '1') {
+      console.info(`[export.concat] KEEP_EXPORT_TMP=1 - leaving temp dir ${dir}`);
+    } else {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
