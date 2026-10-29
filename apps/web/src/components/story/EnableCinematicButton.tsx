@@ -106,7 +106,7 @@ export function EnableCinematicButton({ projectId }: { projectId: string }) {
             </div>
 
             <p className="mt-3 text-[10px] text-[var(--noc-t6)]">
-              This does not generate the clips yet - it only plans the shots. You choose when to render each scene.
+              This does not generate the clips yet - it only plans the shots. Final cost may vary based on the shot breakdown; you are charged per clip generated.
             </p>
           </div>
         </div>

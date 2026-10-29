@@ -75,7 +75,9 @@ export const productionSceneSchema = z.object({
   // Optional at parse time so a legacy/scene-level manifest still validates;
   // `normaliseProductionManifest` guarantees at least one shot before the value
   // ever reaches the shot-clip engine.
-  shots: z.array(productionSceneShotSchema).min(1).max(12).optional(),
+  // 3-5 shots is a product requirement, not a suggestion: two shots per scene
+  // halves the quoted clip count and makes each clip shorter than the H3 minimum.
+  shots: z.array(productionSceneShotSchema).min(3).max(5).optional(),
 });
 
 export const productionManifestSchema = z.object({
@@ -220,20 +222,26 @@ function normaliseScene(raw: unknown, index: number): ProductionScene {
   const duration = asNumber(record.duration_sec ?? record.duration);
   const shotsRaw = Array.isArray(record.shots) ? record.shots : [];
   const sceneDuration = Math.min(15, Math.max(5, duration ?? 6));
-  // Legacy or lazy LLM output: fall back to a single shot covering the whole
-  // scene instead of leaving `shots` undefined. One shot is honest - it yields
-  // one clip and the stitcher refuses (it needs two) - and it stops
-  // buildShotClipPlan from silently returning an empty plan.
+  const basePrompt = asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt);
+  const baseCamera = asString(record.camera_motion ?? record.camera ?? 'Static shot');
+  // The schema requires 3-5 shots, so a legacy scene-level manifest is split into
+  // three equal beats rather than injected as one shot that would fail validation.
   const shots = shotsRaw.length > 0
-    ? shotsRaw.slice(0, 12).map((shot, shotIndex) => normaliseShot(shot, shotIndex, index + 1))
-    : [{
-        shot_id: `SCENE_${String(index + 1).padStart(2, '0')}_SHOT_01`,
-        timeframe: `00:00 - 00:${String(sceneDuration).padStart(2, '0')}`,
-        camera_setup: asString(record.camera_motion ?? record.camera ?? 'Static shot'),
-        action_description: asString(record.minimax_video_prompt ?? record.prompt ?? 'Continuous action'),
-        video_prompt: asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt),
-        transition_to_next: 'Cut to next scene',
-      }];
+    ? shotsRaw.slice(0, 5).map((shot, shotIndex) => normaliseShot(shot, shotIndex, index + 1))
+    : Array.from({ length: 3 }, (_, shotIndex) => {
+        const per = Math.max(1, Math.round(sceneDuration / 3));
+        const start = shotIndex * per;
+        const end = Math.min(sceneDuration, start + per);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return {
+          shot_id: `SCENE_${String(index + 1).padStart(2, '0')}_SHOT_${pad(shotIndex + 1)}`,
+          timeframe: `00:${pad(start)} - 00:${pad(end)}`,
+          camera_setup: baseCamera,
+          action_description: basePrompt,
+          video_prompt: basePrompt,
+          transition_to_next: shotIndex === 2 ? 'Cut to next scene' : 'Continuous action',
+        };
+      });
   const rawSceneId = asNumber(record.scene_id ?? record.id);
   return {
     scene_id: Number.isFinite(rawSceneId) ? Math.max(1, Math.floor(rawSceneId as number)) : index + 1,
