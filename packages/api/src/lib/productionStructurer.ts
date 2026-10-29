@@ -75,7 +75,7 @@ export const productionSceneSchema = z.object({
   // Optional at parse time so a legacy/scene-level manifest still validates;
   // `normaliseProductionManifest` guarantees at least one shot before the value
   // ever reaches the shot-clip engine.
-  shots: z.array(productionSceneShotSchema).min(1).max(12).optional(),
+  // 3-5 shots is a product requirement, not a suggestion: two shots per scene`n  // silently halves the quoted clip count and makes each clip shorter than the`n  // H3 minimum. Enforced here so a lazy manifest fails loudly.`n  shots: z.array(productionSceneShotSchema).min(3).max(5).optional(),
 });
 
 export const productionManifestSchema = z.object({
@@ -163,7 +163,7 @@ YOU MUST OUTPUT STRICTLY VALID JSON FOLLOWING THIS EXACT SCHEMA:
 
 RULE 0 — EXACT SCENE COUNT: you must output EXACTLY {{EXPECTED_SCENE_COUNT}} scenes when a count is given. Do not combine scenes, do not skip scenes, do not split a scene into two. Scene numbers must run 1..{{EXPECTED_SCENE_COUNT}} with no gaps.
 
-RULE 0b — SHOT GRID IS MANDATORY: every scene MUST include a non-empty "shots" array of 3 to 5 entries. The sum of the shot durations implied by "timeframe" MUST equal the scene's "duration_sec" - the first shot starts at 00:00 and the last shot ends exactly at duration_sec. Shots are continuous: shot N starts where shot N-1 ended, with no gaps and no overlaps. If a scene is only 5 seconds long, emit a single shot covering the full 5 seconds; otherwise split it.
+RULE 0b — SHOT GRID IS MANDATORY: every scene MUST contain between 3 and 5 shots. Never output fewer than 3 shots, even for a 5 second scene - split the action instead. A scene with fewer than 3 shots is an invalid response. every scene MUST include a non-empty "shots" array of 3 to 5 entries. The sum of the shot durations implied by "timeframe" MUST equal the scene's "duration_sec" - the first shot starts at 00:00 and the last shot ends exactly at duration_sec. Shots are continuous: shot N starts where shot N-1 ended, with no gaps and no overlaps. If a scene is only 5 seconds long, emit a single shot covering the full 5 seconds; otherwise split it.
 
 RULE 1 — MASTER VISUAL BIBLE: 'minimax_video_prompt' (and every shot 'video_prompt') MUST be constructed as:
   [master_style] + [camera_setup] + [character descriptions, verbatim from 'characters'] + [action] + [negative_prompt_suffix as '--no ' + suffix]
@@ -224,16 +224,27 @@ function normaliseScene(raw: unknown, index: number): ProductionScene {
   // scene instead of leaving `shots` undefined. One shot is honest - it yields
   // one clip and the stitcher refuses (it needs two) - and it stops
   // buildShotClipPlan from silently returning an empty plan.
+  const basePrompt = asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt);
+  const baseCamera = asString(record.camera_motion ?? record.camera ?? 'Static shot');
+  // The schema requires 3-5 shots, so a legacy scene-level manifest is split into
+  // three equal beats rather than injected as a single shot that would fail
+  // validation. Synthetic, but honest about being a fallback.
   const shots = shotsRaw.length > 0
-    ? shotsRaw.slice(0, 12).map((shot, shotIndex) => normaliseShot(shot, shotIndex, index + 1))
-    : [{
-        shot_id: `SCENE_${String(index + 1).padStart(2, '0')}_SHOT_01`,
-        timeframe: `00:00 - 00:${String(sceneDuration).padStart(2, '0')}`,
-        camera_setup: asString(record.camera_motion ?? record.camera ?? 'Static shot'),
-        action_description: asString(record.minimax_video_prompt ?? record.prompt ?? 'Continuous action'),
-        video_prompt: asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt),
-        transition_to_next: 'Cut to next scene',
-      }];
+    ? shotsRaw.slice(0, 5).map((shot, shotIndex) => normaliseShot(shot, shotIndex, index + 1))
+    : Array.from({ length: 3 }, (_, shotIndex) => {
+        const per = Math.max(1, Math.round(sceneDuration / 3));
+        const start = shotIndex * per;
+        const end = Math.min(sceneDuration, start + per);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return {
+          shot_id: `SCENE_${String(index + 1).padStart(2, '0')}_SHOT_${pad(shotIndex + 1)}`,
+          timeframe: `00:${pad(start)} - 00:${pad(end)}`,
+          camera_setup: baseCamera,
+          action_description: basePrompt,
+          video_prompt: basePrompt,
+          transition_to_next: shotIndex === 2 ? 'Cut to next scene' : 'Continuous action',
+        };
+      });
   const rawSceneId = asNumber(record.scene_id ?? record.id);
   return {
     scene_id: Number.isFinite(rawSceneId) ? Math.max(1, Math.floor(rawSceneId as number)) : index + 1,
@@ -367,25 +378,46 @@ export async function structureProductionManifest(
 
   const countOf = (manifest: ProductionManifest): number => manifest.scenes.length;
 
-  let manifest = normaliseProductionManifest(await callModel(baseMessages), input.title ?? 'Untitled Production');
+  const parseOrNull = (raw: unknown): ProductionManifest | null => {
+    try {
+      return normaliseProductionManifest(raw, input.title ?? 'Untitled Production');
+    } catch {
+      // Schema rejection (too few shots, wrong shape) is repairable once.
+      return null;
+    }
+  };
 
-  // One repair pass, then fail: a manifest with the wrong number of scenes
-  // silently drops story beats and makes the quoted price a lie.
-  if (expectedSceneCount && countOf(manifest) !== expectedSceneCount) {
+  let manifest = parseOrNull(await callModel(baseMessages));
+
+  // One repair pass, then fail. Two things are repaired here: the wrong number
+  // of scenes (which silently drops story beats) and a shot count below the
+  // enforced minimum of 3 (which halves the quoted price and shortens clips).
+  if (!manifest || (expectedSceneCount && countOf(manifest) !== expectedSceneCount)) {
     const repairMessages = [
       ...baseMessages,
       { role: 'assistant', content: JSON.stringify(manifest) },
       {
         role: 'user',
-        content: `You returned ${countOf(manifest)} scenes. The story has exactly ${expectedSceneCount}. Re-output the full JSON with exactly ${expectedSceneCount} scenes, preserving the shot grids. Do not explain.`,
+        content: `The previous response was invalid. It must contain exactly ${expectedSceneCount} scenes, and EVERY scene must have between 3 and 5 shots with timeframes covering the scene duration. Re-output the complete JSON with those constraints. Do not explain.`,
       },
     ];
-    manifest = normaliseProductionManifest(await callModel(repairMessages), input.title ?? 'Untitled Production');
+    manifest = parseOrNull(await callModel(repairMessages));
+  }
+
+  if (!manifest) {
+    throw new Error('Production manifest did not satisfy the schema after one repair attempt');
   }
 
   if (expectedSceneCount && countOf(manifest) !== expectedSceneCount) {
     throw new Error(
       `Production manifest has ${countOf(manifest)} scenes but the story has ${expectedSceneCount}`,
+    );
+  }
+
+  const thin = manifest.scenes.find((scene) => (scene.shots?.length ?? 0) < 3);
+  if (thin) {
+    throw new Error(
+      `Scene ${thin.scene_id} has ${thin.shots?.length ?? 0} shots; at least 3 are required`,
     );
   }
 

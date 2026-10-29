@@ -6008,7 +6008,7 @@ export const storyRouter = router({
       });
 
       const hasManifest = manifestShots > 0;
-      const totalShots = hasManifest ? manifestShots : Math.max(sceneCount, 1) * 5;
+      const totalShots = hasManifest ? manifestShots : Math.max(sceneCount, 1) * 3;
 
       const { getFeatureCreditCost } = await import('../lib/credits');
       const perSecond = await getFeatureCreditCost(ctx.prisma, 'generate:h3_max_480p');
