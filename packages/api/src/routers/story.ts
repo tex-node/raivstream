@@ -5967,13 +5967,14 @@ export const storyRouter = router({
           logline: project.logline ?? undefined,
           prose,
           audienceMode: (project.audienceMode === 'KIDS' ? 'KIDS' : 'GENERAL') as never,
+          expectedSceneCount: await (ctx.prisma as any).storySceneSeed.count({ where: { projectId: input.projectId } }),
         });
       } catch (error) {
         // Loud by design: a silent fallback would leave the user paying for clips
         // whose grid does not match their story.
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `Could not build the cinematic breakdown: ${(error as Error).message}`,
+          message: `Could not generate a valid shot manifest for this story. Please try again. (${(error as Error).message})`,
         });
       }
 
@@ -6007,7 +6008,7 @@ export const storyRouter = router({
       });
 
       const hasManifest = manifestShots > 0;
-      const totalShots = hasManifest ? manifestShots : Math.max(sceneCount, 1) * 4;
+      const totalShots = hasManifest ? manifestShots : Math.max(sceneCount, 1) * 5;
 
       const { getFeatureCreditCost } = await import('../lib/credits');
       const perSecond = await getFeatureCreditCost(ctx.prisma, 'generate:h3_max_480p');

@@ -93,6 +93,12 @@ export interface ManifestStructurerInput {
   prose: string;
   audienceMode?: StoryAudienceMode;
   supporting?: Record<string, unknown>;
+  /**
+   * Pin the scene count to the story's existing scene cards. GPT-4o will happily
+   * collapse a 9-scene story into 1, which silently loses eight scenes of
+   * coverage and makes the consent estimate meaningless.
+   */
+  expectedSceneCount?: number;
 }
 
 export interface ManifestStructurerDeps {
@@ -155,7 +161,9 @@ YOU MUST OUTPUT STRICTLY VALID JSON FOLLOWING THIS EXACT SCHEMA:
   ]
 }
 
-RULE 0 — SHOT GRID IS MANDATORY: every scene MUST include a non-empty "shots" array of 3 to 5 entries. The sum of the shot durations implied by "timeframe" MUST equal the scene's "duration_sec" - the first shot starts at 00:00 and the last shot ends exactly at duration_sec. Shots are continuous: shot N starts where shot N-1 ended, with no gaps and no overlaps. If a scene is only 5 seconds long, emit a single shot covering the full 5 seconds; otherwise split it.
+RULE 0 — EXACT SCENE COUNT: you must output EXACTLY {{EXPECTED_SCENE_COUNT}} scenes when a count is given. Do not combine scenes, do not skip scenes, do not split a scene into two. Scene numbers must run 1..{{EXPECTED_SCENE_COUNT}} with no gaps.
+
+RULE 0b — SHOT GRID IS MANDATORY: every scene MUST include a non-empty "shots" array of 3 to 5 entries. The sum of the shot durations implied by "timeframe" MUST equal the scene's "duration_sec" - the first shot starts at 00:00 and the last shot ends exactly at duration_sec. Shots are continuous: shot N starts where shot N-1 ended, with no gaps and no overlaps. If a scene is only 5 seconds long, emit a single shot covering the full 5 seconds; otherwise split it.
 
 RULE 1 — MASTER VISUAL BIBLE: 'minimax_video_prompt' (and every shot 'video_prompt') MUST be constructed as:
   [master_style] + [camera_setup] + [character descriptions, verbatim from 'characters'] + [action] + [negative_prompt_suffix as '--no ' + suffix]
@@ -311,39 +319,75 @@ export async function structureProductionManifest(
   if (!apiKey) throw new Error('Production manifest structurer is not configured');
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
-  const response = await doFetch(CHAT_COMPLETIONS_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: gpt40Model(env),
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: STAGE_2_SYSTEM_PROMPT },
-        { role: 'user', content: buildManifestUserMessage(input) },
-      ],
-    }),
-  });
 
-  if (!response.ok) {
-    throw new Error(`Production manifest structurer failed with ${response.status}`);
+  const expectedSceneCount = typeof input.expectedSceneCount === 'number' && input.expectedSceneCount > 0
+      ? Math.min(12, Math.floor(input.expectedSceneCount))
+      : undefined;
+
+  const systemPrompt = expectedSceneCount
+    ? STAGE_2_SYSTEM_PROMPT.replace(/\{\{EXPECTED_SCENE_COUNT\}\}/g, String(expectedSceneCount))
+    : STAGE_2_SYSTEM_PROMPT.replace(/\{\{EXPECTED_SCENE_COUNT\}\}/g, 'the number the story requires');
+
+  const callModel = async (messages: Array<{ role: string; content: string }>): Promise<unknown> => {
+    const response = await doFetch(CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: gpt40Model(env),
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+        messages,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Production manifest structurer failed with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Production manifest structurer returned no content');
+
+    try {
+      return JSON.parse(content);
+    } catch {
+      const match = content.trim().match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Production manifest structurer returned invalid JSON');
+      return JSON.parse(match[0]);
+    }
+  };
+
+  const baseMessages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: buildManifestUserMessage(input) },
+  ];
+
+  const countOf = (manifest: ProductionManifest): number => manifest.scenes.length;
+
+  let manifest = normaliseProductionManifest(await callModel(baseMessages), input.title ?? 'Untitled Production');
+
+  // One repair pass, then fail: a manifest with the wrong number of scenes
+  // silently drops story beats and makes the quoted price a lie.
+  if (expectedSceneCount && countOf(manifest) !== expectedSceneCount) {
+    const repairMessages = [
+      ...baseMessages,
+      { role: 'assistant', content: JSON.stringify(manifest) },
+      {
+        role: 'user',
+        content: `You returned ${countOf(manifest)} scenes. The story has exactly ${expectedSceneCount}. Re-output the full JSON with exactly ${expectedSceneCount} scenes, preserving the shot grids. Do not explain.`,
+      },
+    ];
+    manifest = normaliseProductionManifest(await callModel(repairMessages), input.title ?? 'Untitled Production');
   }
 
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Production manifest structurer returned no content');
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(content);
-  } catch {
-    const match = content.trim().match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('Production manifest structurer returned invalid JSON');
-    raw = JSON.parse(match[0]);
+  if (expectedSceneCount && countOf(manifest) !== expectedSceneCount) {
+    throw new Error(
+      `Production manifest has ${countOf(manifest)} scenes but the story has ${expectedSceneCount}`,
+    );
   }
 
-  return normaliseProductionManifest(raw, input.title ?? 'Untitled Production');
+  return manifest;
 }

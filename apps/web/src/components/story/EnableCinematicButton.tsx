@@ -58,7 +58,7 @@ export function EnableCinematicButton({ projectId }: { projectId: string }) {
         <div>
           <p className="text-sm font-black text-[var(--noc-t1)]">Cinematic Multi-Shot</p>
           <p className="mt-0.5 text-[11px] font-semibold text-[var(--noc-t5)]">
-            Split each scene into {data?.shotsPerScene ?? 4} continuous shots for smoother motion.
+            Up to {data?.shotsPerScene ?? 5} continuous shots per scene for smoother motion.
           </p>
         </div>
         <button
@@ -76,10 +76,11 @@ export function EnableCinematicButton({ projectId }: { projectId: string }) {
           <div className="w-full max-w-md rounded-2xl border border-[var(--noc-hairline)] bg-[var(--noc-card)] p-5">
             <h2 className="text-sm font-black text-[var(--noc-t1)]">Enable Cinematic Mode?</h2>
             <p className="mt-2 text-xs font-semibold text-[var(--noc-t4)]">
-              Cinematic Mode will split each of your {data?.sceneCount ?? 0} scenes into{' '}
-              {data?.shotsPerScene ?? 4} shots, generating{' '}
-              <strong>{data?.totalShots ?? 0} total clips</strong>. This will cost approximately{' '}
-              <strong>{(data?.estimatedCredits ?? 0).toLocaleString()} credits</strong>. Proceed?
+              Cinematic Mode will generate{' '}
+              <strong>up to {data?.totalShots ?? 0} clips</strong> across{' '}
+              {data?.sceneCount ?? 0} scenes (estimated{' '}
+              <strong>{(data?.estimatedCredits ?? 0).toLocaleString()} credits</strong>). You are
+              charged per clip actually rendered, so the final cost may be lower. Proceed?
             </p>
 
             {error && (
