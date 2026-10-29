@@ -99,3 +99,23 @@ Use these exact words. Never collapse them.
 | Exports filter | Server-side `source: 'export'` filter; all 9 exports visible in one click |
 
 Residual: none known on web.
+## D-004 Phase 2 — Organizations & Awards (COMPLETE)
+
+**Status: 100% DEPLOYED & VERIFIED.**
+
+Org Admin self-service, invite code onboarding, award categories, and the nomination workflow were verified end-to-end by the owner.
+
+| Fix | PR |
+|---|---|
+| Dashboard counted zero videos after a STUDENT → ORG_ADMIN promotion (scope now includes every ACTIVE member) | #116 |
+| Creating an org did not enrol its creator, so the org was unmanageable | #119 |
+| Self-removal / last-admin removal could orphan an org (this is how `test-school` lost its admin) | #136 |
+| Org tables collided with another tenant's `public.organizations` | #111 |
+
+Residual: seeded student accounts have placeholder password hashes and cannot sign in; use an existing account to exercise the student view.
+
+## Story Playground — Multi-Shot (SCOPED)
+
+`MultiShotControls` added to scene cards (`story-playground/new`). Chosen design: **Option A** — one playable clip plus a purple **Multi-Shot** badge, progress bar (`Rendering shot X of Y`), and a "View shots" expander. No stitched concat exists server-side; `runSceneShotClipChain` writes individual `StorySceneAsset` rows tagged `shotIndex`.
+
+Residual: no stitched MP4, so a multi-shot scene cannot be published as one video yet.

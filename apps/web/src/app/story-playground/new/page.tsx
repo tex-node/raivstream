@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Pencil, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
+import { MultiShotControls } from '@/components/story/MultiShotControls';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
@@ -1901,6 +1902,12 @@ export default function StoryPlaygroundPage() {
                                 : (latestVideoAsset(scene) ? 'Regenerate Video' : 'Animate to Video')}
                             </button>
                           )}
+                          {/* Multi-shot is additive: it appears only when the
+                              scene's manifest has a shot grid, and never
+                              replaces the single-clip button. */}
+                          {projectId && scene.id ? (
+                            <MultiShotControls projectId={projectId} sceneId={scene.id} />
+                          ) : null}
                           {!isR16 && (scene.assets?.length ?? 0) > 0 && (
                             <button
                               type="button"
