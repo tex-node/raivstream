@@ -135,7 +135,6 @@ export function ExportPublishControls({
             exportId: row.id,
             title: values.title,
             ...(values.description ? { description: values.description } : {}),
-            isKidsSafe: values.isKidsSafe,
           });
         }}
       />

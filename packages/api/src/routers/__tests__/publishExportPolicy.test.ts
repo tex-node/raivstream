@@ -52,8 +52,6 @@ describe('story.publishExport — policy', () => {
     const result = await caller(prisma).story.publishExport({
       exportId: 'export-1',
       title: 'Princess Goalina',
-      // The caller may claim anything; the policy must win.
-      isKidsSafe: true,
     });
 
     expect(result.videoId).toBe('video-1');
@@ -70,7 +68,6 @@ describe('story.publishExport — policy', () => {
     await caller(prisma, true).story.publishExport({
       exportId: 'export-1',
       title: 'Kids story',
-      isKidsSafe: false,
     });
 
     expect(prisma.created[0].isKidsSafe).toBe(true);
@@ -79,7 +76,19 @@ describe('story.publishExport — policy', () => {
   it('refuses a KIDS story published from a non-R16 session', async () => {
     const prisma = makePrisma('KIDS');
     await expect(
-      caller(prisma, false).story.publishExport({ exportId: 'export-1', title: 'x', isKidsSafe: true }),
+      caller(prisma, false).story.publishExport({ exportId: 'export-1', title: 'x' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+  it('a caller cannot choose the audience by passing isKidsSafe', async () => {
+    const prisma = makePrisma('GENERAL');
+    // The field is not in the input schema, so Zod strips it: a caller asking for
+    // the kids feed gets the policy's answer instead of an error.
+    await caller(prisma).story.publishExport({
+      exportId: 'export-1',
+      title: 'Princess Goalina',
+      isKidsSafe: true,
+    } as never);
+
+    expect(prisma.created[0].isKidsSafe).toBe(false);
   });
 });
