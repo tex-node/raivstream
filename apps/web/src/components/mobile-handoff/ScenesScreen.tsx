@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Shell } from '@/components/layout/Shell';
 import { EnableCinematicButton } from '@/components/story/EnableCinematicButton';
+import { MultiShotControls } from '@/components/story/MultiShotControls';
 import { Pill, Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { trpc } from '@/lib/trpc';
@@ -157,8 +158,8 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
             const cover = scene.imageUrl ?? scene.assets?.find((a: any) => a.status === 'READY')?.thumbnailUrl ?? null;
             const narrationAudio: string | null = scene.narrationAudioUrl ?? null;
             return (
+              <div key={scene.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Link
-                key={scene.id}
                 href={`/story-playground/${projectId}/scenes/${scene.id}`}
                 className="noc-pressable"
                 style={{
@@ -201,6 +202,11 @@ export function ScenesScreen({ projectId }: { projectId: string }) {
                   </div>
                 </div>
               </Link>
+              {/* Shot controls live beside the card, not inside the Link: this is
+                  the only place in the workspace that can render them, and the
+                  per-scene detail route does not exist yet. */}
+              <MultiShotControls projectId={projectId} sceneId={scene.id} />
+              </div>
             );
           })
         )}
