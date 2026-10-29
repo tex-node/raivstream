@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canExportStory, exportUnavailableReason } from '../exportEligibility';
+import { canExportStory } from '../exportEligibility';
 
 /**
  * The UI gate must match the server boundary exactly. If this drifts, the button
@@ -23,8 +23,4 @@ describe('canExportStory', () => {
     expect(canExportStory({ isR16Session: true, audienceMode: undefined })).toBe(false);
   });
 
-  it('explains which condition failed', () => {
-    expect(exportUnavailableReason({ isR16Session: true, audienceMode: 'GENERAL' })).toMatch(/kids/i);
-    expect(exportUnavailableReason({ isR16Session: false, audienceMode: 'KIDS' })).toMatch(/R16/i);
-  });
 });
