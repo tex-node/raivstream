@@ -434,7 +434,7 @@ export async function renderOutputDerivative(
     exportId?: string;
   },
   deps: OutputRenderDeps = {},
-): Promise<{ assetUrl: string; endCardApplied: boolean }> {
+): Promise<{ assetUrl: string; endCardApplied: boolean; durationSeconds?: number | null }> {
   const doFetch = deps.fetch ?? fetch;
   const doFfmpeg = deps.ffmpeg ?? runFfmpeg;
   const doUpload = deps.upload ?? uploadBufferToR2;
@@ -623,7 +623,11 @@ export async function renderOutputDerivative(
       const buffer = await readFile(card.path);
       const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
       console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
-      return { assetUrl, endCardApplied: card.applied };
+      // Probe the FINISHED file rather than trusting the planned sum: the
+      // renderer pads, trims and appends a 2s card, so the planned total is not
+      // the artefact (the 9B.1A lesson: expected 12, actual 8.57).
+      const measured = await doProbe(card.path).catch(() => ({ durationSeconds: null }));
+      return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
     }
 
     // ── Video-only path (non-educational, existing behavior unchanged) ─────────
@@ -713,7 +717,11 @@ export async function renderOutputDerivative(
       const buffer = await readFile(card.path);
       const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
       console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
-      return { assetUrl, endCardApplied: card.applied };
+      // Probe the FINISHED file rather than trusting the planned sum: the
+      // renderer pads, trims and appends a 2s card, so the planned total is not
+      // the artefact (the 9B.1A lesson: expected 12, actual 8.57).
+      const measured = await doProbe(card.path).catch(() => ({ durationSeconds: null }));
+      return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
     }
 
     const out = path.join(dir, 'out.mp4');
@@ -746,7 +754,9 @@ export async function renderOutputDerivative(
     const buffer = await readFile(card.path);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
     console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
-    return { assetUrl, endCardApplied: card.applied };
+    // Same measurement at the non-early-return exit.
+    const measured = await doProbe(card.path).catch(() => ({ durationSeconds: null }));
+    return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }

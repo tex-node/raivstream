@@ -91,6 +91,7 @@ function setupHappyPath(prisma: ReturnType<typeof makePrisma>, existingSpy?: any
   return existingSpy ?? vi.spyOn(renderModule, 'renderOutputDerivative').mockResolvedValue({
     assetUrl: 'https://r2.raivstream.com/story-exports/project-r16/exports/export-1/out.mp4',
     endCardApplied: true,
+    durationSeconds: 12,
   });
 }
 
@@ -192,7 +193,7 @@ describe('R16 story video export', () => {
     let capturedScenes: Array<{ sceneId: string; videoUrl?: string | null }> = [];
     const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockImplementation(async ({ scenes }) => {
       capturedScenes = scenes as typeof capturedScenes;
-      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true };
+      return { assetUrl: 'https://r2.raivstream.com/out.mp4', endCardApplied: true, durationSeconds: 12 };
     });
 
     const prisma = makePrisma();
@@ -305,7 +306,7 @@ describe('R16 story video export', () => {
   // ── 10. R2 output URL is persisted ────────────────────────────────────────
   it('persists the R2 output URL and READY status after assembly', async () => {
     const r2Url = 'https://r2.raivstream.com/story-exports/project-r16/exports/export-1/out.mp4';
-    const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockResolvedValue({ assetUrl: r2Url, endCardApplied: true });
+    const spy = vi.spyOn(renderModule, 'renderOutputDerivative').mockResolvedValue({ assetUrl: r2Url, endCardApplied: true, durationSeconds: 12 });
     const prisma = makePrisma();
     setupHappyPath(prisma, spy);
     (prisma.storyVideoExport.update as any).mockImplementation(({ data }: any) =>
