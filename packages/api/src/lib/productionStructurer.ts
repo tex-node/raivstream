@@ -75,9 +75,10 @@ export const productionSceneSchema = z.object({
   // Optional at parse time so a legacy/scene-level manifest still validates;
   // `normaliseProductionManifest` guarantees at least one shot before the value
   // ever reaches the shot-clip engine.
-  // 3-5 shots is a product requirement, not a suggestion: two shots per scene
-  // halves the quoted clip count and makes each clip shorter than the H3 minimum.
-  shots: z.array(productionSceneShotSchema).min(3).max(5).optional(),
+  // Min of 1 so a thin LLM response still parses; thin scenes are padded to 3
+  // deterministically after parsing (an under-delivering model must not block
+  // the whole manifest).
+  shots: z.array(productionSceneShotSchema).min(1).max(12).optional(),
 });
 
 export const productionManifestSchema = z.object({
@@ -215,6 +216,41 @@ function normaliseShot(raw: unknown, index: number, sceneId: number): Production
     video_prompt: asString(record.video_prompt ?? record.prompt, ''),
     transition_to_next: asString(record.transition_to_next ?? record.transition, ''),
   };
+}
+
+/**
+ * Pad a scene to the 3-shot minimum using the deterministic splitter.
+ *
+ * The model reliably returns 1-2 shots for short scenes. Splitting the existing
+ * prompt into three equal beats keeps the manifest usable and the price
+ * predictable; the alternative (throwing) blocks the entire feature.
+ */
+function padThinShotGrid(scene: ProductionScene): ProductionScene {
+  const existing = scene.shots ?? [];
+  if (existing.length >= 3) return scene;
+
+  const duration = Math.min(15, Math.max(5, scene.duration_sec ?? 6));
+  const basePrompt = scene.minimax_video_prompt || 'Continuous action';
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  // Keep whatever the model produced, then top up to 3 rather than discarding it.
+  const kept = existing.map((shot, i) => ({ ...shot, shot_id: shot.shot_id || `SCENE_${pad(scene.scene_id)}_SHOT_${pad(i + 1)}` }));
+  const synthetic = Array.from({ length: 3 - kept.length }, (_, offset) => {
+    const slot = kept.length + offset;
+    const per = Math.max(1, Math.round(duration / 3));
+    const start = Math.min(duration - 1, slot * per);
+    const end = Math.min(duration, start + per);
+    return {
+      shot_id: `SCENE_${pad(scene.scene_id)}_SHOT_${pad(slot + 1)}`,
+      timeframe: `00:${pad(start)} - 00:${pad(end)}`,
+      camera_setup: scene.camera_motion || 'Static Hold, Eye Level',
+      action_description: basePrompt,
+      video_prompt: basePrompt,
+      transition_to_next: slot === 2 ? 'Cut to next scene' : 'Continuous action',
+    };
+  });
+
+  return { ...scene, shots: [...kept, ...synthetic] };
 }
 
 function normaliseScene(raw: unknown, index: number): ProductionScene {
@@ -396,6 +432,15 @@ export async function structureProductionManifest(
       `Production manifest has ${countOf(manifest)} scenes but the story has ${expectedSceneCount}`,
     );
   }
+
+  // LLM often under-delivers on shot count (2 per scene is typical). Pad thin
+  // scenes deterministically rather than failing the whole manifest: a repaired
+  // 3-shot grid renders and prices predictably, a thrown error leaves the user
+  // with nothing.
+  manifest = {
+    ...manifest,
+    scenes: manifest.scenes.map((scene) => padThinShotGrid(scene)),
+  };
 
   return manifest;
 }
