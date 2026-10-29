@@ -6114,6 +6114,15 @@ export const storyRouter = router({
               status: 'READY',
               shotIndex: null,
               isLatest: true,
+              // Record the assembled length: everything downstream (export runtime,
+              // UI labels, 'sum of scenes' checks) has to probe the file otherwise.
+              // Sum the shot clips actually selected (DB rows carry the duration;
+              // ShotClipLike does not). 0 becomes null rather than a false '0s'.
+              durationSeconds:
+                (clips as Array<{ durationSeconds?: number | null }>).reduce(
+                  (sum, clip) => sum + (clip.durationSeconds ?? 0),
+                  0,
+                ) || null,
             },
             select: { id: true, assetUrl: true },
           });
