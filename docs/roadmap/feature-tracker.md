@@ -84,3 +84,18 @@ Use these exact words. Never collapse them.
 | 2026-10-15 | STORY-PACE | PROPOSED â†’ IMPLEMENTED | Phase B: schema, flag, blueprint, narrative engine, story.ts, 32 tests green; type-check clean | Claude |
 | 2026-10-18 | SEC-RATELIMIT | â€” â†’ DEPLOYED | PRs #68 (Redis limiter), #69 (exec-shape fix â€” limiter was inert), #70 (auth-route logging); prod verification: 5Ã—401 â†’ 429 with Retry-After | agent |
 | 2026-10-18 | SEC-RATELIMIT-2 | â€” â†’ PROPOSED | D-067 Phase 2 (read fail-open / write fail-closed) | agent |
+
+## D-004 — Media Library (COMPLETE)
+
+**Status: 100% DEPLOYED & VERIFIED** (verified in a browser session on 2026-10-29).
+
+| Capability | Evidence |
+|---|---|
+| Unified listing | `fetchOwnedAssets` returns `StoryVideoExport` + `StorySceneAsset` + `Video` + `AudioAsset`; `library.getAssets` delegates to it (duplicate merge deleted in #131) |
+| Final exports | `StoryVideoExport` rows carry `project.title`, purple **Final Export** badge, and download as `<Project_Title>.mp4` |
+| Scene titles | `"<Project> - Scene N.mp4"` via the `scene` relation (not the removed `project` select — see PR #132) |
+| Pagination | `useInfiniteQuery` + Load More in `/library` and `/admin/users/[userId]`; proven with a two-page HTTP test (page 1 → cursor → page 2, overlap 0) |
+| Downloads | `/api/download` proxy enforces `Content-Disposition: attachment`, auth + R2 host allowlist, streams without buffering |
+| Exports filter | Server-side `source: 'export'` filter; all 9 exports visible in one click |
+
+Residual: none known on web.

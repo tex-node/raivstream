@@ -146,6 +146,17 @@ export function Navbar() {
               </Link>
             )}
 
+            {/* Library — signed-in only, hidden on R16 */}
+            {!isR16 && (
+              <Link
+                href="/library"
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors text-[var(--noc-t3)] hover:text-[var(--noc-t1)]"
+              >
+                <span className="hidden sm:inline">Library</span>
+                <span className="sm:hidden" aria-label="Library">▦</span>
+              </Link>
+            )}
+
             {/* Avatar + dropdown */}
             <div className="relative">
               <button
