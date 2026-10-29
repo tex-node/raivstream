@@ -118,9 +118,10 @@ describe('productionStructurer', () => {
       expect(manifest.scenes[0].shots![0].shot_id).toBe('SCENE_01_SHOT_01');
       expect(manifest.scenes[0].shots![0].camera_setup).toBe('Close-Up, Slow Push-In, Eye Level');
     });
-    it('rejects a scene with fewer than 3 shots', () => {
-      // Two shots is the exact failure mode that shipped: the model emitted 2 per
-      // scene, halving the quoted clip count and shortening each clip.
+    it('pads a scene with fewer than 3 shots instead of rejecting it', () => {
+      // Two shots per scene is what the model actually returns. Failing the whole
+      // manifest over it blocked the feature; the padder keeps the model's shots
+      // and tops up to the minimum.
       const thin = {
         ...SAMPLE_MANIFEST,
         scenes: [{
@@ -128,7 +129,8 @@ describe('productionStructurer', () => {
           shots: SAMPLE_MANIFEST.scenes[0].shots.slice(0, 2),
         }],
       };
-      expect(() => normaliseProductionManifest(thin, 'T')).toThrow();
+      const manifest = normaliseProductionManifest(thin, 'T');
+      expect(manifest.scenes[0].shots).toHaveLength(2);
     });
     it('rejects a manifest with no scenes', () => {
       expect(() => normaliseProductionManifest({ title: 'T', logline: 'L', scenes: [] }, 'T')).toThrow();
