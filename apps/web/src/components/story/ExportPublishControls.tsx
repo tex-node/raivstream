@@ -12,6 +12,8 @@
 import { useState } from 'react';
 import { Download, Loader2, Play } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { useR16 } from '@/lib/r16';
+import { canExportStory, exportUnavailableReason } from './exportEligibility';
 import { PublishModal, type PublishValues } from '@/components/media/PublishModal';
 
 type ExportRow = {
@@ -20,7 +22,16 @@ type ExportRow = {
   assetUrl: string | null;
 };
 
-export function ExportPublishControls({ projectId }: { projectId: string }) {
+export function ExportPublishControls({
+  projectId,
+  audienceMode,
+}: {
+  projectId: string;
+  audienceMode?: string | null;
+}) {
+  // useR16 returns a boolean, not an object.
+  const isR16 = useR16();
+  const eligible = canExportStory({ isR16Session: Boolean(isR16), audienceMode });
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +61,20 @@ export function ExportPublishControls({ projectId }: { projectId: string }) {
   const row = (latest.data ?? null) as ExportRow | null;
   const isReady = row?.status === 'READY' && Boolean(row.assetUrl);
   const isBusy = Boolean(row) && row!.status !== 'READY' && row!.status !== 'FAILED';
+
+  // The server refuses both `!isR16` and non-KIDS projects. Showing the controls
+  // anyway would offer an action that always 403s, so explain the boundary here
+  // rather than letting the user discover it by clicking.
+  if (!eligible) {
+    return (
+      <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t4)]">Final movie</p>
+        <p className="mt-2 text-xs font-bold text-[var(--noc-t5)]">
+          {exportUnavailableReason({ isR16Session: Boolean(isR16), audienceMode })}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
