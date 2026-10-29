@@ -5905,6 +5905,107 @@ export const storyRouter = router({
     }),
 
   /** Phase 17 — read a scene's shot-grid clips + the manifest plan for the grid. */
+  /**
+   * Stitch a scene's READY shot clips into one hero video.
+   *
+   * Runs the concat in-request (a scene is seconds of footage, not minutes) and
+   * creates an asset with `shotIndex: null` so it becomes the scene's primary
+   * video. Nothing is written unless FFmpeg and the upload both succeed - a
+   * half-written hero row pointing at a missing file is worse than no row.
+   */
+  stitchSceneShots: protectedProcedure
+    .input(z.object({ projectId: z.string(), sceneId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+
+      const clips = await (ctx.prisma as any).storySceneAsset.findMany({
+        where: {
+          sceneId: input.sceneId,
+          projectId: input.projectId,
+          assetType: 'VIDEO',
+          shotIndex: { not: null },
+          deletedAt: null,
+        },
+        orderBy: { shotIndex: 'asc' },
+      });
+
+      const { planConcat, concatShotClips } = await import('../lib/story/shotConcat');
+      const plan = planConcat(clips as never);
+      if (!plan.ok) {
+        const message =
+          plan.reason === 'still_rendering' ? 'Wait for every shot to finish rendering.'
+          : plan.reason === 'missing_shot' ? 'This scene is missing a shot; regenerate it before stitching.'
+          : plan.reason === 'not_enough_clips' ? 'Only one shot exists - there is nothing to stitch.'
+          : 'No rendered shots to stitch.';
+        throw new TRPCError({ code: 'BAD_REQUEST', message });
+      }
+
+      const fs = await import('node:fs/promises');
+      const os = await import('node:os');
+      const path = await import('node:path');
+      const { spawn } = await import('node:child_process');
+      const { uploadBufferToR2, getPublicUrlForKey } = await import('../lib/r2');
+
+      const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'shot-stitch-'));
+      const outputKey = `story-projects/${project.id}/scenes/${input.sceneId}/stitched-${Date.now()}.mp4`;
+
+      try {
+        const result = await concatShotClips(clips as never, {
+          workDir,
+          outputKey,
+          download: async (url, filePath) => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Could not download shot (HTTP ${res.status})`);
+            await fs.writeFile(filePath, Buffer.from(await res.arrayBuffer()));
+          },
+          runFfmpeg: (args) => new Promise<void>((resolve, reject) => {
+            const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+            let stderr = '';
+            child.stderr?.on('data', (chunk) => { stderr = (stderr + String(chunk)).slice(-800); });
+            const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('ffmpeg concat timed out')); }, 180_000);
+            child.on('error', (err) => { clearTimeout(timer); reject(err); });
+            child.on('close', (code) => {
+              clearTimeout(timer);
+              if (code === 0) resolve();
+              else reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-400)}`));
+            });
+          }),
+          upload: async (filePath, key) => {
+            const buffer = await fs.readFile(filePath);
+            await uploadBufferToR2(buffer, key, 'video/mp4');
+            return getPublicUrlForKey(key) ?? key;
+          },
+        });
+
+        const first = plan.ordered[0];
+        const hero = await (ctx.prisma as any).storySceneAsset.create({
+          data: {
+            sceneId: input.sceneId,
+            projectId: input.projectId,
+            userId: project.userId,
+            assetType: 'VIDEO',
+            provider: 'ffmpeg',
+            model: 'shot-concat',
+            r2Key: outputKey,
+            assetUrl: result.outputUrl,
+            thumbnailUrl: (first as { thumbnailUrl?: string | null }).thumbnailUrl ?? null,
+            status: 'READY',
+            shotIndex: null,
+          },
+          select: { id: true, assetUrl: true },
+        });
+
+        // Make it the scene's hero video so the card and exports pick it up.
+        await (ctx.prisma as any).storySceneSeed.update({
+          where: { id: input.sceneId },
+          data: { imageStatus: 'READY' },
+        });
+
+        return { assetId: hero.id, assetUrl: hero.assetUrl, clipCount: result.clipCount };
+      } finally {
+        await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+      }
+    }),
   getSceneShotClips: protectedProcedure
     .input(z.object({ projectId: z.string(), sceneId: z.string() }))
     .query(async ({ ctx, input }) => {
