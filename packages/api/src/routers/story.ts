@@ -9142,7 +9142,9 @@ export const storyRouter = router({
       exportId: z.string().min(1),
       title: z.string().min(1).max(100),
       description: z.string().max(500).optional(),
-      isKidsSafe: z.boolean().default(false),
+      // No isKidsSafe input: the audience is derived by resolveExportPolicy from
+      // the project's audienceMode and the session tier. Accepting it here would
+      // invite callers to believe they can choose which feed they land in.
     }))
     .mutation(async ({ ctx, input }) => {
       const exported = await ctx.prisma.storyVideoExport.findUnique({

@@ -497,11 +497,18 @@ export class StoryVideoExportService {
           r2Key: `story-exports/${row.projectId}/exports/${row.id}/out.mp4`,
           completedAt: new Date(),
           endCardApplied: rendered.endCardApplied,
-        // Measured from the finished file, not the planned sum.
-        durationSeconds: rendered.durationSeconds ?? null,
+          // Measured from the finished file, never inferred from the scene sum:
+          // a NULL here means "we could not measure", not "we guessed".
+          durationSeconds: rendered.durationSeconds ?? null,
           errorMessage: null,
         },
       });
+
+      if (updated.durationSeconds === null) {
+        console.warn(
+          `[storyVideoExport] duration probe unavailable for export ${row.id} - durationSeconds left NULL (not inferred from the scene sum)`,
+        );
+      }
       return serializeExport(updated);
     } catch (error) {
       // Deterministic failures are recorded, not retried forever: the user can
