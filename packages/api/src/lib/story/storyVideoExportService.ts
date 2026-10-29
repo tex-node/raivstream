@@ -497,6 +497,8 @@ export class StoryVideoExportService {
           r2Key: `story-exports/${row.projectId}/exports/${row.id}/out.mp4`,
           completedAt: new Date(),
           endCardApplied: rendered.endCardApplied,
+        // Measured from the finished file, not the planned sum.
+        durationSeconds: rendered.durationSeconds ?? null,
           errorMessage: null,
         },
       });
