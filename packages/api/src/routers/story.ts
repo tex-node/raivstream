@@ -5913,6 +5913,112 @@ export const storyRouter = router({
    * video. Nothing is written unless FFmpeg and the upload both succeed - a
    * half-written hero row pointing at a missing file is worse than no row.
    */
+  /**
+   * Generate the multi-shot production manifest on demand.
+   *
+   * On-demand, not automatic: one GPT-4o call per project and 4x the clips, so
+   * the user opts in and sees the cost first. Fails loudly rather than pretending
+   * single-shot is multi-shot.
+   */
+  ensureShotManifest: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+
+      const existing = project.productionManifest as unknown as ProductionManifest | null;
+      const existingShots = (existing?.scenes ?? []).reduce(
+        (sum, scene) => sum + (scene.shots?.length ?? 0),
+        0,
+      );
+      if (existingShots > 0) {
+        return { success: true as const, shotCount: existingShots, reused: true };
+      }
+
+      const { isManifestStructurerEnabled, structureProductionManifest } =
+        await import('../lib/productionStructurer');
+
+      if (!isManifestStructurerEnabled(process.env)) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Multi-shot generation is not enabled',
+        });
+      }
+
+      const chapters = await (ctx.prisma as any).storyChapter.findMany({
+        where: { projectId: input.projectId },
+        orderBy: { chapterNumber: 'asc' },
+        select: { content: true },
+      });
+      const prose = (chapters as Array<{ content: string | null }>)
+        .map((chapter) => chapter.content ?? '')
+        .filter(Boolean)
+        .join('\n\n');
+
+      if (!prose.trim()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This story has no text to break into shots yet.' });
+      }
+
+      let manifest: ProductionManifest;
+      try {
+        manifest = await structureProductionManifest({
+          title: project.title ?? 'Untitled story',
+          logline: project.logline ?? undefined,
+          prose,
+          audienceMode: (project.audienceMode === 'KIDS' ? 'KIDS' : 'GENERAL') as never,
+        });
+      } catch (error) {
+        // Loud by design: a silent fallback would leave the user paying for clips
+        // whose grid does not match their story.
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not build the cinematic breakdown: ${(error as Error).message}`,
+        });
+      }
+
+      await (ctx.prisma as any).storyProject.update({
+        where: { id: input.projectId },
+        data: { productionManifest: manifest as never },
+      });
+
+      const shotCount = manifest.scenes.reduce((sum, scene) => sum + (scene.shots?.length ?? 0), 0);
+      return { success: true as const, shotCount, reused: false };
+    }),
+
+  /**
+   * Pre-consent estimate. Never calls the LLM: a dry run would cost as much as the
+   * real thing, so an existing manifest is counted and a missing one assumes the
+   * 4-shot default the structurer prompt asks for.
+   */
+  getShotManifestEstimate: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ensureProject(ctx, input.projectId);
+
+      const manifest = project.productionManifest as unknown as ProductionManifest | null;
+      const manifestShots = (manifest?.scenes ?? []).reduce(
+        (sum, scene) => sum + (scene.shots?.length ?? 0),
+        0,
+      );
+
+      const sceneCount = await (ctx.prisma as any).storySceneSeed.count({
+        where: { projectId: input.projectId },
+      });
+
+      const hasManifest = manifestShots > 0;
+      const totalShots = hasManifest ? manifestShots : Math.max(sceneCount, 1) * 4;
+
+      const { getFeatureCreditCost } = await import('../lib/credits');
+      const perSecond = await getFeatureCreditCost(ctx.prisma, 'generate:h3_max_480p');
+      const secondsPerShot = 5;
+
+      return {
+        hasManifest,
+        sceneCount,
+        shotsPerScene: hasManifest ? Math.round(manifestShots / Math.max(sceneCount, 1)) : 4,
+        totalShots,
+        estimatedCredits: Math.round(totalShots * secondsPerShot * perSecond),
+      };
+    }),
   stitchSceneShots: protectedProcedure
     .input(z.object({ projectId: z.string(), sceneId: z.string() }))
     .mutation(async ({ ctx, input }) => {
