@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Camera, ChevronRight, Clapperboard, Clock, CloudSun, HeartHandshake, History, ImagePlus, Lamp, Loader2, Mic, Pencil, Plus, Smile, Sparkles, ThumbsDown, ThumbsUp, UserRound, Wand2, X } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { MultiShotControls } from '@/components/story/MultiShotControls';
+import { EnableCinematicButton } from '@/components/story/EnableCinematicButton';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
@@ -1772,6 +1773,8 @@ export default function StoryPlaygroundPage() {
               </div>
 
               <div className="mb-4 max-w-2xl"><LowBalanceWarning /></div>
+
+              {projectId && <EnableCinematicButton projectId={projectId} />}
 
               {scenes.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-8 text-center font-bold text-[var(--noc-t4)]">
