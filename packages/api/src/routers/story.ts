@@ -6091,6 +6091,15 @@ export const storyRouter = router({
         // Both writes or neither: an asset with no seed pointer is an orphan the
         // user can never reach, and a seed pointing at a missing asset is worse.
         const hero = await (ctx.prisma as any).$transaction(async (tx: any) => {
+          // The export invariant requires exactly one READY VIDEO per scene with
+          // isLatest: true. Nothing ever set it, so a stitched scene looked
+          // unexportable ("N scene(s) do not have a ready video yet") even though
+          // the hero existed. Clear the flag off the shot clips first.
+          await tx.storySceneAsset.updateMany({
+            where: { sceneId: input.sceneId, assetType: 'VIDEO' },
+            data: { isLatest: false },
+          });
+
           const asset = await tx.storySceneAsset.create({
             data: {
               sceneId: input.sceneId,
@@ -6104,6 +6113,7 @@ export const storyRouter = router({
               thumbnailUrl: (first as { thumbnailUrl?: string | null }).thumbnailUrl ?? null,
               status: 'READY',
               shotIndex: null,
+              isLatest: true,
             },
             select: { id: true, assetUrl: true },
           });
