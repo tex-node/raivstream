@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Shell } from '@/components/layout/Shell';
+import { ExportPublishControls } from '@/components/story/ExportPublishControls';
 import { Skeleton, SectionLabel } from '@/components/mobile/primitives';
 import { gradientPlaceholder } from '@/lib/mobileFormat';
 import { useR16 } from '@/lib/r16';
@@ -123,6 +124,11 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
           </div>
 
           <div className="flex flex-col gap-[18px] px-[18px] pt-4 lg:px-0 lg:pt-0 lg:mt-6">
+            {/* Full-story export + publish: the worker assembles the MP4, then the
+                result can go to the feed. Kept next to the primary action so the
+                end of the pipeline is visible from the Overview. */}
+            <ExportPublishControls projectId={projectId} />
+
             {nextScene ? (
               <button
                 type="button"
