@@ -112,12 +112,19 @@ export default function AdminUserDetailPage() {
 function Media({ userId }: { userId: string }) {
   const [selected, setSelected] = useState<{ url: string; title: string } | null>(null);
   const [exportsOnly, setExportsOnly] = useState(false);
-  const { data, isLoading, error } = trpc.admin.getUserMedia.useQuery({
-    userId,
-    limit: 100,
-    ...(exportsOnly ? { source: 'export' as const } : {}),
-  });
-  const items = data?.items ?? [];
+  // Infinite query keyed on the filter so switching pills resets the pages.
+  const { data, isLoading, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    trpc.admin.getUserMedia.useInfiniteQuery(
+      {
+        userId,
+        limit: 60,
+        ...(exportsOnly ? { source: 'export' as const } : {}),
+      },
+      {
+        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      },
+    );
+  const items = data?.pages.flatMap((page) => page.items) ?? [];
 
   if (isLoading) return <p className="mt-6 text-sm text-[var(--noc-t4)]">Loading media…</p>;
   if (error) return <p className="mt-6 text-sm text-[var(--noc-magenta)]">{error.message}</p>;
@@ -190,6 +197,19 @@ function Media({ userId }: { userId: string }) {
           </div>
         </div>
       ))}
+
+      {hasNextPage && (
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="rounded-lg border border-[var(--noc-hairline)] px-5 py-2 text-xs font-bold text-[var(--noc-t3)] disabled:opacity-50"
+          >
+            {isFetchingNextPage ? 'Loading…' : `Load more (${items.length} shown)`}
+          </button>
+        </div>
+      )}
     </div>
 
       <VideoLightbox

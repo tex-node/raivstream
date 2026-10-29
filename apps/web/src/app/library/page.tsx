@@ -67,14 +67,21 @@ export default function LibraryPage() {
 
   // An explicit `type` (undefined for All) so the query key changes with the tab
   // and the request is unambiguous in the network panel.
-  const query = trpc.library.getAssets.useQuery({
-    limit: 100,
-    ...(filter === 'export'
-      ? { source: 'export' as const }
-      : { type: filter === 'all' ? undefined : filter }),
-  });
+  // Infinite query keyed on the filter: changing the pill resets the pages
+  // because the input (and therefore the query key) changes.
+  const query = trpc.library.getAssets.useInfiniteQuery(
+    {
+      limit: 60,
+      ...(filter === 'export'
+        ? { source: 'export' as const }
+        : { type: filter === 'all' ? undefined : filter }),
+    },
+    {
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    },
+  );
 
-  const assets = query.data?.items ?? [];
+  const assets = query.data?.pages.flatMap((page) => page.items) ?? [];
   const [publishTarget, setPublishTarget] = useState<{ id: string; title: string } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
@@ -214,9 +221,22 @@ export default function LibraryPage() {
           })}
         </div>
 
-        {query.data?.nextCursor && (
+        {query.hasNextPage && (
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => void query.fetchNextPage()}
+              disabled={query.isFetchingNextPage}
+              className="rounded-lg border border-[var(--noc-hairline)] px-5 py-2 text-xs font-bold text-[var(--noc-t3)] disabled:opacity-50"
+            >
+              {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
+
+        {!query.hasNextPage && assets.length > 0 && (
           <p className="mt-6 text-center text-xs text-[var(--noc-t6)]">
-            Showing the newest {assets.length}. Paging lands in Phase 1.1.
+            End of library · {assets.length} items
           </p>
         )}
         <VideoLightbox
