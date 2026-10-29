@@ -50,8 +50,19 @@ export function MultiShotControls({
     onSuccess: () => { void refetch(); },
   });
 
+  const utils = trpc.useUtils();
+  // Once stitched, the hero asset becomes the scene's primary video - keep the
+  // controls from offering another stitch and let the card player update.
+  const [hasHero, setHasHero] = useState(false);
+
   const stitch = trpc.story.stitchSceneShots.useMutation({
-    onSuccess: () => { void refetch(); },
+    onSuccess: async () => {
+      setHasHero(true);
+      void refetch();
+      // The scene card reads getWorkspace, so the stitched hero only appears
+      // after that query is invalidated.
+      await utils.story.invalidate();
+    },
   });
 
   const plan = (data?.plan ?? []) as unknown[];
@@ -90,7 +101,7 @@ export function MultiShotControls({
         <button
           type="button"
           onClick={() => generate.mutate({ projectId, sceneId })}
-          disabled={inFlight}
+          disabled={inFlight || hasHero}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-[rgba(139,92,246,0.9)] px-3 py-1.5 text-xs font-black text-white disabled:opacity-50"
         >
           {inFlight ? <Loader2 className="animate-spin" size={14} /> : <Clapperboard size={14} />}
@@ -125,7 +136,7 @@ export function MultiShotControls({
         </ul>
       )}
 
-      {ready.length >= 2 && ready.length === total && !inFlight && (
+      {ready.length >= 2 && ready.length === total && !inFlight && !hasHero && (
         <button
           type="button"
           onClick={() => stitch.mutate({ projectId, sceneId })}

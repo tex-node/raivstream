@@ -6087,27 +6087,39 @@ export const storyRouter = router({
         });
 
         const first = plan.ordered[0];
-        const hero = await (ctx.prisma as any).storySceneAsset.create({
-          data: {
-            sceneId: input.sceneId,
-            projectId: input.projectId,
-            userId: project.userId,
-            assetType: 'VIDEO',
-            provider: 'ffmpeg',
-            model: 'shot-concat',
-            r2Key: outputKey,
-            assetUrl: result.outputUrl,
-            thumbnailUrl: (first as { thumbnailUrl?: string | null }).thumbnailUrl ?? null,
-            status: 'READY',
-            shotIndex: null,
-          },
-          select: { id: true, assetUrl: true },
-        });
+        // Both writes or neither: an asset with no seed pointer is an orphan the
+        // user can never reach, and a seed pointing at a missing asset is worse.
+        const hero = await (ctx.prisma as any).$transaction(async (tx: any) => {
+          const asset = await tx.storySceneAsset.create({
+            data: {
+              sceneId: input.sceneId,
+              projectId: input.projectId,
+              userId: project.userId,
+              assetType: 'VIDEO',
+              provider: 'ffmpeg',
+              model: 'shot-concat',
+              r2Key: outputKey,
+              assetUrl: result.outputUrl,
+              thumbnailUrl: (first as { thumbnailUrl?: string | null }).thumbnailUrl ?? null,
+              status: 'READY',
+              shotIndex: null,
+            },
+            select: { id: true, assetUrl: true },
+          });
 
-        // Make it the scene's hero video so the card and exports pick it up.
-        await (ctx.prisma as any).storySceneSeed.update({
-          where: { id: input.sceneId },
-          data: { imageStatus: 'READY' },
+          // Attach it as the scene's primary video: the card player, storybook
+          // fallback and export pipeline all read these fields.
+          await tx.storySceneSeed.update({
+            where: { id: input.sceneId },
+            data: {
+              imageStatus: 'READY',
+              latestImageAssetId: asset.id,
+              activeImageAssetId: asset.id,
+              imageUrl: asset.assetUrl,
+            },
+          });
+
+          return asset;
         });
 
         return { assetId: hero.id, assetUrl: hero.assetUrl, clipCount: result.clipCount };
