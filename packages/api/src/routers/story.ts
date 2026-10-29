@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { protectedProcedure, publicProcedure, r16Procedure, router } from '../trpc';
+import { resolveExportPolicy } from '../lib/story/storyExportPolicy';
 import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
@@ -9132,6 +9133,7 @@ export const storyRouter = router({
           project: {
             select: {
               title: true,
+              audienceMode: true,
               coverAsset: { select: { assetUrl: true, thumbnailUrl: true } },
             },
           },
@@ -9146,6 +9148,14 @@ export const storyRouter = router({
       if (exported.status !== 'READY' || !exported.assetUrl) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'This export is still being assembled.' });
       }
+
+      // Same-surface only: a general story must not land in the kids feed, and a
+      // kids story must not land in the main feed. isKidsSafe is derived from the
+      // policy rather than trusted from the payload.
+      const policy = resolveExportPolicy({
+        isR16: ctx.isR16 ?? false,
+        audienceMode: exported.project?.audienceMode ?? null,
+      });
 
       const duplicate = await ctx.prisma.video.findFirst({
         where: { creatorId: ctx.user.id, mp4Url: exported.assetUrl },
@@ -9170,7 +9180,7 @@ export const storyRouter = router({
           duration: Math.max(1, Math.round(exported.durationSeconds ?? 15)),
           status: 'READY',
           isPublic: true,
-          isKidsSafe: input.isKidsSafe,
+          isKidsSafe: policy.isKidsSafe,
           moderationStatus: 'PENDING',
           publishedAt: new Date(),
         },
@@ -9182,7 +9192,9 @@ export const storyRouter = router({
 
       return { videoId: video.id, moderationStatus: video.moderationStatus };
     }),
-  requestStoryVideoExport: r16Procedure
+  // Non-R16 callers are allowed: the service resolves the export policy and
+  // refuses crossed combos (KIDS on main app, GENERAL on R16).
+  requestStoryVideoExport: protectedProcedure
     .input(z.object({
       projectId: z.string(),
     }))
@@ -9194,7 +9206,8 @@ export const storyRouter = router({
       }),
     ),
 
-  getStoryVideoExport: r16Procedure
+  // Pure read - takes no isR16 - so it must be reachable from both surfaces.
+  getStoryVideoExport: protectedProcedure
     .input(z.object({
       projectId: z.string(),
       exportId: z.string().optional(),
