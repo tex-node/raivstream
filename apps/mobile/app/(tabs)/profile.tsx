@@ -110,6 +110,9 @@ export default function ProfileScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
+          <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/library')}>
+            <Text style={styles.outlineBtnText}>My Media</Text>
+          </TouchableOpacity>
           {p?.role !== 'CREATOR' && (
             <BecomeCreatorButton />
           )}
