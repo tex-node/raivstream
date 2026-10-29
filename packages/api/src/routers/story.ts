@@ -9110,6 +9110,78 @@ export const storyRouter = router({
   // Both procedures use r16Procedure (ctx.isR16 required at middleware level).
   // The service also enforces ctx.isR16 as defense-in-depth.
 
+  /**
+   * Publish a READY StoryVideoExport to the feed.
+   *
+   * `library.publishAsset` covers single scene assets; a stitched story export is
+   * a different row and had no path to the feed. Mirrors the same contract:
+   * PENDING moderation, an explicit scan, and a duplicate guard.
+   */
+  publishExport: protectedProcedure
+    .input(z.object({
+      exportId: z.string().min(1),
+      title: z.string().min(1).max(100),
+      description: z.string().max(500).optional(),
+      isKidsSafe: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const exported = await ctx.prisma.storyVideoExport.findUnique({
+        where: { id: input.exportId },
+        select: {
+          id: true, userId: true, status: true, assetUrl: true, durationSeconds: true,
+          project: {
+            select: {
+              title: true,
+              coverAsset: { select: { assetUrl: true, thumbnailUrl: true } },
+            },
+          },
+        },
+      });
+
+      // Same message for "missing" and "not yours": ownership is not the client's
+      // business to probe.
+      if (!exported || exported.userId !== ctx.user.id) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Export not found.' });
+      }
+      if (exported.status !== 'READY' || !exported.assetUrl) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This export is still being assembled.' });
+      }
+
+      const duplicate = await ctx.prisma.video.findFirst({
+        where: { creatorId: ctx.user.id, mp4Url: exported.assetUrl },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'That story has already been published.' });
+      }
+
+      const thumbnailUrl =
+        exported.project?.coverAsset?.thumbnailUrl
+        ?? exported.project?.coverAsset?.assetUrl
+        ?? exported.assetUrl;
+
+      const video = await ctx.prisma.video.create({
+        data: {
+          creatorId: ctx.user.id,
+          title: input.title.trim(),
+          ...(input.description?.trim() ? { description: input.description.trim() } : {}),
+          thumbnailUrl,
+          mp4Url: exported.assetUrl,
+          duration: Math.max(1, Math.round(exported.durationSeconds ?? 15)),
+          status: 'READY',
+          isPublic: true,
+          isKidsSafe: input.isKidsSafe,
+          moderationStatus: 'PENDING',
+          publishedAt: new Date(),
+        },
+        select: { id: true, moderationStatus: true },
+      });
+
+      const { scanAndUpdateVideo } = await import('../lib/contentScanner');
+      void scanAndUpdateVideo(ctx.prisma, video.id, thumbnailUrl);
+
+      return { videoId: video.id, moderationStatus: video.moderationStatus };
+    }),
   requestStoryVideoExport: r16Procedure
     .input(z.object({
       projectId: z.string(),
