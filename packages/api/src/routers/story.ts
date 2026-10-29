@@ -5944,13 +5944,15 @@ export const storyRouter = router({
         });
       }
 
+      // StoryChapter stores prose in `body` - there is no `content` column.
+      // `enhancedBody` is the revised version once the writer edits a chapter.
       const chapters = await (ctx.prisma as any).storyChapter.findMany({
         where: { projectId: input.projectId },
         orderBy: { chapterNumber: 'asc' },
-        select: { content: true },
+        select: { body: true, enhancedBody: true, summary: true },
       });
-      const prose = (chapters as Array<{ content: string | null }>)
-        .map((chapter) => chapter.content ?? '')
+      const prose = (chapters as Array<{ body: string | null; enhancedBody: string | null; summary: string | null }>)
+        .map((chapter) => chapter.enhancedBody?.trim() || chapter.body?.trim() || chapter.summary?.trim() || '')
         .filter(Boolean)
         .join('\n\n');
 
