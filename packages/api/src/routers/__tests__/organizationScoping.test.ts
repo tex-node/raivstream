@@ -299,3 +299,44 @@ describe('invite code rotation', () => {
     expect(prisma.organization.update).not.toHaveBeenCalled();
   });
 });
+describe('admin.removeOrgMember guards', () => {
+  function prismaFor(opts: { role?: string; otherAdmins?: number; membership?: boolean } = {}) {
+    const { role = 'ORG_ADMIN', otherAdmins = 1, membership = true } = opts;
+    return {
+      organizationMember: {
+        findUnique: vi.fn(async () => (membership ? { id: 'm1', role } : null)),
+        count: vi.fn(async () => otherAdmins),
+        update: vi.fn(async () => ({ id: 'm1', status: 'REMOVED' })),
+      },
+    };
+  }
+
+  function asAdmin(prisma: ReturnType<typeof prismaFor>, selfId = 'admin-1') {
+    return appRouter.createCaller({
+      prisma: prisma as never,
+      userId: selfId,
+      user: { id: selfId, email: 'admin@raiv.test', username: 'admin', displayName: 'A', role: 'ADMIN' as const },
+    } as never);
+  }
+
+  it('refuses to remove yourself', async () => {
+    const prisma = prismaFor();
+    await expect(asAdmin(prisma).admin.removeOrgMember({ orgId: 'org-1', userId: 'admin-1' }))
+      .rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(prisma.organizationMember.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to remove the last remaining admin', async () => {
+    const prisma = prismaFor({ role: 'ORG_ADMIN', otherAdmins: 0 });
+    await expect(asAdmin(prisma).admin.removeOrgMember({ orgId: 'org-1', userId: 'someone-else' }))
+      .rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(prisma.organizationMember.update).not.toHaveBeenCalled();
+  });
+
+  it('still removes a member when another admin remains', async () => {
+    const prisma = prismaFor({ role: 'STUDENT', otherAdmins: 1 });
+    const result = await asAdmin(prisma).admin.removeOrgMember({ orgId: 'org-1', userId: 'student-1' });
+    expect(result).toEqual({ success: true });
+    expect(prisma.organizationMember.update).toHaveBeenCalled();
+  });
+});

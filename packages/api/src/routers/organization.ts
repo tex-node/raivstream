@@ -615,11 +615,40 @@ export const adminOrganizationProcedures = {
   removeOrgMember: adminProcedure
     .input(z.object({ orgId: z.string().min(1), userId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
+      // A platform admin removing themselves locks them out of the org they were
+      // working in - this is exactly how "Test School" lost its only admin 16
+      // seconds after a student was added.
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'You cannot remove yourself from the organization.',
+        });
+      }
+
       const membership = await ctx.prisma.organizationMember.findUnique({
         where: { organizationId_userId: { organizationId: input.orgId, userId: input.userId } },
-        select: { id: true },
+        select: { id: true, role: true },
       });
       if (!membership) throw new TRPCError({ code: 'NOT_FOUND', message: 'Membership not found.' });
+
+      // Removing the last admin orphans the org: afterwards nobody can add
+      // members or nominate, and nothing in the UI explains why.
+      if (membership.role === 'ORG_ADMIN') {
+        const otherAdmins = await ctx.prisma.organizationMember.count({
+          where: {
+            organizationId: input.orgId,
+            role: 'ORG_ADMIN',
+            status: 'ACTIVE',
+            userId: { not: input.userId },
+          },
+        });
+        if (otherAdmins === 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'That is the last admin. Promote someone else before removing them.',
+          });
+        }
+      }
 
       // Soft-remove: keeps the audit trail and lets re-adding restore the row.
       await ctx.prisma.organizationMember.update({
