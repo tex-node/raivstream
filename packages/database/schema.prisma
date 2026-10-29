@@ -1572,6 +1572,9 @@ model StoryVideoExport {
 
   errorMessage  String?
   endCardApplied Boolean?
+  /// Policy tier that produced this export ('R16' | 'GENERAL'). Null on
+  /// historical rows that predate the tier policy.
+  tier String?
 
   completedAt   DateTime?
   createdAt     DateTime               @default(now())

@@ -41,6 +41,7 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@raivstream/database';
 import { TRPCError } from '@trpc/server';
+import { resolveExportPolicy } from './storyExportPolicy';
 import { deriveOutput } from '../creative/output/derivation';
 import { renderOutputDerivative, EXPORT_RENDERER_VERSION, type OutputRenderDeps, type RenderScene } from '../creative/output/render';
 import { EXPORT_STUCK_THRESHOLD_MS } from '../ffmpegSafety';
@@ -180,14 +181,7 @@ export class StoryVideoExportService {
     },
     deps: OutputRenderDeps = {},
   ): Promise<StoryVideoExportState> {
-    // ── 1. R16 context check (defense-in-depth; r16Procedure enforces this at
-    //       the procedure layer — this is the service-level invariant) ────────
-    if (!input.isR16) {
-      throw new TRPCError({
-        code: 'FORBIDDEN',
-        message: 'Story video export is only available in R16 mode.',
-      });
-    }
+
 
     // ── 2. Load and authorize project ───────────────────────────────────────
     const project = await prisma.storyProject.findFirst({
@@ -204,13 +198,15 @@ export class StoryVideoExportService {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found.' });
     }
 
-    // ── 3. R16/KIDS project invariant ────────────────────────────────────────
-    if (project.audienceMode !== 'KIDS') {
-      throw new TRPCError({
-        code: 'FORBIDDEN',
-        message: 'Story video export is only available for KIDS-mode projects.',
-      });
-    }
+    // ── 3. Export policy — same-surface only ─────────────────────────────────
+    // Replaces the two hard guards (mode + audience). A KIDS story exports from
+    // R16, a GENERAL story from the main app; the crossed combos are refused.
+    // Everything below this line is policy-agnostic: scene invariants, hashing
+    // and enqueueing apply identically to both tiers.
+    const policy = resolveExportPolicy({
+      isR16: input.isR16,
+      audienceMode: project.audienceMode,
+    });
 
     // ── 4. Load canonical scene set — all scenes in deterministic order ──────
     const isEducational = project.contentType === 'EDUCATIONAL';
@@ -347,6 +343,7 @@ export class StoryVideoExportService {
           status: 'PENDING',
           sourceHash,
           sceneIds: sceneIdList as never,
+          tier: policy.tier,
         },
       });
     } catch (createErr: unknown) {

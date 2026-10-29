@@ -24,3 +24,18 @@ describe('canExportStory', () => {
   });
 
 });
+
+describe('canExportStory - general tier', () => {
+  it('allows a GENERAL story on the main app', () => {
+    expect(canExportStory({ isR16Session: false, audienceMode: 'GENERAL' })).toBe(true);
+  });
+
+  it('refuses a GENERAL story on R16', () => {
+    expect(canExportStory({ isR16Session: true, audienceMode: 'GENERAL' })).toBe(false);
+  });
+
+  it('refuses an unknown audience mode on either surface', () => {
+    expect(canExportStory({ isR16Session: false, audienceMode: 'UNKNOWN' })).toBe(false);
+    expect(canExportStory({ isR16Session: true, audienceMode: 'UNKNOWN' })).toBe(false);
+  });
+});

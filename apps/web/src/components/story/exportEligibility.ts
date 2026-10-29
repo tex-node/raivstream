@@ -6,6 +6,9 @@ export function canExportStory(opts: {
   isR16Session: boolean;
   audienceMode: string | null | undefined;
 }): boolean {
-  return opts.isR16Session === true && opts.audienceMode === 'KIDS';
+  // Same-surface only, mirroring resolveExportPolicy on the server.
+  if (opts.isR16Session && opts.audienceMode === 'KIDS') return true;
+  if (!opts.isR16Session && opts.audienceMode === 'GENERAL') return true;
+  return false;
 }
 

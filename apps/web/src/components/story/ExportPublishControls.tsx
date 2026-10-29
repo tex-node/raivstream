@@ -65,10 +65,11 @@ export function ExportPublishControls({
   if (!eligible) {
     return (
       <div className="rounded-lg border border-dashed border-white/10 px-4 py-3 text-sm text-white/50">
-        Full-movie export is available for R16 kids stories only.
-        {project.audienceMode === 'KIDS' && !isR16Session && (
-          <> Open this story on the R16 app to export it.</>
-        )}
+        {project.audienceMode === 'KIDS' && !isR16Session
+          ? 'Open this story on the R16 app to export it.'
+          : project.audienceMode === 'GENERAL' && isR16Session
+          ? 'General stories export from the main app.'
+          : 'Full-movie export is not available for this story.'}
       </div>
     );
   }

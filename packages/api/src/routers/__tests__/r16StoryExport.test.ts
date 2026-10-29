@@ -114,21 +114,20 @@ describe('R16 story video export', () => {
     spy.mockRestore();
   });
 
-  // ── 2. GENERAL project cannot use R16 export ───────────────────────────────
-  it('rejects export for a GENERAL-mode project (FORBIDDEN)', async () => {
+  // ── 2. Crossed combos stay forbidden under the export policy ───────────────
+  it('rejects a GENERAL project exported from an R16 session (crossed combo)', async () => {
     const prisma = makePrisma();
     (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('p-general', 'user-1', 'GENERAL'));
 
     const err = await service.requestExport(prisma as any, r16Input('p-general')).catch((e) => e);
     expect(err).toBeInstanceOf(TRPCError);
     expect((err as TRPCError).code).toBe('FORBIDDEN');
-    expect((err as TRPCError).message).toMatch(/KIDS-mode/i);
+    expect((err as TRPCError).message).toMatch(/cannot be exported/i);
   });
 
-  // ── NEW: Normal (non-R16) user cannot invoke R16 export endpoint ───────────
-  it('rejects export when ctx.isR16 is false, regardless of project audienceMode', async () => {
+  // ── NEW: the mirror case — a KIDS story cannot export from the main app ────
+  it('rejects a KIDS project exported from a non-R16 session (crossed combo)', async () => {
     const prisma = makePrisma();
-    // Even if audienceMode is KIDS, ctx.isR16=false must be rejected
     (prisma.storyProject.findFirst as any).mockResolvedValue(makeProject('project-r16', 'user-1', 'KIDS'));
 
     const err = await service
@@ -136,7 +135,7 @@ describe('R16 story video export', () => {
       .catch((e) => e);
     expect(err).toBeInstanceOf(TRPCError);
     expect((err as TRPCError).code).toBe('FORBIDDEN');
-    expect((err as TRPCError).message).toMatch(/R16 mode/i);
+    expect((err as TRPCError).message).toMatch(/cannot be exported/i);
   });
 
   it('requestStoryVideoExport and getStoryVideoExport are exposed under r16Procedure', () => {
