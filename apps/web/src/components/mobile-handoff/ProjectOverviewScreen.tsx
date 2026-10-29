@@ -127,7 +127,7 @@ export function ProjectOverviewScreen({ projectId }: { projectId: string }) {
             {/* Full-story export + publish: the worker assembles the MP4, then the
                 result can go to the feed. Kept next to the primary action so the
                 end of the pipeline is visible from the Overview. */}
-            <ExportPublishControls projectId={projectId} audienceMode={project.audienceMode ?? null} />
+            <ExportPublishControls project={project} isR16Session={isR16} />
 
             {nextScene ? (
               <button

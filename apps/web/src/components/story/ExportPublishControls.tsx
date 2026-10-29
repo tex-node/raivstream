@@ -12,8 +12,7 @@
 import { useState } from 'react';
 import { Download, Loader2, Play } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { useR16 } from '@/lib/r16';
-import { canExportStory, exportUnavailableReason } from './exportEligibility';
+import { canExportStory } from './exportEligibility';
 import { PublishModal, type PublishValues } from '@/components/media/PublishModal';
 
 type ExportRow = {
@@ -23,15 +22,16 @@ type ExportRow = {
 };
 
 export function ExportPublishControls({
-  projectId,
-  audienceMode,
+  project,
+  isR16Session,
 }: {
-  projectId: string;
-  audienceMode?: string | null;
+  project: { id?: string; audienceMode?: string | null };
+  isR16Session: boolean;
 }) {
-  // useR16 returns a boolean, not an object.
-  const isR16 = useR16();
-  const eligible = canExportStory({ isR16Session: Boolean(isR16), audienceMode });
+  const projectId = project.id ?? '';
+  // Gate mirrors the server boundary: requestExport refuses both `!isR16` and
+  // non-KIDS projects, so the controls must not be offered here.
+  const eligible = canExportStory({ isR16Session, audienceMode: project.audienceMode });
   const [open, setOpen] = useState(false);
   const [published, setPublished] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,16 +62,13 @@ export function ExportPublishControls({
   const isReady = row?.status === 'READY' && Boolean(row.assetUrl);
   const isBusy = Boolean(row) && row!.status !== 'READY' && row!.status !== 'FAILED';
 
-  // The server refuses both `!isR16` and non-KIDS projects. Showing the controls
-  // anyway would offer an action that always 403s, so explain the boundary here
-  // rather than letting the user discover it by clicking.
   if (!eligible) {
     return (
-      <div className="rounded-2xl border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-t4)]">Final movie</p>
-        <p className="mt-2 text-xs font-bold text-[var(--noc-t5)]">
-          {exportUnavailableReason({ isR16Session: Boolean(isR16), audienceMode })}
-        </p>
+      <div className="rounded-lg border border-dashed border-white/10 px-4 py-3 text-sm text-white/50">
+        Full-movie export is available for R16 kids stories only.
+        {project.audienceMode === 'KIDS' && !isR16Session && (
+          <> Open this story on the R16 app to export it.</>
+        )}
       </div>
     );
   }
