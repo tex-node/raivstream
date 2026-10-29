@@ -72,6 +72,9 @@ export const productionSceneSchema = z.object({
   duration_sec: z.number().min(5).max(15),
   resolution: z.enum(['768P', '1080P']),
   first_frame_image_url: z.string().nullable(),
+  // Optional at parse time so a legacy/scene-level manifest still validates;
+  // `normaliseProductionManifest` guarantees at least one shot before the value
+  // ever reaches the shot-clip engine.
   shots: z.array(productionSceneShotSchema).min(1).max(12).optional(),
 });
 
@@ -138,7 +141,7 @@ YOU MUST OUTPUT STRICTLY VALID JSON FOLLOWING THIS EXACT SCHEMA:
       "duration_sec": "Number (Accepted values: 5 to 15)",
       "resolution": "String (Accepted values: '768P' or '1080P')",
       "first_frame_image_url": "String or Null (ALWAYS null — the server fills I2V first frames)",
-      "shots": [ "OPTIONAL. Only for scenes longer than one clip: the 5-6s shot grid.",
+      "shots": [ "REQUIRED. Break the scene into 3 to 5 continuous shots of 4-5 seconds each.",
         {
           "shot_id": "SCENE_01_SHOT_01",
           "timeframe": "00:00 - 00:05",
@@ -151,6 +154,8 @@ YOU MUST OUTPUT STRICTLY VALID JSON FOLLOWING THIS EXACT SCHEMA:
     }
   ]
 }
+
+RULE 0 — SHOT GRID IS MANDATORY: every scene MUST include a non-empty "shots" array of 3 to 5 entries. The sum of the shot durations implied by "timeframe" MUST equal the scene's "duration_sec" - the first shot starts at 00:00 and the last shot ends exactly at duration_sec. Shots are continuous: shot N starts where shot N-1 ended, with no gaps and no overlaps. If a scene is only 5 seconds long, emit a single shot covering the full 5 seconds; otherwise split it.
 
 RULE 1 — MASTER VISUAL BIBLE: 'minimax_video_prompt' (and every shot 'video_prompt') MUST be constructed as:
   [master_style] + [camera_setup] + [character descriptions, verbatim from 'characters'] + [action] + [negative_prompt_suffix as '--no ' + suffix]
@@ -206,16 +211,28 @@ function normaliseScene(raw: unknown, index: number): ProductionScene {
   const record = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const duration = asNumber(record.duration_sec ?? record.duration);
   const shotsRaw = Array.isArray(record.shots) ? record.shots : [];
+  const sceneDuration = Math.min(15, Math.max(5, duration ?? 6));
+  // Legacy or lazy LLM output: fall back to a single shot covering the whole
+  // scene instead of leaving `shots` undefined. One shot is honest - it yields
+  // one clip and the stitcher refuses (it needs two) - and it stops
+  // buildShotClipPlan from silently returning an empty plan.
   const shots = shotsRaw.length > 0
     ? shotsRaw.slice(0, 12).map((shot, shotIndex) => normaliseShot(shot, shotIndex, index + 1))
-    : undefined;
+    : [{
+        shot_id: `SCENE_${String(index + 1).padStart(2, '0')}_SHOT_01`,
+        timeframe: `00:00 - 00:${String(sceneDuration).padStart(2, '0')}`,
+        camera_setup: asString(record.camera_motion ?? record.camera ?? 'Static shot'),
+        action_description: asString(record.minimax_video_prompt ?? record.prompt ?? 'Continuous action'),
+        video_prompt: asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt),
+        transition_to_next: 'Cut to next scene',
+      }];
   const rawSceneId = asNumber(record.scene_id ?? record.id);
   return {
     scene_id: Number.isFinite(rawSceneId) ? Math.max(1, Math.floor(rawSceneId as number)) : index + 1,
     elevenlabs_narration: asString(record.elevenlabs_narration ?? record.narration),
     minimax_video_prompt: asString(record.minimax_video_prompt ?? record.prompt ?? record.video_prompt),
     camera_motion: asString(record.camera_motion ?? record.camera ?? 'Static shot'),
-    duration_sec: Math.min(15, Math.max(5, duration ?? 6)),
+    duration_sec: sceneDuration,
     resolution: normaliseResolution(record.resolution),
     first_frame_image_url: asString(record.first_frame_image_url ?? record.first_frame) || null,
     shots,
