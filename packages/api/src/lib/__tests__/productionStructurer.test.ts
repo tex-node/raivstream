@@ -27,11 +27,29 @@ const SAMPLE_MANIFEST = {
       shots: [
         {
           shot_id: 'SCENE_01_SHOT_01',
-          timeframe: '00:00 - 00:05',
+          timeframe: '00:00 - 00:02',
           camera_setup: 'Close-Up, Slow Push-In, Eye Level',
           action_description: 'Eldon kneels and breathes heavily.',
           video_prompt: 'Cinematic low-angle close up of ELDON, slow push-in, frost on steel.',
           transition_to_next: 'Cut to wide shot.',
+        },
+        // Three shots is the enforced minimum; fixtures below it would fail the
+        // schema rather than test normalisation.
+        {
+          shot_id: 'SCENE_01_SHOT_02',
+          timeframe: '00:02 - 00:04',
+          camera_setup: 'Medium Shot, Static, Eye Level',
+          action_description: 'Eldon looks up at the sky.',
+          video_prompt: 'Cinematic medium shot of ELDON looking up, frost on steel.',
+          transition_to_next: 'Cut to wide.',
+        },
+        {
+          shot_id: 'SCENE_01_SHOT_03',
+          timeframe: '00:04 - 00:06',
+          camera_setup: 'Wide Shot, Slow Dolly Out, Low Angle',
+          action_description: 'The battlefield empties around him.',
+          video_prompt: 'Cinematic wide shot of ELDON alone on the battlefield, slow dolly out.',
+          transition_to_next: 'Cut to next scene.',
         },
       ],
     },
@@ -83,6 +101,9 @@ describe('productionStructurer', () => {
       expect(manifest.scenes[0].duration_sec).toBe(15);
       expect(manifest.scenes[0].resolution).toBe('1080P');
       expect(manifest.scenes[0].first_frame_image_url).toBeNull();
+      // A scene-level (legacy) manifest is split into the 3 shots the schema now
+      // requires, rather than being injected as one shot that would fail.
+      expect(manifest.scenes[0].shots).toHaveLength(3);
       // Master Visual Bible fields fall back to safe defaults when absent.
       expect(manifest.master_style.length).toBeGreaterThan(0);
       expect(manifest.negative_prompt_suffix).toContain('animation');
@@ -93,9 +114,21 @@ describe('productionStructurer', () => {
       expect(manifest.master_style).toContain('photorealism');
       expect(manifest.negative_prompt_suffix).toContain('2d');
       expect(manifest.characters.ELDON).toContain('knight');
-      expect(manifest.scenes[0].shots).toHaveLength(1);
+      expect(manifest.scenes[0].shots).toHaveLength(3);
       expect(manifest.scenes[0].shots![0].shot_id).toBe('SCENE_01_SHOT_01');
       expect(manifest.scenes[0].shots![0].camera_setup).toBe('Close-Up, Slow Push-In, Eye Level');
+    });
+    it('rejects a scene with fewer than 3 shots', () => {
+      // Two shots is the exact failure mode that shipped: the model emitted 2 per
+      // scene, halving the quoted clip count and shortening each clip.
+      const thin = {
+        ...SAMPLE_MANIFEST,
+        scenes: [{
+          ...SAMPLE_MANIFEST.scenes[0],
+          shots: SAMPLE_MANIFEST.scenes[0].shots.slice(0, 2),
+        }],
+      };
+      expect(() => normaliseProductionManifest(thin, 'T')).toThrow();
     });
     it('rejects a manifest with no scenes', () => {
       expect(() => normaliseProductionManifest({ title: 'T', logline: 'L', scenes: [] }, 'T')).toThrow();

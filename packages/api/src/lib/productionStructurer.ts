@@ -75,7 +75,9 @@ export const productionSceneSchema = z.object({
   // Optional at parse time so a legacy/scene-level manifest still validates;
   // `normaliseProductionManifest` guarantees at least one shot before the value
   // ever reaches the shot-clip engine.
-  shots: z.array(productionSceneShotSchema).min(1).max(12).optional(),
+  // 3-5 shots is a product requirement, not a suggestion: two shots per scene
+  // halves the quoted clip count and makes each clip shorter than the H3 minimum.
+  shots: z.array(productionSceneShotSchema).min(3).max(5).optional(),
 });
 
 export const productionManifestSchema = z.object({
