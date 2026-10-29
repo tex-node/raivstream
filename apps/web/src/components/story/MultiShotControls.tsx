@@ -50,6 +50,10 @@ export function MultiShotControls({
     onSuccess: () => { void refetch(); },
   });
 
+  const stitch = trpc.story.stitchSceneShots.useMutation({
+    onSuccess: () => { void refetch(); },
+  });
+
   const plan = (data?.plan ?? []) as unknown[];
   const clips = (data?.clips ?? []) as ShotClip[];
   const ready = clips.filter((c) => c.status === 'READY' && c.assetUrl);
@@ -119,6 +123,31 @@ export function MultiShotControls({
             </li>
           ))}
         </ul>
+      )}
+
+      {ready.length >= 2 && ready.length === total && !inFlight && (
+        <button
+          type="button"
+          onClick={() => stitch.mutate({ projectId, sceneId })}
+          disabled={stitch.isPending}
+          className="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-[rgba(16,185,129,0.9)] px-3 py-1.5 text-xs font-black text-white disabled:opacity-50"
+        >
+          {stitch.isPending ? <Loader2 className="animate-spin" size={14} /> : null}
+          {stitch.isPending ? 'Stitching…' : 'Stitch Video'}
+        </button>
+      )}
+
+      {stitch.data?.assetUrl && (
+        <p className="mt-2 text-[11px] font-bold text-[#34d399]">
+          Stitched {stitch.data.clipCount} shots ·{' '}
+          <a href={stitch.data.assetUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            open video
+          </a>
+        </p>
+      )}
+
+      {stitch.error && (
+        <p className="mt-2 text-[11px] font-bold text-[var(--noc-magenta)]">{stitch.error.message}</p>
       )}
 
       {generate.error && (
