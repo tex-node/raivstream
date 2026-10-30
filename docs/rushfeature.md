@@ -70,28 +70,38 @@ one shape that serves both a production bible and a reference-element workflow.
 
 **What it changes.** *(Scoped against the read below: this is "promote a field", not "add a
 table" - `CharacterReferenceAsset` already exists with an id, a character relation, status,
-assetUrl, providerModel and an `approvedReferenceAssetId` pointer.)* Three pieces:
+assetUrl, providerModel and an `approvedReferenceAssetId` pointer.)* Three pieces, sequenced so
+the behaviour change is **last and reversible**:
 
 1. **Promote the existing asset to a first-class entity** - `category` (character | environment
-   | prop), `media[]` variants (front / side / full / wardrobe), typed `properties[]`, a
-   `reviewStatus`, `ipDetected`, and a `usageMeta` ledger. Additive columns and a variant table.
-2. **Add user-owned vs performer-owned ownership** - additive, and the seam the Actor Programme
-   would later attach to.
-3. **Replace text injection with ordered reference IDs** - `lockedIdentityBlock` currently
-   reaches the prompt as verbatim text while the asset sits beside it unused for conditioning.
-   The prompt path must consume the reference asset IDs **in order** (reference 1, reference 2),
-   with the text block demoted to the descriptive half.
+   | prop), `medias[]` variants (front / side / full / wardrobe), typed `properties[]`,
+   `reviewStatus`, `ipDetected`, and a `usageMeta` ledger. Additive; **no behaviour change**.
+2. **Add user-owned vs performer-owned ownership** - the Actor Programme seam. Additive; **no
+   behaviour change**.
+3. **Replace `lockedIdentityBlock` text injection with ordered reference IDs at generation time.**
+   This is the only piece that changes every generated scene, and the only part of Phase 1 that
+   can regress output that currently works. It ships **last, behind a flag**, with a baseline
+   captured first: measure the current text-path output against the approved reference (PSNR
+   against the reference, or the existing critic score) before (1) and (2) land, then compare the
+   flag-on path against that baseline. If the output regresses, the flag goes off and the text
+   path stays.
 
-**(1) and (2) look like the work; (3) is the work.** Only (3) changes generated output, and it
-changes it for every scene generated after it ships.
+**(1) and (2) look like the work; (3) is the work.** They have migrations, so they read as the
+phase; only (3) changes what a creator sees. Sequencing them this way makes Phase 1 a promotion
+followed by a behaviour change that can be undone, not a promotion that quietly altered every
+scene.
 
 **Hard rule.** A character shot whose required reference is missing is **refused**, not
 generated from text. Falling back to text is how identity drifts.
 
-**Exit criteria.** A character is created once, reused across scenes, and every generated shot
-records the ordered reference IDs it consumed.
+**Exit criteria.** A character is created once and reused across scenes; every generated shot
+records the ordered reference IDs it consumed; and **the flag-on path matches or beats the
+baseline on the same test, and can be turned off per project.** Without that last clause
+"shipped behind a flag" degrades into "shipped, flag never tested".
 
-**Dependencies.** None beyond Phase 0.
+**Dependencies.** (1) and (2): none beyond Phase 0 — they can start immediately. (3): the
+baseline measurement, which must describe the current text path *before* the additive work
+lands.
 
 **Does not do.** No public actor surface, no verification, no licensing, no casting. The
 performer field is the seam for a later Actor Programme; that marketplace is deferred.
@@ -334,6 +344,11 @@ results are what the Phase 1 and Phase 2 sections above are now scoped against.
    every scene/asset pair, so one change re-renders the film. Per-segment persistence exists
    only in Movie Builder, not in story export. Phase 2 must build the segment cache before any
    take can be spliced, which makes it a **weeks-to-a-month** phase rather than a small one.
+3. **Baseline for Phase 1 piece (3) — not yet taken.** A measurement of the **current text-path
+   output** against the approved reference (PSNR against the reference, or the existing critic
+   score), captured **before** the additive work lands. This is a prerequisite for piece (3)
+   only: (1) and (2) can start immediately, and (3) waits for the baseline. That is the correct
+   dependency - the baseline has to describe the world before the flag exists.
 
 ---
 
