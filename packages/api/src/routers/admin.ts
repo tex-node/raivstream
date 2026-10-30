@@ -1455,6 +1455,15 @@ export const adminRouter = router({
       // status is the media/processing lifecycle; moderationStatus is the review
       // state. Reject blocks the media; approve restores it ONLY if it was blocked
       // - otherwise approving a PROCESSING/FAILED video would clobber its status.
+      //
+      // isPublic is intentionally left true on reject. The visibility gate is
+      // moderationStatus (nonKidsFilter excludes REJECTED); the two fields will
+      // disagree on a rejected row and that is by design. Do not add a second
+      // gate here - if a future query checks isPublic, it must also check
+      // moderationStatus, or rejected videos become visible.
+      //
+      // FLAGGED is a review state, so status is deliberately untouched: a flagged
+      // video stays READY until a human decides. Do not couple them.
       const statusUpdate =
         input.action === 'reject' ? { status: 'BLOCKED' as const } :
         input.action === 'approve' && video.status === 'BLOCKED' ? { status: 'READY' as const } :
