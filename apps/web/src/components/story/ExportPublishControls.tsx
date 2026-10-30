@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Download, Loader2, Play } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { canExportStory } from './exportEligibility';
+import { exportPublishState } from './exportPublishState';
 import { PublishModal, type PublishValues } from '@/components/media/PublishModal';
 
 type ExportRow = {
@@ -54,13 +55,49 @@ export function ExportPublishControls({
   });
 
   const publish = trpc.story.publishExport.useMutation({
-    onSuccess: () => { setPublished(true); setError(null); },
+    onSuccess: async (data) => {
+      setPublished(true);
+      setError(null);
+      void exportVideo.refetch();
+      // On R16, publishing IS the kids-feed intent, so chain the submission. If it
+      // fails the Video row still exists in PENDING and the button falls through to
+      // 'submit' on the next render: publish is durable, submit is retryable.
+      if (isKidsR16) {
+        try {
+          await submitForPublication.mutateAsync({ videoId: data.videoId });
+        } catch {
+          /* surfaced through submitForPublication's own error */
+        }
+      }
+    },
     onError: (err) => setError(err.message),
   });
 
   const row = (latest.data ?? null) as ExportRow | null;
   const isReady = row?.status === 'READY' && Boolean(row.assetUrl);
   const isBusy = Boolean(row) && row!.status !== 'READY' && row!.status !== 'FAILED';
+
+  const isKidsR16 = isR16Session && project.audienceMode === 'KIDS';
+
+  // The Video row publishExport created, plus the kids-review submission. Two
+  // separate facts - see the comment at the button.
+  const exportVideo = trpc.story.getExportVideo.useQuery(
+    { exportId: row?.id ?? '' },
+    { enabled: Boolean(row?.id) && isKidsR16 },
+  );
+
+  const submitForPublication = trpc.video.submitForPublication.useMutation({
+    onSuccess: () => { void exportVideo.refetch(); },
+    onError: (err) => setError(err.message),
+  });
+
+  const publishState = exportPublishState({
+    isR16Session,
+    audienceMode: project.audienceMode,
+    exportStatus: row?.status ?? null,
+    video: exportVideo.data ?? null,
+    loading: exportVideo.isLoading,
+  });
 
   if (!eligible) {
     return (
@@ -93,13 +130,45 @@ export function ExportPublishControls({
           >
             <Play size={16} /> Watch Story
           </a>
-          <button
-            type="button"
-            onClick={() => { setPublished(false); setError(null); setOpen(true); }}
-            className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-sm font-black text-white"
-          >
-            Publish to Feed
-          </button>
+          {/* publishExport writes PENDING (automated scan queue); submitForPublication
+              writes submittedForPublicationAt (creator-requested kids review). Two
+              different queues, two different facts - do not collapse them. */}
+          {isKidsR16 ? (
+            publishState === 'submitted' ? (
+              <span className="text-xs font-bold text-[var(--noc-t4)]">Submitted for review</span>
+            ) : publishState === 'live' ? (
+              <span className="text-xs font-bold text-[#7dd3a0]">Live in the kids feed</span>
+            ) : publishState === 'processing' ? (
+              <span className="text-xs font-bold text-[var(--noc-t4)]">Finishing your film…</span>
+            ) : publishState === 'submit' ? (
+              <button
+                type="button"
+                disabled={submitForPublication.isPending}
+                onClick={() => {
+                  if (exportVideo.data) submitForPublication.mutate({ videoId: exportVideo.data.videoId });
+                }}
+                className="rounded-xl bg-[rgba(79,139,214,0.12)] px-3 py-2 text-sm font-black text-[var(--noc-blue)] disabled:opacity-50"
+              >
+                {submitForPublication.isPending ? 'Submitting…' : 'Submit for review'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setPublished(false); setError(null); setOpen(true); }}
+                className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-sm font-black text-white"
+              >
+                Publish to kids feed
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setPublished(false); setError(null); setOpen(true); }}
+              className="rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-3 py-2 text-sm font-black text-white"
+            >
+              Publish to Feed
+            </button>
+          )}
         </div>
       ) : (
         <div className="mt-2">

@@ -39,7 +39,9 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 // Routes that are not appropriate for the kids (R16) subdomain
-const R16_BLOCKED_ROUTES = ['/generate', '/director', '/story-studio', '/upload', '/credits', '/pricing', '/analytics', '/settings', '/subscription', '/admin', '/create', '/projects', '/avatar', '/series', '/studio'];
+// /library is blocked here to make "no library on R16" enforced intent rather
+// than a convention: publishing on R16 happens in the project workspace.
+const R16_BLOCKED_ROUTES = ['/generate', '/director', '/story-studio', '/upload', '/credits', '/pricing', '/analytics', '/settings', '/subscription', '/admin', '/create', '/projects', '/avatar', '/series', '/studio', '/library'];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

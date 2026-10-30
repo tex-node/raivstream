@@ -9245,4 +9245,44 @@ export const storyRouter = router({
             projectId: input.projectId,
           }),
     ),
+
+  /**
+   * The Video row a published export became, if any.
+   *
+   * publishExport's duplicate guard matches on `mp4Url`, so that equality is the
+   * real link between an export and its Video row - there is no foreign key. This
+   * exists so the R16 button can mirror the guards of submitForPublication
+   * instead of approximating them.
+   */
+  getExportVideo: protectedProcedure
+    .input(z.object({ exportId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const exported = await ctx.prisma.storyVideoExport.findFirst({
+        where: { id: input.exportId, userId: ctx.user.id },
+        select: { assetUrl: true },
+      });
+      // No asset yet, or not the caller's export: both mean "nothing to publish".
+      if (!exported?.assetUrl) return null;
+
+      const video = await ctx.prisma.video.findFirst({
+        where: { creatorId: ctx.user.id, mp4Url: exported.assetUrl },
+        select: {
+          id: true,
+          status: true,
+          moderationStatus: true,
+          submittedForPublicationAt: true,
+        },
+        // Deterministic when historical rows share an mp4Url; publishExport only
+        // prevents new duplicates.
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!video) return null;
+
+      return {
+        videoId: video.id,
+        status: video.status,
+        moderationStatus: video.moderationStatus,
+        submittedForPublicationAt: video.submittedForPublicationAt,
+      };
+    }),
 });
