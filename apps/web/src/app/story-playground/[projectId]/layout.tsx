@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Clapperboard, Loader2, Play, X } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { ExportPublishControls } from '@/components/story/ExportPublishControls';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 import { useUser } from '@/lib/auth';
@@ -149,18 +150,14 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
           )}
 
           {exportStatus === 'READY' && storyVideoExport.data?.id ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex-1">
-                <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-cyan)]">Your story video is ready</p>
-                <p className="text-xs font-semibold text-[var(--noc-t4)]">Watch it or save the MP4.</p>
-              </div>
-              <a href={storyVideoExport.data.assetUrl ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[linear-gradient(90deg,#d946a8,#b25ad9)] px-5 py-3 font-black text-white">
-                <Play size={17} /> Watch Story
-              </a>
-              <a href={`/api/story/export/${storyVideoExport.data.id}/download`} download="my-story.mp4" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--noc-purple)] px-5 py-3 font-black text-white">
-                Save Video
-              </a>
-            </div>
+            // One implementation of Watch / Save / Publish. The bar used to own
+            // its own Watch + Save and had no publish action, which read as "there
+            // is no publish path" on every tab except Overview.
+            <ExportPublishControls
+              project={{ id: projectId, audienceMode: workspace.data?.project?.audienceMode ?? null }}
+              isR16Session={isR16}
+              variant="compact"
+            />
           ) : exportStatus === 'GENERATING' || requestStoryVideoExport.isPending ? (
             <div>
               <p className="text-sm font-black uppercase tracking-wide text-[var(--noc-t4)]">Assembling your story…</p>

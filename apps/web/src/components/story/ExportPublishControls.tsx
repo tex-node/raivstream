@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { Download, Loader2, Play } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { canExportStory } from './exportEligibility';
-import { exportPublishState } from './exportPublishState';
+import { publishSlot } from './exportPublishState';
 import { PublishModal, type PublishValues } from '@/components/media/PublishModal';
 
 type ExportRow = {
@@ -25,9 +25,12 @@ type ExportRow = {
 export function ExportPublishControls({
   project,
   isR16Session,
+  variant = 'full',
 }: {
   project: { id?: string; audienceMode?: string | null };
   isR16Session: boolean;
+  /** compact is the layout bar: same three actions, tighter layout. */
+  variant?: 'full' | 'compact';
 }) {
   const projectId = project.id ?? '';
   // Gate mirrors the server boundary: requestExport refuses both `!isR16` and
@@ -91,7 +94,7 @@ export function ExportPublishControls({
     onError: (err) => setError(err.message),
   });
 
-  const publishState = exportPublishState({
+  const publishState = publishSlot({
     isR16Session,
     audienceMode: project.audienceMode,
     exportStatus: row?.status ?? null,
@@ -122,6 +125,12 @@ export function ExportPublishControls({
         </p>
       ) : isReady ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="w-full text-[11px] font-black uppercase tracking-wide text-[var(--noc-cyan)]">
+            {publishState === 'publish' ? 'Ready to publish'
+              : publishState === 'submitted' ? 'Submitted for review'
+              : publishState === 'live' ? 'Live in the kids feed'
+              : 'Your story video is ready'}
+          </p>
           <a
             href={row!.assetUrl as string}
             target="_blank"
@@ -129,6 +138,13 @@ export function ExportPublishControls({
             className="inline-flex items-center gap-2 rounded-xl bg-[rgba(79,139,214,0.12)] px-3 py-2 text-sm font-black text-[var(--noc-blue)]"
           >
             <Play size={16} /> Watch Story
+          </a>
+          <a
+            href={`/api/story/export/${row!.id}/download`}
+            download="my-story.mp4"
+            className="inline-flex items-center gap-2 rounded-xl bg-[rgba(139,92,246,0.18)] px-3 py-2 text-sm font-black text-[#a78bfa]"
+          >
+            <Download size={16} /> Save
           </a>
           {/* publishExport writes PENDING (automated scan queue); submitForPublication
               writes submittedForPublicationAt (creator-requested kids review). Two
