@@ -274,7 +274,7 @@ export default function ModerationPage() {
               </label>
 
               <div>
-                <label className="mb-1.5 block text-xs text-[var(--noc-t4)]">Reason (optional for approve)</label>
+                <label className="mb-1.5 block text-xs text-[var(--noc-t4)]">Reason (required to reject, optional to approve)</label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -286,7 +286,7 @@ export default function ModerationPage() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleAction(activeVideo, 'reject')}
+                  disabled={!reason.trim()} onClick={() => handleAction(activeVideo, 'reject')}
                   disabled={moderate.isPending}
                   className="flex-1 rounded-xl border border-red-500/30 bg-red-500/15 py-2 text-sm font-semibold text-red-400 transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
                 >
