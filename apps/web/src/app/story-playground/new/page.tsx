@@ -1096,13 +1096,13 @@ export default function StoryPlaygroundPage() {
             onClick={() => setHomeTab('create')}
             className={`rounded-full px-5 py-2 text-sm font-black ${homeTab === 'create' ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-white' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
           >
-            {isR16 ? 'Create Story' : 'Create Story'}
+            Create Story
           </button>
           <button
             onClick={() => setHomeTab('library')}
             className={`rounded-full px-5 py-2 text-sm font-black ${homeTab === 'library' ? 'bg-[linear-gradient(90deg,#d946a8,#b25ad9)] text-white' : 'border border-[rgba(233,233,237,0.10)] bg-[rgba(233,233,237,0.04)] text-[var(--noc-t4)]'}`}
           >
-            {isR16 ? 'My Stories' : 'My Stories'}
+            My Stories
           </button>
         </div>
         {homeTab === 'create' && (<>
