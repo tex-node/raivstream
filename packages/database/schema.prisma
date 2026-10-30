@@ -1325,27 +1325,75 @@ enum CharacterReferenceStatus {
   FAILED
 }
 
+/// A named, typed, reusable identity reference.
+///
+/// `characterId` is optional because a reference can be an environment or a prop.
+/// The schema cannot express "only CHARACTER references may attach to a
+/// StoryCharacterMemory" - a nullable FK plus a default does not forbid it - so
+/// that rule is enforced in the service layer. Without it, making the FK nullable
+/// would be a loosening rather than an extension.
 model CharacterReferenceAsset {
-  id              String                   @id @default(cuid())
-  characterId     String
-  character       StoryCharacterMemory     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id              String                        @id @default(cuid())
+  characterId     String?
+  character       StoryCharacterMemory?         @relation(fields: [characterId], references: [id], onDelete: Cascade)
   projectId       String
 
-  status          CharacterReferenceStatus @default(PENDING)
+  category        CharacterReferenceCategory    @default(CHARACTER)
+  status          CharacterReferenceStatus      @default(PENDING)
   assetUrl        String?
   prompt          String
   negativePrompt  String?
-  providerModel   String                   @default("FLUX2")
+  providerModel   String                        @default("FLUX2")
   generationJobId String?
   errorMessage    String?
-  isLatest        Boolean                  @default(false)
+  isLatest        Boolean                       @default(false)
 
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  /// Typed key-values: [{ key, type: 'text'|'multi_select', values: string[] }]
+  properties      Json?
+  /// Tri-state: null = unchecked, true = flagged, false = clean.
+  ipDetected      Boolean?
+  reviewStatus    CharacterReferenceReviewStatus @default(PENDING)
+  /// Denormalised on use; generation counts are DERIVED from job records, never
+  /// stored as counters (the durationSeconds lesson).
+  lastUsedAt      DateTime?
+  lastJobId       String?
+
+  medias          CharacterReferenceMedia[]
+
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
 
   @@index([characterId, isLatest])
   @@index([projectId, status])
+  @@index([projectId, category])
   @@map("character_reference_assets")
+}
+
+model CharacterReferenceMedia {
+  id          String                 @id @default(cuid())
+  referenceId String
+  reference   CharacterReferenceAsset @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  /// front | side | full | wardrobe | location | prop
+  kind        String
+  assetUrl    String
+  width       Int?
+  height      Int?
+  createdAt   DateTime               @default(now())
+
+  @@index([referenceId])
+  @@map("character_reference_media")
+}
+
+enum CharacterReferenceCategory {
+  CHARACTER
+  ENVIRONMENT
+  PROP
+}
+
+enum CharacterReferenceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum BatchGenerationRunStatus {
