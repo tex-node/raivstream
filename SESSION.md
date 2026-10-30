@@ -2352,3 +2352,4 @@ Test suite: `packages/api/src/lib/storyIntelligence/__tests__/educationalContent
   confidence; Sentry not configured).
 - Process change: docs/operations/migration-runbook.md — Check C-1 (branch vs.
   target-branch migration state) added after the branch divergence was caught.
+- Moderation policy decision (2026-10-30): self-approval by an account holding both creator and moderator roles is permitted by policy; the control is the ModerationLog audit trail (automated=false, acting moderatorId, queryable by video). Documented in docs/operations/moderation-policy.md#self-approval.

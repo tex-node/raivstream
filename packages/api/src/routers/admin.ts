@@ -1465,6 +1465,11 @@ export const adminRouter = router({
             ...statusUpdate,
           },
         }),
+        // Self-approval is permitted by policy: an account holding both creator and
+        // moderator roles may approve/reject its own content. The control is this
+        // audit trail - every action writes automated=false + the acting moderatorId,
+        // queryable per video. See docs/operations/moderation-policy.md#self-approval.
+        // Do not add a creatorId === moderatorId guard without changing that policy.
         ctx.prisma.moderationLog.create({
           data: {
             videoId:     input.videoId,
