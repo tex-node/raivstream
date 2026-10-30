@@ -22,6 +22,8 @@ export type OwnedAsset = {
   createdAt: Date;
   source: 'story' | 'studio' | 'upload' | 'generated' | 'export';
   status?: string;
+  /** Present only for source: 'export': the StoryVideoExport row to publish. */
+  exportId?: string;
 };
 
 export type OwnedAssetsInput = {
@@ -176,6 +178,10 @@ export async function fetchOwnedAssets(
       title: projectTitle ?? 'Final export',
       createdAt: exported.createdAt as unknown as Date,
       source: 'export',
+      // The list query already filters to READY, but the UI mirrors the server
+      // guard (publishExport requires READY + assetUrl) rather than trusting it.
+      status: 'READY',
+      exportId: String(exported.id),
     });
   }
 
