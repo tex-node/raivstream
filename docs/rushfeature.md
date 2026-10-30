@@ -68,15 +68,22 @@ claims to improve actually works on both surfaces.
 **Goal.** Replace re-described identity text with named, typed, reusable reference assets —
 one shape that serves both a production bible and a reference-element workflow.
 
-**What it changes.**
-- A new reference entity with `category` (character | environment | prop), `name`,
-  `displayName`, `medias[]` (front / side / full / wardrobe variants), typed `properties[]`
-  (text and multi-select), `reviewStatus`, `ipDetected`, and a `usageMeta` ledger (generation
-  count, last used, last job).
-- **Ownership from day one**: user-owned vs performer-owned, so licensing can attach later
-  without a migration of meaning.
-- Track D's reference-conditioned edit path becomes the renderer; the ordered reference array
-  becomes its input.
+**What it changes.** *(Scoped against the read below: this is "promote a field", not "add a
+table" - `CharacterReferenceAsset` already exists with an id, a character relation, status,
+assetUrl, providerModel and an `approvedReferenceAssetId` pointer.)* Three pieces:
+
+1. **Promote the existing asset to a first-class entity** - `category` (character | environment
+   | prop), `media[]` variants (front / side / full / wardrobe), typed `properties[]`, a
+   `reviewStatus`, `ipDetected`, and a `usageMeta` ledger. Additive columns and a variant table.
+2. **Add user-owned vs performer-owned ownership** - additive, and the seam the Actor Programme
+   would later attach to.
+3. **Replace text injection with ordered reference IDs** - `lockedIdentityBlock` currently
+   reaches the prompt as verbatim text while the asset sits beside it unused for conditioning.
+   The prompt path must consume the reference asset IDs **in order** (reference 1, reference 2),
+   with the text block demoted to the descriptive half.
+
+**(1) and (2) look like the work; (3) is the work.** Only (3) changes generated output, and it
+changes it for every scene generated after it ships.
 
 **Hard rule.** A character shot whose required reference is missing is **refused**, not
 generated from text. Falling back to text is how identity drifts.
@@ -96,12 +103,21 @@ performer field is the seam for a later Actor Programme; that marketplace is def
 **Goal.** Make a scene's video a **take with a revision**, so regenerating one shot does not
 invalidate the whole film.
 
-**What it changes.**
-- Scene assets gain revision/take identity (revision, take number, parent take).
-- The export references **specific per-scene asset IDs**, not only a whole-film hash.
-- Regeneration semantics with an idempotency key and an expected revision, so a retry is safe
-  and a conflicting regenerate is a typed refusal rather than a fork.
-- **Incremental assembly**: splicing one scene's new take instead of re-rendering every scene.
+**What it changes.** *(Scoped against the read below: the assembly path is a single re-render
+today, so this is the month end of the plan.)* Three things, in this order:
+
+1. **Per-scene segment persistence for story export.** `renderOutputDerivative` builds one
+   filter graph over all scenes and uploads a single `out.mp4`; there is no per-scene artefact.
+   Movie Builder already persists segments per job - the pattern exists, it has simply never
+   been applied to the story export path.
+2. **Re-assembly by splicing one new take** into the existing segments instead of re-rendering
+   every scene. The export must reference specific per-scene asset IDs rather than only a
+   whole-film hash, which today re-renders everything when one scene changes.
+3. **Revision/take semantics on top** - revision, take number, parent take, idempotency key,
+   expected revision, typed conflicts - so a retry is safe and a conflicting regenerate is
+   refused rather than forking the film.
+
+(1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
 **Exit criteria.** Change scene 3 → only scene 3 re-renders and the film re-assembles; the
 other scenes keep their existing takes.
@@ -304,14 +320,20 @@ promised.
 
 ## Prerequisite reads
 
-Two reads must happen before Phases 1–2 are scoped as work. Both are inspections, not
-estimates, and neither is optional.
+**Both reads are complete (2026-10-30).** They were prerequisites, not estimates, and their
+results are what the Phase 1 and Phase 2 sections above are now scoped against.
 
-1. **Track D's current shape** — is a reference already stored as an asset with an ID, or only
-   as free text in the identity block? This decides whether Phase 1 is "add a table" or
-   "promote an existing field."
-2. **Export incrementality** — can the assembly path splice one scene's new take, or only
-   re-render the whole film? This decides whether Phase 2 is weeks or a month.
+1. **Track D's reference shape — answered: references are already assets with IDs.**
+   `CharacterReferenceAsset` carries `id`, `characterId` → `StoryCharacterMemory`, `status`,
+   `assetUrl`, `prompt`, `providerModel` (default FLUX2) and `isLatest`, and the character
+   carries `approvedReferenceAssetId` / `approvedAt`. Phase 1 is therefore a **promotion**, not
+   a new table - with the caveat that the *text* path (`lockedIdentityBlock`) is still what
+   reaches the prompt.
+2. **Export incrementality — answered: full re-render today.** `renderOutputDerivative`
+   concatenates every scene in one filter graph and uploads one `out.mp4`; `sourceHash` covers
+   every scene/asset pair, so one change re-renders the film. Per-segment persistence exists
+   only in Movie Builder, not in story export. Phase 2 must build the segment cache before any
+   take can be spliced, which makes it a **weeks-to-a-month** phase rather than a small one.
 
 ---
 
