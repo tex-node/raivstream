@@ -28,6 +28,7 @@ import {
   sanitizeR16AssetPayload,
   selectStorybookImageForScene,
   type CreativeCriticInput,
+  promoteForReview,
 } from '../lib/creativeCritic';
 import { DEFAULT_R16_STORY_VISUAL_STYLE, DEFAULT_STORY_VISUAL_STYLE, enforceR16Style, isR16VisualStyle, normaliseStoryVisualStyle, styleLabel, stylePromptBlock, type StoryVisualStyleKey } from '../lib/storyVisualStyles';
 import { snapshotChapterVersion } from '../lib/story/chapterVersioning';
@@ -6260,6 +6261,10 @@ export const storyRouter = router({
         where: { id: input.assetId, projectId: input.projectId, sceneId: input.sceneId, userId: ctx.user.id, status: 'READY', deletedAt: null },
       });
       if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ready scene image not found' });
+      // creativeStatus is the REVIEW lifecycle, status is the media lifecycle, and
+      // this mutation only checked the second: a swept DRAFT asset would be scored
+      // and still claim it is unreviewed.
+      await promoteForReview(ctx.prisma as never, input.assetId);
       const existingCount = await (ctx.prisma as any).creativeCriticRun.count({ where: { assetId: asset.id } });
       const retryAttempt = Math.min(existingCount, 99);
       const run = await createCreativeCriticRun(ctx.prisma, {
