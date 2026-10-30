@@ -73,3 +73,23 @@ describe('withdrawPublication — general feed', () => {
     expect(prisma.updates[0]).toEqual({ withdrawnAt: null });
   });
 });
+
+describe('resubmitPublication — a rejected general video returns to review', () => {
+  it('REJECTED general video goes back to PENDING with the reason cleared', async () => {
+    const prisma = makePrisma({ ...generalLive, moderationStatus: 'REJECTED', moderationReason: 'not suitable' });
+    await caller(prisma).video.resubmitPublication({ videoId: 'v1' });
+    expect(prisma.updates[0]).toMatchObject({
+      withdrawnAt: null,
+      moderationReason: null,
+      moderationStatus: 'PENDING',
+    });
+    // A general video has no kids submission, so it must not claim one.
+    expect(prisma.updates[0]).not.toHaveProperty('submittedForPublicationAt');
+  });
+
+  it('an APPROVED withdrawn general video simply comes back, still APPROVED', async () => {
+    const prisma = makePrisma({ ...generalLive, withdrawnAt: new Date() });
+    await caller(prisma).video.resubmitPublication({ videoId: 'v1' });
+    expect(prisma.updates[0]).toEqual({ withdrawnAt: null });
+  });
+});

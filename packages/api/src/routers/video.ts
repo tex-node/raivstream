@@ -373,7 +373,8 @@ export const videoRouter = router({
       }
 
       // Kids videos re-enter the review queue. A general-feed video has no queue
-      // to re-enter: clearing withdrawnAt restores it to the feed as it was.
+      // to re-enter - clearing withdrawnAt restores it as it was - unless it was
+      // REJECTED, which must go back through review rather than silently clear.
       const updated = await ctx.prisma.video.update({
         where: { id: video.id },
         data: video.isKidsSafe
@@ -383,7 +384,9 @@ export const videoRouter = router({
               moderationReason: null,
               moderationStatus: 'PENDING',
             }
-          : { withdrawnAt: null },
+          : video.moderationStatus === 'REJECTED'
+            ? { withdrawnAt: null, moderationReason: null, moderationStatus: 'PENDING' }
+            : { withdrawnAt: null },
         select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
       });
       await analytics.track(ctx.prisma, { event: 'video_publication_resubmitted', userId: ctx.user.id, properties: { videoId: video.id } });

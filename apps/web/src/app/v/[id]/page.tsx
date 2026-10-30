@@ -169,10 +169,16 @@ function PublicationControl({ videoId }: { videoId: string }) {
     withdraw.mutate({ videoId });
   };
 
-  // General-feed videos have no review queue: live means publishedAt, and
-  // putting it back only clears withdrawnAt (the API keeps them APPROVED).
+  // General-feed videos have no review queue: live means publishedAt. A REJECTED
+  // one must go back through review, so it is checked before "live" - otherwise a
+  // blocked video would render as live with a Withdraw button.
   const body = !data.isKidsSafe ? (
-    data.withdrawnAt ? (
+    data.moderationStatus === 'REJECTED' ? (
+      <>
+        <p className="text-sm text-[var(--noc-t4)]">Not approved{data.moderationReason ? `: ${data.moderationReason}` : '.'}</p>
+        <button className={btn} disabled={busy} onClick={() => resubmit.mutate({ videoId })}>Ask for another look</button>
+      </>
+    ) : data.withdrawnAt ? (
       <>
         <p className="text-sm text-[var(--noc-t4)]">This video is not in the feed.</p>
         <button className={btn} disabled={busy} onClick={() => resubmit.mutate({ videoId })}>Put it back</button>
