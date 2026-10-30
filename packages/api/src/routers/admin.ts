@@ -1452,8 +1452,13 @@ export const adminRouter = router({
         input.action === 'reject'  ? 'REJECTED'  :
         'FLAGGED';
 
-      // For rejected videos, also block them from the feed
-      const statusUpdate = input.action === 'reject' ? { status: 'BLOCKED' as const } : {};
+      // status is the media/processing lifecycle; moderationStatus is the review
+      // state. Reject blocks the media; approve restores it ONLY if it was blocked
+      // - otherwise approving a PROCESSING/FAILED video would clobber its status.
+      const statusUpdate =
+        input.action === 'reject' ? { status: 'BLOCKED' as const } :
+        input.action === 'approve' && video.status === 'BLOCKED' ? { status: 'READY' as const } :
+        {};
 
       await ctx.prisma.$transaction([
         ctx.prisma.video.update({
