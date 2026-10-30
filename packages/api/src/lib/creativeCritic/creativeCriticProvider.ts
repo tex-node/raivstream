@@ -68,9 +68,9 @@ class OpenAICompatibleCreativeCriticProvider {
                   '- overallScore: integer 0-100, your overall judgement of this image as a story illustration',
                   '- scores: object with integer 0-100 values for exactly these keys: characterIdentity, continuity, composition, lighting, emotion, visualStyle, environment, storyAlignment, sceneClarity, technicalQuality',
                   '- strengths: array of 1-3 short strings describing what works',
-                  '- issues: array of {category: string, severity: "LOW"|"MEDIUM"|"HIGH", description: string}',
+                  '- issues: array of {category: "CHARACTER" | "CONTINUITY" | "COMPOSITION" | "LIGHTING" | "EMOTION" | "STYLE" | "ENVIRONMENT" | "STORY" | "CLARITY" | "TECHNICAL", severity: "LOW" | "MEDIUM" | "HIGH", description: string}',
                   '- improvementPlan: object with string-array values for exactly: character, composition, lighting, emotion, style, environment, story, technical',
-                  '- recommendation: one of "APPROVE" | "REVISE" | "RETRY"',
+                  '- recommendation: exactly one of "APPROVE" | "SUGGEST_REFINEMENT" | "REGENERATE"',
                   '- confidence: integer 0-100',
                   'Score what you actually observe in this specific image. The key names above are a schema, not values: do not copy them as numbers, and do not default every dimension to the same score unless the image genuinely merits it.',
                   'An image with a wrong or drifting character, visible text or UI overlays, distorted anatomy, duplicated characters, or the wrong aspect ratio must score low on the dimensions it affects, and must not be recommended for approval.',
@@ -99,7 +99,23 @@ class OpenAICompatibleCreativeCriticProvider {
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new Error('Creative critic provider returned no content');
-    const parsed = creativeCriticResultSchema.parse(parseJsonObject(content));
+    // Models drift on casing even when the schema is explicit ('continuity' for
+    // 'CONTINUITY'), and a rejected response loses a whole run. Normalise the
+    // enumerated fields before validation rather than punishing the model for it.
+    const raw = parseJsonObject(content) as Record<string, unknown>;
+    const upper = (v: unknown) => (typeof v === 'string' ? v.trim().toUpperCase() : v);
+    const normalised = {
+      ...raw,
+      recommendation: upper(raw.recommendation),
+      issues: Array.isArray(raw.issues)
+        ? (raw.issues as Array<Record<string, unknown>>).map((issue) => ({
+            ...issue,
+            category: upper(issue.category),
+            severity: upper(issue.severity),
+          }))
+        : raw.issues,
+    };
+    const parsed = creativeCriticResultSchema.parse(normalised);
     return {
       provider: 'openai-compatible',
       model: this.model,
