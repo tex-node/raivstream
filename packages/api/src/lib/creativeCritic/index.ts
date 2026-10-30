@@ -14,3 +14,4 @@ export * from './styleCritic';
 export * from './environmentCritic';
 export * from './storyCritic';
 export * from './technicalQualityCritic';
+export { promoteForReview } from './promoteForReview';
