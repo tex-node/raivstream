@@ -27,7 +27,7 @@ export function ExportPublishControls({
   isR16Session,
   variant = 'full',
 }: {
-  project: { id?: string; audienceMode?: string | null };
+  project: { id?: string; title?: string | null; audienceMode?: string | null };
   isR16Session: boolean;
   /** compact is the layout bar: same three actions, tighter layout. */
   variant?: 'full' | 'compact';
@@ -209,7 +209,7 @@ export function ExportPublishControls({
 
       <PublishModal
         open={open}
-        defaultTitle="My story"
+        defaultTitle={project.title || 'My story'}
         pending={publish.isPending}
         error={error}
         published={published}
