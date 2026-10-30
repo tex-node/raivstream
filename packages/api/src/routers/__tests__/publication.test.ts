@@ -93,7 +93,7 @@ describe('withdrawPublication', () => {
 describe('resubmitPublication', () => {
   it('succeeds from REJECTED (clears reason + withdrawnAt, back to PENDING)', async () => {
     const prisma = makePrisma();
-    prisma.video.findFirst.mockResolvedValue({ ...READY_ROW, moderationStatus: 'REJECTED', moderationReason: 'nope' });
+    prisma.video.findFirst.mockResolvedValue({ ...{ ...READY_ROW, isKidsSafe: true }, moderationStatus: 'REJECTED', moderationReason: 'nope' });
     const caller = videoRouter.createCaller(r16ctx(prisma));
     await caller.resubmitPublication({ videoId: 'v1' });
     const data = prisma.video.update.mock.calls[0]![0].data as Record<string, unknown>;

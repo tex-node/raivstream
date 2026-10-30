@@ -61,7 +61,7 @@ export default function VideoPage() {
           />
         </div>
       </div>
-      {isOwner && isR16 && <PublicationControl videoId={id} />}
+      {isOwner && <PublicationControl videoId={id} />}
       {isOwner && !isR16 && <ShareMenu videoId={id} />}
     </div>
   );
@@ -164,7 +164,28 @@ function PublicationControl({ videoId }: { videoId: string }) {
   const btn =
     'px-4 py-2 rounded-full text-sm font-semibold text-white bg-[var(--noc-magenta)] hover:opacity-90 disabled:opacity-40';
 
-  const body = data.withdrawnAt ? (
+  const confirmWithdraw = () => {
+    if (typeof window !== 'undefined' && !window.confirm('Take this video off the feed? You can put it back later.')) return;
+    withdraw.mutate({ videoId });
+  };
+
+  // General-feed videos have no review queue: live means publishedAt, and
+  // putting it back only clears withdrawnAt (the API keeps them APPROVED).
+  const body = !data.isKidsSafe ? (
+    data.withdrawnAt ? (
+      <>
+        <p className="text-sm text-[var(--noc-t4)]">This video is not in the feed.</p>
+        <button className={btn} disabled={busy} onClick={() => resubmit.mutate({ videoId })}>Put it back</button>
+      </>
+    ) : data.publishedAt ? (
+      <>
+        <p className="text-sm text-[var(--noc-t4)]">Live in the main feed.</p>
+        <button className={btn} disabled={busy} onClick={confirmWithdraw}>Withdraw from feed</button>
+      </>
+    ) : (
+      <p className="text-sm text-[var(--noc-t4)]">This video is not in the feed yet.</p>
+    )
+  ) : data.withdrawnAt ? (
     <>
       <p className="text-sm text-[var(--noc-t4)]">This video is not on Raivstream Kids.</p>
       <button className={btn} disabled={busy} onClick={() => resubmit.mutate({ videoId })}>Send again</button>
@@ -172,7 +193,7 @@ function PublicationControl({ videoId }: { videoId: string }) {
   ) : data.moderationStatus === 'APPROVED' ? (
     <>
       <p className="text-sm text-[var(--noc-t4)]">Live on Raivstream Kids.</p>
-      <button className={btn} disabled={busy} onClick={() => withdraw.mutate({ videoId })}>Take it down</button>
+      <button className={btn} disabled={busy} onClick={confirmWithdraw}>Take it down</button>
     </>
   ) : data.moderationStatus === 'REJECTED' ? (
     <>

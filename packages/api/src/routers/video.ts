@@ -329,15 +329,21 @@ export const videoRouter = router({
     }),
 
   /** Withdraw a submitted/live video from the R16 timeline (soft; keeps the row). */
-  withdrawPublication: r16Procedure
+  // Withdrawal is available on BOTH surfaces. A creator who can publish to the
+  // main feed must be able to take it back; ownership (findFirst creatorId) is
+  // the real scope, not the tier. Previously r16Procedure made this R16-only,
+  // which was a one-way door on the less gated surface.
+  withdrawPublication: protectedProcedure
     .input(z.object({ videoId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const video = await ctx.prisma.video.findFirst({
         where: { id: input.videoId, creatorId: ctx.user.id },
       });
       if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
-      if (!video.submittedForPublicationAt) {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This video has not been sent for review.' });
+      // "Live" means submitted for kids review OR published to the main feed -
+      // general videos never get submittedForPublicationAt.
+      if (!video.submittedForPublicationAt && !video.publishedAt) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This video is not live yet.' });
       }
       if (video.withdrawnAt) {
         throw new TRPCError({ code: 'CONFLICT', message: 'This video is already withdrawn.' });
@@ -355,7 +361,7 @@ export const videoRouter = router({
     }),
 
   /** Resubmit a rejected/withdrawn video: a fresh review cycle (clears the reason). */
-  resubmitPublication: r16Procedure
+  resubmitPublication: protectedProcedure
     .input(z.object({ videoId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const video = await ctx.prisma.video.findFirst({
@@ -366,14 +372,18 @@ export const videoRouter = router({
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only a not-approved or withdrawn video can be sent again.' });
       }
 
+      // Kids videos re-enter the review queue. A general-feed video has no queue
+      // to re-enter: clearing withdrawnAt restores it to the feed as it was.
       const updated = await ctx.prisma.video.update({
         where: { id: video.id },
-        data: {
-          submittedForPublicationAt: new Date(),
-          withdrawnAt: null,
-          moderationReason: null,
-          moderationStatus: 'PENDING',
-        },
+        data: video.isKidsSafe
+          ? {
+              submittedForPublicationAt: new Date(),
+              withdrawnAt: null,
+              moderationReason: null,
+              moderationStatus: 'PENDING',
+            }
+          : { withdrawnAt: null },
         select: { id: true, moderationStatus: true, submittedForPublicationAt: true },
       });
       await analytics.track(ctx.prisma, { event: 'video_publication_resubmitted', userId: ctx.user.id, properties: { videoId: video.id } });
@@ -395,6 +405,8 @@ export const videoRouter = router({
           submittedForPublicationAt: true,
           withdrawnAt: true,
           moderationReason: true,
+          publishedAt: true,
+          isKidsSafe: true,
         },
       });
       if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Video not found.' });
