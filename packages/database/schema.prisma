@@ -1348,6 +1348,15 @@ model CharacterReferenceAsset {
   errorMessage    String?
   isLatest        Boolean                       @default(false)
 
+  /// Owner of the reference (the account). Backfilled from the project's owner;
+  /// a reference with an owner and a null userId would be the "data says
+  /// something the code wouldn't produce" shape.
+  userId          String?
+  /// The performer whose likeness this is, when one exists. Deliberately a plain
+  /// column: it becomes a FK to a Performer entity once the Actor Programme's
+  /// licensing flow exists. Piece (2) must not invent that shape.
+  performerId     String?
+
   /// Typed key-values: [{ key, type: 'text'|'multi_select', values: string[] }]
   properties      Json?
   /// Tri-state: null = unchecked, true = flagged, false = clean.
@@ -1366,6 +1375,7 @@ model CharacterReferenceAsset {
   @@index([characterId, isLatest])
   @@index([projectId, status])
   @@index([projectId, category])
+  @@index([userId])
   @@map("character_reference_assets")
 }
 
