@@ -286,8 +286,8 @@ export default function ModerationPage() {
 
               <div className="flex gap-2">
                 <button
-                  disabled={!reason.trim()} onClick={() => handleAction(activeVideo, 'reject')}
-                  disabled={moderate.isPending}
+                  onClick={() => handleAction(activeVideo, 'reject')}
+                  disabled={moderate.isPending || !reason.trim()}
                   className="flex-1 rounded-xl border border-red-500/30 bg-red-500/15 py-2 text-sm font-semibold text-red-400 transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
                 >
                   Reject
