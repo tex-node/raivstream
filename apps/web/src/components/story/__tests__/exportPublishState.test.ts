@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { exportPublishState } from '../exportPublishState';
+import { exportPublishState, publishSlot } from '../exportPublishState';
 
 const video = (over: Partial<{ status: string; moderationStatus: string; submittedForPublicationAt: Date | null }> = {}) => ({
   status: 'READY',
@@ -52,5 +52,24 @@ describe('exportPublishState', () => {
 
   it('offers submit for a published, READY, unsubmitted video', () => {
     expect(exportPublishState({ ...base, video: video() })).toBe('submit');
+  });
+});
+
+describe('publishSlot — surface eligibility vs publish state', () => {
+  const ready = { ...base, exportStatus: 'READY', video: null };
+
+  it('hides publishing for a GENERAL film on the main app (bar keeps Watch + Save)', () => {
+    expect(publishSlot({ ...ready, isR16Session: false, audienceMode: 'GENERAL' })).toBe('hidden');
+  });
+
+  it('hides publishing for a KIDS film off the R16 surface', () => {
+    expect(publishSlot({ ...ready, isR16Session: false, audienceMode: 'KIDS' })).toBe('hidden');
+  });
+
+  it('defers to exportPublishState on the eligible surface', () => {
+    const cases = [null, video({ submittedForPublicationAt: new Date() }), video({ moderationStatus: 'APPROVED' }), video()];
+    for (const caseVideo of cases) {
+      expect(publishSlot({ ...ready, video: caseVideo })).toBe(exportPublishState({ ...ready, video: caseVideo }));
+    }
   });
 });

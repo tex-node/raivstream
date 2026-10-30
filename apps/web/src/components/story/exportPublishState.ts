@@ -1,3 +1,5 @@
+import { canExportStory } from './exportEligibility';
+
 /**
  * Which control the R16 workspace should show for a published export.
  *
@@ -41,4 +43,29 @@ export function exportPublishState(input: {
   if (input.video.moderationStatus === 'APPROVED') return 'live';
   if (input.video.status !== 'READY') return 'processing';
   return 'submit';
+}
+/**
+ * The publish slot as a surface renders it.
+ *
+ * Two questions, kept separate on purpose: `canExportStory` asks whether this
+ * surface may offer publishing at all (the bar must still show Watch + Save for
+ * a GENERAL film on the main app), and `exportPublishState` asks what the
+ * publish action's state is. Presentation never leaks into either.
+ */
+export function publishSlot(input: {
+  isR16Session: boolean;
+  audienceMode: string | null | undefined;
+  exportStatus: string | null;
+  video: {
+    status: string;
+    moderationStatus: string;
+    submittedForPublicationAt: Date | null;
+  } | null;
+  loading: boolean;
+}): ExportPublishState {
+  const eligible = canExportStory({
+    isR16Session: input.isR16Session,
+    audienceMode: input.audienceMode,
+  });
+  return eligible ? exportPublishState(input) : 'hidden';
 }
