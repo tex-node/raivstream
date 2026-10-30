@@ -51,9 +51,16 @@ claims to improve actually works on both surfaces.
 **State.**
 - Admin-transition audit — **complete**. One admin write site, no third instance of the
   "sets one axis, forgets the paired one" class; the axis rule is documented at the write site.
-- R16/KIDS acceptance render (export → publish → moderation → feed) — **not done**. The KIDS
-  story is complete at nine scenes but no scene has rendered clips yet, so clips precede any
-  export. This costs real credits and is a first-run validation, not a regression.
+- R16/KIDS acceptance render (export → publish → moderation → feed) — **not done, and blocked
+  on credits rather than on code.** Measured state (2026-10-30): the KIDS story is complete at
+  nine scenes; it has **zero video assets** and **eleven FAILED image assets**, every one with
+  the same message — *"Insufficient credits — you need 80 but have 0"* — all within thirty
+  seconds of each other, with `generationJobId` null on every row (they failed at the credit
+  gate, before any provider call). The account balance is 0.
+  The real sequence is: **top up → nine scene images → nine scene clips → export → publish.**
+  An earlier draft said "~720 credits for nine clips" — wrong twice: 720 is nine *images* at 80
+  credits, and it assumed the images already existed. Budget images **and** clips, and expect to
+  start by funding the account.
 
 **Exit criteria.** Both the GENERAL and R16 surfaces proven end-to-end.
 
@@ -182,6 +189,12 @@ curated surface, with its revenue terms recorded.
 
 **Does not do.** No editing surface, no paid subscriptions, no actor marketplace, no partner
 programme. It is the viewing and submission loop, nothing more.
+
+**The publishable unit is the assembled film.** Scene assets are not feed records, and there is
+no scene-asset → feed bridge on either surface: `publishExport` is the only story-to-feed path,
+by design. Publishing individual scene videos would need its own moderation, its own kids-policy
+answer (is a single scene kids-safe when the film was reviewed as a whole?), and its own feed
+semantics (one story = nine feed items). That is a different product, not a missing feature.
 
 ---
 
