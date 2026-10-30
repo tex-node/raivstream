@@ -54,7 +54,9 @@ function makePrisma() {
       }),
       updateMany: vi.fn(async () => ({ count: 0 })),
       findFirst: vi.fn(async ({ where }: { where: { id: string; characterId: string; projectId: string } }) =>
-        where.id === 'ref-1' && where.characterId === 'ch1' && where.projectId === 'p1' ? { id: where.id } : null,
+        where.id === 'ref-1' && where.characterId === 'ch1' && where.projectId === 'p1'
+          ? { id: where.id, category: mockAssetCategory }
+          : null,
       ),
       findMany: vi.fn(async ({ where, select }: { where: { characterId: string }; select?: Record<string, boolean> }) =>
         refs
@@ -123,6 +125,10 @@ describe('generateCharacterReference', () => {
   });
 });
 
+// The rule the schema cannot express: only CHARACTER references may attach to a
+// character, so the approve path has to check the kind itself.
+let mockAssetCategory = 'CHARACTER';
+
 describe('approveCharacterReference', () => {
   it('requires ownership', async () => {
     const prisma = makePrisma();
@@ -143,6 +149,19 @@ describe('approveCharacterReference', () => {
     expect(prisma.storyCharacterMemory.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ approvedReferenceAssetId: 'ref-1' }) }),
     );
+  });
+
+  it('refuses a non-character reference', async () => {
+    const prisma = makePrisma();
+    // Clear any approval left by an earlier test: the early-return branch would
+    // otherwise short-circuit before the category check.
+    prisma.__char.approvedReferenceAssetId = null;
+    mockAssetCategory = 'PROP';
+    await expect(
+      storyRouter.createCaller(ctx(prisma)).approveCharacterReference({ characterId: 'ch1', assetId: 'ref-1' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(prisma.storyCharacterMemory.update).not.toHaveBeenCalled();
+    mockAssetCategory = 'CHARACTER';
   });
 
   it('is idempotent for the same asset (no update)', async () => {

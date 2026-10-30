@@ -5266,9 +5266,14 @@ export const storyRouter = router({
 
       const asset = await ctx.prisma.characterReferenceAsset.findFirst({
         where: { id: input.assetId, characterId: character.id, projectId: character.projectId, status: 'READY' },
-        select: { id: true },
+        select: { id: true, category: true },
       });
       if (!asset) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That reference does not belong to this character.' });
+      // characterId is now nullable, so the FK alone no longer proves the kind.
+      // Only character references may be a character's approved identity.
+      if (asset.category !== 'CHARACTER') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only character references can be attached to a character.' });
+      }
 
       return ctx.prisma.storyCharacterMemory.update({
         where: { id: character.id },
