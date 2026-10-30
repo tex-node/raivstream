@@ -1,216 +1,329 @@
-# Rush feature roadmap
+# Rush Parity Roadmap
 
-**North star:** a Raivstream production is a staged document where the unit is a **shot with
-revision history**, continuity is carried by **named reference assets** rather than
-re-described text, and **regenerating one shot does not fork the rest of the film**.
+A planning document. It records the ordered phases by which Raivstream can match the promise
+of rush.film, and names explicitly what is deferred and why. No phase here is complete; this
+is a plan, not a changelog.
 
-## What Rush's promise actually is
+## What this document is not
 
-From the inspected bundle: Story → Treatment → Outline → Script → Scene breakdown → Cast →
-Look → Coverage → Storyboard → live, with:
+Not an implementation spec, not a commitment, and not a schedule. The phases are **ordered, not
+dated**. Two prerequisite reads have not happened yet, which is exactly why nothing here carries
+a date: the size of Phases 1 and 2 is unknown until they are done.
 
-- explicit **per-stage approval**;
-- shots as **revisioned takes**;
-- **ordered reference-image tokens** for continuity;
-- a **scope-aware director** (Rewrite the screenplay / Direct Scene 12 / Direct Shot 12C /
-  Update Bible).
+---
 
-Auto mode (one sentence → film) is the on-ramp; Manual mode (bring your script) is the
-professional path.
+## Framing: the promise has two halves
+
+Rush's inspected promise is not only a film-production tool. It has two sides.
+
+**The Studio half — staged film production.** A production is a *document* with stages
+(Story → Treatment → Outline → Script → Scene breakdown → Cast → Look → Coverage → Storyboard
+→ live). The unit of work is a **shot with revisioned takes**, continuity is carried by
+**ordered reference-asset IDs** rather than text re-described in every prompt, and a
+**scope-aware director** can address the screenplay, a scene, a shot, or the bible.
+
+**The Watch half — consumption and distribution.** A curated viewing surface, filmmaker
+profiles and public handles, a film-submission pipeline with revenue-share terms, a licensed
+actor supply side, a free editor, a separate manual studio, a twelve-lesson academy, and a
+creator partnership programme. That half is not decoration; it is what turns finished films
+into an audience and a business.
+
+### Raivstream's position
+
+Raivstream's gap to that promise is **not raw model access** — it owns its integrations
+(FLUX2, MiniMax H3, ElevenLabs) where Rush orchestrates third-party providers. Track D already
+produces reference-conditioned scene stills. The 5.0 creative layer already has
+Brief → Bible → Plan → Preview → Produce → Review → Director → Approval → Outputs, though it
+is flagged off. The Academy exists. Movie Builder exists for stills-based assembly.
+
+What is missing is the **identity store**, the **take model**, the **staged surface**, and
+almost the **entire consumption/distribution half**. Those are the phases.
 
 ---
 
 ## Phase 0 — Baseline proof
 
-Close the one unexercised path and confirm the current pipeline is trustworthy before
-layering on it.
+**Goal.** Close the unexercised paths before layering anything on top of them.
 
-- [ ] **R16/KIDS acceptance render** — export → publish → moderation → feed. The only path
-      never exercised. The KIDS story (`cmvsmkojj…`, "Justice League's Snack Adventure") is
-      complete at 9 scenes; no scene has clips yet, so this needs ~9 clip renders (~720
-      credits) before the export can exist.
-- [x] **Admin-transition audit** (read-only, 2026-10-30) — one admin write site
-      (`admin.moderateVideo`, `admin.ts:1464`); **no third instance** of the
-      "sets one axis, forgets the paired one" class. `reject` intentionally leaves
-      `isPublic` true (the filter is the gate) — commented. `flag` intentionally leaves
-      `status` untouched — commented. No admin takedown path exists (see Future plans).
+**What it changes.** Nothing in the product; it establishes that the pipeline the roadmap
+claims to improve actually works on both surfaces.
 
-**Exit criteria:** both surfaces (GENERAL and R16) proven end-to-end; the admin-transition
-class closed or documented with no third instance. *(GENERAL proven; R16 outstanding.)*
+**State.**
+- Admin-transition audit — **complete**. One admin write site, no third instance of the
+  "sets one axis, forgets the paired one" class; the axis rule is documented at the write site.
+- R16/KIDS acceptance render (export → publish → moderation → feed) — **not done**. The KIDS
+  story is complete at nine scenes but no scene has rendered clips yet, so clips precede any
+  export. This costs real credits and is a first-run validation, not a regression.
 
----
+**Exit criteria.** Both the GENERAL and R16 surfaces proven end-to-end.
 
-## Phase 1 — Identity store (the highest-leverage gap)
+**Dependencies.** None.
 
-Replace `lockedIdentityBlock` text with named, typed, reusable reference assets — Rush's
-Bible + Higgsfield's Reference Elements v2 in one shape.
-
-- New `CharacterReference` entity: `category` (character | environment | prop), `name`,
-  `displayName`, `medias[]` (front/side/full/wardrobe variants), `properties[]`
-  (typed `text | multi_select`), `reviewStatus`, `ipDetected`, `usageMeta`
-  (`generationCount`, `lastUsedAt`, `lastJobId`).
-- Ownership split (user vs performer) so licensing can attach later.
-- Track D's `fal-ai/flux-2/edit` becomes the renderer; the reference array becomes the input.
-
-**Hard rule:** a character shot whose reference is required and missing is **refused**, not
-generated from text.
-
-**Exit criteria:** a character is created once, reused across scenes, and every generated
-shot carries the ordered reference IDs it consumed.
+**Does not do.** No new capability, no schema change, no UI.
 
 ---
 
-## Phase 2 — Take model (the architectural change)
+## Phase 1 — Identity store
 
-Make a scene's video a **take with a revision**, so regenerating one shot does not
+**Goal.** Replace re-described identity text with named, typed, reusable reference assets —
+one shape that serves both a production bible and a reference-element workflow.
+
+**What it changes.**
+- A new reference entity with `category` (character | environment | prop), `name`,
+  `displayName`, `medias[]` (front / side / full / wardrobe variants), typed `properties[]`
+  (text and multi-select), `reviewStatus`, `ipDetected`, and a `usageMeta` ledger (generation
+  count, last used, last job).
+- **Ownership from day one**: user-owned vs performer-owned, so licensing can attach later
+  without a migration of meaning.
+- Track D's reference-conditioned edit path becomes the renderer; the ordered reference array
+  becomes its input.
+
+**Hard rule.** A character shot whose required reference is missing is **refused**, not
+generated from text. Falling back to text is how identity drifts.
+
+**Exit criteria.** A character is created once, reused across scenes, and every generated shot
+records the ordered reference IDs it consumed.
+
+**Dependencies.** None beyond Phase 0.
+
+**Does not do.** No public actor surface, no verification, no licensing, no casting. The
+performer field is the seam for a later Actor Programme; that marketplace is deferred.
+
+---
+
+## Phase 2 — Take model
+
+**Goal.** Make a scene's video a **take with a revision**, so regenerating one shot does not
 invalidate the whole film.
 
-- `StorySceneAsset` gains `revision`, `takeNumber`, `parentTakeId`.
-- Export references **specific asset IDs per scene**, not a whole-film hash only.
-- `regenerate-take` semantics: idempotency key + expected revision + typed conflicts
-  (`REGENERATION_PENDING`, `REGENERATION_CONFLICT`), so a regenerate is safe to retry and
-  never forks the film.
-- Incremental assembly: the concat splices one scene's new take rather than re-rendering all
-  six (PR #159's `[export.concat]` instrumentation is the seam; per-shot
-  `segments/shot-NNN.mp4` R2 persistence, if added, makes this tractable).
+**What it changes.**
+- Scene assets gain revision/take identity (revision, take number, parent take).
+- The export references **specific per-scene asset IDs**, not only a whole-film hash.
+- Regeneration semantics with an idempotency key and an expected revision, so a retry is safe
+  and a conflicting regenerate is a typed refusal rather than a fork.
+- **Incremental assembly**: splicing one scene's new take instead of re-rendering every scene.
 
-**Exit criteria:** change scene 3 → export re-renders only scene 3's segment and re-assembles;
-scenes 1–2, 4–6 keep their takes.
+**Exit criteria.** Change scene 3 → only scene 3 re-renders and the film re-assembles; the
+other scenes keep their existing takes.
+
+**Dependencies.** Phase 1. A take model without a reference store produces revisioned takes of
+inconsistent characters.
+
+**Does not do.** No new UI; the take model is a data-and-assembly change.
 
 ---
 
-## Phase 3 — Staged production surface (expose what exists)
+## Phase 3 — Staged production surface and a named manual studio
 
-The 5.0 creative layer already has Brief → Bible → Plan → Preview → Produce → Review →
-Director → Approval → Outputs. Surface it.
+**Goal.** Expose the staged production model that already exists in the 5.0 creative layer as
+a first-class surface, with approvals at each stage.
 
-- Port the 5.0 stages onto the Story Playground surface, **or** flip the `RAIVSTREAM_5_*`
-  flags and route `/create` canonical — whichever the acceptance evidence supports.
-- Per-stage explicit approval (`script/approve`, `scenes/approve`, `takes/approve`) modelled
-  on Rush's approval events.
+**What it changes.**
+- Surface the creative stages (Brief → Bible → Plan → Preview → Produce → Review → Director →
+  Approval → Outputs) over the story production data.
+- **Per-stage explicit approval**, so a creator signs off on the script, the scenes, and the
+  takes rather than only the final film.
+- The manual surface lives at **its own route**, distinct from the guided flow — Rush calls its
+  equivalent a manual studio, and the distinction matters because the guided path assumes
+  defaults that the manual path exposes.
 
-**Exit criteria:** a creator sees and approves each stage; the linear Story Playground remains
-as the Auto-path entry.
+**Exit criteria.** A creator sees and approves each stage; the manual surface exists as its own
+route and does not require the guided flow.
+
+**Dependencies.** Phase 2. Staged production is only meaningful if a shot is an addressable,
+revisioned unit.
+
+**Does not do.** No new generation capability. This phase is mostly exposure of what exists,
+behind flags, plus approval state.
+
+---
+
+## Phase 3.5 — Watch and Submit Films
+
+**Goal.** The consumption and distribution half — the part Raivstream does not have at all.
+
+**What it changes.**
+- **Watch**: a curated film library, filmmaker profiles and public handles, curated originals
+  presented alongside user work.
+- **Submit Films**: an application flow, an admin review step, and recorded revenue-share terms
+  for accepted films.
+
+**Exit criteria.** A finished production can be submitted, reviewed, accepted, and watched on a
+curated surface, with its revenue terms recorded.
+
+**Dependencies.** Phase 3 — a production must exist before it can be watched. Explicitly
+**not** dependent on Phase 4.
+
+**Does not do.** No editing surface, no paid subscriptions, no actor marketplace, no partner
+programme. It is the viewing and submission loop, nothing more.
 
 ---
 
 ## Phase 4 — Scoped director
 
-One conversational interface over script, scene, shot, and bible — scope-aware.
+**Goal.** One conversational interface over script, scene, shot, and bible — scope-aware.
 
-- Reuse 5.0's `director.propose` / `applyInstruction` / `affectedSceneIds`; add explicit scope
-  targeting (Direct Scene 12, Direct Shot 12C, Update Bible).
-- Cost estimate before apply (Rush has `/estimate`).
+**What it changes.**
+- Explicit scope targeting: rewrite the screenplay, direct one scene, direct one shot, update
+  the bible.
+- A **cost estimate before apply**, so a director instruction can be declined on price.
 
-**Depends on Phase 2** — a scope-aware director over a whole-film hash just triggers full
-re-renders with extra steps.
+**Exit criteria.** "Direct shot 12C" regenerates only that shot's take.
 
-**Exit criteria:** "direct shot 12C" regenerates only that shot's take.
+**Dependencies.** Phase 2. A scope-aware director over a whole-film hash just triggers full
+re-renders with a better interface.
+
+**Does not do.** No new model; it reuses the existing director machinery with scope.
 
 ---
 
 ## Phase 5 — Cinematic vocabulary and look
 
-- Lens/sensor/grade fields on director controls: lens (e.g. anamorphic 40 mm), sensor,
-  movement, lighting, grade.
-- Resolution ladder (480p → 4K) with plan gating, mirroring the existing credit-rate
-  mechanism.
+**Goal.** Make "look" a first-class object rather than a prompt fragment.
 
-**Exit criteria:** a "look" is a saved, reusable object, not a prompt fragment.
+**What it changes.** Lens, sensor, movement, lighting and grade fields on the director
+controls; a resolution ladder with plan gating, mirroring the existing credit-rate mechanism.
+
+**Exit criteria.** A look is saved, named, and reusable.
+
+**Dependencies.** Phase 2 (independent of 3, 3.5, 4).
+
+**Does not do.** No new provider, no new model.
 
 ---
 
 ## Phase 6 — Presets and LoRAs as product objects
 
-- `ProductionPreset` with `variantId` and a strength control; selectable per generation.
-- Shareable presets (Rush's `genjutsu_preset` pattern).
+**Goal.** Saved looks that can be applied, shared, and reused across productions.
 
-**Exit criteria:** a saved look can be applied, shared, and reused across productions.
+**What it changes.** A preset entity with a variant and a strength control, selectable per
+generation and shareable between creators.
 
----
+**Exit criteria.** A saved look can be applied, shared, and reused.
 
-## Phase 7 — Auto mode (the on-ramp)
+**Dependencies.** Phase 5.
 
-One sentence → the existing pipeline, no questions, defaults, capped — Rush's Free-tier
-promise.
-
-- Skip `generateQuestions`, use defaults, run through to export; cap credits per film.
-
-**Exit criteria:** "make me a 30-second noir short about a lost dog" produces a publishable
-film without a single follow-up question.
+**Does not do.** No marketplace for presets, no revenue share on them.
 
 ---
 
-## Phase 8 — Motion/object operator *(optional capability)*
+## Phase 7 — Auto mode
 
-A different operator class from I2V:
+**Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
+credits.
 
-- **motion-control** — keep the source performance, re-render the subject;
-- **replace-objects** — re-synthesise a masked region.
+**What it changes.** A path that skips the guided question flow, chooses defaults, and runs
+through to an export under a per-film credit cap.
 
-Pick one provider (Higgsfield Genjutsu if callable, or the Kling motion-control endpoints
-exposed alongside). Mode-dependent reference budgets.
+**Exit criteria.** A one-line prompt yields a publishable film without a single follow-up
+question.
 
-**Exit criteria:** a source clip + reference images produces either a motion-transferred or
-object-swapped output.
+**Dependencies.** Phase 2, so a bad shot can be regenerated cheaply.
+
+**Does not do.** No new models; it is a policy and defaults layer over the existing pipeline.
+
+---
+
+## Phase 8 — Motion/object operator *(optional)*
+
+**Goal.** A distinct operator class from image-to-video: **motion control** (keep the source
+performance, re-render the subject) and **replace objects** (re-synthesise a masked region),
+with mode-dependent reference budgets.
+
+**Exit criteria.** A source clip plus reference images produces either a motion-transferred or
+an object-swapped output.
+
+**Dependencies.** Phase 1 (references feed the operator).
+
+**Does not do.** It is not a gap in Rush's studio promise. This is new capability, and it is
+deliberately optional.
 
 ---
 
 ## Phase 9 — Academy content tied to the surface
 
-Academy exists (courses, lessons, assignments, submissions). Write the curriculum against
-Phases 1–5 — building an actor, continuity that holds, choosing a camera and lens, taking over
-the edit.
+**Goal.** Curriculum that teaches the controls that exist.
 
-**Exit criteria:** 12 lessons / 4 modules, each tied to a shipped control.
+**What it changes.** Twelve lessons across four modules, each tied to a shipped control from
+Phases 1–5 — building an actor, holding continuity, choosing a camera and lens, taking over the
+edit.
+
+**Exit criteria.** Twelve lessons / four modules, each referencing a control a creator can
+actually reach.
+
+**Dependencies.** Phases 1–5 shipped. Curriculum follows surface, never precedes it.
+
+**Does not do.** No new product capability.
 
 ---
 
-## Future plans *(not scheduled, recorded so they are not lost)*
+## Future plans (not scheduled)
 
-- **Series as first-class surface** — canon/memory/episodes exist in 5.0 but are flagged off; a
-  series is a production with inherited continuity.
-- **Studio/brand layer** — products/campaigns exist in 5.0; surface for commercial work.
-- **Admin takedown (reversible, non-moderation)** — *named, not built.* An admin can **reject**
-  (block + require re-review) but cannot **withdraw** another creator's video. Reject is the
-  stronger action and already hides content, so this is not "admins can't hide a video"; the
-  gap is a reversible hide for a copyright complaint, a harassment report pending review, or an
-  author request — `admin.takedownVideo` writing `withdrawnAt` plus an
-  `adminWithdrawnBy`/`adminWithdrawnReason` audit field, reversible without a full re-review.
-  A product/policy decision (who, what reasons, how appealed), not a defect.
-- **Pricing model decision** — Rush's pass-through (credits with per-second cost) vs
-  Raivstream's configurable credit ledger. A business decision, not a feature; **do not change
-  pricing while Phases 1–3 are in flight.**
-- **Human-in-the-loop tier** — Rush's Pro Studio offers director prompt optimisation as a
-  service; Raivstream has admin moderation, not a premium human service.
-- **Provider breadth** — Raivstream owns its integrations (FLUX2, H3, ElevenLabs); adding
-  Seedance/Kling/Veo/Sora is ongoing work, not a roadmap phase.
+Each of these is recorded so it is not silently dropped, and deferred so it is not silently
+promised.
+
+- **RushCut / editing surface** — a full editor is a separate project with its own interaction
+  model; the gap is real and the decision to build it should be made separately.
+- **Actor Programme marketplace** — the performer ownership field exists from Phase 1; the
+  public supply side (verification, licensing, casting) is a legal and product layer, not a
+  phase.
+- **Creator Partners programme** — business development, not product.
+- **Admin takedown of another creator's video** — named product gap from the audit: an admin
+  can reject (block and require re-review) but cannot withdraw another creator's content. A
+  reversible, non-moderation hide is a policy decision: who may do it, what reasons are
+  recorded, how it is appealed.
+- **Pricing model decision** — Rush's pass-through versus Raivstream's configurable credit
+  ledger. A business decision, not a feature; pricing should not change while Phases 1–3 are in
+  flight.
+- **Human-in-the-loop service tier** — Rush's Pro Studio sells director prompt optimisation as
+  a human service; Raivstream has admin moderation, not a paid human service.
+- **Provider breadth** — adding Seedance, Kling, Veo or Sora is ongoing integration work, not a
+  roadmap phase.
 - **Second moderation pass over the assembled film** — deferred by policy; revisit only if a
   concatenation can read wrong in sequence.
+- **Support chat, light-theme mirrors** — polish, not capability.
 
 ---
 
 ## Ordering rationale
 
-- **Phase 0 first** because the export loop's last unexercised path is the surface the whole
-  roadmap claims to improve.
+- **Phase 0 first** because the last unexercised path is the very surface the roadmap claims to
+  improve.
 - **Phase 1 before Phase 2** because a take model without a reference store produces revisioned
   takes of inconsistent characters.
-- **Phase 2 before Phase 3/4** because staged production and scoped direction are only
+- **Phase 2 before Phases 3 and 4** because staged production and scoped direction are only
   meaningful if a shot is an addressable, revisioned unit.
-- **Phase 3 before Phase 4** because the director needs a staged surface to direct.
-- **Phases 5–7 in any order after 2** — independent polish and on-ramp.
-- **Phase 8 optional** — a new capability, not a gap in Rush's promise.
+- **Phase 3 before 3.5** because a production must exist before it can be watched.
+- **Phase 3.5 before Phase 4** because a film can be watched before it can be directed
+  shot-by-shot, and the distribution half is the larger missing surface.
+- **Phases 5–7 independent after Phase 2** — polish and on-ramp, orderable at will.
+- **Phase 8 optional** — a new capability, not a gap.
 - **Phase 9 last** — curriculum follows surface.
 
 ---
 
-## Two reads required before Phase 1/2 can be scoped as work
+## Prerequisite reads
 
-1. **Track D's current shape** — is the reference already stored as an asset with an ID, or only
-   as `lockedIdentityBlock` text? Decides whether Phase 1 is "add a table" or "promote an
-   existing field."
-2. **Export incrementality** — can the concat splice one scene's new take, or only re-render the
-   whole film? Decides whether Phase 2 is weeks or a month.
+Two reads must happen before Phases 1–2 are scoped as work. Both are inspections, not
+estimates, and neither is optional.
 
-Both are reads, not estimates. Do not scope Phase 1 or 2 as work until they are done.
+1. **Track D's current shape** — is a reference already stored as an asset with an ID, or only
+   as free text in the identity block? This decides whether Phase 1 is "add a table" or
+   "promote an existing field."
+2. **Export incrementality** — can the assembly path splice one scene's new take, or only
+   re-render the whole film? This decides whether Phase 2 is weeks or a month.
+
+---
+
+## Summary
+
+Raivstream's gap to Rush is not raw model access — it owns that. The gap is the identity store,
+the take model, the staged surface, and the entire Watch/Submit distribution half.
+
+Phases 1–2 are the architectural work: weeks, not days. Phase 3 is mostly exposure of what
+already exists behind flags. Phase 3.5 is the largest genuinely new surface. Everything after
+that is polish, optional capability, or a recorded business decision rather than a scheduled
+feature.
+
+Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
+not.
