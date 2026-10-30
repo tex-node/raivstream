@@ -82,11 +82,26 @@ export default function LibraryPage() {
   );
 
   const assets = query.data?.pages.flatMap((page) => page.items) ?? [];
-  const [publishTarget, setPublishTarget] = useState<{ id: string; title: string } | null>(null);
+  // A discriminated target, not a bare id: an export and a scene asset are
+  // published by different procedures, and the type makes the wrong call
+  // structurally impossible.
+  type PublishTarget =
+    | { kind: 'asset'; assetId: string; title: string }
+    | { kind: 'export'; exportId: string; title: string };
+  const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
   const [playing, setPlaying] = useState<{ url: string; title: string } | null>(null);
   const utils = trpc.useUtils();
+
+  const publishExport = trpc.story.publishExport.useMutation({
+    onSuccess: async () => {
+      setPublished(true);
+      setPublishError(null);
+      await utils.library.getAssets.invalidate();
+    },
+    onError: (err) => setPublishError(err.message),
+  });
 
   const publishAsset = trpc.library.publishAsset.useMutation({
     onSuccess: async () => {
@@ -207,10 +222,19 @@ export default function LibraryPage() {
                   )}
                   <span>{new Date(asset.createdAt).toLocaleDateString()}</span>
                 </div>
+                {asset.type === 'video' && asset.source === 'export' && asset.status === 'READY' && (
+                  <button
+                    type="button"
+                    onClick={() => { setPublished(false); setPublishError(null); setPublishTarget({ kind: 'export', exportId: asset.id, title: asset.title }); }}
+                    className="w-full border-t border-[var(--noc-hairline)] py-1.5 text-[10px] font-bold text-[#a78bfa] hover:text-[var(--noc-t1)]"
+                  >
+                    Publish export to Feed
+                  </button>
+                )}
                 {asset.type === "video" && asset.source === "story" && (
                   <button
                     type="button"
-                    onClick={() => { setPublished(false); setPublishError(null); setPublishTarget({ id: asset.id, title: `Story ${new Date(asset.createdAt).toLocaleDateString()}` }); }}
+                    onClick={() => { setPublished(false); setPublishError(null); setPublishTarget({ kind: 'asset', assetId: asset.id, title: `Story ${new Date(asset.createdAt).toLocaleDateString()}` }); }}
                     className="w-full border-t border-[var(--noc-hairline)] py-1.5 text-[10px] font-bold text-[var(--noc-t4)] hover:text-[var(--noc-t1)]"
                   >
                     Publish to Feed
@@ -250,14 +274,18 @@ export default function LibraryPage() {
         <PublishModal
           open={Boolean(publishTarget)}
           defaultTitle={publishTarget?.title}
-          pending={publishAsset.isPending}
+          pending={publishAsset.isPending || publishExport.isPending}
           error={publishError}
           published={published}
           onClose={() => { setPublishTarget(null); setPublishError(null); setPublished(false); }}
           onSubmit={(values) => {
             if (!publishTarget) return;
             setPublishError(null);
-            publishAsset.mutate({ assetId: publishTarget.id, ...values });
+            if (publishTarget.kind === 'export') {
+              publishExport.mutate({ exportId: publishTarget.exportId, title: values.title });
+            } else {
+              publishAsset.mutate({ assetId: publishTarget.assetId, ...values });
+            }
           }}
         />
       </main>
