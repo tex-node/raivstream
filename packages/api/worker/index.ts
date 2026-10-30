@@ -13,6 +13,7 @@ import { prisma } from '@raivstream/database';
 import { getBoss, stopBoss, enqueueStoryExport } from '../src/lib/jobs';
 import { registerExportJob } from '../src/lib/jobs/exportJob';
 import { sweepStuckExports } from '../src/lib/jobs/startupSweep';
+import { sweepStuckCriticRuns } from '../src/lib/jobs/criticSweep';
 import { killAllChildren } from '../src/lib/childProcesses';
 
 async function main(): Promise<void> {
@@ -20,7 +21,13 @@ async function main(): Promise<void> {
   registerExportJob(boss, prisma);
 
   const { scanned, requeued } = await sweepStuckExports(prisma, enqueueStoryExport);
-  console.info(`[worker] ready — queue=export.story stuck_sweep scanned=${scanned} requeued=${requeued}`);
+  // The critic queue needs the same reconciliation as the export queue: a run
+  // orphaned by a restart stays RUNNING forever, and its score is the number a
+  // phase can be judged by.
+  const critic = await sweepStuckCriticRuns(prisma);
+  console.info(
+    `[worker] ready — queue=export.story stuck_sweep scanned=${scanned} requeued=${requeued} critic_sweep scanned=${critic.scanned} failed=${critic.failed}`,
+  );
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
