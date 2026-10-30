@@ -154,7 +154,7 @@ export default function StoryPlaygroundProjectLayout({ children }: { children: R
             // its own Watch + Save and had no publish action, which read as "there
             // is no publish path" on every tab except Overview.
             <ExportPublishControls
-              project={{ id: projectId, audienceMode: workspace.data?.project?.audienceMode ?? null }}
+              project={{ id: projectId, title: workspace.data?.project?.title ?? null, audienceMode: workspace.data?.project?.audienceMode ?? null }}
               isR16Session={isR16}
               variant="compact"
             />
