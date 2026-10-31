@@ -664,6 +664,21 @@ export async function renderOutputDerivative(
       cursorSeconds += probe.durationSeconds ?? 0;
     }
 
+    // `input.derivation.effectiveDurationSeconds` comes from the DECLARED asset
+    // duration (`asset.durationSeconds`, e.g. 5s), while the containers are what
+    // the encoder produced (e.g. 5.184s). Capping at the declared value silently
+    // truncates the film - measured here at 33 frames / 1.104s on a six-scene
+    // export. Cap from the measured sum instead: the same lesson as the export
+    // row's durationSeconds and isLatest - derive from what happened, not from
+    // what was declared.
+    const measuredRuntimeSeconds = cursorSeconds;
+    const capSeconds = measuredRuntimeSeconds > 0
+      ? Math.max(input.derivation.effectiveDurationSeconds, Math.ceil(measuredRuntimeSeconds))
+      : input.derivation.effectiveDurationSeconds;
+    console.info(
+      `[export.derivation] declared=${input.derivation.effectiveDurationSeconds} measured=${measuredRuntimeSeconds.toFixed(3)} cap=${capSeconds} inputs=${inputs.length}`,
+    );
+
     const parts = inputs.map(
       (_, index) => `[${index}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v${index}]`,
     );
@@ -690,7 +705,7 @@ export async function renderOutputDerivative(
         ...inputs.flatMap((file) => ['-i', file]),
         '-filter_complex', filter,
         '-map', '[vout]',
-        '-t', String(input.derivation.effectiveDurationSeconds),
+        '-t', String(capSeconds),
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
@@ -787,7 +802,7 @@ export async function renderOutputDerivative(
           '-filter_complex', `${segLabels}concat=n=${segFiles.length}:v=1:a=1[vout][aout]`,
           '-map', '[vout]',
           '-map', '[aout]',
-          '-t', String(input.derivation.effectiveDurationSeconds),
+          '-t', String(capSeconds),
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
           '-pix_fmt', 'yuv420p',
@@ -812,7 +827,7 @@ export async function renderOutputDerivative(
         ...inputs.flatMap((file) => ['-i', file]),
         '-filter_complex', filter,
         '-map', '[vout]',
-        '-t', String(input.derivation.effectiveDurationSeconds),
+        '-t', String(capSeconds),
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
@@ -834,7 +849,7 @@ export async function renderOutputDerivative(
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const card = await appendEndCard(withAudio, segmentAssembled ? true : nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
+    const card = await appendEndCard(withAudio, segmentAssembled ? true : nativeSources.length > 0, capSeconds);
     const buffer = await readFile(card.path);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
     console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
