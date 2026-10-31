@@ -1,6 +1,9 @@
 import type { CreativeCriticResult } from './criticTypes';
 
-export const DEFAULT_CREATIVE_CRITIC_THRESHOLD = 90;
+// 80 is the value between the two calibration points (reference-conditioned 85,
+// pre-reference 75), so the gate answers "did the creator use their references"
+// rather than "was this perfect". See docs/operations/critic-threshold-policy.md.
+export const DEFAULT_CREATIVE_CRITIC_THRESHOLD = 80;
 export const HARD_MAX_CREATIVE_CRITIC_RETRIES = 3;
 
 export function creativeCriticThreshold() {
