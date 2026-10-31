@@ -361,6 +361,11 @@ export default function StoryPlaygroundPage() {
   useEffect(() => {
     if (isR16 && !R16_STYLE_VALUES.has(selectedVisualStyle)) setSelectedVisualStyle('CARTOON');
   }, [isR16, selectedVisualStyle]);
+  // Deep link from the home screen's "See all stories" link, which exists because
+  // the home list is truncated to two continue items.
+  const [homeTab, setHomeTab] = useState<'create' | 'library'>(
+    searchParams.get('tab') === 'library' ? 'library' : 'create',
+  );
   const [projectId, setProjectId] = useState<string | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -372,7 +377,7 @@ export default function StoryPlaygroundPage() {
   const [openDirectorSceneIds, setOpenDirectorSceneIds] = useState<string[]>([]);
   const [editingStory, setEditingStory] = useState(false);
   const [editDrafts, setEditDrafts] = useState<Record<string, { title: string; summary: string; body: string }>>({});
-  const [homeTab, setHomeTab] = useState<'create' | 'library'>('create');
+  // Deep link from the home screen's 'See all stories' link, which exists because
   const [feedbackComments, setFeedbackComments] = useState<Record<string, string>>({});
   const [feedbackRatings, setFeedbackRatings] = useState<Record<string, 'UP' | 'DOWN'>>({});
   const [sceneForm, setSceneForm] = useState({
