@@ -483,6 +483,7 @@ export class StoryVideoExportService {
 
       const scenes: RenderScene[] = sceneIdList.map((sceneId) => ({
         sceneId,
+        assetId: readyByScene.get(sceneId)!.id,
         videoUrl: readyByScene.get(sceneId)!.assetUrl,
         audioUrl: hasNarrationForEveryScene ? (sceneById.get(sceneId)?.narrationAudioUrl ?? null) : undefined,
       }));
@@ -510,6 +511,10 @@ export class StoryVideoExportService {
           scenes,
           derivation,
           r2Prefix: `story-exports/${row.projectId}/exports/${row.id}`,
+          // Segment cache scope. Without it the renderer cannot key segments and
+          // caching silently disables itself - the flag-in-the-DB-false-in-code
+          // trap, so the service passes it explicitly on every render.
+          projectId: row.projectId,
           backgroundMusicUrl,
           creatorHandle,
           exportId: row.id,
