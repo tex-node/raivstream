@@ -12,11 +12,33 @@ failure has now happened four times in one stretch:
 | `.Replace(old, new, 1)` | three-argument overload does not exist on Windows PowerShell 5; the call threw and the file was not written, but the script printed success | Type-check on the *next* run |
 | `git switch main` mid-script | after a failed merge, the branch holding the fix was left behind while the working tree moved to `main`, so the next test run exercised the wrong tree | Grep for the guard, found absent |
 | multi-line string replacement | the replacement text spanned lines inside a single-quoted string literal; the `homeTab` declaration was deleted and its uses orphaned | TypeScript |
+| `git switch -c` did not take effect | the branch was never created, `git commit` then ran **on `main`**; the commit had to be moved to a branch and `main` reset to `origin/main` | `git log` inspection before pushing |
+| Prisma `select` omitted a flag | a behaviour flag was `true` in the database and `undefined` in the code, so the feature silently took its default path; 80 credits were spent producing a control image that looked like a result | Inspecting the composed prompt instead of trusting the flag |
 
 The common shape: **the tool reports success while doing something other than
 what was intended.** PowerShell string manipulation is the worst offender
 because its failure modes are silent — a no-op replace returns the original
-string, and a partial write leaves a file that still parses.
+string, and a partial write leaves a file that still parses. The `select` row is
+the same shape one layer down: a flag that is true in storage can be false in
+every consumer, silently.
+
+## Verify state, do not assume it
+
+Two mechanical checks, because both have already failed once:
+
+```bash
+test "$(git branch --show-current)" != "main" || { echo "refusing to commit on main"; exit 1; }
+```
+
+```ts
+// a flag that gates behaviour must be asserted in the path that consumes it
+expect(composePrompt({ identityRefsEnabled: true })).not.toContain(identityProse);
+```
+
+The second is the general rule: **a flag that gates behaviour must be asserted
+in the path that consumes it, not in the database that stores it.** A test on the
+stored value proves nothing about the read.
+
 
 ## What to do instead
 
