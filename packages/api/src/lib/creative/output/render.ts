@@ -740,33 +740,101 @@ export async function renderOutputDerivative(
       return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
     }
 
-    const out = path.join(dir, 'out.mp4');
-    const args = [
-      ...inputs.flatMap((file) => ['-i', file]),
-      '-filter_complex', filter,
-      '-map', '[vout]',
-      '-t', String(input.derivation.effectiveDurationSeconds),
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-pix_fmt', 'yuv420p',
-      '-movflags', '+faststart',
-      out,
-    ];
-    await doFfmpeg(args);
+    // ── Phase 2 A/B: per-segment renders behind RENDER_SEGMENTS_ENABLED ────────
+    // The graph above is a hard-cut concat of independently normalised inputs, so
+    // the split is mechanical: render each input with the same filters into its
+    // own file (carrying its own audio), then concat with audio.
+    //
+    // The risk is frame rounding. One continuous timeline does not round;
+    // independent segments do. The captured baseline (993 frames, 33.113991 s,
+    // docs/operations/renderer-refactor-baseline.md) is what decides whether this
+    // path is frame-transparent. A one-frame delta means it is not.
+    let segmentAssembled: string | null = null;
+    if (process.env.RENDER_SEGMENTS_ENABLED === 'true') {
+      if (nativeSources.length !== inputs.length) {
+        // Mixed audio would need silent tracks synthesised per segment. Fall back
+        // rather than change the audio contract inside a renderer refactor.
+        console.warn(
+          `[export.segments] falling back to the single-graph path: ${nativeSources.length}/${inputs.length} inputs carry audio`,
+        );
+      } else {
+        const segFiles: string[] = [];
+        for (let i = 0; i < inputs.length; i += 1) {
+          const segPath = path.join(dir, `seg-${i}.mp4`);
+          await doFfmpeg([
+            '-i', inputs[i]!,
+            '-filter_complex',
+              `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v];`
+              + '[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a]',
+            '-map', '[v]',
+            '-map', '[a]',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-movflags', '+faststart',
+            segPath,
+          ]);
+          const segProbe = await doProbe(segPath).catch(() => ({ durationSeconds: null }) as MediaProbe);
+          console.info(`[export.segments] seg=${i} duration=${segProbe.durationSeconds ?? 'null'}`);
+          segFiles.push(segPath);
+        }
+        const assembled = path.join(dir, 'out.mp4');
+        const segLabels = segFiles.map((_, i) => `[${i}:v][${i}:a]`).join('');
+        await doFfmpeg([
+          ...segFiles.flatMap((file) => ['-i', file]),
+          '-filter_complex', `${segLabels}concat=n=${segFiles.length}:v=1:a=1[vout][aout]`,
+          '-map', '[vout]',
+          '-map', '[aout]',
+          '-t', String(input.derivation.effectiveDurationSeconds),
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          assembled,
+        ]);
+        segmentAssembled = assembled;
+        console.info(`[export.segments] assembled n=${segFiles.length}`);
+      }
+    }
 
-    // E1 — carry the source clips' native audio into the export before the end card.
-    const withAudio = await muxNativeAudioBed({
-      videoPath: out,
-      nativeSources,
-      outputPath: path.join(dir, 'out-with-native.mp4'),
-      dir,
-      run: doFfmpeg,
-      hasExistingAudio: false,
-    });
+    let withAudio: string;
+    if (segmentAssembled) {
+      // Segments already carry their source audio, so the native-audio mux would
+      // duplicate it.
+      withAudio = segmentAssembled;
+    } else {
+      const out = path.join(dir, 'out.mp4');
+      const args = [
+        ...inputs.flatMap((file) => ['-i', file]),
+        '-filter_complex', filter,
+        '-map', '[vout]',
+        '-t', String(input.derivation.effectiveDurationSeconds),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        out,
+      ];
+      await doFfmpeg(args);
+
+      // E1 — carry the source clips' native audio into the export before the end card.
+      withAudio = await muxNativeAudioBed({
+        videoPath: out,
+        nativeSources,
+        outputPath: path.join(dir, 'out-with-native.mp4'),
+        dir,
+        run: doFfmpeg,
+        hasExistingAudio: false,
+      });
+    }
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const card = await appendEndCard(withAudio, nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
+    const card = await appendEndCard(withAudio, segmentAssembled ? true : nativeSources.length > 0, input.derivation.effectiveDurationSeconds);
     const buffer = await readFile(card.path);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
     console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
