@@ -776,18 +776,20 @@ export async function renderOutputDerivative(
         const segFiles: string[] = [];
         for (let i = 0; i < inputs.length; i += 1) {
           const segPath = path.join(dir, `seg-${i}.mp4`);
+          // VIDEO ONLY. Audio is muxed once, continuously, after assembly: six
+          // independent AAC encodes quantise to their frame grid and leave the
+          // joined track ~10 ms short of the single-graph timeline. The single
+          // continuous audio bed is the mechanism that makes the two paths
+          // bit-identical, and it already exists (`muxNativeAudioBed`).
           await doFfmpeg([
             '-i', inputs[i]!,
             '-filter_complex',
-              `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v];`
-              + '[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a]',
+              `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
             '-map', '[v]',
-            '-map', '[a]',
+            '-an',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
             '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac',
-            '-b:a', '128k',
             '-movflags', '+faststart',
             segPath,
           ]);
@@ -796,31 +798,35 @@ export async function renderOutputDerivative(
           segFiles.push(segPath);
         }
         const assembled = path.join(dir, 'out.mp4');
-        const segLabels = segFiles.map((_, i) => `[${i}:v][${i}:a]`).join('');
+        const segLabels = segFiles.map((_, i) => `[${i}:v]`).join('');
         await doFfmpeg([
           ...segFiles.flatMap((file) => ['-i', file]),
-          '-filter_complex', `${segLabels}concat=n=${segFiles.length}:v=1:a=1[vout][aout]`,
+          '-filter_complex', `${segLabels}concat=n=${segFiles.length}:v=1:a=0[vout]`,
           '-map', '[vout]',
-          '-map', '[aout]',
           '-t', String(capSeconds),
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
           '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-          '-b:a', '128k',
           '-movflags', '+faststart',
           assembled,
         ]);
         segmentAssembled = assembled;
-        console.info(`[export.segments] assembled n=${segFiles.length}`);
+        console.info(`[export.segments] assembled n=${segFiles.length} audio=deferred`);
       }
     }
 
     let withAudio: string;
     if (segmentAssembled) {
-      // Segments already carry their source audio, so the native-audio mux would
-      // duplicate it.
-      withAudio = segmentAssembled;
+      // Audio last, once, continuously - the same bed the single-graph path uses.
+      // This is what makes the two paths bit-identical rather than "close".
+      withAudio = await muxNativeAudioBed({
+        videoPath: segmentAssembled,
+        nativeSources,
+        outputPath: path.join(dir, 'out-with-native.mp4'),
+        dir,
+        run: doFfmpeg,
+        hasExistingAudio: false,
+      });
     } else {
       const out = path.join(dir, 'out.mp4');
       const args = [
@@ -849,7 +855,7 @@ export async function renderOutputDerivative(
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.
-    const card = await appendEndCard(withAudio, segmentAssembled ? true : nativeSources.length > 0, capSeconds);
+    const card = await appendEndCard(withAudio, nativeSources.length > 0, capSeconds);
     const buffer = await readFile(card.path);
     const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
     console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
