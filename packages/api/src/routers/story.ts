@@ -2901,6 +2901,9 @@ async function generateSceneImageAsset(
           synopsis: true,
           storyDna: true,
           productionManifest: true,
+          // Phase 1 piece (3): without this the composer's flag read is undefined
+          // and the project silently falls back to the text path.
+          identityRefsEnabled: true,
           characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
@@ -3323,6 +3326,9 @@ async function generateSceneVideoAsset(
           synopsis: true,
           storyDna: true,
           productionManifest: true,
+          // Phase 1 piece (3): without this the composer's flag read is undefined
+          // and the project silently falls back to the text path.
+          identityRefsEnabled: true,
           characterMemory: { orderBy: { createdAt: 'asc' } },
         },
       },
