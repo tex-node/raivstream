@@ -658,13 +658,13 @@ export async function renderOutputDerivative(
         nativeSources.push({
           filePath: file,
           startSeconds: cursorSeconds,
-          durationSeconds: probe.durationSeconds ?? input.derivation.effectiveDurationSeconds,
+          durationSeconds: probe.durationSeconds ?? input.derivation.declaredDurationSeconds,
         });
       }
       cursorSeconds += probe.durationSeconds ?? 0;
     }
 
-    // `input.derivation.effectiveDurationSeconds` comes from the DECLARED asset
+    // `input.derivation.declaredDurationSeconds` comes from the DECLARED asset
     // duration (`asset.durationSeconds`, e.g. 5s), while the containers are what
     // the encoder produced (e.g. 5.184s). Capping at the declared value silently
     // truncates the film - measured here at 33 frames / 1.104s on a six-scene
@@ -673,10 +673,10 @@ export async function renderOutputDerivative(
     // what was declared.
     const measuredRuntimeSeconds = cursorSeconds;
     const capSeconds = measuredRuntimeSeconds > 0
-      ? Math.max(input.derivation.effectiveDurationSeconds, Math.ceil(measuredRuntimeSeconds))
-      : input.derivation.effectiveDurationSeconds;
+      ? Math.max(input.derivation.declaredDurationSeconds, Math.ceil(measuredRuntimeSeconds))
+      : input.derivation.declaredDurationSeconds;
     console.info(
-      `[export.derivation] declared=${input.derivation.effectiveDurationSeconds} measured=${measuredRuntimeSeconds.toFixed(3)} cap=${capSeconds} inputs=${inputs.length}`,
+      `[export.derivation] declared=${input.derivation.declaredDurationSeconds} measured=${measuredRuntimeSeconds.toFixed(3)} cap=${capSeconds} inputs=${inputs.length}`,
     );
 
     const parts = inputs.map(
@@ -717,7 +717,7 @@ export async function renderOutputDerivative(
       if (!mResp.ok) throw new Error(`Failed to fetch background music (${mResp.status})`);
       await writeFile(mFile, Buffer.from(await mResp.arrayBuffer()));
       const out = path.join(dir, 'out.mp4');
-      const totalDur = input.derivation.effectiveDurationSeconds;
+      const totalDur = input.derivation.declaredDurationSeconds;
       const fadeOutStart = Math.max(0, totalDur - 1);
       await doFfmpeg([
         '-i', videoOnly,
@@ -744,7 +744,7 @@ export async function renderOutputDerivative(
         run: doFfmpeg,
         hasExistingAudio: true,
       });
-      const card = await appendEndCard(mixed, true, input.derivation.effectiveDurationSeconds);
+      const card = await appendEndCard(mixed, true, input.derivation.declaredDurationSeconds);
       const buffer = await readFile(card.path);
       const assetUrl = (await doUpload(buffer, `${input.r2Prefix}/out.mp4`, 'video/mp4')) ?? `file://${card.path}`;
       console.info(`[export.endcard] applied=${card.applied} reason=${card.reason} exportId=${input.exportId ?? 'unknown'}`);
