@@ -62,15 +62,34 @@ export interface StoryVideoExportState {
   completedAt: Date | null;
 }
 
+export type SourceHashOptions = {
+  /** Renderer version; defaults to EXPORT_RENDERER_VERSION. */
+  version?: string;
+  /**
+   * Project-level render input. `identityRefsEnabled` changes the composed prompt
+   * and therefore the pixels, so it must change the hash or the cache serves the
+   * pre-flag export. A named field, not a version bump: a version string would make
+   * a flag flip look like a renderer upgrade and force a bump per flag.
+   */
+  identityRefsEnabled?: boolean;
+};
+
 export function computeSourceHash(
   pairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }>,
-  version: string = EXPORT_RENDERER_VERSION,
+  optionsOrVersion: SourceHashOptions | string = {},
 ): string {
+  const options: SourceHashOptions = typeof optionsOrVersion === 'string'
+    ? { version: optionsOrVersion }
+    : optionsOrVersion;
+  const version = options.version ?? EXPORT_RENDERER_VERSION;
+  const identityRefs = options.identityRefsEnabled ? '1' : '0';
   const sorted = [...pairs].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
   // E1 — fold the renderer version into the payload so a renderer change (e.g.
   // preserving source-clip native audio) invalidates every cached export, not just
   // ones whose source changed. Include the audioUrl suffix only when present.
-  const payload = `${version}|` + sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
+  // Project-level behaviour flags join the payload for the same reason: an input
+  // that changes the output but not the hash is a cache that lies.
+  const payload = `${version}|identityRefs:${identityRefs}|` + sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
   return createHash('sha256').update(payload).digest('hex');
 }
 
@@ -192,6 +211,9 @@ export class StoryVideoExportService {
         audienceMode: true,
         contentType: true,
         backgroundMusicUrl: true,
+        // Behaviour-determining project input: it must reach computeSourceHash, or
+        // a flag flip is invisible to the cache and the old render is served.
+        identityRefsEnabled: true,
       },
     });
     if (!project) {
@@ -295,7 +317,13 @@ export class StoryVideoExportService {
     const hashPayloadPairs: Array<{ sceneId: string; assetId: string; audioUrl?: string | null }> = backgroundMusicUrl
       ? [...pairsBase, { sceneId: '__music__', assetId: backgroundMusicUrl }]
       : pairsBase;
-    const sourceHash = computeSourceHash(hashPayloadPairs);
+    // `project` is loaded by this service; if it did not select the flag the hash
+    // would silently default to the text path, which is the composer bug again.
+    const identityRefsEnabled = (project as { identityRefsEnabled?: boolean }).identityRefsEnabled;
+    if (identityRefsEnabled === undefined) {
+      console.warn('[storyVideoExport] project.identityRefsEnabled missing from the query; hashing as false');
+    }
+    const sourceHash = computeSourceHash(hashPayloadPairs, { identityRefsEnabled: Boolean(identityRefsEnabled) });
 
     // One row per (projectId, sourceHash) artifact — see @@unique.
     const existing = await prisma.storyVideoExport.findFirst({
