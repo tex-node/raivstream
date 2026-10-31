@@ -81,3 +81,11 @@ relying on memory of the work.
 "I will remember" has failed twice in this stretch. A rule that depends on
 recall is not a rule. This one is checkable: a diff that touches many lines of a
 file for a one-line intent is the signature of the wrong tool.
+
+## The through-line
+
+Every durable artifact from this stretch is a **mechanism that reports when it is
+bypassed**, not a convention that assumes care: a failing test, an exit code, a
+log line, a named incident row. The ones that survived are the ones that fire;
+the ones that did not survive were the ones that depended on remembering.
+
