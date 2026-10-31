@@ -921,6 +921,11 @@ model StoryProject {
   tone           String?
   targetAudience String?
   audienceMode   StoryAudienceMode  @default(GENERAL)
+  /// Phase 1 piece (3) experiment flag: condition scene identity on ordered
+  /// reference IDs instead of the lockedIdentityBlock prose. Per-project, not a
+  /// global env var, so flag-off and flag-on are scored by the same deploy,
+  /// worker and critic. Default false = the existing text path.
+  identityRefsEnabled Boolean        @default(false)
   storyType      StoryType          @default(SHORT_STORY)
   ageRange       String?
   theme          String?
