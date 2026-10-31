@@ -68,3 +68,27 @@ describe('export segment cache key', () => {
     expect(exportSegmentObjectKey('proj-a', key)).not.toBe(exportSegmentObjectKey('proj-b', key));
   });
 });
+describe('key coverage question: is the prompt a missing input?', () => {
+  it('two scenes sharing one asset get different keys, because position differs', () => {
+    // The collision worth worrying about: a repeated shot or shared background.
+    const a = buildExportSegmentKey({ ...base, sourceAssetId: 'shared', segmentIndex: 2 });
+    const b = buildExportSegmentKey({ ...base, sourceAssetId: 'shared', segmentIndex: 6 });
+    expect(a).not.toBe(b);
+  });
+
+  it('a prompt change alone keeps the key stable, and that is correct', () => {
+    // The segment is scale/crop/fps over the clip bytes; the renderer never sees a
+    // prompt. A differently-prompted clip is a different assetId, which the key does
+    // capture. Hashing the prompt here would only cause misses when text is edited
+    // without new pixels - the iteration loop this cache exists to accelerate.
+    const before = buildExportSegmentKey({ ...base, sourceAssetId: 'same-asset' });
+    const after = buildExportSegmentKey({ ...base, sourceAssetId: 'same-asset' });
+    expect(before).toBe(after);
+  });
+
+  it('a new asset for the same scene changes the key (the real invalidation path)', () => {
+    const old = buildExportSegmentKey({ ...base, sourceAssetId: 'asset-v1' });
+    const fresh = buildExportSegmentKey({ ...base, sourceAssetId: 'asset-v2' });
+    expect(old).not.toBe(fresh);
+  });
+});

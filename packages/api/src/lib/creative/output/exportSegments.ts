@@ -42,6 +42,24 @@ export interface ExportSegmentKeyInput {
   filters?: string;
 }
 
+/**
+ * Why the prompt is NOT in this key.
+ *
+ * A segment is a pure function of the **rendered clip** plus the filter chain - it
+ * is `scale/crop/setsar/fps` over source bytes, then a video-only x264 encode.
+ * `renderOutputDerivative` never receives a prompt: the prompt influenced the
+ * *generation* of the clip, and a differently-prompted clip is a different
+ * `sourceAssetId`.
+ *
+ * Adding a prompt hash would therefore not close a gap - it would create misses
+ * whenever scene text edits without new pixels, which is exactly the iteration
+ * loop the cache exists to accelerate. Two scenes that share one asset but carry
+ * different prompts get different keys anyway, because `segmentIndex` differs.
+ *
+ * The one assumption this makes is that an asset's bytes are immutable once its id
+ * exists (R2 keys are per-asset). If an asset is ever overwritten under the same
+ * id, that assumption breaks and this key would serve stale pixels.
+ */
 export function buildExportSegmentKey(input: ExportSegmentKeyInput): string {
   const filters = input.filters ?? exportSegmentFilters(input.width, input.height);
   return createHash('sha256')
