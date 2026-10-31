@@ -16,7 +16,14 @@ export interface OutputDerivation {
   targetHeight: number;
   /** fill = center-crop source to the target aspect (the mechanic, decided here). */
   cropMode: 'fill';
-  effectiveDurationSeconds: number;
+  /**
+   * The runtime implied by the DECLARED asset durations (`asset.durationSeconds`,
+   * e.g. "5s"), NOT by the encoded containers (which may be 5.184s). The renderer
+   * overrides its cap from measurement - see the `[export.derivation]` log - so
+   * this value is a declaration, not the film's runtime. Trusting it as a runtime
+   * silently truncated exports by ~1.1s (PR #208).
+   */
+  declaredDurationSeconds: number;
 }
 
 const SOURCE_WIDTH = 1080;
@@ -42,7 +49,7 @@ export function deriveOutput(
     targetWidth: target.width,
     targetHeight: target.height,
     cropMode: 'fill',
-    effectiveDurationSeconds: effective,
+    declaredDurationSeconds: effective,
   };
 }
 

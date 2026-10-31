@@ -26,7 +26,7 @@ describe('creative output derivation', () => {
     expect(d.aspectRatio).toBe('16:9');
     expect(d.targetWidth).toBe(1920);
     expect(d.targetHeight).toBe(1080);
-    expect(d.effectiveDurationSeconds).toBe(30);
+    expect(d.declaredDurationSeconds).toBe(30);
   });
 
   it('derives 1:1 (square social)', () => {
@@ -37,8 +37,8 @@ describe('creative output derivation', () => {
   });
 
   it('duration variants clamp to the source runtime', () => {
-    expect(deriveOutput('SQUARE', 15, 30).effectiveDurationSeconds).toBe(15);
-    expect(deriveOutput('SQUARE', 90, 30).effectiveDurationSeconds).toBe(30);
+    expect(deriveOutput('SQUARE', 15, 30).declaredDurationSeconds).toBe(15);
+    expect(deriveOutput('SQUARE', 90, 30).declaredDurationSeconds).toBe(30);
   });
 });
 
