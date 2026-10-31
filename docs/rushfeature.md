@@ -4,11 +4,17 @@ A planning document. It records the ordered phases by which Raivstream can match
 of rush.film, and names explicitly what is deferred and why. No phase here is complete; this
 is a plan, not a changelog.
 
-**Start with the phase template** (below, "Phase template"). It exists because four phases'
-worth of silent failures were found the hard way - a scoring gate that echoed its own prompt, a
-behaviour flag that was true in the database and false in the code, a cache key that did not
-cover a behaviour-determining input, a commit that landed on the wrong branch. Each cost real
-time or real credits. Use the template rather than rediscovering them.
+**Start with the phase template** (below, "Phase template"). It exists because silent failures
+were found the hard way: a scoring gate that echoed its own prompt, a behaviour flag that was
+true in the database and false in the code, a cache key that did not cover a
+behaviour-determining input, a commit that landed on the wrong branch. Each cost real time or
+real credits.
+
+Those four are **recent instances of a longer pattern, not a list of four mistakes**. The same
+class predates this stretch: the 2026-10-13 migration incident (a `.hold` directory rename and a
+partial migration deploy) and the `WEB_TC=1` / `API_TEST` gate that printed a failure and was
+merged past. The pattern is months old and recurs; that is why the template is a control rather
+than a postmortem. Use it rather than rediscovering them.
 
 ## What this document is not
 
