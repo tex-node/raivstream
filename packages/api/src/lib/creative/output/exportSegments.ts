@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { getPublicUrlForKey, objectExistsInR2, removeFromR2, uploadBufferToR2 } from '../../r2';
+import { getPublicUrlForKey, listObjectsInR2, objectExistsInR2, removeFromR2, uploadBufferToR2 } from '../../r2';
 
 /**
  * Phase 2 segment cache — infrastructure only.
@@ -113,4 +113,70 @@ export async function uploadSegmentFile(
   filePath: string,
 ): Promise<void> {
   await store.upload(key, await readFile(filePath));
+}
+
+/**
+ * Retention policy: 30 days (decided 2026-10-31 — see
+ * docs/operations/segment-cache-policy.md).
+ *
+ * Without a sweep the keyspace grows forever: fifty exports of one project
+ * accumulate segments for every asset combination it has ever had, which turns a
+ * measured 2x speedup into an R2 bill. A generous TTL bounds growth without
+ * tracking per-project usage, and the cost of an expired entry is one cold
+ * segment — a performance regression, never a correctness one.
+ */
+export const EXPORT_SEGMENT_TTL_DAYS = 30;
+
+export const EXPORT_SEGMENT_PREFIX = 'export-segments/';
+
+export interface SweepableSegmentObject {
+  key: string;
+  lastModified: Date | null;
+}
+
+/**
+ * Which objects the TTL sweep should delete. Pure, so the policy is testable
+ * without R2. An object with no `lastModified` is KEPT: unknown age is not
+ * evidence of staleness, and deleting on unknown would be the fail-open version.
+ */
+export function selectExpiredSegmentKeys(
+  objects: SweepableSegmentObject[],
+  options: { now: Date; ttlDays?: number; prefix?: string },
+): string[] {
+  const ttlDays = options.ttlDays ?? EXPORT_SEGMENT_TTL_DAYS;
+  const prefix = options.prefix ?? EXPORT_SEGMENT_PREFIX;
+  const cutoff = options.now.getTime() - ttlDays * 24 * 60 * 60 * 1000;
+  return objects
+    .filter((object) => object.key.includes(prefix))
+    .filter((object) => object.lastModified !== null && object.lastModified.getTime() < cutoff)
+    .map((object) => object.key);
+}
+
+/**
+ * Execute the TTL policy. Lists, filters, deletes, and reports counts.
+ *
+ * Listing is done over `story-projects/` and filtered, because R2 has no wildcard
+ * prefix: `export-segments` sits inside each project. That scans the whole
+ * story-projects keyspace, which is acceptable at current volume and is the reason
+ * the sweep runs once per worker boot rather than per export.
+ *
+ * Injected list/remove keep it testable and keep the R2 dependency out of the
+ * policy predicate.
+ */
+export async function sweepExpiredExportSegments(options?: {
+  now?: Date;
+  ttlDays?: number;
+  list?: (prefix: string) => Promise<SweepableSegmentObject[]>;
+  remove?: (key: string) => Promise<void>;
+}): Promise<{ scanned: number; deleted: number }> {
+  const list = options?.list ?? listObjectsInR2;
+  const remove = options?.remove ?? removeFromR2;
+  const objects = await list('story-projects/');
+  const scanned = objects.filter((object) => object.key.includes(EXPORT_SEGMENT_PREFIX)).length;
+  const keys = selectExpiredSegmentKeys(objects, {
+    now: options?.now ?? new Date(),
+    ttlDays: options?.ttlDays,
+  });
+  for (const key of keys) await remove(key);
+  return { scanned, deleted: keys.length };
 }

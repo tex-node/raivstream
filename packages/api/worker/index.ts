@@ -14,6 +14,7 @@ import { getBoss, stopBoss, enqueueStoryExport } from '../src/lib/jobs';
 import { registerExportJob } from '../src/lib/jobs/exportJob';
 import { sweepStuckExports } from '../src/lib/jobs/startupSweep';
 import { sweepStuckCriticRuns } from '../src/lib/jobs/criticSweep';
+import { sweepExpiredExportSegments } from '../src/lib/creative/output/exportSegments';
 import { killAllChildren } from '../src/lib/childProcesses';
 
 async function main(): Promise<void> {
@@ -25,6 +26,8 @@ async function main(): Promise<void> {
   // orphaned by a restart stays RUNNING forever, and its score is the number a
   // phase can be judged by.
   const critic = await sweepStuckCriticRuns(prisma);
+  // Segment retention: 30-day TTL (docs/operations/segment-cache-policy.md).
+  const segments = await sweepExpiredExportSegments().catch(() => ({ scanned: 0, deleted: 0 }));
   console.info(
     `[worker] ready — queue=export.story stuck_sweep scanned=${scanned} requeued=${requeued} critic_sweep scanned=${critic.scanned} failed=${critic.failed}`,
   );
