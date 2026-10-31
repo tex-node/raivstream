@@ -157,6 +157,13 @@ other scenes keep their existing takes.
   job; `renderOutputDerivative` builds one filter graph over all scenes and uploads a single
   `out.mp4`. Does the Movie Builder pattern port cleanly, or is the story export's shape
   structurally different? This decides whether (1) is a cache-key change or a renderer rewrite.
+  **The read must end with one of two sentences, before any code:**
+  - *"It ports: the first piece is a cache key; weeks."*
+  - *"It doesn't port: the first piece is a renderer refactor, which is a behaviour change and
+    needs the flag treatment; Phase 2 is bigger than planned."*
+
+  Those two have different rollback stories, and the second makes the phase larger before a
+  line of code exists. A read that ends without choosing has not finished.
 - **B — revision semantics.** Use Phase 9A's `SequenceVersion` monotonic `max+1` pattern as the
   model (never reuse a version number), alongside the export's `sourceHash` discipline.
 - **C — `sourceHash` coverage.** `sourceHash` was `sceneId:assetId` pairs plus
