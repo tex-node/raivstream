@@ -53,10 +53,55 @@ export function recommendationForScore(score: number, threshold = creativeCritic
   return 'SUGGEST_REFINEMENT' as const;
 }
 
+/**
+ * Identity gate, Phase 1 piece (3) follow-through.
+ *
+ * `characterIdentity` is read from the per-dimension scores, never derived from
+ * the aggregate: a good composition cannot hide a drifted character. Missing or
+ * non-numeric identity FAILS CLOSED rather than falling back to the overall
+ * score - the same discipline as `resolveExportPolicy` refusing a null
+ * audienceMode.
+ */
+export const DEFAULT_CREATIVE_IDENTITY_THRESHOLD = 85;
+
+export function creativeCriticIdentityThreshold() {
+  const parsed = Number(
+    process.env.CREATIVE_CRITIC_IDENTITY_THRESHOLD ?? DEFAULT_CREATIVE_IDENTITY_THRESHOLD,
+  );
+  return Number.isFinite(parsed)
+    ? Math.min(100, Math.max(0, parsed))
+    : DEFAULT_CREATIVE_IDENTITY_THRESHOLD;
+}
+
+export function passesIdentityGate(
+  scores: Record<string, unknown> | null | undefined,
+  threshold = creativeCriticIdentityThreshold(),
+): boolean {
+  const raw = scores?.characterIdentity;
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(value)) return false;
+  return clampScore(value) >= threshold;
+}
+
+export function recommendationForResult(
+  result: { overallScore: number; scores?: Record<string, unknown> | null },
+  options?: { threshold?: number; identityThreshold?: number },
+): 'APPROVE' | 'SUGGEST_REFINEMENT' | 'REGENERATE' {
+  const threshold = options?.threshold ?? creativeCriticThreshold();
+  const identityThreshold = options?.identityThreshold ?? creativeCriticIdentityThreshold();
+  const overall = clampScore(result.overallScore);
+  if (overall < 70) return 'REGENERATE';
+  if (overall >= threshold && passesIdentityGate(result.scores, identityThreshold)) return 'APPROVE';
+  return 'SUGGEST_REFINEMENT';
+}
+
 export function normaliseCriticResult(result: CreativeCriticResult, threshold = creativeCriticThreshold()): CreativeCriticResult {
   const overallScore = Number.isFinite(result.overallScore) ? result.overallScore : aggregateScore(result.scores);
-  const scoreRecommendation = recommendationForScore(overallScore, threshold);
-  const recommendation = result.recommendation === 'APPROVE' && overallScore < threshold
+  const scoreRecommendation = recommendationForResult(
+    { overallScore, scores: result.scores as unknown as Record<string, unknown> },
+    { threshold },
+  );
+  const recommendation = result.recommendation === 'APPROVE' && scoreRecommendation !== 'APPROVE'
     ? scoreRecommendation
     : result.recommendation;
   return {
