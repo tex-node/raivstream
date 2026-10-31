@@ -74,9 +74,31 @@ auto-passed by construction. See the SESSION.md entry for 2026-10-30.
 
 ## Revisit
 
-When per-dimension gating lands (Phase 1, piece 3), `characterIdentity >= 85`
-becomes the axis to weight, because identity is what the phase is about and the
-aggregate can hide it.
+Per-dimension gating has landed (Phase 1, piece 3 follow-through): auto-approval requires
+`overall >= 80` **and** `characterIdentity >= 85`. See "The decision" above.
+
+## Watch: the gate's first real rejection
+
+The identity gate was designed from calibration, not from a failure. Checked against every
+completed run at the time it shipped, **zero assets would have been newly rejected** — the 802
+constant-90 rows carry `characterIdentity = 90` and pass trivially. So the gate is currently
+validated by its test matrix and by nothing else.
+
+The event it exists for is:
+
+```
+overallScore >= 80 AND (characterIdentityScore IS NULL OR characterIdentityScore < 85)
+```
+
+**That event is worth alerting on**, because it is the first evidence the gate does anything.
+Two interpretations if it never fires over a long window:
+
+- the gate is unnecessary (assets do not drift in this way), or
+- the identity dimension is not measuring drift.
+
+Both are worth knowing, and neither can be distinguished by reasoning about the code. Until the
+first rejection, treat the gate as **prospective and unproven in production** rather than
+validated.
 
 ## Related open work
 
