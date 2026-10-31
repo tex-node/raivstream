@@ -4,6 +4,12 @@ A planning document. It records the ordered phases by which Raivstream can match
 of rush.film, and names explicitly what is deferred and why. No phase here is complete; this
 is a plan, not a changelog.
 
+**Start with the phase template** (below, "Phase template"). It exists because four phases'
+worth of silent failures were found the hard way - a scoring gate that echoed its own prompt, a
+behaviour flag that was true in the database and false in the code, a cache key that did not
+cover a behaviour-determining input, a commit that landed on the wrong branch. Each cost real
+time or real credits. Use the template rather than rediscovering them.
+
 ## What this document is not
 
 Not an implementation spec, not a commitment, and not a schedule. The phases are **ordered, not
@@ -138,6 +144,26 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 **Exit criteria.** Change scene 3 → only scene 3 re-renders and the film re-assembles; the
 other scenes keep their existing takes.
+
+**Reads before writing code (none cost credits).**
+
+- **A — segment-cache portability.** `movieRenderWorker` persists per-segment artefacts per
+  job; `renderOutputDerivative` builds one filter graph over all scenes and uploads a single
+  `out.mp4`. Does the Movie Builder pattern port cleanly, or is the story export's shape
+  structurally different? This decides whether (1) is a cache-key change or a renderer rewrite.
+- **B — revision semantics.** Use Phase 9A's `SequenceVersion` monotonic `max+1` pattern as the
+  model (never reuse a version number), alongside the export's `sourceHash` discipline.
+- **C — `sourceHash` coverage.** `sourceHash` was `sceneId:assetId` pairs plus
+  `EXPORT_RENDERER_VERSION`. Does it include **project-level behaviour flags** such as
+  `identityRefsEnabled`, which now changes the rendered output? If it covers only per-scene
+  asset identity, then flipping a behaviour flag does not change the hash while it does change
+  the output - and Phase 2's A/B is confounded by a cache that cannot see the difference.
+  **A hash that does not cover a behaviour-determining input is a cache that lies** - the same
+  class as a flag that is true in the database and false in the code.
+
+**Baseline.** The current behaviour is a full re-render on any asset change, and it is
+measurable from `story_video_exports` without spending credits: count distinct `sourceHash`
+values per project against asset changes.
 
 **Dependencies.** Phase 1. A take model without a reference store produces revisioned takes of
 inconsistent characters.
