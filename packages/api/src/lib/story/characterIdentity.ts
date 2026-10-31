@@ -61,11 +61,30 @@ export function composeIdentityBlock(character: {
   ].filter(Boolean).join(', ');
 }
 
+/** Options are explicit: a function that reads ambient state cannot be tested alone. */
+export type IdentityResolutionMode = {
+  /** false = Phase 1 piece (3) flag-on: drop the visual prose, keep the name binding. */
+  includeProse: boolean;
+  /** 0-based position of this character's reference image in the provider payload. */
+  referenceIndex?: number;
+};
+
 /**
  * `lockedIdentityBlock` when set, else the existing composer output. This is the
  * byte-compatible fallback for characters that have never been frozen.
+ *
+ * With `includeProse: false` the 442-char visual description is replaced by a
+ * positional binding, because `fal-ai/flux-2/edit` has no reference-token channel:
+ * the prose is the only way to link an image to a character name.
  */
-export function resolveIdentityFor(character: CharacterIdentityInput): string {
+export function resolveIdentityFor(
+  character: CharacterIdentityInput,
+  mode: IdentityResolutionMode = { includeProse: true },
+): string {
+  if (!mode.includeProse) {
+    const position = (mode.referenceIndex ?? 0) + 1;
+    return `the character in reference image ${position} is ${character.name}`;
+  }
   const locked = character.lockedBlock?.trim();
   return locked ? locked : character.promptIngredient;
 }
@@ -74,12 +93,19 @@ export function resolveIdentityFor(character: CharacterIdentityInput): string {
  * Replace each character's identity with a name-based placeholder token. Returns
  * the joined token string (sent to the enhancer) and the token -> resolved-block
  * map (used to substitute after enhancement).
+ *
+ * The mode is threaded through to the map, not just the placeholder text: the
+ * enhancer substitutes the map back into its output, so a prose value here would
+ * silently restore the identity block on the flag-on path.
  */
-export function renderPlaceholders(characters: CharacterIdentityInput[]): { text: string; map: Record<string, string> } {
+export function renderPlaceholders(
+  characters: CharacterIdentityInput[],
+  mode: { includeProse: boolean } = { includeProse: true },
+): { text: string; map: Record<string, string> } {
   const map: Record<string, string> = {};
-  const tokens = characters.map((character) => {
+  const tokens = characters.map((character, index) => {
     const token = placeholderFor(character.name);
-    map[token] = resolveIdentityFor(character);
+    map[token] = resolveIdentityFor(character, { includeProse: mode.includeProse, referenceIndex: index });
     return token;
   });
   return { text: tokens.join('; '), map };
