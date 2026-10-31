@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   // Segment retention: 30-day TTL (docs/operations/segment-cache-policy.md).
   const segments = await sweepExpiredExportSegments().catch(() => ({ scanned: 0, deleted: 0 }));
   console.info(
-    `[worker] ready — queue=export.story stuck_sweep scanned=${scanned} requeued=${requeued} critic_sweep scanned=${critic.scanned} failed=${critic.failed}`,
+    `[worker] ready — queue=export.story stuck_sweep scanned=${scanned} requeued=${requeued} critic_sweep scanned=${critic.scanned} failed=${critic.failed} export_segment_sweep scanned=${segments.scanned} deleted=${segments.deleted}`,
   );
 
   let shuttingDown = false;
