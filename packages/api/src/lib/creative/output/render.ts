@@ -877,20 +877,31 @@ export async function renderOutputDerivative(
           `[export.segments] hit=${cacheHits} miss=${cacheMisses.length} missKeys=${cacheMisses.join(',') || 'none'} elapsedMs=${Date.now() - segmentLoopStartedAt}`,
         );
         const assembled = path.join(dir, 'out.mp4');
-        const segLabels = segFiles.map((_, i) => `[${i}:v]`).join('');
+        // Join with the concat DEMUXER and stream copy, not a filter graph.
+        // Segments are already exactly 1080x1920 / 30 fps / h264, so re-encoding
+        // them here would spend a second generation of compression for nothing:
+        // the segment path would then differ from the single-graph path at ~44 dB
+        // for an implementation reason, not a quality decision. Copy keeps the
+        // pixels the segments already contain.
+        const concatList = path.join(dir, 'segments.txt');
+        await writeFile(
+          concatList,
+          segFiles.map((file) => `file '${file}'`).join('\n') + '\n',
+        );
         await doFfmpeg([
-          ...segFiles.flatMap((file) => ['-i', file]),
-          '-filter_complex', `${segLabels}concat=n=${segFiles.length}:v=1:a=0[vout]`,
-          '-map', '[vout]',
-          '-t', String(capSeconds),
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-pix_fmt', 'yuv420p',
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', concatList,
+          '-c', 'copy',
           '-movflags', '+faststart',
           assembled,
         ]);
         segmentAssembled = assembled;
-        console.info(`[export.segments] assembled n=${segFiles.length} audio=deferred`);
+        // No -t here on purpose: with stream copy there is nothing to trim, and the
+        // cap existed only to correct a declared-duration derivation that is now
+        // measured (see the [export.derivation] log). The measured sum is the
+        // authority, and the end card is appended from it.
+        console.info(`[export.segments] assembled n=${segFiles.length} audio=deferred copied=true`);
       }
     }
 
