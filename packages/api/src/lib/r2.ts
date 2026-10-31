@@ -4,7 +4,7 @@
  * so short-lived provider URLs don't expire before the client loads them.
  */
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 function getClient() {
   const rawEndpoint = process.env.R2_ENDPOINT!;
@@ -133,4 +133,44 @@ export async function removeFromR2(key: string): Promise<void> {
   } catch {
     /* best-effort */
   }
+}
+
+export interface R2ObjectInfo {
+  key: string;
+  lastModified: Date | null;
+  size: number | null;
+}
+
+/**
+ * List objects under a prefix, paginated. Returns [] when R2 is not configured.
+ *
+ * Needed by the export-segment retention sweep: a TTL policy has to enumerate
+ * what it is deleting, and a delete-by-known-key helper cannot do that on its own.
+ * Best-effort like the other helpers - a listing failure returns whatever was
+ * collected rather than throwing.
+ */
+export async function listObjectsInR2(prefix: string): Promise<R2ObjectInfo[]> {
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!bucket) return [];
+  const out: R2ObjectInfo[] = [];
+  let continuationToken: string | undefined;
+  try {
+    do {
+      const page = await getClient().send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken }),
+      );
+      for (const object of page.Contents ?? []) {
+        if (!object.Key) continue;
+        out.push({
+          key: object.Key,
+          lastModified: object.LastModified ?? null,
+          size: object.Size ?? null,
+        });
+      }
+      continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (continuationToken);
+  } catch {
+    /* best-effort: return what was collected */
+  }
+  return out;
 }
