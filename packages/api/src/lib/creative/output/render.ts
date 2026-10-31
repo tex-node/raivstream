@@ -12,12 +12,17 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile, readFile, rm, rename , stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  buildExportSegmentKey,
+  createR2ExportSegmentStore,
+  exportSegmentObjectKey,
+  type ExportSegmentStore,
+} from './exportSegments';
 import { uploadBufferToR2 } from '../../r2';
 import { trackChild } from '../../childProcesses';
 import type { OutputDerivation } from './derivation';
 
-export interface OutputRenderDeps {
-  fetch?: typeof fetch;
+export interface OutputRenderDeps {fetch?: typeof fetch;
   ffmpeg?: (args: string[]) => Promise<void>;
   upload?: (buffer: Buffer, key: string, contentType: string) => Promise<string | null>;
   /** Override the end-card preflight (tests inject a known-good or known-bad result). */
@@ -29,6 +34,11 @@ export interface OutputRenderDeps {
    * how to position it in the ambience bed.
    */
   probe?: (filePath: string) => Promise<MediaProbe>;
+  /**
+   * Segment cache store. `undefined` = build one from env when the flag is on;
+   * `null` = explicitly disabled (tests use this to prove the off switch).
+   */
+  segmentStore?: ExportSegmentStore | null;
 }
 
 /** E1 — native-audio probe result for a source clip. */
@@ -411,8 +421,25 @@ async function doEndCardPreflight(): Promise<EndCardPreflightResult> {
   return { drawtext, font, ok: drawtext && font };
 }
 
+/**
+ * The flag is the off switch, not a hint: when `CACHE_SEGMENTS_ENABLED` is not
+ * `'true'` this returns null and the caller never touches the store - no `has()`,
+ * no `upload()`. Exported so that property is testable rather than asserted in a
+ * comment.
+ */
+export function resolveSegmentStore(
+  env: NodeJS.ProcessEnv,
+  injected?: ExportSegmentStore | null,
+): ExportSegmentStore | null {
+  if (env.CACHE_SEGMENTS_ENABLED !== 'true') return null;
+  if (injected !== undefined) return injected;
+  return createR2ExportSegmentStore();
+}
+
 export interface RenderScene {
   sceneId: string;
+  /** The ready asset this scene renders from — part of the segment cache key. */
+  assetId?: string | null;
   videoUrl?: string | null;
   stillUrl?: string | null;
   /** Narration audio URL for educational mux (R2-hosted MP3). Server-side only — never accepted from client input. */
@@ -424,6 +451,8 @@ export async function renderOutputDerivative(
     scenes: RenderScene[];
     derivation: OutputDerivation;
     r2Prefix: string;
+    /** Project scope for the segment cache. Absent = caching disabled for this render. */
+    projectId?: string;
     backgroundMusicUrl?: string | null;
     /**
      * Creator's public handle for the end card. Derived from trusted account data
@@ -774,29 +803,79 @@ export async function renderOutputDerivative(
         );
       } else {
         const segFiles: string[] = [];
+        // Cache is an optimisation: a failed read falls through to a render, and a
+        // failed write is logged. Nothing here may fail the export.
+        const cacheStore = resolveSegmentStore(process.env, deps.segmentStore);
+        let cacheHits = 0;
+        const cacheMisses: string[] = [];
+        const segmentLoopStartedAt = Date.now();
         for (let i = 0; i < inputs.length; i += 1) {
           const segPath = path.join(dir, `seg-${i}.mp4`);
-          // VIDEO ONLY. Audio is muxed once, continuously, after assembly: six
-          // independent AAC encodes quantise to their frame grid and leave the
-          // joined track ~10 ms short of the single-graph timeline. The single
-          // continuous audio bed is the mechanism that makes the two paths
-          // bit-identical, and it already exists (`muxNativeAudioBed`).
-          await doFfmpeg([
-            '-i', inputs[i]!,
-            '-filter_complex',
-              `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
-            '-map', '[v]',
-            '-an',
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-pix_fmt', 'yuv420p',
-            '-movflags', '+faststart',
-            segPath,
-          ]);
+          const scene = input.scenes[i];
+          const cacheObjectKey = cacheStore && input.projectId && scene?.assetId
+            ? exportSegmentObjectKey(
+                input.projectId,
+                buildExportSegmentKey({
+                  rendererVersion: EXPORT_RENDERER_VERSION,
+                  segmentIndex: i,
+                  sourceAssetId: scene.assetId,
+                  width: W,
+                  height: H,
+                }),
+              )
+            : null;
+          let loadedFromCache = false;
+          if (cacheStore && cacheObjectKey) {
+            const present = await cacheStore.has(cacheObjectKey).catch(() => false);
+            if (present) {
+              try {
+                await writeFile(segPath, await cacheStore.download(cacheObjectKey));
+                loadedFromCache = true;
+                cacheHits += 1;
+              } catch (error) {
+                // Flaky R2, truncated object, expired URL - render instead.
+                console.warn(
+                  `[export.segments] cache read failed for ${cacheObjectKey}: ${(error as Error).message} - re-rendering`,
+                );
+              }
+            }
+          }
+          if (!loadedFromCache) {
+            // VIDEO ONLY. Audio is muxed once, continuously, after assembly: six
+            // independent AAC encodes quantise to their frame grid and leave the
+            // joined track ~10 ms short of the single-graph timeline. The single
+            // continuous audio bed is the mechanism that makes the two paths
+            // bit-identical, and it already exists (`muxNativeAudioBed`).
+            await doFfmpeg([
+              '-i', inputs[i]!,
+              '-filter_complex',
+                `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=30,settb=AVTB[v]`,
+              '-map', '[v]',
+              '-an',
+              '-c:v', 'libx264',
+              '-preset', 'ultrafast',
+              '-pix_fmt', 'yuv420p',
+              '-movflags', '+faststart',
+              segPath,
+            ]);
+            if (cacheStore && cacheObjectKey) {
+              await cacheStore.upload(cacheObjectKey, await readFile(segPath)).catch((error: unknown) => {
+                console.warn(
+                  `[export.segments] cache write failed for ${cacheObjectKey}: ${(error as Error).message}`,
+                );
+              });
+              cacheMisses.push(cacheObjectKey.split('/').pop()?.replace('.mp4', '').slice(0, 12) ?? 'unknown');
+            }
+          }
           const segProbe = await doProbe(segPath).catch(() => ({ durationSeconds: null }) as MediaProbe);
-          console.info(`[export.segments] seg=${i} duration=${segProbe.durationSeconds ?? 'null'}`);
+          console.info(
+            `[export.segments] seg=${i} source=${loadedFromCache ? 'cache' : 'render'} duration=${segProbe.durationSeconds ?? 'null'}`,
+          );
           segFiles.push(segPath);
         }
+        console.info(
+          `[export.segments] hit=${cacheHits} miss=${cacheMisses.length} missKeys=${cacheMisses.join(',') || 'none'} elapsedMs=${Date.now() - segmentLoopStartedAt}`,
+        );
         const assembled = path.join(dir, 'out.mp4');
         const segLabels = segFiles.map((_, i) => `[${i}:v]`).join('');
         await doFfmpeg([
