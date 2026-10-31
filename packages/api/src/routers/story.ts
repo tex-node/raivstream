@@ -15,7 +15,7 @@ import { creditKeys } from '../lib/credits/idempotencyKeys';
 import { mirrorUrlToR2, uploadBufferToR2, getPublicUrlForKey } from '../lib/r2';
 import { analytics, type StoryAnalyticsEventName } from '../lib/analytics';
 import { promptEnhancerService } from '../lib/promptEnhancerService';
-import { composeIdentityBlock, renderPlaceholders, substituteIdentityBlocks, computeSceneImageRouting, fetchApprovedReferences } from '../lib/story/characterIdentity';
+import { composeIdentityBlock, renderPlaceholders, resolveIdentityFor, substituteIdentityBlocks, computeSceneImageRouting, fetchApprovedReferences } from '../lib/story/characterIdentity';
 import { isFalCapabilityLive, readFalMediaConfig } from '../lib/mediaProviders/config';
 import { SCENE_IMAGE_RENDERER_VERSION } from '../lib/sceneImageVersion';
 import {
@@ -2282,8 +2282,18 @@ export function composeScenePromptText(input: {
     prompt = raw.length <= effectiveCeiling ? raw : limitText(raw, effectiveCeiling);
   } else {
     // IMAGE / COMIC_PANEL path — unchanged
+    // Phase 1 piece (3): with the per-project flag on, the identity prose is
+    // replaced by a positional binding. flux-2/edit has no reference-token
+    // channel, so the name binding is the only link between image and character.
+    const identityRefsEnabled = Boolean(
+      (input.scene.project as { identityRefsEnabled?: boolean }).identityRefsEnabled,
+    );
     const characterText = characters.length
-      ? characters.map((character) => character.promptIngredient).join('; ')
+      ? characters
+          .map((character, index) =>
+            resolveIdentityFor(character, { includeProse: !identityRefsEnabled, referenceIndex: index }),
+          )
+          .join('; ')
       : 'use the established main character design from the story';
     const settingText = [
       input.scene.locationType ? `setting: ${input.scene.locationType}` : undefined,
@@ -2428,7 +2438,11 @@ export async function composeEnhancedScenePrompt(
   const identityPlaceholders = (): string => {
     const characters = characterReferencesFromScene(input.scene, input.scene.project.characterMemory);
     if (!characters.length) return 'use the established main character design from the story';
-    const placeholders = renderPlaceholders(characters);
+    // The mode reaches the map, not just the placeholder text: the enhancer
+    // substitutes the map back, so a prose value here would restore the block.
+    const placeholders = renderPlaceholders(characters, {
+      includeProse: !Boolean((input.scene.project as { identityRefsEnabled?: boolean }).identityRefsEnabled),
+    });
     identityMap = placeholders.map;
     return placeholders.text;
   };
