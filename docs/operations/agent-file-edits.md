@@ -89,3 +89,26 @@ bypassed**, not a convention that assumes care: a failing test, an exit code, a
 log line, a named incident row. The ones that survived are the ones that fire;
 the ones that did not survive were the ones that depended on remembering.
 
+## The self-consistency class
+
+A distinct failure mode, named after its third instance in one stretch: **a
+system that agrees with itself cannot detect its own error.** Each of these was
+internally coherent, and coherence is what made it invisible.
+
+| Instance | Why it looked correct | What was actually happening |
+|---|---|---|
+| Creative Critic | provider real, model real, API key real, 802 completed runs | the prompt contained a filled-in JSON example; every score was the example echoed back |
+| Export cache | `sourceHash` matched the exported file exactly, and re-exports were consistent | the hash covered `sceneId:assetId` but not a project flag that changed the rendered prompt |
+| Export derivation | `durationSeconds` in the DB matched the probe to the millisecond | the probe measured a file that had already been truncated by the declared-duration cap |
+
+The shared tell: **agreement between two artefacts that share an input**. DB
+matching the probe proves the DB is honest, not that the probe measured the
+intended thing; a cache hit proves the key matched, not that the key covered
+every input; a stable score proves stability, not discrimination.
+
+The check that catches the class is always external to the system that agrees
+with itself: calibrate the gate against a known-bad input, put the
+behaviour-determining input into the key, and compare the artefact against the
+sum of its parts rather than against its own record.
+
+
