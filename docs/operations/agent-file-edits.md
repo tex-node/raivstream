@@ -66,6 +66,15 @@ relying on memory of the work.
 - Never switch branches inside a script that may have left uncommitted work.
 - Treat any gate that prints a result as informational only: the ship step must
   `exit 1` on a non-zero exit code, or the gate is decorative.
+- **Address `gh` PRs by number, not by current branch.** `gh pr checks` infers its
+  target from the checked-out branch, so after any script that ends with
+  `git switch main` it silently checks the wrong thing — and reports "no pull
+  requests found", which reads like a missing PR rather than a wrong branch.
+  `gh pr checks <number>` and `gh pr merge <number>` cannot drift. Same discipline
+  as passing a flag explicitly: **a command that infers its target from ambient
+  state is a command that can lie.**
+- Pass long PR/commit bodies via `--body-file`. A `$(...)` or `||` inside a
+  double-quoted `--body` argument is parsed by the shell, not by `gh`.
 
 ## Why this is written down
 
