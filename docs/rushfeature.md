@@ -377,3 +377,32 @@ feature.
 
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
+
+## Phase template (proven on Phase 1)
+
+Phase 1 is the first phase in this roadmap that closed on its own exit criterion rather than
+on an argument. Its sequence is the template for Phase 2 and Phase 3:
+
+1. **Capture a baseline** on the current deploy, scored by whatever gate will judge the phase.
+2. **Ship the additive pieces first**, with no behaviour change (schema, migrations, columns
+   nothing consumes yet).
+3. **Ship the behaviour change behind a per-project flag**, default off.
+4. **A/B on the same deploy** — same worker, same critic, same assets. A global env flag makes
+   the comparison two deploys apart, which is not a comparison.
+5. **Keep the flag on only if the result matches or beats the baseline.** Otherwise it stays
+   off and the old path remains.
+6. **Replicate on a second scene/character before generalising.** One sample with a favourable
+   delta is a hypothesis.
+7. **State the experiment's scope in the record**, so a narrow result cannot later be read as a
+   broad one.
+
+Three checks catch the silent failures that make a result meaningless rather than wrong:
+
+- **Calibrate any scoring gate against a known-bad input** before trusting it on anything good.
+  A critic that reads its own handwriting is worse than no critic, because it manufactures
+  evidence.
+- **Assert a behaviour flag in the path that consumes it**, not in the database that stores it.
+  A flag can be true in storage and `undefined` in every consumer.
+- **Guard the branch before committing**, the same way a gate's exit code is checked before
+  merging. A tool that reports success while doing something else is the default failure mode.
+
