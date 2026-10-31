@@ -100,6 +100,20 @@ export function HomeScreen() {
           </p>
         </div>
 
+        {isSignedIn && projects.length > 0 && (
+          // The list below is truncated to two "continue" items, so anything older
+          // was reachable only by URL. This is the way back to every story.
+          <div className="flex items-center justify-between gap-3">
+            <span className="noc-section-header">Your stories</span>
+            <Link
+              href="/story-playground/new?tab=library"
+              className="text-sm font-black text-[var(--noc-purple)] hover:underline"
+            >
+              See all {projects.length} →
+            </Link>
+          </div>
+        )}
+
         {isSignedIn && (
           <div className="flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-3">
             {projectsQuery.isLoading ? (
