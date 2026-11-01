@@ -156,6 +156,16 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3.5 schema shipped (2026-11-01).** `CreatorProfile`, `FilmSubmission`, `RevenueTerms`,
+`FilmPayout` added additively (no existing column altered; no call site changed). **Terms pinning decided
+and tested before any consumer exists:** a film is paid under the terms pinned at acceptance
+(`acceptedRevenueTermsId`), never under the terms effective at payout; `resolvePinnedTerms` consults only
+the pinned id and returns null otherwise, with no "latest effective" fallback because that fallback is the
+bug. Seven tests: editing the terms table leaves an accepted film's terms and payout unchanged; an
+unpinned submission is refused rather than priced; integer basis points floor to the cent. Migration is
+additive and **not yet applied** to production. Next: `/submit` + the admin queue, then `/watch` and
+`/filmmakers/[username]`.
+
 **Phase 3.5 scoped** — see `docs/operations/phase-3.5-watch-scoping.md`. `Video` is already film-shaped for
 playback (`completionRate`, `avgWatchTime`, `engagementScore`), so the gap is **attribution and
 ingestion**: `CreatorProfile`, `FilmSubmission`, `RevenueTerms`, `FilmPayout`, four routes
