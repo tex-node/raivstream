@@ -1612,7 +1612,7 @@ model StorySceneAsset {
   @@index([projectId])
   @@index([userId])
   @@index([sceneId, isLatest])
-  @@index([sceneId, takeNumber])
+  @@unique([sceneId, assetType, takeNumber])
   @@unique([sceneId, idempotencyKey])
   @@index([sceneId, isFavorite])
   @@index([deletedAt])
