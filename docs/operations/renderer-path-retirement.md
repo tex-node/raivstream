@@ -63,6 +63,30 @@ in the same change: without it, nothing would fail if a conditional were re-adde
 measurement of the single-graph vs segment-path difference and cannot be reproduced
 without restoring the old path.
 
+## Criterion 4 execution plan (settled 2026-11-01)
+
+Four parts, one change:
+
+1. **Migrate the nine assertions to the segment contract** - and migrate the *intent*, not
+   just the number. Each migrated test must still prove the three properties the old test
+   proved, or the segment path ends up with weaker guarantees than the pipeline it replaced:
+
+   - the film has the right scenes, **in the right order**;
+   - the **audio is present and matched to the timeline**;
+   - the **end card is applied**.
+
+   A test that only checks `N+2` ffmpeg calls has migrated the mechanism and dropped the
+   guarantees.
+2. **Delete, don't disable** - the `RENDER_SEGMENTS_ENABLED` read, the branch, and
+   `filter`'s no-music use. `filter` survives only for the background-music path, with a
+   comment naming it as the surviving use.
+3. **Enforcement test** - `render.ts` contains no `RENDER_SEGMENTS_ENABLED`. It belongs
+   **in `output.test.ts`, next to the migrated tests**, not in a separate architecture
+   file: the person who re-adds the flag will be editing `render.ts` and running that
+   suite, and a test they never run is not a control.
+4. **Retirement document to four ticks**, with the evidence already recorded, plus the
+   sentence that 44.66 dB is the last measurement of the old path.
+
 ## What is already established
 
 - Segment path: 993 frames / 33.113991 s / 1427 audio frames - identical to
