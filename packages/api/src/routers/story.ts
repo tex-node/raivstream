@@ -3458,12 +3458,19 @@ async function generateSceneVideoAsset(
   let parentTakeId: string | null = null;
   let idempotencyKey: string | undefined;
   let reusedAsset: any = null;
-  if (takeAware) {
-    latestTake = await (ctx.prisma as any).storySceneAsset.findFirst({
+  // NUMBERING IS CORRECTNESS, NOT SEMANTICS. The unique index
+  // (sceneId, assetType, takeNumber) exists whether the flag is on or off, so a row
+  // inserted with the column default of 1 collides as soon as take 1 is taken - and
+  // the P2002 rescue would then number takes for a project that never opted in.
+  // Numbering therefore always runs; only idempotency and conflict are gated.
+  latestTake = await (ctx.prisma as any).storySceneAsset.findFirst({
       where: { sceneId: scene.id, assetType: 'VIDEO' },
       orderBy: { takeNumber: 'desc' },
       select: { id: true, takeNumber: true },
     });
+    takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
+    parentTakeId = latestTake?.id ?? null;
+    if (takeAware) {
     idempotencyKey =
       input.idempotencyKey ??
       deriveTakeIdempotencyKey({
@@ -3498,8 +3505,6 @@ async function generateSceneVideoAsset(
           cause: conflict,
         });
       }
-      takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
-      parentTakeId = latestTake?.id ?? null;
       // Gate every take-aware run on a log line that names what it did: a flag that
       // is true in the database but false in this process produces a false pass, and
       // so does a derived key silently standing in for a supplied one.
