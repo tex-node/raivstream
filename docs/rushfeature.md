@@ -148,6 +148,16 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Cohort population (2026-11-01, measured before running).** 40 projects meet the original conditions;
+38 have no failed generation in 7 days; **9 are cold-eligible** (newest asset newer than newest export);
+**7 pass both**: `cmuakvg9u`, `cmubjeepf`, `cmv0wzock`, `cmuh3t0ow`, `cmucb152g`, `cmud2cjve`,
+`cmv8feun4`. The two already-proven projects are no longer cold-eligible *because* they were exported —
+they warmed their own caches, so consuming a candidate removes it from the pool. Five datapoints is
+achievable with seven candidates, but only just, and the selection must be computed at run time.
+**Criterion decision:** each project yields two numbers (cold `hit=0 miss=N`, warm `hit=N−1 miss=1`).
+Measured as **three projects × both arms** is stronger than five projects × one number, because the arm
+pair is what proves the loop; the breadth question is answered by three differently-shaped projects.
+
 **Warm-cache loop, corrected (2026-11-01).** Gates held (`SELECTION_COUNT=5`, `ENABLED=5`). Two of five
 projects reproduced the claim with `[export.path] segments=true`: **hit=12 miss=1** and **hit=5 miss=1**.
 The other three were unmeasurable for two reasons that are not the cache: their **cold** export reused an
