@@ -156,6 +156,18 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**5.0 env gap closed (2026-11-01), and one false assurance removed.** All fourteen runtime flags are now
+declared in `ecosystem.config.cjs` for both apps — ten enabled, three (`STUDIO`, `SERIES`, `AUDIO`)
+**explicitly `'false'`** — because pm2 does not read `env_file` and the deploy workflow sources
+`apps/web/.env.local` before `pm2 start`. That second fact was the finding: `STUDIO` and `SERIES` were live
+`true` in both processes while a test asserted they were absent from the config. **Absence is not off.** The
+test now asserts the value (`STUDIO_ENABLED: 'false'`), and the server's `.env.local` no longer carries
+them, so the config is the only authority. Verified after a real deploy: core chain `true`, deferred stages
+`false`, in both processes. **Ledger writer: blocked on a business input** — 0 subscriptions, 0 paid credit
+purchases in 90 days, 108 watch-history rows over 9 videos. The pro-rata input is real; the money side is
+empty. Unblocked by a first revenue period or a decision to seed a pool for testing. See the "Ledger Writer:
+Blocked On" section in `docs/operations/phase-3.5-watch-scoping.md`.
+
 **Phase 3.5 UI shipped (2026-11-01).** Four pages: `/submit` (effective terms shown before the button,
 rejection-finality copy, already-submitted disabled), `/watch` (attribution from the join on every
 render), `/filmmakers/[username]` (profile + accepted films, **no earnings panel**), `/admin/films` (queue

@@ -88,3 +88,52 @@ is *ingestion + attribution + a watch surface*.
 3. Admin queue and terms editor.
 4. `/watch` + `/filmmakers/[username]`, reading only accepted submissions.
 5. Analytics events and the submission↔watch join.
+
+## Ledger Writer: Blocked On
+
+**Status: blocked on a business input, not on code.** No `FilmRevenuePeriod` row exists, no
+`film_revenue_periods` table exists yet, and — measured on 2026-11-01 — **there is no revenue in the
+system to divide**:
+
+| check | result |
+|---|---|
+| `film_revenue_periods` table present | **no** (by design; ships with the writer) |
+| `subscriptions` rows (Paystack + Stripe) | **0** |
+| paid credit purchases, last 90 days | **0** |
+| `watch_history` rows (the pro-rata input) | 108 across 9 videos |
+
+So the watch side of the computation is real and the money side is empty. Building the writer now would
+mean testing it against a fixture pool — machinery with no caller, which is the `moderateExport` mistake.
+
+### The missing input
+
+1. **A pool amount, and the decision of how it is sized.** The platform does have revenue *sources* wired
+   (`Subscription` with Paystack and Stripe, `CreditTransaction` purchases), but neither has produced a
+   row yet. A pool therefore cannot be derived; it has to be **declared** by an operator for the first
+   period, and the sizing rule (a percentage of subscription revenue? of credit spend? a fixed seed?) is a
+   business decision, not an engineering one.
+2. **A period boundary.** Monthly is the assumption; nothing in the schema enforces it.
+
+### The test that will prove it when a period exists
+
+The two properties already recorded in `docs/operations/phase-3.5-payout-decision.md`:
+
+- **a period with no pool produces no payouts** — and must not mark itself `PAID` while paying zero;
+- **the pinned terms are used**, so editing `revenue_terms` after acceptance changes nothing
+  (`termsPinning.test.ts` already locks the second half).
+
+Plus one that only real data can prove: the sum of `FilmPayout.amountCents` for a period never exceeds
+`poolCents`, and films with zero watch minutes receive no ledger row (not a zero-value one).
+
+### What would unblock it
+
+Either:
+
+- **the first revenue period** — any month in which `subscriptions` or credit purchases produce a
+  non-zero total, which gives the pool a defensible size; or
+- **a decision to seed a pool manually for testing**, in which case the writer can be built and the
+  no-pool/no-payout property tested against a seeded row — and the seed must be clearly labelled as a
+  seed, not as earned revenue.
+
+Until one of those exists, the writer stays unbuilt and `/filmmakers/[username]` keeps having no
+earnings panel — a page that says nothing is more honest than a page that says zero.
