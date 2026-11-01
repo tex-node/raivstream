@@ -148,6 +148,14 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Idempotency collapse resolved at the source (2026-11-01).** The UI now sends one
+`crypto.randomUUID()` key **per regenerate press**, so two quick presses are two intents and two takes; the
+derived 60-second bucket remains only as a fallback for API callers that supply no key. Decision: option 1
+(client keys per press) — the bucket stays a safety net, and creator-visible behaviour no longer depends on
+it. The flag decision is now policy: default-on for `max_take > 1` is defensible on five projects of
+evidence, and the remaining question is which projects should get revision semantics, not whether the
+mechanism works.
+
 **Three-project cohort, both arms (2026-11-01) — 3/3 PASS.** Cold `hit=0 miss=5`, `0/6`, `0/6`; new takes
 8, 5, 5 each with a parent and `isLatest`; warm `hit=4 miss=1`, `5/1`, `5/1`; every arm gated on
 `[export.path] segments=true`. Two GENERAL projects and one KIDS project, so the surface difference is

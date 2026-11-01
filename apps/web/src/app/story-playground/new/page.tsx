@@ -949,8 +949,19 @@ export default function StoryPlaygroundPage() {
   const makeSceneVideo = (scene: StoryScene) => {
     if (!projectId) return;
     const hasVideo = Boolean(latestVideoAsset(scene));
-    const action = hasVideo ? regenerateSceneVideo : generateSceneVideo;
-    action.mutate({ projectId, sceneId: scene.id, model: 'H3_MAX' });
+    // One key per PRESS, not per request. Two quick presses are two intents; without
+    // this the server's derived 60-second bucket would collapse them into a single
+    // take and the creator's second instruction would be silently ignored. The
+    // derived key stays as a fallback for API callers that supply nothing.
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${scene.id}`;
+    if (hasVideo) {
+      regenerateSceneVideo.mutate({ projectId, sceneId: scene.id, model: 'H3_MAX', idempotencyKey });
+    } else {
+      generateSceneVideo.mutate({ projectId, sceneId: scene.id, model: 'H3_MAX' });
+    }
   };
 
   const allScenesHaveReadyVideo =
