@@ -153,7 +153,13 @@ today, so this is the month end of the plan.)* Three things, in this order:
 `parentTakeId` = take 7, `isLatest` true, take 7 demoted — the take-row assertion passed on real data.
 Export with the new take → `[export.path] segments=true`, **hit=5 miss=1**, one segment rendered. Same
 composition re-request → **same export id and same hash**, no new row. Arm 1 (flag off, full re-render)
-was not re-run; the 10,973 ms baseline stands. **Idempotency reuse is rule-tested only:** a "duplicate"
+was not re-run; the 10,973 ms baseline stands. **Idempotency reuse is now proven** with a supplied key: `take=13` created (charged 400), the retry
+returned the same asset id with `reused=true`, **0 credits**, balance unchanged, no new row. Getting
+there exposed an ordering bug (#233): the stale-revision check ran before the idempotency lookup, so a
+duplicate of a request that had just succeeded was answered with `REGENERATION_CONFLICT`. Idempotency
+now resolves first — same key means same intent. A same-payload retry that crosses the 60 s bucket
+boundary is answered with `REGENERATION_CONFLICT`, not a new take: the client is told its expectation
+is stale, which is the honest answer once the first attempt advanced the scene. **Superseded note:** a "duplicate"
 regenerate five minutes later created take 9 because the derived key includes `floor(now/60s)` — the
 documented decision (a retry a minute later is a new intent), not a defect. No request has yet landed
 inside the same bucket, so the `(sceneId, idempotencyKey)` reuse branch has not executed in production.
