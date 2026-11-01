@@ -1591,6 +1591,11 @@ model StorySceneAsset {
   /// per scene (the SequenceVersion max+1 pattern), `parentTakeId` links a take to
   /// the one it replaced, and `idempotencyKey` makes a duplicate regenerate request
   /// return the existing take instead of creating a second.
+  ///
+  /// POLICY: `takeNumber` is "the Nth attempt" and is consumed even when the attempt
+  /// fails - a failed row stays as history with its number. `isLatest` is "the
+  /// current SUCCESSFUL revision" and is the only thing revision semantics may read;
+  /// numbering reads max(takeNumber), everything else reads isLatest.
   takeNumber      Int                   @default(1)
   parentTakeId    String?
   idempotencyKey  String?
