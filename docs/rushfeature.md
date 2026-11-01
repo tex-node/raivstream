@@ -148,6 +148,18 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**A/B result (2026-11-01, one project, flag toggled in the DB).** Stale revision → typed
+`REGENERATION_CONFLICT` (expected 1, current 7). Regenerate at the current take → take 8 written with
+`parentTakeId` = take 7, `isLatest` true, take 7 demoted — the take-row assertion passed on real data.
+Export with the new take → `[export.path] segments=true`, **hit=5 miss=1**, one segment rendered. Same
+composition re-request → **same export id and same hash**, no new row. Arm 1 (flag off, full re-render)
+was not re-run; the 10,973 ms baseline stands. **Idempotency reuse is rule-tested only:** a "duplicate"
+regenerate five minutes later created take 9 because the derived key includes `floor(now/60s)` — the
+documented decision (a retry a minute later is a new intent), not a defect. No request has yet landed
+inside the same bucket, so the `(sceneId, idempotencyKey)` reuse branch has not executed in production.
+Also found by running it (#231): take numbers are per `(sceneId, assetType)`, not per scene — the
+backfill numbered images and videos together, so video takes collided with image takes.
+
 **Scope statement (piece 2, confirmed).** The take model gives **shot-level revisions and
 idempotency** (`takeNumber`, `parentTakeId`, `idempotencyKey`). The film remains a **versioned
 snapshot** keyed on `sourceHash` = the ordered per-scene-take composition: a new take produces a
