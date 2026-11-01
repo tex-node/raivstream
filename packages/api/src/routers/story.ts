@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { protectedProcedure, publicProcedure, r16Procedure, router } from '../trpc';
 import { resolveExportPolicy } from '../lib/story/storyExportPolicy';
 import { moderatePrompt, moderationRejectMessage, suggestSafeRewrite } from '../lib/promptModeration';
+import {
+  classifyTakeUniqueViolation,
+  deriveTakeIdempotencyKey,
+  nextTakeNumber,
+  staleTakeConflict,
+} from '../lib/story/takeNumbering';
 import { storyTextService, MAX_STORY_BODY_CHARS, type StoryAudienceMode } from '../lib/storyTextService';
 import { isManifestStructurerEnabled, structureProductionManifest, type ProductionManifest } from '../lib/productionStructurer';
 import { applyMasterVisualBible } from '../lib/visualBible';
@@ -3305,7 +3311,7 @@ async function generateSceneImageAsset(
 
 async function generateSceneVideoAsset(
   ctx: any,
-  input: { projectId: string; sceneId: string; model: SceneVideoModel; duration?: number; isRegeneration?: boolean; instruction?: string; resolution?: string },
+  input: { projectId: string; sceneId: string; model: SceneVideoModel; duration?: number; isRegeneration?: boolean; idempotencyKey?: string; expectedTakeNumber?: number; instruction?: string; resolution?: string },
 ) {
   const project = await ctx.prisma.storyProject.findFirst({
     where: { id: input.projectId, userId: ctx.user.id },
@@ -3442,12 +3448,72 @@ async function generateSceneVideoAsset(
   }
 
   const providerInfo = sceneVideoProviderInfo(input.model);
-  const asset = await (ctx.prisma as any).storySceneAsset.create({
-    data: {
-      sceneId: scene.id,
+
+  // ── Take semantics (Phase 2, piece 2) ───────────────────────────────────────
+  // Gated on the project column, default false: with the flag off this path is
+  // byte-for-byte the old one (columns take their defaults, no extra queries).
+  const takeAware = Boolean((project as { takeAwareExportEnabled?: boolean }).takeAwareExportEnabled);
+  let latestTake: { id: string; takeNumber: number } | null = null;
+  let takeNumber: number | undefined;
+  let parentTakeId: string | null = null;
+  let idempotencyKey: string | undefined;
+  let reusedAsset: any = null;
+  if (takeAware) {
+    latestTake = await (ctx.prisma as any).storySceneAsset.findFirst({
+      where: { sceneId: scene.id, assetType: 'VIDEO' },
+      orderBy: { takeNumber: 'desc' },
+      select: { id: true, takeNumber: true },
+    });
+    const conflict = staleTakeConflict({
+      expectedTakeNumber: input.expectedTakeNumber ?? null,
+      currentTakeNumber: latestTake?.takeNumber ?? 0,
+    });
+    if (conflict) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: 'REGENERATION_CONFLICT',
+        cause: conflict,
+      });
+    }
+    takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
+    parentTakeId = latestTake?.id ?? null;
+    idempotencyKey =
+      input.idempotencyKey ??
+      deriveTakeIdempotencyKey({
+        sceneId: scene.id,
+        prompt: composed.prompt,
+        expectedTakeNumber: input.expectedTakeNumber ?? null,
+        now: Date.now(),
+      });
+    const existing = await (ctx.prisma as any).storySceneAsset.findFirst({
+      where: { sceneId: scene.id, idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) reusedAsset = existing;
+  }
+
+  if (reusedAsset) {
+    // A duplicate request returns the existing take and charges nothing.
+    const existingAsset = await (ctx.prisma as any).storySceneAsset.findUnique({ where: { id: reusedAsset.id } });
+    await trackStoryAnalytics(ctx, {
+      event: 'scene_generation_reused',
       projectId: project.id,
-      userId: ctx.user.id,
-      assetType: 'VIDEO',
+      audienceMode,
+      properties: { sceneId: scene.id, assetId: reusedAsset.id, generationType: 'VIDEO' },
+    });
+    return { asset: existingAsset, reused: true as const, creditsUsed: 0 };
+  }
+
+  const createTakeRow = (take: number | undefined, parent: string | null) =>
+    (ctx.prisma as any).storySceneAsset.create({
+      data: {
+        sceneId: scene.id,
+        projectId: project.id,
+        userId: ctx.user.id,
+        assetType: 'VIDEO',
+        takeNumber: take ?? 1,
+        parentTakeId: parent,
+        idempotencyKey: idempotencyKey ?? null,
       provider: providerInfo.provider,
       model: providerInfo.model,
       promptVersionId: null,
@@ -3457,8 +3523,45 @@ async function generateSceneVideoAsset(
       status: 'GENERATING',
       creativeStatus: 'DRAFT',
       isLatest: false,
-    },
-  });
+      },
+    });
+
+  let asset: any;
+  try {
+    asset = await createTakeRow(takeNumber, parentTakeId);
+  } catch (error) {
+    const violation = classifyTakeUniqueViolation(error);
+    if (violation === 'idempotencyKey' && idempotencyKey) {
+      // A duplicate request: return the take that already exists, charge nothing.
+      const existing = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { sceneId: scene.id, idempotencyKey },
+      });
+      if (existing) {
+        await trackStoryAnalytics(ctx, {
+          event: 'scene_generation_reused',
+          projectId: project.id,
+          audienceMode,
+          properties: { sceneId: scene.id, assetId: existing.id, generationType: 'VIDEO' },
+        });
+        return { asset: existing, reused: true as const, creditsUsed: 0 };
+      }
+    }
+    if (violation === 'takeNumber') {
+      // A LOST RACE, not a stale client: another writer inserted our number
+      // between the read and the write. Re-read and retry once with the next one.
+      const retryLatest = await (ctx.prisma as any).storySceneAsset.findFirst({
+        where: { sceneId: scene.id, assetType: 'VIDEO' },
+        orderBy: { takeNumber: 'desc' },
+        select: { id: true, takeNumber: true },
+      });
+      asset = await createTakeRow(
+        nextTakeNumber(retryLatest?.takeNumber ?? 0),
+        retryLatest?.id ?? null,
+      );
+    } else {
+      throw error;
+    }
+  }
 
   const isPerSecondVideo = isVideoPerSecondPricingEnabled() && input.model === 'H3_MAX';
   const featureKey = isPerSecondVideo
@@ -5880,6 +5983,11 @@ export const storyRouter = router({
       duration: z.number().int().min(4).max(15).optional(),
       instruction: z.string().max(300).optional(),
       resolution: z.string().max(20).optional(),
+      // Phase 2 piece (2): duplicate requests return the existing take; a stale
+      // expected take is a typed conflict. Both optional, so clients that do not
+      // send them keep the old behaviour exactly.
+      idempotencyKey: z.string().min(8).max(200).optional(),
+      expectedTakeNumber: z.number().int().min(1).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, input)),
 
@@ -5891,6 +5999,11 @@ export const storyRouter = router({
       duration: z.number().int().min(4).max(15).optional(),
       instruction: z.string().max(300).optional(),
       resolution: z.string().max(20).optional(),
+      // Phase 2 piece (2): duplicate requests return the existing take; a stale
+      // expected take is a typed conflict. Both optional, so clients that do not
+      // send them keep the old behaviour exactly.
+      idempotencyKey: z.string().min(8).max(200).optional(),
+      expectedTakeNumber: z.number().int().min(1).optional(),
     }))
     .mutation(({ ctx, input }) => generateSceneVideoAsset(ctx, { ...input, isRegeneration: true })),
 

@@ -11,6 +11,7 @@ export const STORY_ANALYTICS_EVENTS = [
   'story_continued',
   'scene_generation_started',
   'scene_generation_completed',
+  'scene_generation_reused',
   'scene_generation_failed',
   'scene_image_started',
   'scene_image_completed',
