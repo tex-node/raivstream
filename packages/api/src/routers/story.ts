@@ -3464,19 +3464,6 @@ async function generateSceneVideoAsset(
       orderBy: { takeNumber: 'desc' },
       select: { id: true, takeNumber: true },
     });
-    const conflict = staleTakeConflict({
-      expectedTakeNumber: input.expectedTakeNumber ?? null,
-      currentTakeNumber: latestTake?.takeNumber ?? 0,
-    });
-    if (conflict) {
-      throw new TRPCError({
-        code: 'CONFLICT',
-        message: 'REGENERATION_CONFLICT',
-        cause: conflict,
-      });
-    }
-    takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
-    parentTakeId = latestTake?.id ?? null;
     idempotencyKey =
       input.idempotencyKey ??
       deriveTakeIdempotencyKey({
@@ -3485,17 +3472,41 @@ async function generateSceneVideoAsset(
         expectedTakeNumber: input.expectedTakeNumber ?? null,
         now: Date.now(),
       });
-    // Gate every take-aware run on a log line that names what it did: a flag that
-    // is true in the database but false in this process produces a false pass, and
-    // so does a derived key silently standing in for a supplied one.
-    console.info(
-      `[export.take] project=${project.id} scene=${scene.id} take=${takeNumber} parent=${parentTakeId ?? 'none'} key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
-    );
+    // IDEMPOTENCY BEFORE CONFLICT. A client that retries the same request sends the
+    // same expectedTakeNumber, and by then the scene has already moved on because
+    // the first attempt succeeded. Checking the conflict first would answer that
+    // retry with REGENERATION_CONFLICT - punishing the client for the request that
+    // worked. The rule is: same key means same intent, so return the take it made.
     const existing = await (ctx.prisma as any).storySceneAsset.findFirst({
       where: { sceneId: scene.id, idempotencyKey },
       select: { id: true },
     });
-    if (existing) reusedAsset = existing;
+    if (existing) {
+      reusedAsset = existing;
+      console.info(
+        `[export.take] project=${project.id} scene=${scene.id} take=reused key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
+      );
+    } else {
+      const conflict = staleTakeConflict({
+        expectedTakeNumber: input.expectedTakeNumber ?? null,
+        currentTakeNumber: latestTake?.takeNumber ?? 0,
+      });
+      if (conflict) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'REGENERATION_CONFLICT',
+          cause: conflict,
+        });
+      }
+      takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
+      parentTakeId = latestTake?.id ?? null;
+      // Gate every take-aware run on a log line that names what it did: a flag that
+      // is true in the database but false in this process produces a false pass, and
+      // so does a derived key silently standing in for a supplied one.
+      console.info(
+        `[export.take] project=${project.id} scene=${scene.id} take=${takeNumber} parent=${parentTakeId ?? 'none'} key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
+      );
+    }
   }
 
   if (reusedAsset) {
