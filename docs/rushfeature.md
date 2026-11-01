@@ -148,6 +148,16 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Iteration-loop measurement (2026-11-01).** Flag off: 101,025 ms total for regenerate-3 → export →
+regenerate-5 → export, both exports **hit=5 miss=1**. Flag on: 84,171 ms, both exports **hit=5 miss=1**.
+Identical cache behaviour; the 17% difference is regenerate-time noise. **The take model does not speed
+up iteration — the segment cache does, and it does so regardless of the flag.** Also found: with the flag
+off, regenerate inserted `takeNumber=1` (the column default), so a second flag-off regenerate would
+collide on the unique index and be rescued by the takeNumber retry, which is not flag-gated — meaning a
+non-take-aware project would silently start numbering takes. Numbering must become unconditional
+(correctness under the constraint) while idempotency and conflict stay behind the flag. Widening to a
+cohort is blocked on that fix.
+
 **A/B result (2026-11-01, one project, flag toggled in the DB).** Stale revision → typed
 `REGENERATION_CONFLICT` (expected 1, current 7). Regenerate at the current take → take 8 written with
 `parentTakeId` = take 7, `isLatest` true, take 7 demoted — the take-row assertion passed on real data.
