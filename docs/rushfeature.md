@@ -148,6 +148,18 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Cohort run (2026-11-01).** Selection enforced both conditions in SQL and returned exactly 5;
+enablement through a generated SQL file verified `ENABLED=5` before anything ran. **3 of 5 projects
+took a new take with a parent and made it latest**; **2 failed at the provider** (take 3 FAILED, latest
+stayed at 2). Cache lines were `hit=0 miss=13`, `hit=4 miss=2`, `hit=0 miss=12`: **cold caches render
+every segment**, so `hit=N−1` was not demonstrated — that assertion presupposes a warm cache and the
+loop must be export → regenerate → export. Two exports reused existing rows because the failed
+regenerations left the composition unchanged, which is the idempotency working. Findings: a failed
+generation consumes a take number and leaves a FAILED take (correct as history, a policy question for
+revisions); and the cohort assertion was mis-specified for cold caches. **Decision: do not widen.**
+Flag returned to 0 of 166. Prerequisites for a wider rollout: a warm-cache iteration loop per project
+and an answer on whether failed attempts consume take numbers.
+
 **Cohort attempt (2026-11-01) — not run, reasons recorded.** The unconditional-numbering split (#236) is
 verified: two consecutive **flag-off** regenerates produced takes **15 then 16, each with a parent, no
 collision**. The cohort itself did not execute: the `UPDATE ... WHERE id IN (...)` meant to enable five
