@@ -156,6 +156,17 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3.5 UI shipped (2026-11-01).** Four pages: `/submit` (effective terms shown before the button,
+rejection-finality copy, already-submitted disabled), `/watch` (attribution from the join on every
+render), `/filmmakers/[username]` (profile + accepted films, **no earnings panel**), `/admin/films` (queue
+with pinned terms read-only, decline disabled until a reason is typed, **no payout field, no re-open**).
+Verified live: `watch=1` with attribution `Rotimi Babs`, `filmmaker films=1`, `terms-standard-2026:500`,
+`queue=0`; no earnings or payout figure appears in the built output. **Critical finding:** the flag did
+**not** survive the deploy — `FILMS_ENABLED` had been exported into a shell and captured by
+`pm2 restart --update-env`, so the deploy lost it and the pages returned 200 over empty API responses.
+Root: **pm2 does not read `env_file`**; flags must be declared in `ecosystem.config.cjs` (now done for both
+apps) or live in the env file the app loads. Ledger writer still pending a revenue period.
+
 **Payout trigger decided (2026-11-01): revenue-period close, pool + pro-rata.** Not on approval (pays
 before the film earns anything and makes `shareBps` decorative) and not manual (a placeholder in a money
 path). The decision surfaced a gap: **no revenue basis exists** — `WatchHistory` has watch time, not value,
