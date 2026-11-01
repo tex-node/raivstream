@@ -156,6 +156,18 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Payout trigger decided (2026-11-01): revenue-period close, pool + pro-rata.** Not on approval (pays
+before the film earns anything and makes `shareBps` decorative) and not manual (a placeholder in a money
+path). The decision surfaced a gap: **no revenue basis exists** — `WatchHistory` has watch time, not value,
+so the writer needs an operator-set `poolCents` per period:
+`poolShare = floor(pool × filmWatchMs / totalFilmMs)`, `amountCents = floor(poolShare × pinnedShareBps /
+10000)`. A period with no pool pays nothing (and must not mark itself paid); pinned terms are used, per
+`termsPinning`. Payment execution is out of scope. **Also decided: a rejection is final for that video** —
+`videoId` is `@unique`, and a status reset would erase the review trail and the pin — so `/submit` states
+the rule, the filmmaker list offers "Submit a new film", and the admin queue never offers "re-open".
+**No UI may preview payouts:** `/admin/films` has no payout field, `/filmmakers/[username]` has no earnings
+panel until a period exists. See docs/operations/phase-3.5-payout-decision.md.
+
 **Phase 3.5 ingestion shipped and the acceptance loop run (2026-11-01).** `films` router over
 `submissionService`: `currentTerms`, `submit`, `mine`, `approved`, `filmmaker`, `queue`, `review`.
 Terms pinned **at submission** (the terms on screen at consent), decline reason required, approval
