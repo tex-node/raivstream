@@ -148,6 +148,16 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Three-project cohort, both arms (2026-11-01) — 3/3 PASS.** Cold `hit=0 miss=5`, `0/6`, `0/6`; new takes
+8, 5, 5 each with a parent and `isLatest`; warm `hit=4 miss=1`, `5/1`, `5/1`; every arm gated on
+`[export.path] segments=true`. Two GENERAL projects and one KIDS project, so the surface difference is
+covered. **Five projects of evidence total.** Harness finding: export eligibility depends on
+`audienceMode` vs surface (KIDS exports on R16, GENERAL does not) — the first attempt failed with
+"This story cannot be exported on this surface" because the harness passed `isR16: true` for everything.
+**Widening proposal:** default-on for `max_take > 1` (40 projects) is now defensible; the one open risk is
+that the derived-idempotency bucket collapses two *intentional* regenerations within 60 s into one take.
+That is a product decision, not a correctness one.
+
 **Cohort population (2026-11-01, measured before running).** 40 projects meet the original conditions;
 38 have no failed generation in 7 days; **9 are cold-eligible** (newest asset newer than newest export);
 **7 pass both**: `cmuakvg9u`, `cmubjeepf`, `cmv0wzock`, `cmuh3t0ow`, `cmucb152g`, `cmud2cjve`,
