@@ -102,8 +102,20 @@ export class OutputService {
       );
       await prisma.creativeOutput.update({
         where: { id: row.id },
-        data: { status: 'READY' as never, assetUrl: rendered.assetUrl, thumbnailUrl: null, errorMessage: null },
+        data: {
+          status: 'READY' as never,
+          assetUrl: rendered.assetUrl,
+          thumbnailUrl: null,
+          errorMessage: null,
+          // MEASURED, not declared. The renderer probes the file it produced; writing
+          // that value is what stops the row and the artefact disagreeing (the
+          // declaredDurationSeconds lesson, now in the creative layer).
+          durationSeconds: rendered.durationSeconds ?? null,
+        },
       });
+      console.info(
+        `[creative.stage] project=${input.projectId} stage=output status=ok format=${row.format} output=${row.id} measured=${rendered.durationSeconds ?? 'null'}`,
+      );
     } catch (error) {
       await prisma.creativeOutput.update({
         where: { id: row.id },
@@ -207,8 +219,20 @@ export class OutputService {
       );
       await prisma.creativeOutput.update({
         where: { id: row.id },
-        data: { status: 'READY' as never, assetUrl: rendered.assetUrl, thumbnailUrl: null, errorMessage: null },
+        data: {
+          status: 'READY' as never,
+          assetUrl: rendered.assetUrl,
+          thumbnailUrl: null,
+          errorMessage: null,
+          // MEASURED, not declared. The renderer probes the file it produced; writing
+          // that value is what stops the row and the artefact disagreeing (the
+          // declaredDurationSeconds lesson, now in the creative layer).
+          durationSeconds: rendered.durationSeconds ?? null,
+        },
       });
+      console.info(
+        `[creative.stage] project=${input.projectId} stage=output status=ok format=${row.format} output=${row.id} measured=${rendered.durationSeconds ?? 'null'}`,
+      );
     } catch (error) {
       await prisma.creativeOutput.update({
         where: { id: row.id },

@@ -156,6 +156,13 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3 measurement fixes (2026-11-01): 1 of 3 shipped, no re-run.** Shipped: `creative_outputs.
+durationSeconds` now persists the renderer's **measured** duration in both READY writers, plus a
+`[creative.stage] … stage=output` line. Remaining: per-stage `[creative.stage]` lines for
+intent/bible/plan/preview/produce/review/director/approval, and critic score exposure — `review/service.ts`
+builds from `evaluated?.findings` while the nine scores live on `CreativeCriticRun`, so they are dropped in
+translation. **Phase 3 is functionally proven and still unmeasured.**
+
 **First real creator run through the 5.0 chain (2026-11-01): all stages succeeded, three gates failed.** Idea
 *"A 30-second animated short about a lighthouse keeper and a lost bird"* → create, plan, produce (after
 preview approval), REVIEW, critic findings, director (`affectedSceneIds: ["SCENE_02"]`, LOCAL, version 1),
