@@ -21,6 +21,7 @@ import { notificationRouter } from './routers/notification';
 import { storyRouter } from './routers/story';
 import { academyRouter } from './routers/academy';
 import { creativeRouter } from './routers/creative';
+import { filmsRouter } from './routers/films';
 import { directorRouter } from './routers/director';
 
 // Root app router
@@ -41,6 +42,7 @@ export const appRouter = router({
   story: storyRouter,
   academy: academyRouter,
   creative: creativeRouter,
+  films: filmsRouter,
   director: directorRouter,
 });
 
