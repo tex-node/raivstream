@@ -16,8 +16,14 @@ import { CREATIVE_FLAGS } from '../featureFlags';
  * wiring it up fails this test.
  */
 
-/** Off by design — absence from the config IS the state. */
-const INTENTIONALLY_ABSENT = new Set([
+/** Off by design — and declared 'false' EXPLICITLY, never left absent.
+ *
+ * Absence was the original rule and it was wrong: the deploy workflow does
+ * `source apps/web/.env.local` before `pm2 start`, so a flag absent from this config
+ * still reaches the process from that file. Studio and series were live `true` for
+ * exactly that reason while this test passed - it checked the config, not the runtime.
+ */
+const DECLARED_OFF = new Set([
   'RAIVSTREAM_5_STUDIO_ENABLED',
   'RAIVSTREAM_5_SERIES_ENABLED',
   'RAIVSTREAM_5_AUDIO_ENABLED',
@@ -39,16 +45,14 @@ describe('runtime flags survive a deploy', () => {
     ...OTHER_RUNTIME_FLAGS,
   ];
 
-  it('every flag the code reads is declared in the pm2 config or explicitly absent', () => {
-    const missing = declared.filter(
-      (name) => !INTENTIONALLY_ABSENT.has(name) && !source.includes(name),
-    );
+  it('every flag the code reads is declared in the pm2 config', () => {
+    const missing = declared.filter((name) => !source.includes(name));
     expect(missing).toEqual([]);
   });
 
-  it('the disabled flags really are absent from the config', () => {
-    for (const name of INTENTIONALLY_ABSENT) {
-      expect(source.includes(name)).toBe(false);
+  it("the off flags are declared 'false', never absent", () => {
+    for (const name of DECLARED_OFF) {
+      expect(source.includes(`${name}: 'false'`)).toBe(true);
     }
   });
 
@@ -56,7 +60,7 @@ describe('runtime flags survive a deploy', () => {
     // A flag declared on web only is the worker gap in miniature.
     const appBlocks = source.split('name:').length - 1;
     expect(appBlocks).toBeGreaterThanOrEqual(2);
-    const occurrences = declared.filter((name) => !INTENTIONALLY_ABSENT.has(name)).map(
+    const occurrences = declared.filter((name) => !DECLARED_OFF.has(name)).map(
       (name) => source.split(name).length - 1,
     );
     // FILMS_ENABLED is in both blocks; every declared flag should appear at least twice.

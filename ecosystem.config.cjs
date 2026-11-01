@@ -38,7 +38,13 @@ module.exports = {
         RAIVSTREAM_5_DIRECTOR_ENABLED: 'true',
         RAIVSTREAM_5_REVIEW_ENABLED: 'true',
         RAIVSTREAM_5_APPROVAL_ENABLED: 'true',
-        RAIVSTREAM_5_OUTPUT_ENABLED: 'true'
+        RAIVSTREAM_5_OUTPUT_ENABLED: 'true',
+        // Deliberately OFF. Declared false rather than omitted: the deploy
+        // workflow sources .env.local before pm2 start, so an omitted flag can
+        // still arrive from there - which is how studio and series were live.
+        RAIVSTREAM_5_STUDIO_ENABLED: 'false',
+        RAIVSTREAM_5_SERIES_ENABLED: 'false',
+        RAIVSTREAM_5_AUDIO_ENABLED: 'false'
       },
       max_memory_restart: '1G',
       node_args: '--max-old-space-size=900',
@@ -60,7 +66,13 @@ module.exports = {
         RAIVSTREAM_5_DIRECTOR_ENABLED: 'true',
         RAIVSTREAM_5_REVIEW_ENABLED: 'true',
         RAIVSTREAM_5_APPROVAL_ENABLED: 'true',
-        RAIVSTREAM_5_OUTPUT_ENABLED: 'true'
+        RAIVSTREAM_5_OUTPUT_ENABLED: 'true',
+        // Deliberately OFF. Declared false rather than omitted: the deploy
+        // workflow sources .env.local before pm2 start, so an omitted flag can
+        // still arrive from there - which is how studio and series were live.
+        RAIVSTREAM_5_STUDIO_ENABLED: 'false',
+        RAIVSTREAM_5_SERIES_ENABLED: 'false',
+        RAIVSTREAM_5_AUDIO_ENABLED: 'false'
       },
       max_restarts: 5,
       restart_delay: 5000,
