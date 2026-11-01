@@ -148,6 +148,13 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Scope statement (piece 2, confirmed).** The take model gives **shot-level revisions and
+idempotency** (`takeNumber`, `parentTakeId`, `idempotencyKey`). The film remains a **versioned
+snapshot** keyed on `sourceHash` = the ordered per-scene-take composition: a new take produces a
+new export row and re-assembles with N-1 segment-cache hits. The film is **not** a stable entity
+that can be patched in place - that would need a stable film identity plus a live-content policy
+for swapping a take inside a published film, both deferred.
+
 **Status 2026-11-01.** Piece (1) complete: the renderer split is the only pipeline (the
 single-graph branch is deleted, enforcement test in `output.test.ts`), segments cache by
 `sourceAssetId`, and the cache is proven under chained iteration. Piece (2) started: `takeNumber`,
