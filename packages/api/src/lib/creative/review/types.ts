@@ -46,4 +46,6 @@ export interface ReviewRunState {
   findings: ReviewFinding[];
   provider: string | null;
   createdAt: Date;
+  /** Overall + per-dimension critic scores (null when unavailable). */
+  scores?: { overall: number; dimensions: Record<string, number> } | null;
 }
