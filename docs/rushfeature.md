@@ -156,6 +156,15 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**First real creator run through the 5.0 chain (2026-11-01): all stages succeeded, three gates failed.** Idea
+*"A 30-second animated short about a lighthouse keeper and a lost bird"* → create, plan, produce (after
+preview approval), REVIEW, critic findings, director (`affectedSceneIds: ["SCENE_02"]`, LOCAL, version 1),
+CREATIVE approval, PORTRAIT + LANDSCAPE outputs both READY. Probe: **514 frames, 17.133333 s, AAC audio** in
+both formats. Credits: 640 production, 0 approval/outputs. **Failures named:** no `[creative.*]` log line for
+this project (log gate unmet); critic returned findings but **no per-dimension scores** (variation unproven);
+**17.13 s against a 30 s idea**, and `creative_outputs.durationSeconds` is null while the file measures
+17.133333. **Verdict: functionally proven end-to-end, not yet measured.**
+
 **5.0 env gap closed (2026-11-01), and one false assurance removed.** All fourteen runtime flags are now
 declared in `ecosystem.config.cjs` for both apps — ten enabled, three (`STUDIO`, `SERIES`, `AUDIO`)
 **explicitly `'false'`** — because pm2 does not read `env_file` and the deploy workflow sources
