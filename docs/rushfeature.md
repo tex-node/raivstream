@@ -156,6 +156,19 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3.5 ingestion shipped and the acceptance loop run (2026-11-01).** `films` router over
+`submissionService`: `currentTerms`, `submit`, `mine`, `approved`, `filmmaker`, `queue`, `review`.
+Terms pinned **at submission** (the terms on screen at consent), decline reason required, approval
+writes only the submission row. End-to-end on real data: submit → pinned `terms-standard-2026` (500 bps) →
+reject without reason refused → reject with reason, **video still APPROVED/READY** → approve on a second
+film, **video still APPROVED/READY** → `/watch` `count=1` with attribution derived from the profile →
+renaming the profile changed `/filmmakers/[username]` with no video row written. **Operational:** pm2 does
+not read `env_file`; `FILMS_ENABLED` must be exported into the environment pm2 launches with (`.env` alone
+left it `<absent>` in both processes). **Found by running it:** `FilmSubmission.videoId` is unique, so a
+declined film cannot be resubmitted — the filmmaker needs a new video, which is defensible but should be a
+stated rule. UI pages (`/submit`, `/watch`, `/filmmakers/[username]`, `/admin/films`) and payouts remain
+to build; the ledger table is untouched.
+
 **Phase 3.5 schema shipped (2026-11-01).** `CreatorProfile`, `FilmSubmission`, `RevenueTerms`,
 `FilmPayout` added additively (no existing column altered; no call site changed). **Terms pinning decided
 and tested before any consumer exists:** a film is paid under the terms pinned at acceptance
