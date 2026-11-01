@@ -3463,12 +3463,21 @@ async function generateSceneVideoAsset(
   // inserted with the column default of 1 collides as soon as take 1 is taken - and
   // the P2002 rescue would then number takes for a project that never opted in.
   // Numbering therefore always runs; only idempotency and conflict are gated.
+  // TWO QUESTIONS, TWO QUERIES. Numbering needs the highest attempt (a failed take
+  // consumed a number, so the next attempt must not reuse it). Revision semantics -
+  // the conflict check, the parent link, and the log - need the current SUCCESSFUL
+  // revision, which is `isLatest`, not `max(takeNumber)`. Taking the max for both
+  // would let a failed attempt look like the current take to a client.
   latestTake = await (ctx.prisma as any).storySceneAsset.findFirst({
-      where: { sceneId: scene.id, assetType: 'VIDEO' },
-      orderBy: { takeNumber: 'desc' },
+      where: { sceneId: scene.id, assetType: 'VIDEO', isLatest: true },
       select: { id: true, takeNumber: true },
     });
-    takeNumber = nextTakeNumber(latestTake?.takeNumber ?? 0);
+    const maxTake = await (ctx.prisma as any).storySceneAsset.findFirst({
+      where: { sceneId: scene.id, assetType: 'VIDEO' },
+      orderBy: { takeNumber: 'desc' },
+      select: { takeNumber: true },
+    });
+    takeNumber = nextTakeNumber(maxTake?.takeNumber ?? 0);
     parentTakeId = latestTake?.id ?? null;
     if (takeAware) {
     idempotencyKey =
@@ -3509,7 +3518,7 @@ async function generateSceneVideoAsset(
       // is true in the database but false in this process produces a false pass, and
       // so does a derived key silently standing in for a supplied one.
       console.info(
-        `[export.take] project=${project.id} scene=${scene.id} take=${takeNumber} parent=${parentTakeId ?? 'none'} key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
+        `[export.take] project=${project.id} scene=${scene.id} attempt=${takeNumber} latest=${latestTake?.takeNumber ?? 'none'} parent=${parentTakeId ?? 'none'} key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
       );
     }
   }
