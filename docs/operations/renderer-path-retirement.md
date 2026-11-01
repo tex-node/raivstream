@@ -19,6 +19,8 @@ run before the removal, not after.
 
 ## Criteria (all four, before removal)
 
+**Status 2026-11-01: criterion 1 MET** - Hero (20 clips), Magic of Stars (16), The Garden That Grew (13) all timeline-identical, each gated on its own [export.path] segments=true log line. Criteria 2-4 remain.
+
 1. **Timeline-identical on 3-5 varied projects.** Not just `cmv14z8t6...`, and not
    just single-character scenes: different scene counts, different character
    counts, different durations. Claim to establish: each project's frame count,

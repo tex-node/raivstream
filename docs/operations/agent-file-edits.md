@@ -14,6 +14,7 @@ failure has now happened four times in one stretch:
 | multi-line string replacement | the replacement text spanned lines inside a single-quoted string literal; the `homeTab` declaration was deleted and its uses orphaned | TypeScript |
 | `git switch -c` did not take effect | the branch was never created, `git commit` then ran **on `main`**; the commit had to be moved to a branch and `main` reset to `origin/main` | `git log` inspection before pushing |
 | Prisma `select` omitted a flag | a behaviour flag was `true` in the database and `undefined` in the code, so the feature silently took its default path; 80 credits were spent producing a control image that looked like a result | Inspecting the composed prompt instead of trusting the flag |
+| env flag not live in the rendering process | a test harness set `RENDER_SEGMENTS_ENABLED=true` via shell-prefixed `pm2 restart --update-env`, but the app also loads `env_file: '../../.env'` and the file won; the render silently took the other path and the two arms produced byte-identical output | No `[export.segments]` lines in the run log - the result was too perfect |
 | uncommitted edit reported as clean | a docs edit existed in the working tree but not in the repository; a later `git switch` would have discarded it silently | `git status --porcelain \| grep -v '^??'` before reporting |
 
 The common shape: **the tool reports success while doing something other than
