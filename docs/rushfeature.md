@@ -148,6 +148,22 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Phase 3 (2026-11-01) — SHIPPED. Read outcome: sprint, not project.** The 5.0 layer is fully wired
+(twelve `RAIVSTREAM_5_*` env flags, twelve creative subrouters, no stubs) and `/create` already exists and
+is linked from the Navbar, so with flags off the route was live but every call failed with "Raivstream 5.0
+is not enabled". Enabled the core chain in production (master, create, intent, bible, preview, production,
+director, review, approval, output), leaving **studio, series and audio off**; verified the flag in the
+running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
+succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
+
+**Phase 3.5 scoped** — see `docs/operations/phase-3.5-watch-scoping.md`. `Video` is already film-shaped for
+playback (`completionRate`, `avgWatchTime`, `engagementScore`), so the gap is **attribution and
+ingestion**: `CreatorProfile`, `FilmSubmission`, `RevenueTerms`, `FilmPayout`, four routes
+(`/watch`, `/watch/[id]`, `/filmmakers/[username]`, `/submit`), an admin submissions queue with a revenue
+terms editor, and three analytics events (`film_submitted`, `film_accepted`, `film_declined`). The
+acceptance criterion requires attribution to be *derived* (join, never copied) and approval to **not**
+publish.
+
 **Phase 2 complete (2026-11-01) — the flag is default-on for projects that iterate.** Flipped
 `takeAwareExportEnabled` using `max(video takeNumber) > 1`: **57 of 166 projects** enabled (the criterion is
 take history; 40 of those are also export-ready). Verified after the change: 57 enabled, worker `ready`
