@@ -148,6 +148,14 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Warm-cache loop, corrected (2026-11-01).** Gates held (`SELECTION_COUNT=5`, `ENABLED=5`). Two of five
+projects reproduced the claim with `[export.path] segments=true`: **hit=12 miss=1** and **hit=5 miss=1**.
+The other three were unmeasurable for two reasons that are not the cache: their **cold** export reused an
+existing row (unchanged composition hash — correct idempotency, but it populates no cache), and their
+regenerations failed at the provider again. Lesson: the cold arm needs a composition the export row does
+not already have, or a project with no prior export. The policy split is visible in the logs:
+`attempt=11 latest=10 parent=…` — numbering reads max, semantics read `isLatest`.
+
 **Cohort run (2026-11-01).** Selection enforced both conditions in SQL and returned exactly 5;
 enablement through a generated SQL file verified `ENABLED=5` before anything ran. **3 of 5 projects
 took a new take with a parent and made it latest**; **2 failed at the provider** (take 3 FAILED, latest
