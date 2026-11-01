@@ -926,6 +926,11 @@ model StoryProject {
   /// global env var, so flag-off and flag-on are scored by the same deploy,
   /// worker and critic. Default false = the existing text path.
   identityRefsEnabled Boolean        @default(false)
+
+  /// Phase 2 piece (2): take-aware export path. Per-project, default false, the
+  /// identityRefsEnabled precedent - it changes what a new take means for the
+  /// film's identity, so it is a column on the project rather than an env var.
+  takeAwareExportEnabled Boolean     @default(false)
   storyType      StoryType          @default(SHORT_STORY)
   ageRange       String?
   theme          String?

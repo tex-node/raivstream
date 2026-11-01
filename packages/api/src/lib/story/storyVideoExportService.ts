@@ -83,13 +83,16 @@ export function computeSourceHash(
     : optionsOrVersion;
   const version = options.version ?? EXPORT_RENDERER_VERSION;
   const identityRefs = options.identityRefsEnabled ? '1' : '0';
-  const sorted = [...pairs].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
+  // ORDER MATTERS. The composition is a film, not a set: segment index is part of
+  // identity (the same lesson as `segmentIndex` in the segment key). Sorting by
+  // sceneId here would make a reordered film hash identically to the original.
+  const ordered = [...pairs];
   // E1 — fold the renderer version into the payload so a renderer change (e.g.
   // preserving source-clip native audio) invalidates every cached export, not just
   // ones whose source changed. Include the audioUrl suffix only when present.
   // Project-level behaviour flags join the payload for the same reason: an input
   // that changes the output but not the hash is a cache that lies.
-  const payload = `${version}|identityRefs:${identityRefs}|` + sorted.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
+  const payload = `${version}|identityRefs:${identityRefs}|` + ordered.map((p) => `${p.sceneId}:${p.assetId}${p.audioUrl ? `:audio:${p.audioUrl}` : ''}`).join(',');
   return createHash('sha256').update(payload).digest('hex');
 }
 

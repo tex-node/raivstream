@@ -19,12 +19,17 @@ describe('computeSourceHash covers project-level behaviour flags', () => {
     expect(on).not.toBe(off);
   });
 
-  it('the same flag value produces the same hash (deterministic, order-independent)', () => {
+  it('is deterministic for the same composition in the same order', () => {
     expect(computeSourceHash(pairs, { identityRefsEnabled: true })).toBe(
-      computeSourceHash([...pairs].reverse(), { identityRefsEnabled: true }),
+      computeSourceHash([...pairs], { identityRefsEnabled: true }),
     );
-    expect(computeSourceHash(pairs, { identityRefsEnabled: false })).toBe(
-      computeSourceHash([...pairs].reverse(), { identityRefsEnabled: false }),
+  });
+
+  it('changes when the composition order changes', () => {
+    // Order is part of identity: the same scenes in a different sequence are a
+    // different film. Sorting by sceneId would hide that.
+    expect(computeSourceHash(pairs, { identityRefsEnabled: true })).not.toBe(
+      computeSourceHash([...pairs].reverse(), { identityRefsEnabled: true }),
     );
   });
 
