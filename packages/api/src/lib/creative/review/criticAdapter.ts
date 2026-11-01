@@ -161,13 +161,38 @@ export function translateCriticResult(
  * Evaluate a produced asset through the existing critic engine and translate.
  * Returns null when the critic is unavailable (graceful — review is optional).
  */
+export interface CriticScoreVector {
+  overall: number;
+  dimensions: Record<string, number>;
+}
+
+/**
+ * The nine dimension scores the critic already computes, carried out of the adapter.
+ *
+ * They were previously used only to annotate individual findings and then discarded,
+ * so the review payload could not show variation — the number that proves the critic
+ * is not returning a constant. Dropping them was a translation choice, not a provider
+ * limitation, and this is the translation.
+ */
+export function extractScoreVector(result: CreativeCriticResult): CriticScoreVector {
+  const dimensions: Record<string, number> = {};
+  for (const [key, value] of Object.entries(result.scores ?? {})) {
+    if (typeof value === 'number') dimensions[key] = value;
+  }
+  return { overall: result.overallScore, dimensions };
+}
+
 export async function evaluateWithCritic(
   input: { criticInput: CreativeCriticInput; refs: EntityReference[] },
   evaluator: CriticEvaluator = defaultEvaluator,
-): Promise<{ findings: ReviewFinding[]; provider: string | null } | null> {
+): Promise<{ findings: ReviewFinding[]; provider: string | null; scores: CriticScoreVector } | null> {
   try {
     const evaluated = await evaluator(input.criticInput);
-    return { findings: translateCriticResult(evaluated.result, input.refs), provider: evaluated.provider };
+    return {
+      findings: translateCriticResult(evaluated.result, input.refs),
+      provider: evaluated.provider,
+      scores: extractScoreVector(evaluated.result),
+    };
   } catch (error) {
     if (error instanceof CreativeCriticUnavailableError) {
       console.warn('[creative.review] critic unavailable:', error.message);

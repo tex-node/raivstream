@@ -156,6 +156,12 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Critic scores persisted (2026-11-01).** `evaluateWithCritic` now returns `{ findings, provider, scores }`;
+`CreativeReviewRun` gains `scores Json?` (additive migration); `ReviewRunState` carries it; the run emits
+`[creative.stage] … stage=review … scores={…}`. The drop was in translation, not the provider. Still open:
+the eight per-stage `[creative.stage]` lines (intent, bible, plan, preview, produce, director, approval) and
+the gated re-run. **Phase 3: functionally proven, unmeasured, one gate closer.**
+
 **Phase 3 measurement fixes (2026-11-01): 1 of 3 shipped, no re-run.** Shipped: `creative_outputs.
 durationSeconds` now persists the renderer's **measured** duration in both READY writers, plus a
 `[creative.stage] … stage=output` line. Remaining: per-stage `[creative.stage]` lines for

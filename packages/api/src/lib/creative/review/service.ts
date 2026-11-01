@@ -51,12 +51,22 @@ export class ReviewService {
       try {
         const evaluated = await evaluateWithCritic({ criticInput, refs }, evaluator);
         const findings: ReviewFinding[] = evaluated?.findings ?? [];
+        // Scores travel with the run, so a caller can prove the critic varies between
+        // assets instead of asserting that it does.
+        console.info(
+          `[creative.stage] project=${project.id} stage=review status=ok scene=${asset.sceneId} scores=${JSON.stringify(evaluated?.scores ?? null)}`,
+        );
         const status = evaluated === null ? 'FAILED' : 'COMPLETED';
         await prisma.creativeReviewRun.update({
           where: { id: run.id },
-          data: { status: status as never, findings: findings as never, provider: evaluated?.provider ?? null },
+          data: {
+            status: status as never,
+            findings: findings as never,
+            provider: evaluated?.provider ?? null,
+            scores: (evaluated?.scores ?? null) as never,
+          },
         });
-        runs.push({ id: run.id, projectId: project.id, sceneId: asset.sceneId, assetId: asset.id, status, findings, provider: evaluated?.provider ?? null, createdAt: run.createdAt });
+        runs.push({ id: run.id, projectId: project.id, sceneId: asset.sceneId, assetId: asset.id, status, findings, provider: evaluated?.provider ?? null, scores: evaluated?.scores ?? null, createdAt: run.createdAt });
       } catch (error) {
         await prisma.creativeReviewRun.update({
           where: { id: run.id },
