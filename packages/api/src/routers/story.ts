@@ -3485,6 +3485,12 @@ async function generateSceneVideoAsset(
         expectedTakeNumber: input.expectedTakeNumber ?? null,
         now: Date.now(),
       });
+    // Gate every take-aware run on a log line that names what it did: a flag that
+    // is true in the database but false in this process produces a false pass, and
+    // so does a derived key silently standing in for a supplied one.
+    console.info(
+      `[export.take] project=${project.id} scene=${scene.id} take=${takeNumber} parent=${parentTakeId ?? 'none'} key=${input.idempotencyKey ? 'supplied' : 'derived'} expected=${input.expectedTakeNumber ?? 'none'}`,
+    );
     const existing = await (ctx.prisma as any).storySceneAsset.findFirst({
       where: { sceneId: scene.id, idempotencyKey },
       select: { id: true },
