@@ -817,6 +817,7 @@ export async function renderOutputDerivative(
         const cacheStore = resolveSegmentStore(process.env, deps.segmentStore);
         let cacheHits = 0;
         const cacheMisses: string[] = [];
+        const cacheHitKeys: string[] = [];
         const segmentLoopStartedAt = Date.now();
         for (let i = 0; i < inputs.length; i += 1) {
           const segPath = path.join(dir, `seg-${i}.mp4`);
@@ -841,6 +842,7 @@ export async function renderOutputDerivative(
                 await writeFile(segPath, await cacheStore.download(cacheObjectKey));
                 loadedFromCache = true;
                 cacheHits += 1;
+                cacheHitKeys.push(cacheObjectKey.split('/').pop()?.replace('.mp4', '').slice(0, 12) ?? 'unknown');
               } catch (error) {
                 // Flaky R2, truncated object, expired URL - render instead.
                 console.warn(
@@ -883,7 +885,7 @@ export async function renderOutputDerivative(
           segFiles.push(segPath);
         }
         console.info(
-          `[export.segments] hit=${cacheHits} miss=${cacheMisses.length} missKeys=${cacheMisses.join(',') || 'none'} elapsedMs=${Date.now() - segmentLoopStartedAt}`,
+          `[export.segments] hit=${cacheHits} miss=${cacheMisses.length} hitKeys=${cacheHitKeys.join(',') || 'none'} missKeys=${cacheMisses.join(',') || 'none'} elapsedMs=${Date.now() - segmentLoopStartedAt}`,
         );
         const assembled = path.join(dir, 'out.mp4');
         // Join with the concat DEMUXER and stream copy, not a filter graph.
