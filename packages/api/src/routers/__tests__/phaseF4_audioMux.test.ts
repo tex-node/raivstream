@@ -778,12 +778,15 @@ describe('F4 §F — Non-educational regression: STORY exports have no audio mux
     );
 
     // Exactly 1 FFmpeg call (the video-only concat)
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
+    // Segment contract: 2 scene segments + concat + end card, and NO per-scene audio
+    // mux - the §F invariant is that STORY exports carry no narration audio.
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(4);
 
-    // The single call must use a=0 (no audio in output)
-    const args = (deps.ffmpeg as any).mock.calls[0][0] as string[];
-    const filterArg = args.find((a) => a.includes('concat='));
-    expect(filterArg).toMatch(/a=0/);
+    // The concat is a STREAM COPY, so no audio filter exists anywhere in the run -
+    // that is the §F invariant (STORY exports carry no narration audio).
+    const allArgs = (deps.ffmpeg as any).mock.calls.map((c: unknown[]) => (c[0] as string[]).join(' '));
+    expect(allArgs.some((a: string) => a.includes('aresample') || a.includes('amix'))).toBe(false);
+    expect(allArgs.some((a: string) => a.includes('concat'))).toBe(true);
   });
 });
 

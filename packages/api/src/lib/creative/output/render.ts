@@ -784,7 +784,7 @@ export async function renderOutputDerivative(
       return { assetUrl, endCardApplied: card.applied, durationSeconds: measured.durationSeconds };
     }
 
-    // ── Phase 2 A/B: per-segment renders behind RENDER_SEGMENTS_ENABLED ────────
+    // ── Phase 2: per-segment renders (the only path since criterion 4) ─────────
     // The graph above is a hard-cut concat of independently normalised inputs, so
     // the split is mechanical: render each input with the same filters into its
     // own file (carrying its own audio), then concat with audio.
@@ -794,23 +794,16 @@ export async function renderOutputDerivative(
     // docs/operations/renderer-refactor-baseline.md) is what decides whether this
     // path is frame-transparent. A one-frame delta means it is not.
     let segmentAssembled: string | null = null;
-    // Log the decision, not just its consequence. An env flag that is set in the
-    // shell but not in the process that renders (PM2 env_file vs --update-env) is
-    // the same trap as a project flag that is true in the database and undefined in
-    // the code: the render silently takes the other path and a comparison looks
-    // like a pass. This line is what makes a run auditable.
-    const segmentsEnabled = process.env.RENDER_SEGMENTS_ENABLED === 'true';
+    // Segment path is the ONLY path (criterion 4, 2026-11-01). The single-graph
+    // branch was deleted rather than left behind a flag: a fallback nobody tests is
+    // a path that rots, and keeping it would keep the 44.66 dB comparison alive
+    // forever. The audio-last design also removed the old mixed-audio fallback -
+    // segments are video-only, so a silent clip simply contributes no audio.
     console.info(
-      `[export.path] segments=${segmentsEnabled} cache=${process.env.CACHE_SEGMENTS_ENABLED === 'true'} inputs=${inputs.length} audio=${nativeSources.length}/${inputs.length} exportId=${input.exportId ?? 'unknown'}`,
+      `[export.path] segments=true cache=${process.env.CACHE_SEGMENTS_ENABLED === 'true'} inputs=${inputs.length} audio=${nativeSources.length}/${inputs.length} exportId=${input.exportId ?? 'unknown'}`,
     );
-    if (segmentsEnabled) {
-      if (nativeSources.length !== inputs.length) {
-        // Mixed audio would need silent tracks synthesised per segment. Fall back
-        // rather than change the audio contract inside a renderer refactor.
-        console.warn(
-          `[export.segments] falling back to the single-graph path: ${nativeSources.length}/${inputs.length} inputs carry audio`,
-        );
-      } else {
+    {
+      {
         const segFiles: string[] = [];
         // Cache is an optimisation: a failed read falls through to a render, and a
         // failed write is logged. Nothing here may fail the export.
@@ -916,43 +909,17 @@ export async function renderOutputDerivative(
       }
     }
 
-    let withAudio: string;
-    if (segmentAssembled) {
-      // Audio last, once, continuously - the same bed the single-graph path uses.
-      // This is what makes the two paths bit-identical rather than "close".
-      withAudio = await muxNativeAudioBed({
-        videoPath: segmentAssembled,
-        nativeSources,
-        outputPath: path.join(dir, 'out-with-native.mp4'),
-        dir,
-        run: doFfmpeg,
-        hasExistingAudio: false,
-      });
-    } else {
-      const out = path.join(dir, 'out.mp4');
-      const args = [
-        ...inputs.flatMap((file) => ['-i', file]),
-        '-filter_complex', filter,
-        '-map', '[vout]',
-        '-t', String(capSeconds),
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart',
-        out,
-      ];
-      await doFfmpeg(args);
-
-      // E1 — carry the source clips' native audio into the export before the end card.
-      withAudio = await muxNativeAudioBed({
-        videoPath: out,
-        nativeSources,
-        outputPath: path.join(dir, 'out-with-native.mp4'),
-        dir,
-        run: doFfmpeg,
-        hasExistingAudio: false,
-      });
-    }
+    if (!segmentAssembled) throw new Error('[export.segments] assembly produced no output');
+    // Audio last, once, continuously. It made the two paths comparable when both
+    // existed; it is now the only audio path.
+    const withAudio = await muxNativeAudioBed({
+      videoPath: segmentAssembled,
+      nativeSources,
+      outputPath: path.join(dir, 'out-with-native.mp4'),
+      dir,
+      run: doFfmpeg,
+      hasExistingAudio: false,
+    });
 
     // Append the end card so the cached derivative (keyed by source hash) always
     // includes it — a same-source re-export reuses the row and never double-applies.

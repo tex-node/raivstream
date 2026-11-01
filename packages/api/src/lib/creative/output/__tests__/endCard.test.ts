@@ -100,7 +100,7 @@ describe('end-card preflight (best-effort skip)', () => {
         endCardPreflight: async () => ({ drawtext: false, font: true, ok: false }),
       } as never,
     );
-    expect(ffmpeg).toHaveBeenCalledTimes(1); // main render only — card skipped
+    expect(ffmpeg).toHaveBeenCalledTimes(2); // 1 segment + concat; card skipped by preflight
     expect(res.assetUrl).toBe('r2://out.mp4');
   });
 });
@@ -131,7 +131,7 @@ describe('endCardApplied — render return value', () => {
       } as never,
     );
     expect(res.endCardApplied).toBe(true);
-    expect(ffmpeg).toHaveBeenCalledTimes(2); // main encode + end card
+    expect(ffmpeg).toHaveBeenCalledTimes(3); // 1 segment + concat + end card
   });
 
   it('returns endCardApplied=false when preflight fails (card skipped, export still completes)', async () => {
@@ -150,7 +150,7 @@ describe('endCardApplied — render return value', () => {
     );
     expect(res.endCardApplied).toBe(false);
     expect(res.assetUrl).toBe('r2://out.mp4'); // export succeeds despite skip
-    expect(ffmpeg).toHaveBeenCalledTimes(1);   // main render only
+    expect(ffmpeg).toHaveBeenCalledTimes(2);   // 1 segment + concat; card skipped
   });
 
   it('returns endCardApplied=true on video-only + background-music path', async () => {

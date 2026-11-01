@@ -64,8 +64,8 @@ describe('renderOutputDerivative — Phase C background music', () => {
         r2Prefix: 'pfx',
       }, deps);
 
-      // 1 video encode + 1 end-card append = 2 calls
-      expect(deps.ffmpegCalls).toHaveLength(2);
+      // Segment contract: 1 scene segment + 1 stream-copy concat + 1 end card = 3
+      expect(deps.ffmpegCalls).toHaveLength(3);
       expect(deps.fetch).toHaveBeenCalledTimes(1); // video only
     });
   });
