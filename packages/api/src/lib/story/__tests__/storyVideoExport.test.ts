@@ -157,8 +157,8 @@ describe('StoryVideoExportService — Phase C backgroundMusicUrl', () => {
 
       await svc.requestExport(prisma, { userId: 'user-1', projectId: 'proj-1', isR16: true }, deps);
 
-      // Video-only, no music → 1 encode + 1 end card = 2 ffmpeg calls
-      expect(ffmpegCalls).toHaveLength(2);
+      // Segment contract: 1 scene segment + 1 stream-copy concat + 1 end card = 3
+      expect(ffmpegCalls).toHaveLength(3);
       expect(ffmpegCalls[0]!.join(' ')).not.toContain('volume=0.3');
     });
   });

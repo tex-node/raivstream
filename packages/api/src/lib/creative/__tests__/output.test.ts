@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { deriveOutput } from '../output/derivation';
 import { renderOutputDerivative } from '../output/render';
 import { ApprovalService } from '../approval/service';
@@ -234,7 +234,8 @@ describe('auto-assembly after production', () => {
     expect(result.blockedScenes).toHaveLength(0);
     expect(prisma.__outputs[0].status).toBe('READY');
     expect(prisma.__outputs[0].format).toBe('PORTRAIT');
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
+    // Segment contract: 4 scene renders + 1 stream-copy concat + 1 end-card pass.
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(6);
   });
 
   it('creates a version but no creativeApproval when none exist', async () => {
@@ -328,25 +329,33 @@ describe('auto-assembly after production', () => {
 
     // Capture the scene order passed to renderOutputDerivative via the render mock.
     const capturedScenes: string[] = [];
+    let concatListText = '';
     deps.ffmpeg = vi.fn(async (args: string[]) => {
       // FFmpeg input files appear before the output; extract the temp clip filenames.
       const inputs = args.filter((a) => a.endsWith('.mp4') && !a.startsWith('-'));
       capturedScenes.push(...inputs);
+      // Capture the concat list while the temp dir still exists: the renderer deletes
+      // it in its finally block, so it cannot be read after the render returns.
+      if (args.includes('concat')) {
+        const listPath = args[args.indexOf('-i') + 1]!;
+        concatListText = await readFile(listPath, 'utf8');
+      }
       await writeFile(args[args.length - 1], Buffer.from('fake-mp4'));
     });
 
     await service.autoAssemble(prisma as never, { projectId: 'p1', plan: FOUR_SCENE_PLAN }, deps as never);
 
     // The assembled film must include all 4 scenes via FFmpeg (ordered, not reversed).
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
-    const args = (deps.ffmpeg as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
-    // FFmpeg concat filter input: -i <scene1> -i <scene2> ... must appear in SCENE_01 → SCENE_04 order.
-    // We verify by checking the -i flags appear in ascending clip order, not reversed.
-    const iFlags = args.filter((_a, idx) => args[idx - 1] === '-i');
-    // Each temp file is written with a scene index; the first input must be an earlier scene
-    // than the last input. We can't inspect content of temp files here, but we can verify
-    // the total count equals the number of scenes.
-    expect(iFlags.length).toBe(SCENE_IDS.length);
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(6); // 4 segments + concat + end card
+    // The segment path assembles with a concat LIST (stream copy), not one filter
+    // graph. Order is asserted by reading that list: the segments must appear
+    // seg-0 → seg-3 ascending, never reversed.
+    const order = concatListText
+      .split('\n')
+      .map((line) => line.match(/seg-(\d+)\.mp4/)?.[1])
+      .filter((v): v is string => Boolean(v))
+      .map(Number);
+    expect(order).toEqual([0, 1, 2, 3]);
   });
 });
 
@@ -362,9 +371,23 @@ describe('creative output renderer', () => {
       deps,
     );
     expect(result.assetUrl).toBe('r2://out.mp4');
-    expect(deps.ffmpeg).toHaveBeenCalledTimes(2); // main render + end-card pass
+    expect(deps.ffmpeg).toHaveBeenCalledTimes(4); // 2 segments + concat + end card
     const args = (deps.ffmpeg as any).mock.calls[0][0] as string[];
     expect(args.join(' ')).toContain('1080:1080');
     expect(args.join(' ')).toContain('settb=AVTB');
+  });
+});
+
+describe('renderer architecture — the one-way door', () => {
+  it('render.ts contains no RENDER_SEGMENTS_ENABLED: the single-graph path is gone', async () => {
+    // Criterion 4 (2026-11-01). The old branch was deleted, not disabled. This
+    // assertion is the replacement for the specification the pre-migration tests
+    // provided: if someone re-adds a conditional that resurrects the single-graph
+    // pipeline, this fails in the suite they are already running - which is the
+    // only thing that keeps the door one-way.
+    const { resolve } = await import('node:path');
+    const source = await readFile(resolve(__dirname, '../output/render.ts'), 'utf8');
+    expect(source).not.toContain('RENDER_SEGMENTS_ENABLED');
+    expect(source).not.toContain('segmentsEnabled');
   });
 });

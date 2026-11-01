@@ -19,7 +19,7 @@ run before the removal, not after.
 
 ## Criteria (all four, before removal)
 
-**Status 2026-11-01: criteria 1-3 MET; criterion 4 scoped and not started.**
+**Status 2026-11-01: ALL FOUR CRITERIA MET.** Criterion 4 shipped: the single-graph branch and the RENDER_SEGMENTS_ENABLED flag are deleted, the segment path is unconditional, the nine assertions that specified the old pipeline are migrated with their intent preserved, and an enforcement test asserts that `render.ts` contains no RENDER_SEGMENTS_ENABLED.
 1. Hero (20 clips), Magic of Stars (16), The Garden That Grew (13) - timeline-identical, each gated on its own `[export.path] segments=true` line.
 2. Chained change: change B's hit keys contained `f9a7cae3e773`, the scene-3 segment rendered in change A, and the output matched a full re-render.
 3. `sweep scanned=57 deleted=57`, then `hit=0 miss=6` with identical duration, packet count and audio hash - delete path and fallback both exercised.
