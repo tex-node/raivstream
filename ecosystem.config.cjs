@@ -23,7 +23,23 @@ module.exports = {
       // Durable across deploys: pm2 does not read env_file, so a flag exported by
       // hand dies on the next restart. Declaring it here is what makes the surface
       // survive a deploy instead of silently switching itself off.
-      env: { FILMS_ENABLED: process.env.FILMS_ENABLED || 'true' },
+      // The 5.0 chain is declared here for the same reason FILMS_ENABLED is:
+      // pm2 does not read env_file, so a flag that only lives in .env.local is
+      // invisible to this process. Studio, series and audio are deliberately absent
+      // - they are off, and their absence is the state.
+      env: {
+        FILMS_ENABLED: process.env.FILMS_ENABLED || 'true',
+        RAIVSTREAM_5_ENABLED: 'true',
+        RAIVSTREAM_5_CREATE_ENABLED: 'true',
+        RAIVSTREAM_5_INTENT_ENABLED: 'true',
+        RAIVSTREAM_5_BIBLE_ENABLED: 'true',
+        RAIVSTREAM_5_PREVIEW_ENABLED: 'true',
+        RAIVSTREAM_5_PRODUCTION_ENABLED: 'true',
+        RAIVSTREAM_5_DIRECTOR_ENABLED: 'true',
+        RAIVSTREAM_5_REVIEW_ENABLED: 'true',
+        RAIVSTREAM_5_APPROVAL_ENABLED: 'true',
+        RAIVSTREAM_5_OUTPUT_ENABLED: 'true'
+      },
       max_memory_restart: '1G',
       node_args: '--max-old-space-size=900',
     },
@@ -33,7 +49,19 @@ module.exports = {
       script: 'pnpm',
       args: 'run worker',
       env_file: '../../.env',
-      env: { FILMS_ENABLED: process.env.FILMS_ENABLED || 'true' },
+      env: {
+        FILMS_ENABLED: process.env.FILMS_ENABLED || 'true',
+        RAIVSTREAM_5_ENABLED: 'true',
+        RAIVSTREAM_5_CREATE_ENABLED: 'true',
+        RAIVSTREAM_5_INTENT_ENABLED: 'true',
+        RAIVSTREAM_5_BIBLE_ENABLED: 'true',
+        RAIVSTREAM_5_PREVIEW_ENABLED: 'true',
+        RAIVSTREAM_5_PRODUCTION_ENABLED: 'true',
+        RAIVSTREAM_5_DIRECTOR_ENABLED: 'true',
+        RAIVSTREAM_5_REVIEW_ENABLED: 'true',
+        RAIVSTREAM_5_APPROVAL_ENABLED: 'true',
+        RAIVSTREAM_5_OUTPUT_ENABLED: 'true'
+      },
       max_restarts: 5,
       restart_delay: 5000,
       // More headroom than web: FFmpeg children are not V8 heap, but this Node
