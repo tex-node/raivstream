@@ -148,6 +148,14 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Cohort attempt (2026-11-01) — not run, reasons recorded.** The unconditional-numbering split (#236) is
+verified: two consecutive **flag-off** regenerates produced takes **15 then 16, each with a parent, no
+collision**. The cohort itself did not execute: the `UPDATE ... WHERE id IN (...)` meant to enable five
+projects was malformed and enabled none (verified `enabled=0`), and the first selected project is not
+export-ready (`3 scene(s) do not have a ready video yet`). **Selection criteria for the next attempt:**
+export-ready (scenes = ready videos) *and* take history; enable via a generated SQL file, then assert
+`enabled=N` before running. The flag remains 0 of 166.
+
 **Iteration-loop measurement (2026-11-01).** Flag off: 101,025 ms total for regenerate-3 → export →
 regenerate-5 → export, both exports **hit=5 miss=1**. Flag on: 84,171 ms, both exports **hit=5 miss=1**.
 Identical cache behaviour; the 17% difference is regenerate-time noise. **The take model does not speed
