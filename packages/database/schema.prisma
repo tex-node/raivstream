@@ -1580,6 +1580,15 @@ model StorySceneAsset {
   generationJobId String?
   isLatest        Boolean               @default(false)
   isFavorite      Boolean               @default(false)
+
+  /// Take model (Phase 2, piece 2). A scene's video is a take with a revision, so
+  /// regenerating one shot does not invalidate the film. `takeNumber` is monotonic
+  /// per scene (the SequenceVersion max+1 pattern), `parentTakeId` links a take to
+  /// the one it replaced, and `idempotencyKey` makes a duplicate regenerate request
+  /// return the existing take instead of creating a second.
+  takeNumber      Int                   @default(1)
+  parentTakeId    String?
+  idempotencyKey  String?
   selectedForStorybookAt DateTime?
   deletedAt       DateTime?
   // Phase 17 — position of this clip within a scene's 5-6s shot grid (0-based).
@@ -1598,6 +1607,8 @@ model StorySceneAsset {
   @@index([projectId])
   @@index([userId])
   @@index([sceneId, isLatest])
+  @@index([sceneId, takeNumber])
+  @@unique([sceneId, idempotencyKey])
   @@index([sceneId, isFavorite])
   @@index([deletedAt])
   @@index([status])

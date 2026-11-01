@@ -148,6 +148,12 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Status 2026-11-01.** Piece (1) complete: the renderer split is the only pipeline (the
+single-graph branch is deleted, enforcement test in `output.test.ts`), segments cache by
+`sourceAssetId`, and the cache is proven under chained iteration. Piece (2) started: `takeNumber`,
+`parentTakeId` and `idempotencyKey` are additive columns on `StorySceneAsset`, backfilled; the
+take-aware export path and its per-project flag are not yet built.
+
 **Exit criteria.** Change scene 3 → only scene 3 re-renders and the film re-assembles; the
 other scenes keep their existing takes.
 
