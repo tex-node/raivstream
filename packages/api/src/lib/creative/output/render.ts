@@ -794,7 +794,16 @@ export async function renderOutputDerivative(
     // docs/operations/renderer-refactor-baseline.md) is what decides whether this
     // path is frame-transparent. A one-frame delta means it is not.
     let segmentAssembled: string | null = null;
-    if (process.env.RENDER_SEGMENTS_ENABLED === 'true') {
+    // Log the decision, not just its consequence. An env flag that is set in the
+    // shell but not in the process that renders (PM2 env_file vs --update-env) is
+    // the same trap as a project flag that is true in the database and undefined in
+    // the code: the render silently takes the other path and a comparison looks
+    // like a pass. This line is what makes a run auditable.
+    const segmentsEnabled = process.env.RENDER_SEGMENTS_ENABLED === 'true';
+    console.info(
+      `[export.path] segments=${segmentsEnabled} cache=${process.env.CACHE_SEGMENTS_ENABLED === 'true'} inputs=${inputs.length} audio=${nativeSources.length}/${inputs.length} exportId=${input.exportId ?? 'unknown'}`,
+    );
+    if (segmentsEnabled) {
       if (nativeSources.length !== inputs.length) {
         // Mixed audio would need silent tracks synthesised per segment. Fall back
         // rather than change the audio contract inside a renderer refactor.
