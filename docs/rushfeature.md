@@ -148,6 +148,19 @@ today, so this is the month end of the plan.)* Three things, in this order:
 
 (1) is the blocker; (3) is the part that is conceptually easy once (1) and (2) exist.
 
+**Phase 2 complete (2026-11-01) — the flag is default-on for projects that iterate.** Flipped
+`takeAwareExportEnabled` using `max(video takeNumber) > 1`: **57 of 166 projects** enabled (the criterion is
+take history; 40 of those are also export-ready). Verified after the change: 57 enabled, worker `ready`
+with `export_segment_sweep scanned=60 deleted=0`, health 200. The obsolete `RENDER_SEGMENTS_ENABLED` was
+removed from the production env — the renderer reads only `CACHE_SEGMENTS_ENABLED`, and the enforcement
+test keeps the deleted flag deleted. Reversible with one `UPDATE ... SET = false`.
+
+**Scope, stated once more so it survives the milestone:** the film is still a **versioned snapshot** — a
+new take produces a new export row. The take model provides shot-level idempotency and revision
+(`takeNumber`, `parentTakeId`, `isLatest`, typed conflict); the **cache** provides the speedup, and does so
+independently of the flag. Neither makes the film a mutable entity; that needs a stable film identity and a
+live-content policy for swapping takes inside published films, both still deferred.
+
 **Idempotency collapse resolved at the source (2026-11-01).** The UI now sends one
 `crypto.randomUUID()` key **per regenerate press**, so two quick presses are two intents and two takes; the
 derived 60-second bucket remains only as a fallback for API callers that supply no key. Decision: option 1
