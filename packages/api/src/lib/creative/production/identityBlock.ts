@@ -73,8 +73,10 @@ export async function resolveCreativeReferences(
   const names = characters.map((character) => character.name?.trim()).filter((name): name is string => Boolean(name));
   if (names.length === 0) return [];
 
-  // APPROVED only: a pending or rejected reference is not an approved identity, and
-  // conditioning on one would spend credits to preserve something nobody signed off on.
+  // READY only: the enum is PENDING | GENERATING | READY | FAILED - there is no
+  // APPROVED state, which the first version of this file wrongly assumed. The cast to
+  // `never` below bypasses Prisma's enum typing, so the compiler could not catch it and
+  // the production DB would have rejected the value at runtime.
   const rows = await (prisma as never as {
     characterReferenceAsset: {
       findMany: (args: unknown) => Promise<Array<{ assetUrl: string | null }>>;
@@ -82,7 +84,7 @@ export async function resolveCreativeReferences(
   }).characterReferenceAsset.findMany({
     where: {
       assetUrl: { not: null },
-      status: 'APPROVED',
+      status: 'READY',
       character: { name: { in: names.slice(0, MAX_REFERENCES) } },
     },
     orderBy: { createdAt: 'desc' },
