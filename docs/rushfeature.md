@@ -156,6 +156,17 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3: PROVEN (2026-11-02).** Provider restored (the first submit after funding still 403'd — propagation lag, which the
+provider's own code comment names as retryable — and the retry succeeded). Gated lighthouse run on `cmvylvazc…`:
+**all nine `[creative.stage]` lines fired** — intent, bible, plan, preview, produce (`run_finished COMPLETED
+generated=8 failed=0`), review, director (`affectedSceneIds=["SCENE_02"]`), approval, output. **Critic variation
+across four scored runs:** overall 85 / **70** / 85 / 85, with per-dimension spread including `characterIdentity: 0`
+on SCENE_03 — not a constant vector. **Duration gate failed on the run and the cause was the column:**
+`creative_outputs.durationSeconds` was `Int?`/`integer`, so a measured `47.333333` stored `47`; fixed to Float (#265,
+through the deploy's migration step) and the same output re-rendered to `row=47.333333 probe=47.333333 diff=0 match=true`.
+**Plan `totalRuntimeSeconds` is null on a third independent plan** — recorded, not fixed: a product decision about what a
+stated duration means. Credits spent: **1,120**. Evidence in `docs/rushfeature.md` and SESSION.md.
+
 **Phase 3 status: Blocked on the fal account (operator-confirmed 2026-11-02).** The operator confirmed the
 account is still locked, so this session ran no probe and no production: the previous two independent checks
 already carry the exact evidence (`fal image disabled: account locked or balance exhausted (HTTP 403)`, and
