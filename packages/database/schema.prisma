@@ -3046,3 +3046,36 @@ enum FilmSubmissionStatus {
   REJECTED
   WITHDRAWN
 }
+
+// ─── Live-content policy audit rows (Phase 3 follow-through) ──────────────────
+// A rejected LIVE asset is flagged, not unpublished: it stays visible until a human
+// looks. This table is the difference between "flagged for review" and "silently
+// ignored" - without it the policy is a hope.
+
+model CreativeReviewFlag {
+  id            String   @id @default(cuid())
+  assetId       String
+  sceneId       String
+  projectId     String
+  /// The run that produced this flag (a re-score run or a live gate evaluation).
+  runId         String
+  /// The breached dimension key, its score, and the floor it missed.
+  dimension     String
+  score         Float
+  floor         Float
+  criticVersion String
+  /// LIVE_GATE | RESCORE_BATCH - a historical re-score must be distinguishable
+  /// from a current gate rejection when someone reviews it.
+  source        String
+
+  createdAt     DateTime @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+  resolution    String?
+  note          String?
+
+  @@unique([assetId, runId])
+  @@index([projectId, createdAt])
+  @@index([reviewedAt])
+  @@map("creative_review_flags")
+}
