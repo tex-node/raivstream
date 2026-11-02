@@ -7,8 +7,27 @@ import { passesIdentityGate, recommendationForResult } from '../qualityScorer';
  * The mixed cases are the ones that matter: a good composition must not carry a
  * drifted character, and a great character must not carry a weak composition.
  */
+/**
+ * A full score vector is required since the per-dimension floors landed (2026-11-02):
+ * a vector carrying only `characterIdentity` now fails closed on the nine dimensions it
+ * omits, which is the point of that change. The helper supplies a passing baseline so
+ * these cases keep testing the identity rule and nothing else.
+ */
+const PASSING_BASELINE = {
+  characterIdentity: 90,
+  continuity: 90,
+  composition: 90,
+  lighting: 90,
+  emotion: 90,
+  visualStyle: 90,
+  environment: 90,
+  storyAlignment: 90,
+  sceneClarity: 90,
+  technicalQuality: 90,
+};
+
 function decide(overallScore: number, characterIdentity: number | undefined) {
-  const scores = characterIdentity === undefined ? {} : { characterIdentity };
+  const scores = characterIdentity === undefined ? {} : { ...PASSING_BASELINE, characterIdentity };
   return recommendationForResult({ overallScore, scores });
 }
 
