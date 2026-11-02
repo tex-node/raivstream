@@ -52,6 +52,11 @@ export async function runRescoreBatch(
     const assets = await (prisma as any).creativeProducedAsset.findMany({
       where: {
         status: 'READY',
+        // IMAGE only: the critic scores a still frame. Passing a VIDEO URL makes the
+        // provider return HTTP 400, which the pilot surfaced as 10 failures in 20
+        // assets - a failure rate that looked like a critic problem and was a
+        // selection problem.
+        kind: 'IMAGE',
         ...(cursorCreatedAt ? { createdAt: { gt: cursorCreatedAt } } : {}),
       },
       orderBy: { createdAt: 'asc' },
