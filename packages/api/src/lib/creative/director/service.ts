@@ -209,8 +209,16 @@ export class DirectorService {
     decision: DirectorDecision;
     requiredAction?: Extract<IntentReadiness, { ready: false }>;
   }> {
+    // Boundary line: the instruction and the scenes it targets are the two values a
+    // director gate has to check.
+    logStage(input.projectId, 'director', 'start', { instruction: input.instruction.slice(0, 60) });
     const directed = await this.direct(prisma, input);
     const applied = await this.apply(prisma, { projectId: input.projectId, userId: input.userId, directiveId: directed.directiveId });
+    logStage(input.projectId, 'director', 'ok', {
+      directiveId: directed.directiveId,
+      affectedSceneIds: applied.affectedSceneIds,
+      impact: applied.impact,
+    });
     const base = {
       applied: applied.applied,
       affectedSceneIds: applied.affectedSceneIds,

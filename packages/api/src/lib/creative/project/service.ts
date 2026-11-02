@@ -9,6 +9,7 @@
  * is only reached through adapters (bible/adapter, intelligence/storyAdapter).
  */
 
+import { logStage } from '../stageLog';
 import type { PrismaClient } from '@raivstream/database';
 import { isCreativeBibleEnabled, isCreativeCreateEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
@@ -159,6 +160,9 @@ export class ProjectService {
     input: { projectId: string; userId: string; status: string },
   ): Promise<CreativeProjectState> {
     const project = await this.get(prisma, { projectId: input.projectId, userId: input.userId });
+    // The preview gate: this call is how a project becomes APPROVED and production
+    // opens, so the line belongs here rather than at the UI that calls it.
+    if (input.status === 'APPROVED') logStage(input.projectId, 'preview', 'ok', { from: project.status });
     // Approval-state consistency (Phase 9): only state-machine transitions are
     // allowed, so a project can never be silently pushed into an impossible state.
     const to = input.status as CreativeProjectState['status'];
