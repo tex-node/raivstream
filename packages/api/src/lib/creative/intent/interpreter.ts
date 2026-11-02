@@ -97,6 +97,21 @@ export function extractDurationSeconds(text: string): number | undefined {
   return undefined;
 }
 
+/**
+ * The creator's subject, verbatim where possible.
+ *
+ * Prefers the "about …" clause - the shape a short idea actually takes - and falls back
+ * to the whole idea when there is no such clause. Never paraphrased: the cast derivation
+ * downstream is only as good as the words it is handed.
+ */
+export function extractSubject(text: string): string | undefined {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return undefined;
+  const about = normalized.match(/\babout\s+([^.;]+)/i);
+  const subject = (about ? about[1]! : normalized).trim();
+  return subject.length > 0 ? subject.slice(0, 240) : undefined;
+}
+
 export function extractExplicitSignals(text: string): CreativeInterpretation['explicit'] {
   const explicit: CreativeInterpretation['explicit'] = {};
   const durationSeconds = extractDurationSeconds(text);
@@ -112,6 +127,11 @@ export function extractExplicitSignals(text: string): CreativeInterpretation['ex
       explicit.tone = explicit.tone ? `${explicit.tone}, ${label}` : label;
     }
   }
+  // What the piece is ABOUT, lifted from the creator's own words rather than paraphrased.
+  // The creative bible derives its cast from this; without it the derivation could only
+  // read the summary prose, which is Raivstream's restatement, not the creator's text.
+  const subject = extractSubject(text);
+  if (subject) explicit.subject = subject;
   return explicit;
 }
 
