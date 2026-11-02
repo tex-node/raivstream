@@ -1366,6 +1366,13 @@ model CharacterReferenceAsset {
   id              String                        @id @default(cuid())
   characterId     String?
   character       StoryCharacterMemory?         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  /// The character's name, independent of the StoryCharacterMemory relation.
+  ///
+  /// A creative project cannot own a StoryCharacterMemory (that model points at
+  /// StoryProject), so its reference rows carry characterId = null and the name had
+  /// nowhere to live - which is why a cast stage could have written rows that
+  /// resolution could never see. Both paths now write this field.
+  characterName   String?
   projectId       String
 
   category        CharacterReferenceCategory    @default(CHARACTER)

@@ -77,6 +77,11 @@ export async function resolveCreativeReferences(
   // APPROVED state, which the first version of this file wrongly assumed. The cast to
   // `never` below bypasses Prisma's enum typing, so the compiler could not catch it and
   // the production DB would have rejected the value at runtime.
+  //
+  // TWO BRANCHES, and the second is the bridge: a creative project cannot own a
+  // StoryCharacterMemory, so its rows carry `characterId = null` and only `characterName`.
+  // Matching on the relation alone - which is what shipped first - could never see them.
+  const wanted = names.slice(0, MAX_REFERENCES);
   const rows = await (prisma as never as {
     characterReferenceAsset: {
       findMany: (args: unknown) => Promise<Array<{ assetUrl: string | null }>>;
@@ -85,16 +90,131 @@ export async function resolveCreativeReferences(
     where: {
       assetUrl: { not: null },
       status: 'READY',
-      character: { name: { in: names.slice(0, MAX_REFERENCES) } },
+      OR: [{ character: { name: { in: wanted } } }, { characterName: { in: wanted } }],
     },
     orderBy: { createdAt: 'desc' },
     select: { assetUrl: true },
   });
 
+  // De-duplicated by URL, so a row that matched BOTH branches is counted once.
   const urls: string[] = [];
   for (const row of rows) {
     if (typeof row.assetUrl === 'string' && row.assetUrl.length > 0 && !urls.includes(row.assetUrl)) urls.push(row.assetUrl);
     if (urls.length >= MAX_REFERENCES) break;
   }
   return urls;
+}
+
+export interface CastReferenceResult {
+  created: Array<{ name: string; assetId: string }>;
+  skipped: Array<{ name: string; reason: 'already_ready' }>;
+}
+
+/**
+ * Cast stage: one READY reference per derived character.
+ *
+ * Reuses the story path's shape rather than writing a second generation call: the row is
+ * created first (so a retry is idempotent against the row), the prompt comes from the
+ * same `characterReferencePrompt` composition, and the provider is the same FLUX2 call.
+ *
+ * A name that already has a READY reference is SKIPPED - a reused character must not get a
+ * second reference, and regenerating one would silently change the identity a previous
+ * production was conditioned on.
+ */
+export async function castReferences(
+  prisma: PrismaClient,
+  input: {
+    projectId: string;
+    characters: CreativeCharacterRef[];
+    generate: (args: { prompt: string; negativePrompt: string }) => Promise<string>;
+  },
+): Promise<CastReferenceResult> {
+  const result: CastReferenceResult = { created: [], skipped: [] };
+
+  for (const character of input.characters.slice(0, MAX_REFERENCES)) {
+    const name = character.name?.trim();
+    if (!name) continue;
+
+    const existing = await (prisma as never as {
+      characterReferenceAsset: {
+        findFirst: (args: unknown) => Promise<{ id: string } | null>;
+      };
+    }).characterReferenceAsset.findFirst({
+      where: { status: 'READY', assetUrl: { not: null }, OR: [{ characterName: name }, { character: { name } }] },
+      select: { id: true },
+    });
+    if (existing) {
+      result.skipped.push({ name, reason: 'already_ready' });
+      continue;
+    }
+
+    const prompt = character.visualDescription?.trim()
+      ? `${character.name}: ${character.visualDescription.trim()}`
+      : `${character.name}, character reference sheet`;
+    const negativePrompt = 'multiple people, crowd, text, watermark, extra limbs, deformed hands, scene background';
+
+    const row = await (prisma as never as {
+      characterReferenceAsset: {
+        create: (args: unknown) => Promise<{ id: string }>;
+        update: (args: unknown) => Promise<unknown>;
+      };
+    }).characterReferenceAsset.create({
+      data: {
+        projectId: input.projectId,
+        characterName: name,
+        status: 'PENDING',
+        prompt,
+        negativePrompt,
+        providerModel: 'FLUX2',
+        isLatest: true,
+      },
+    });
+
+    const assetUrl = await input.generate({ prompt, negativePrompt });
+    await (prisma as never as {
+      characterReferenceAsset: { update: (args: unknown) => Promise<unknown> };
+    }).characterReferenceAsset.update({
+      where: { id: row.id },
+      data: { status: 'READY', assetUrl, approvedReferenceAssetId: undefined },
+    });
+
+    result.created.push({ name, assetId: row.id });
+  }
+
+  return result;
+}
+
+/**
+ * The blocking gate.
+ *
+ * Fail-open is right for UNKNOWN (the quarantine predicate surfaces unscored assets); it is
+ * wrong for KNOWN-UNAPPROVED. A production that silently conditions on nothing is the exact
+ * failure this chain has chased for four sessions, so this refuses and names the characters.
+ */
+export async function assertCastApproved(
+  prisma: PrismaClient,
+  input: { projectId: string; characters: CreativeCharacterRef[] },
+): Promise<void> {
+  const names = input.characters.map((character) => character.name?.trim()).filter((name): name is string => Boolean(name));
+  if (names.length === 0) return;
+
+  const approved = await (prisma as never as {
+    characterReferenceAsset: {
+      findMany: (args: unknown) => Promise<Array<{ characterName: string | null }>>;
+    };
+  }).characterReferenceAsset.findMany({
+    where: {
+      status: 'READY',
+      assetUrl: { not: null },
+      approvedReferenceAssetId: { not: null },
+      OR: [{ characterName: { in: names } }, { character: { name: { in: names } } }],
+    },
+    select: { characterName: true },
+  });
+
+  const approvedNames = new Set(approved.map((row) => (row.characterName ?? '').toLowerCase()).filter(Boolean));
+  const missing = names.filter((name) => !approvedNames.has(name.toLowerCase()));
+  if (missing.length > 0) {
+    throw new Error(`CAST_NOT_APPROVED: approve the reference for ${missing.join(', ')} before producing.`);
+  }
 }
