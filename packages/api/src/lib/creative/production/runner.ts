@@ -27,7 +27,14 @@ import { MediaProviderError } from '../../mediaProviders/types';
 import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } from './capabilityRouter';
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
+import { logStage } from '../stageLog';
 import { logProductionEvent } from '../observability/metrics';
+import {
+  composeCreativeIdentityBlock,
+  resolveCreativeReferences,
+  withIdentityBlock,
+  type CreativeCharacterRef,
+} from './identityBlock';
 import { outputService } from '../output/service';
 
 export interface ProductionDeps {
@@ -193,9 +200,28 @@ export async function runCreativeProduction(
         const ref = `creative-produce-${asset.id}-a${attempt}`;
           const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0) : 0;
         try {
-          const media = spec.kind === 'IMAGE'
-            ? await deps.generateStill(spec as StillSpec, project.id, asset.id)
-            : await deps.generateVideo(spec as VideoSpec, project.id, asset.id, seedImageUrl);
+          let media;
+          if (spec.kind === 'IMAGE') {
+            // Identity conditioning (build step 3). Before this, creative stills were
+            // text-to-image with no references at all, which is why no creative output
+            // could ever clear the identity floor: the pipeline guaranteed the failure.
+            const sceneCharacters = ((spec as StillSpec).characterRefs ?? []) as CreativeCharacterRef[];
+            const identityBlock = composeCreativeIdentityBlock(sceneCharacters);
+            const referenceImageUrls = await resolveCreativeReferences(prisma, sceneCharacters);
+            const stillSpec: StillSpec = {
+              ...(spec as StillSpec),
+              prompt: withIdentityBlock((spec as StillSpec).prompt, identityBlock),
+              ...(referenceImageUrls.length ? { referenceImageUrls } : {}),
+            };
+            logStage(project.id, 'produce', 'ok', {
+              scene: spec.sceneId,
+              references: referenceImageUrls.length,
+              identityBlock: identityBlock ? 'yes' : 'no',
+            });
+            media = await deps.generateStill(stillSpec, project.id, asset.id);
+          } else {
+            media = await deps.generateVideo(spec as VideoSpec, project.id, asset.id, seedImageUrl);
+          }
           await prisma.creativeProducedAsset.update({
             where: { id: asset.id },
             data: { status: 'READY', assetUrl: media.assetUrl, thumbnailUrl: media.thumbnailUrl ?? null, provider: 'internal' },
