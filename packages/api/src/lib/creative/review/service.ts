@@ -7,6 +7,7 @@
  * feeds the Director). Findings are actionable objects, not text reports.
  */
 
+import { logStage } from '../stageLog';
 import type { PrismaClient } from '@raivstream/database';
 import { isCreativeReviewEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
@@ -53,9 +54,10 @@ export class ReviewService {
         const findings: ReviewFinding[] = evaluated?.findings ?? [];
         // Scores travel with the run, so a caller can prove the critic varies between
         // assets instead of asserting that it does.
-        console.info(
-          `[creative.stage] project=${project.id} stage=review status=ok scene=${asset.sceneId} scores=${JSON.stringify(evaluated?.scores ?? null)}`,
-        );
+        logStage(project.id, 'review', 'ok', {
+          scene: asset.sceneId,
+          scores: evaluated?.scores ?? null,
+        });
         const status = evaluated === null ? 'FAILED' : 'COMPLETED';
         await prisma.creativeReviewRun.update({
           where: { id: run.id },

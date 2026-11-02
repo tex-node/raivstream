@@ -156,6 +156,15 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Output failure gate closed; provider blocked (2026-11-02).** `output/service.ts` now logs
+`stage=output status=fail` in both catch blocks, and `stageFailureCoverage.test.ts` enumerates all nine
+stages, requiring a failure disposition for each (a real `'fail'` call, or an acknowledged-gap entry — the
+gap set is asserted to be exactly the known eight, so it may shrink but not grow). `FAL_KEY` is present
+**in-process** in both apps (len 69) and in both env files, so the fal HTTP 403 is **account state**
+("account locked or balance exhausted"), not configuration. **No run attempted** — it would fail identically.
+**Phase 3 verdict: Blocked**, on the fal account; the two duration questions remain: (1) output-row-vs-probe
+unanswerable without an output; (2) plan-declared-30 s unanswerable while `totalRuntimeSeconds` is null.
+
 **All nine stage lines shipped (2026-11-02).** Pre-project identity decided: `intent` and `bible` are
 identified by a **request id** threaded to `project.create` (`[creative.stage] request=<uuid> stage=intent
 status=ok`, and the bible line carries `projectId` as detail), so the pre-project line joins to the project's
