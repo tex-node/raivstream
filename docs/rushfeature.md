@@ -183,6 +183,25 @@ column did.
 decision about what a stated duration means) and **eight acknowledged missing failure lines** (shrink-only set,
 enforced by `stageFailureCoverage.test.ts`).
 
+**Live-content policy decided (2026-11-02): flag, do not unpublish.** A rejected live asset is flagged for human
+review and stays visible until someone looks; an automated gate does not get unilateral power over published
+content. Every live rejection writes an audit row naming the asset, the breached dimension, its score and floor, the
+run and the critic version — without it, "flagged" is indistinguishable from "silently ignored". The policy is
+**prospective**: the gate has zero production rejections so far. Revisit if a flag sits unreviewed past 14 days, if
+the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
+dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
+
+**802 critic re-scores — SCOPED, NOT BUILT (2026-11-02).** Re-runs the current critic and the per-dimension gate over
+the 802 assets approved under the constant-90 critic. **Writes:** new scores into `creative_review_runs.scores`, the
+gate verdict per asset, and — per the flag policy — an audit row per live rejection (new `creative_review_flags`
+table: asset, scene, project, dimension, score, floor, runId, criticVersion, createdAt, review fields, unique on
+`(assetId, runId)` so a resumed batch cannot double-flag). **Cost:** 802 critic calls at fractions of a cent;
+the runner must be **resumable** (cursor on `createdAt`) and **rate-limited**, and must skip assets already re-scored
+under the current critic version. **Acceptance:** after the batch, the number of live assets below floor is known and
+every one has an audit row — the output is a **number, not a cleanup**. **It does not unpublish anything** (the
+policy is flag); it does not modify scores on the original runs; and it does not act on assets whose project is
+inactive. Blocked on nothing except the flag table and the runner.
+
 **Next phase (operator decision, 2026-11-02): PER-DIMENSION GATING.** Scope: one predicate that fails a creative
 asset when any dimension falls below its own threshold, even if the aggregate passes; a test matrix across the nine
 dimensions; no credits and no schema change. Blocking condition: none — the identity generalisation landed and the

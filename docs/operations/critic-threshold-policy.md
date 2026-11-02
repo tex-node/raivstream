@@ -164,3 +164,51 @@ real run to date clears its floors. Its first genuine rejection will be its proo
 That is the correct state for a gate built from calibration rather than from a live failure — but it means the gate
 is *untested against reality*, only against its matrix (21 cases: 10 dimensions × 3 boundary points, aggregate
 interplay, the SCENE_03 row, and four fail-closed shapes).
+
+## Live-content policy (decided 2026-11-02: **flag, do not unpublish**)
+
+The gate had zero production rejections when this policy was written. It is therefore **prospective**: it
+describes what will happen the first time a per-dimension floor rejects an asset that is already live, not what has
+happened.
+
+### The decision
+
+**A rejected live asset is flagged for human review and stays visible until a person looks at it.** An automated
+gate does not get unilateral power over published content.
+
+Reasoning: the control is the human review, not the automation. This is the same principle that allows
+self-approval with an audit trail, and the inverse of the admin-takedown gap — an automated mechanism acting on live
+content without a human in the loop would be the `isKidsSafe` class one layer up. The cost is latency, and latency
+is the correct price for not letting a score remove a published film.
+
+### What the gate does, by asset state
+
+| asset state | gate result | effect |
+|---|---|---|
+| **new** (not published) | any dimension below floor | `SUGGEST_REFINEMENT`, no publish. Breach named, e.g. `['characterIdentity']`. |
+| **live** (published) | any dimension below floor | **flag row written, asset stays live**, breach named. No feed change. |
+| any | missing/malformed scores | fails closed, same as above for its state |
+
+### The audit requirement
+
+Every rejection of a **live** asset must write a row naming:
+
+- `assetId`, `sceneId`, `projectId`
+- the breached `dimension`, its `score`, and the `floor` it missed
+- the `runId` and the critic/threshold version used
+- `createdAt`, and the reviewer fields once someone acts (`reviewedAt`, `reviewedById`, `decision`, `note`)
+
+**Without that row, "flagged for review" is indistinguishable from "silently ignored"** — and the second is what the
+system does today. The row is the difference between a policy and a hope.
+
+### The condition under which this policy should change
+
+Revisit — toward faster action, not toward automation for its own sake — if **any** of these occur:
+
+1. **A flagged asset stays unreviewed for more than 14 days.** Flagging is only safe if review actually happens.
+2. **The 802 re-score batch finds more than 5% of live assets below a floor.** That is a population problem, not an
+   individual-review problem, and per-asset flagging would not keep up.
+3. **A flagged asset with a dimension below half its floor is reported by a viewer before review.** At that severity,
+   latency stops being an acceptable price.
+
+None of these has occurred yet; they are stated now so the policy is changed by evidence rather than by discomfort.
