@@ -17,14 +17,14 @@
  *  - READ-ONLY toward publication: no Video.status, no moderationStatus, no feed.
  */
 import { prisma } from '@raivstream/database';
-import { buildCriticInput, evaluateWithCritic } from '../../lib/creative/review/criticAdapter';
-import type { CreativeBibleState } from '../../lib/creative/shared/types';
-import type { CreativeProductionPlanState } from '../../lib/creative/production/plan';
+import { buildCriticInput, evaluateWithCritic } from '../src/lib/creative/review/criticAdapter';
+import type { CreativeBibleState } from '../src/lib/creative/shared/types';
+import type { CreativeProductionPlanState } from '../src/lib/creative/production/plan';
 import {
   dimensionFloorBreaches,
   dimensionFloors,
   recommendationForResult,
-} from '../../lib/creativeCritic/qualityScorer';
+} from '../src/lib/creativeCritic/qualityScorer';
 
 export const CRITIC_VERSION = 'phase3-dimension-floors-v1';
 
