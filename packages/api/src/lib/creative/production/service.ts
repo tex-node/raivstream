@@ -359,6 +359,13 @@ export class ProductionPlanService {
       throw new CreativeError('PLAN_NOT_APPROVED', (error as Error).message);
     }
 
+    // Debug stop: reach the gate, then stop BEFORE any generation. Used to prove the
+    // refusal on a deployed build without spending credits.
+    if (process.env.CREATIVE_PRODUCE_DRY_RUN === '1') {
+      logStage(input.projectId, 'produce', 'ok', { dryRun: true, gate: 'passed' });
+      return { started: false, reason: 'already_running' };
+    }
+
     // Idempotent production operations (Phase 9): never start a second run while
     // one is genuinely active. A stale RUNNING row (dead process) is recovered
     // by `recoverStuckProductions`, not started twice here.
