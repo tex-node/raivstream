@@ -191,6 +191,16 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Measured re-production (2026-11-02): min identity 0, unchanged — and the cause is data, not conditioning.**
+Project `cmvzluerv…`, run `cmvzlujkm…`, 4 scenes, **1,120 credits**. Per-scene identity: **80 / 60 / 0 / 70**, min **0** — the
+same 0–50 band. **Diagnosis from the log:** every scene logged `references=0 identityBlock=no`, and the jobs are
+`model=FLUX` — **FLUX2_EDIT was never called**. The conditioning code is correct but had nothing to work with: a freshly
+interpreted creative project's **bible carries no characters**, so no identity block was composed and no reference could
+be resolved (`scene.characters` was empty too, so the name filter matched nothing against the 6 READY assets). **This is a
+wiring/data gap, not a conditioning failure and not a calibration question.** Next: populate `bible.characters` at intent
+time and map them to reference assets at plan time; only then is `references>0` reachable. **The 99-flag backlog stays
+deferred** — re-rendering while stills call FLUX with no references would repeat this spend for the same number.
+
 **Identity floor unreachable BY CONSTRUCTION in the creative pipeline (read 2026-11-02).** The 0–50 minimums are not
 mis-calibration. **Stills model:** creative uses `fal-ai/flux-2` — *text-to-image only* — while story uses
 `fal-ai/flux-2/edit`, which takes `imageUrls` (max 4). **References:** `FalFlux2Input` has only `prompt`,
