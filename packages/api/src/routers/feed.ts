@@ -169,10 +169,21 @@ export const feedRouter = router({
       nextCursor = last.avgStarRating?.toString();
     }
 
-    // If not enough rated videos, fall back to trending
+    // If not enough rated videos, fall back to trending.
+    //
+    // THE BUG THIS FIXES: the fallback used to build its own where from scratch, so the
+    // star filter, `withdrawnAt` and the quarantine clause were all silently dropped -
+    // the query returned 0-star videos and a below-floor video because nothing excluded
+    // them, and the result looked like ordinary trending rather than a bypass. Only the
+    // star filter may be relaxed here; the safety clauses are not negotiable.
     if (videos.length === 0) {
       const fallback = await ctx.prisma.video.findMany({
-        where: { status: 'READY', isPublic: true, ...(input.kidsOnly ? kidsFilter : { moderationStatus: { not: 'REJECTED' } }) },
+        where: {
+          status: 'READY',
+          isPublic: true,
+          ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(await quarantineClause(ctx.prisma)),
+        },
         orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
         take: input.limit,
         select: videoSelect,
