@@ -9,6 +9,7 @@
 
 import type { PrismaClient } from '@raivstream/database';
 import { logStage } from '../stageLog';
+import { assertCastApproved } from './identityBlock';
 import { isCreativePreviewEnabled, isCreativeProductionEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
 import type { CreativeBibleState, CreativeProjectType } from '../shared/types';
@@ -299,7 +300,7 @@ export class ProductionPlanService {
   async adapt(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<AdapterManifest | null> {
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      include: { productionPlan: true, brief: true },
+      include: { productionPlan: true, brief: true, bible: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
     if (!project.productionPlan) return null;
@@ -336,6 +337,26 @@ export class ProductionPlanService {
     if (!producible) {
       if (project.status === 'GENERATING') return { started: false, reason: 'already_running' };
       throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the preview before producing.');
+    }
+
+    // The blocking cast gate, wired into the production path itself so it refuses real
+    // productions and not just the unit test. It runs AFTER the project (and so its bible)
+    // is loaded and BEFORE any generation: a gate placed after the first asset would be
+    // reporting, not blocking.
+    //
+    // The bible comes from the project row - no second query, which is what broke four
+    // production stubs the first time this was attempted.
+    const castCharacters = (((project as { bible?: { characters?: unknown } | null }).bible?.characters ?? []) as Array<{
+      name?: string;
+      visualDescription?: string;
+    }>)
+      .filter((character) => Boolean(character?.name))
+      .map((character) => ({ name: character.name as string, visualDescription: character.visualDescription ?? null }));
+    try {
+      await assertCastApproved(prisma, { projectId: input.projectId, characters: castCharacters });
+    } catch (error) {
+      logStage(input.projectId, 'produce', 'fail', { reason: (error as Error).message.slice(0, 120) });
+      throw new CreativeError('PLAN_NOT_APPROVED', (error as Error).message);
     }
 
     // Idempotent production operations (Phase 9): never start a second run while

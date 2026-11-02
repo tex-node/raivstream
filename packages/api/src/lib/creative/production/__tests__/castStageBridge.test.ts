@@ -112,3 +112,64 @@ describe('proof 4: an existing READY reference is not regenerated', () => {
     expect(created.map((row) => row.characterName)).toEqual(['Lost Bird']);
   });
 });
+describe('the gate is wired into the production path, not just exported', () => {
+  // The production service is flag-gated, so the wired path is only reached with it open.
+  process.env.RAIVSTREAM_5_ENABLED = 'true';
+  process.env.RAIVSTREAM_5_PRODUCTION_ENABLED = 'true';
+
+  const projectRow = (bible: unknown) => ({
+    id: 'p1',
+    userId: 'u1',
+    status: 'APPROVED',
+    projectType: 'STORY',
+    productionPlan: { plan: { scenes: [] } },
+    brief: null,
+    bible,
+  });
+
+  function producePrisma(bible: unknown, approved: Array<{ characterName: string }>) {
+    const prisma: any = {
+      creativeProject: { findFirst: async () => projectRow(bible) },
+      characterReferenceAsset: { findMany: async () => approved },
+      creativeProductionRun: { findFirst: async () => null, create: async () => ({ id: 'run1' }) },
+      creativeProducedAsset: { findMany: async () => [], count: async () => 0, updateMany: async () => ({ count: 0 }) },
+    };
+    return prisma;
+  }
+
+  it('produce() refuses a real production while a cast reference is unapproved', async () => {
+    const { ProductionPlanService } = await import('../service');
+    const prisma = producePrisma({ characters: [{ name: 'Lighthouse Keeper' }] }, []);
+    await expect(
+      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }),
+    ).rejects.toThrow(/CAST_NOT_APPROVED.*Lighthouse Keeper/);
+  });
+
+  it('produce() passes the gate once every cast character is approved', async () => {
+    const { ProductionPlanService } = await import('../service');
+    const prisma = producePrisma({ characters: [{ name: 'Lighthouse Keeper' }] }, [{ characterName: 'Lighthouse Keeper' }]);
+    // It may fail later on an incomplete stub; the assertion is that the failure is NOT the gate.
+    await expect(
+      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }),
+    ).rejects.not.toThrow(/CAST_NOT_APPROVED/).catch(() => undefined);
+    let gateError: unknown = null;
+    try {
+      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' });
+    } catch (error) {
+      gateError = error;
+    }
+    expect(String((gateError as Error)?.message ?? '')).not.toMatch(/CAST_NOT_APPROVED/);
+  });
+
+  it('a project with no cast is not blocked', async () => {
+    const { ProductionPlanService } = await import('../service');
+    const prisma = producePrisma({ characters: [] }, []);
+    let gateError: unknown = null;
+    try {
+      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' });
+    } catch (error) {
+      gateError = error;
+    }
+    expect(String((gateError as Error)?.message ?? '')).not.toMatch(/CAST_NOT_APPROVED/);
+  });
+});
