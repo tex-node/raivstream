@@ -191,6 +191,17 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Cast derivation shipped (2026-11-02): steps 1-2 of the build, proven free; step 3 and the run NOT done.**
+`deriveCast()` replaces the hardcoded `characters: []` for `STORY` — parses the creator's subject first and alone, splits
+on "and"/commas, strips articles, bounds at `MAX_CAST = 4`, de-dupes, and marks every description as a proposal pending
+creator approval. `extractSubject()` fills `explicit.subject` from the "about …" clause verbatim. **10 free tests** pin
+the lighthouse cast (`Lighthouse Keeper`, `Lost Bird`) and caught two bugs before any spend: the derivation missed the
+already-stripped subject entirely, and (once fixed) let the leading-article pattern swallow the summary into a character
+named *"a lost bird I understand this as a story targeting 30s"*. **Still missing: step 3, the cast stage that generates
+and approves one reference per character.** Without it no `CharacterReferenceAsset` rows exist for these characters, so
+`references` stays 0 and both acceptance conditions (`references>0`, a `FLUX2_EDIT` job) remain **unmet** — recorded as
+unmet, not approximated. Next session: build the cast stage, then one re-production (~1,120 credits).
+
 **Why the bible has no characters — read 2026-11-02: never-extracted.** `domainKnowledgeFor()` **hardcodes
 `characters: []` for `STORY`** (`intelligence/service.ts:51`), and the interpreter does not populate `explicit.subject`
 (the free interpretation of the lighthouse idea returned only `durationSeconds: 30`). `seedBibleFromInterpretation()`
