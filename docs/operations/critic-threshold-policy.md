@@ -127,3 +127,40 @@ Two consequences, both now recorded as requirements rather than observations:
    so the asset would proceed to cut with an absent character and every log line would say `status=ok`.
 
 This is the evidence base for the per-dimension gating phase; the acceptance test is the SCENE_03 row above.
+
+## Per-dimension floors (shipped 2026-11-02)
+
+The aggregate gate is no longer sufficient. An asset fails if **any** dimension falls below its floor, even when
+`overall` passes. Thresholds are data — `DEFAULT_DIMENSION_FLOORS` in `qualityScorer.ts`, one table:
+
+| dimension | floor | why |
+|---|---|---|
+| `characterIdentity` | **85** | unchanged from Phase 1; identity drift is the failure the critic exists to catch |
+| `continuity` | 70 | catches visible wardrobe/lighting/set jumps between scenes |
+| `composition` | 70 | a usable frame clears 70 without being remarkable |
+| `lighting` | 70 | below this the subject reads as unlit |
+| `emotion` | 65 | most subjective; flags a dead performance, not a plain one |
+| `visualStyle` | 65 | tolerates a loose interpretation of the chosen style |
+| `environment` | 65 | tolerates a sparse but readable set |
+| `storyAlignment` | 70 | the "reads as the right moment" line |
+| `sceneClarity` | 70 | comprehension floor for a single look |
+| `technicalQuality` | 70 | artefacts, warping, extra limbs — below this the asset is not shippable |
+
+**Fail-closed:** a missing or non-numeric dimension is a breach, never an exemption. `null`, `'n/a'`, `NaN` and an
+absent key all fail, and so does a `null` scores object.
+
+**The aggregate stays.** `overall >= 80` is still a gate; the floors are additional. A uniformly mediocre asset
+(every dimension 82) passes the floors and fails the aggregate — both checks are load-bearing.
+
+### Acceptance case
+
+SCENE_03 (production, 2026-11-02): `overall: 85`, `characterIdentity: 0` → **SUGGEST_REFINEMENT**, with the breach
+named as `['characterIdentity']`. Test: `dimensionFloors.test.ts`, "the SCENE_03 acceptance case".
+
+### The honest caveat, recorded at ship time
+
+**This gate has zero rejections in production so far.** The 802 constant-90 assets carry `identity: 90`, and every
+real run to date clears its floors. Its first genuine rejection will be its proof, and that has not happened yet.
+That is the correct state for a gate built from calibration rather than from a live failure — but it means the gate
+is *untested against reality*, only against its matrix (21 cases: 10 dimensions × 3 boundary points, aggregate
+interplay, the SCENE_03 row, and four fail-closed shapes).
