@@ -345,3 +345,47 @@ a publish path writes `sourceProducedAssetId`, both the feed clause and the disc
 
 Quarantine lifts when below-floor assets fall under **5%** of images. The un-quarantine path remains a **re-render with
 the identity fix** (~97 × 80 credits plus video) — a spend decision, not a policy one.
+
+## Creative publish — the link that makes quarantine load-bearing (2026-11-02)
+
+Operator decision: **approved outputs only.** A creative output becomes a feed video only when its version carries an
+APPROVED `CreativeApproval` and the output is `READY` with media — the `publishExport` rule applied to the creative
+pipeline, rather than a second publishing path with weaker preconditions.
+
+### What the publish path writes
+
+`creative.output.publish` → `outputService.publish`:
+
+| field | value |
+|---|---|
+| `mp4Url` | the output's `assetUrl` |
+| `sourceProjectId` | the project |
+| `sourceVersionId` | the approved version |
+| `sourceProducedAssetId` | **only when the version has exactly one READY asset** — a film spans many scenes, so the single-asset column is often not knowable |
+| `moderationStatus` | `PENDING`, the existing publish rule |
+
+Idempotent by media URL: a second publish of the same output returns the existing video and creates nothing.
+
+**Provenance is written at publish time, never derived at read time** — the Phase 3.5 attribution rule. A read-time join
+is an inference that goes stale the moment an asset is re-rendered.
+
+### Preconditions, both directions tested
+
+Refused with a typed error: no approval row, `PENDING` approval, `REJECTED` approval, output not `READY`, and `READY`
+with no media. A publish path that accepts an unapproved version would let a rendered-but-unblessed cut reach a feed.
+
+### Two separate spends, and they must not be conflated
+
+1. **The 99-flag backlog is a re-render decision** (~97 × 80 credits + video). Quarantine cannot reach those assets
+   because **no video ever came from them** — there is nothing to quarantine, only something to regenerate.
+2. **Creative publish is a forward-looking capability.** It makes quarantine meaningful for work produced from now on.
+   It does **nothing** for the backlog.
+
+Saying "quarantine handles the backlog" would be false: quarantine stops promotion, and those assets were never
+promoted. They need the identity fix and a re-render.
+
+### Disclosure
+
+Now readable — a film page can walk `Video.sourceProjectId` → assets → minimum identity — but it is not shipped in this
+pass. It is a one-line read on top of a link that now exists, and it belongs with the feed clause that consumes the same
+link.

@@ -308,6 +308,81 @@ export class OutputService {
       createdAt: row.createdAt,
     };
   }
+  /**
+   * Publish a rendered output to the feed (operator decision 2026-11-02: approved
+   * outputs only, the publishExport model applied to the creative pipeline).
+   *
+   * Preconditions are the same rule story films already follow: the version must be
+   * APPROVED, the output READY, and it must have media. Anything else is refused with
+   * a typed error rather than published and corrected later.
+   *
+   * The provenance is written HERE, at publish time — never derived at read time. A
+   * read-time join is an inference that can go stale (the Phase 3.5 attribution rule).
+   */
+  async publish(
+    prisma: PrismaClient,
+    input: { projectId: string; userId: string; outputId: string; title: string; isKidsSafe?: boolean },
+  ): Promise<{ videoId: string; created: boolean }> {
+    if (!isCreativeOutputEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 output is not enabled.');
+    const project = await prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: input.userId } });
+    if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+
+    const output = await prisma.creativeOutput.findFirst({ where: { id: input.outputId, projectId: project.id } });
+    if (!output) throw new CreativeError('PROJECT_NOT_FOUND', 'Output not found.');
+    if (output.status !== 'READY' || !output.assetUrl) {
+      throw new CreativeError('PLAN_NOT_APPROVED', 'Render the output before publishing it.');
+    }
+
+    const version = await prisma.creativeVersion.findFirst({
+      where: { id: output.versionId, projectId: project.id },
+      select: { id: true },
+    });
+    // Approval is read from the approval table's mirrored field; a version with no
+    // approval row is not approved, and the refusal is typed rather than silent.
+    const approved = await prisma.creativeApproval.findFirst({
+      where: { projectId: project.id, versionId: output.versionId, kind: 'CREATIVE' },
+      select: { id: true, status: true },
+    });
+    if (!version || approved?.status !== 'APPROVED') {
+      throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the version before publishing its output.');
+    }
+
+    // Idempotent by media URL - the publishExport precedent: the same output can only
+    // become one video, and a retry returns what already exists.
+    const existing = await prisma.video.findFirst({ where: { creatorId: input.userId, mp4Url: output.assetUrl }, select: { id: true } });
+    if (existing) return { videoId: existing.id, created: false };
+
+    // A film derives from a version spanning many assets, so the single-asset column is
+    // only knowable when the version happens to have exactly one.
+    const assets = await prisma.creativeProducedAsset.findMany({
+      where: { projectId: project.id, status: 'READY' },
+      select: { id: true },
+      take: 2,
+    });
+
+    const video = await prisma.video.create({
+      data: {
+        creatorId: input.userId,
+        title: input.title.trim().slice(0, 100),
+        thumbnailUrl: output.thumbnailUrl ?? output.assetUrl,
+        mp4Url: output.assetUrl,
+        duration: Math.max(1, Math.round(output.durationSeconds ?? 5)),
+        status: 'READY',
+        isPublic: true,
+        isKidsSafe: input.isKidsSafe ?? false,
+        moderationStatus: 'PENDING',
+        publishedAt: new Date(),
+        sourceProjectId: project.id,
+        sourceVersionId: version.id,
+        ...(assets.length === 1 ? { sourceProducedAssetId: assets[0]!.id } : {}),
+      },
+      select: { id: true },
+    });
+
+    logStage(project.id, 'output', 'ok', { format: output.format, output: output.id, published: video.id });
+    return { videoId: video.id, created: true };
+  }
+
 }
 
 export const outputService = new OutputService();

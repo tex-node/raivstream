@@ -36,6 +36,34 @@ export const creativeOutputRouter = router({
       }
     }),
 
+  /**
+   * Publish a READY output of an APPROVED version to the feed.
+   *
+   * Writes the provenance at publish time (sourceProjectId / sourceVersionId, and the
+   * single asset when the version has exactly one) so quarantine can act on a fact
+   * rather than an inference.
+   */
+  publish: creativeProcedure
+    .input(z.object({
+      projectId: z.string(),
+      outputId: z.string(),
+      title: z.string().min(1).max(100),
+      isKidsSafe: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await timedCreative('output.publish', () => outputService.publish(ctx.prisma, {
+          projectId: input.projectId,
+          userId: ctx.user.id,
+          outputId: input.outputId,
+          title: input.title,
+          isKidsSafe: input.isKidsSafe,
+        }));
+      } catch (error) {
+        throw toTrpcError(error, 'Output could not be published.');
+      }
+    }),
+
   /** Output gallery (provenance back to the source version). */
   list: creativeProcedure
     .input(z.object({ projectId: z.string() }))
