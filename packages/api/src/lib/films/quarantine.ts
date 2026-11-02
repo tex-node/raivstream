@@ -80,16 +80,45 @@ export function feedExclusionWhere(quarantinedAssetIds: readonly string[]): Reco
 }
 
 /**
- * CAN THE FEED ACTUALLY APPLY THIS TODAY? No.
+ * CAN THE FEED ACTUALLY APPLY THIS TODAY? Still no — but the prerequisite now exists.
  *
- * `Video` carries no reference to the `CreativeProducedAsset` that produced it — there
- * is no `sourceProducedAssetId`, and the publish path does not write one. So a feed
- * predicate has nothing to join against, and shipping one anyway would exclude zero
- * rows while appearing to enforce a policy: the false-pass shape this project keeps
- * catching.
+ * `Video.sourceProducedAssetId` shipped (nullable, 2026-11-02), so a feed predicate finally
+ * has something to join on. What it does not have is a **populated** link: none of the four
+ * paths that create a `Video` (generation publish, library publish of a story asset, story
+ * export, upload) reads a `CreativeOutput`, and the measured URL join between
+ * `videos.mp4Url` and `creative_outputs.assetUrl` returns **0 matches** across 14 videos and
+ * 44 ready outputs.
  *
- * The prerequisite is therefore a column plus population at publish time, not a filter.
+ * So the wiring reports on the DATA, not on the schema: the filter is live when at least one
+ * video carries a source, and inert otherwise. A predicate that claims to be wired because a
+ * column exists is exactly the false pass this project keeps catching.
  */
-export function feedQuarantineIsWired(): boolean {
-  return false;
+export function feedQuarantineIsWired(videosWithSource: number): boolean {
+  return videosWithSource > 0;
+}
+
+/**
+ * Resolve the source asset id at publish time.
+ *
+ * Returns null when the caller does not know it — and null is the honest answer, not a
+ * failure. A guessed link would let a score act on content it never scored.
+ */
+export function resolveSourceProducedAssetId(
+  candidate: string | null | undefined,
+): string | null {
+  if (typeof candidate !== 'string') return null;
+  const trimmed = candidate.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Was this video's source produced by the creative pipeline at all? NULL means the link is
+ * unknown, and unknown stays fail-open: the video is surfaced.
+ */
+export function shouldSurfaceVideo(
+  surface: PromotionSurface,
+  input: { scores?: Record<string, unknown> | null; sourceProducedAssetId?: string | null },
+): boolean {
+  if (!input.sourceProducedAssetId) return true;
+  return shouldSurface(surface, { scores: input.scores });
 }

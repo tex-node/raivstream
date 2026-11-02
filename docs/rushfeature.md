@@ -191,6 +191,16 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Quarantine wiring (2026-11-02): the column landed, the links did not.** `Video.sourceProducedAssetId` shipped
+nullable (NULL = source unknown = fail-open, mirroring the unscored rule). **No populate path exists:** all four
+`Video`-creating paths (generation, library, story export, upload) were read and none touches a `CreativeOutput`, and
+the 5.0 pipeline has no publish-to-feed step. **Backfill declined on measurement:** the URL join returns **0 matches**
+across 14 videos × 44 ready outputs, so option (a) is unreliable here and option (c) is impossible — none of the 99
+flagged assets is a video's source. **Named number: 14/14 videos (100%) have NULL source** — the population quarantine
+cannot reach, stated rather than implied. `feedQuarantineIsWired(videosWithSource)` now reports on **data, not
+schema**: a column is not wiring, one populated row is. The inert test was updated (not deleted) to assert the
+pre-populate state. Disclosure still deferred: nothing to read yet.
+
 **Quarantine shipped (2026-11-02), with the honest wiring gap.** `lib/films/quarantine.ts` — asset below the identity
 floor stops being **promoted** (feed excludes, library and direct link include), unscored assets are **not**
 quarantined (quarantine fails open on unknown, the opposite of approval), 13 tests. **Verified on real data:** 99

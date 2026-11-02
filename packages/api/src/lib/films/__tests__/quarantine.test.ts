@@ -5,7 +5,9 @@ import {
   feedQuarantineIsWired,
   isQuarantined,
   quarantineVerdict,
+  resolveSourceProducedAssetId,
   shouldSurface,
+  shouldSurfaceVideo,
 } from '../quarantine';
 
 /**
@@ -78,10 +80,58 @@ describe('the feed where-fragment', () => {
   });
 });
 
-describe('the honest capability gate', () => {
-  it('reports that feed quarantine is NOT wired today', () => {
-    // Video has no sourceProducedAssetId, so a feed predicate has nothing to join
-    // against. This test exists so nobody ships that filter believing it works.
-    expect(feedQuarantineIsWired()).toBe(false);
+describe('the honest capability gate — reports on data, not schema', () => {
+  it('is inert when no video carries a source (a fresh database)', () => {
+    // The column exists; the DATA does not. A predicate that claimed to be wired
+    // because a column exists would be the false pass this project keeps catching.
+    expect(feedQuarantineIsWired(0)).toBe(false);
+  });
+
+  it('is live once at least one video carries a source', () => {
+    expect(feedQuarantineIsWired(1)).toBe(true);
+  });
+
+  it('today: 0 of 14 videos carry a source, so the filter is inert', () => {
+    // Measured 2026-11-02: no Video-creating path reads a CreativeOutput, and the URL
+    // join between videos.mp4Url and creative_outputs.assetUrl returns 0 matches.
+    expect(feedQuarantineIsWired(0)).toBe(false);
+  });
+});
+
+describe('an unsourced video is fail-open, like an unscored asset', () => {
+  it('a video with no source is surfaced even with a below-floor score present', () => {
+    // If the link is missing we do not know which asset the score belongs to.
+    expect(shouldSurfaceVideo('feed', { scores: null, sourceProducedAssetId: null })).toBe(true);
+    expect(shouldSurfaceVideo('feed', { scores: { characterIdentity: 0 }, sourceProducedAssetId: null })).toBe(true);
+  });
+
+  it('a sourced video below floor is excluded from the feed', () => {
+    expect(
+      shouldSurfaceVideo('feed', { scores: { characterIdentity: 0 }, sourceProducedAssetId: 'ast_1' }),
+    ).toBe(false);
+  });
+
+  it('a sourced, at-floor video is surfaced', () => {
+    expect(
+      shouldSurfaceVideo('feed', { scores: { characterIdentity: 90 }, sourceProducedAssetId: 'ast_1' }),
+    ).toBe(true);
+  });
+
+  it('library and direct link include a sourced below-floor video', () => {
+    const input = { scores: { characterIdentity: 0 }, sourceProducedAssetId: 'ast_1' };
+    expect(shouldSurfaceVideo('library', input)).toBe(true);
+    expect(shouldSurfaceVideo('direct', input)).toBe(true);
+  });
+});
+
+describe('the publish-time resolver never guesses', () => {
+  it('returns null for absent, empty, whitespace and non-strings', () => {
+    for (const value of [null, undefined, '', '   ', 42 as unknown as string]) {
+      expect(resolveSourceProducedAssetId(value as string)).toBeNull();
+    }
+  });
+
+  it('passes through a real id, trimmed', () => {
+    expect(resolveSourceProducedAssetId(' ast_1 ')).toBe('ast_1');
   });
 });

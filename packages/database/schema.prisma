@@ -451,6 +451,12 @@ model Video {
   id                String        @id @default(cuid())
   creatorId         String
   creator           User          @relation("CreatorVideos", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  /// Which creative produced asset this video came from, when the publish path
+  /// knew it at write time. NULL means "source unknown" - and unknown is fail-open:
+  /// an unsourced video is NOT quarantined, the same rule as an unscored asset.
+  /// A link derived at read time would be an inference that can go stale, so this
+  /// is written at publish or left NULL, never guessed.
   awardNominations  AwardNomination[]
   
   // Metadata

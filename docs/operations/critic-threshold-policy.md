@@ -300,3 +300,48 @@ place was true of the *code* and false of the *library*: nothing had ever measur
 When the below-floor count falls under **5%** of image assets — whether by re-render with the identity fix or by the
 backlog ageing out — quarantine is no longer a population treatment and should be removed rather than kept as a
 permanent invisible state. Stated now so it cannot become one.
+
+## Wiring quarantine to the feed (2026-11-02) — the column landed, the links did not
+
+`Video.sourceProducedAssetId` shipped **nullable**. NULL means "source unknown", and unknown is **fail-open** in
+`quarantine.ts`: an unsourced video is not quarantined, exactly as an unscored asset is not. That symmetry is the
+whole reason the column is nullable rather than required — the alternative is guessing, and a guessed link lets a
+score act on content it never scored.
+
+### The populate path: there isn't one yet
+
+Four code paths create a `Video` — generation publish, library publish of a `StorySceneAsset`, story export, and
+upload. **None of them reads a `CreativeOutput`.** The 5.0 creative pipeline renders outputs (44 READY, all with
+URLs) and has no publish-to-feed step, so there is no write-time fact to record. The link was not forced in; it is
+absent because the flow is absent.
+
+### The backfill: measured, then declined
+
+| option | result |
+|---|---|
+| (a) join `videos.mp4Url` → `creative_outputs.assetUrl` | **0 matches** across 14 videos × 44 ready outputs |
+| (b) leave NULL | the default — historical videos stay surfaced (fail-open) |
+| (c) targeted pass for the 99 flagged assets | **impossible**: none of those assets is a video's source, because no video ever came from them |
+
+**The named number: 14 of 14 videos (100%) have `sourceProducedAssetId IS NULL`.** That is the population quarantine
+cannot reach, and it is stated rather than implied. It is also the correct value — the data genuinely lacks the link,
+so the honest column is empty.
+
+### The wiring now reports on data, not schema
+
+`feedQuarantineIsWired(videosWithSource: number)` returns `videosWithSource > 0`. A column's existence is not
+wiring; **one populated row** is. Today it returns `false`, and the test asserts both the inert case (a fresh
+database) and the live case, so the rule survives the flip.
+
+The old "not wired" test was **updated, not deleted** — it now asserts the predicate is inert when **no video carries
+a source**, which is the real pre-populate state.
+
+### What follows the link
+
+The film-page disclosure is still deferred, for the same reason it was deferred before: there is nothing to read. Once
+a publish path writes `sourceProducedAssetId`, both the feed clause and the disclosure become one-line reads.
+
+### Lift condition, unchanged
+
+Quarantine lifts when below-floor assets fall under **5%** of images. The un-quarantine path remains a **re-render with
+the identity fix** (~97 × 80 credits plus video) — a spend decision, not a policy one.
