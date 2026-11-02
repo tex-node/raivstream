@@ -191,6 +191,16 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Quarantine CERTIFIED on three surfaces (2026-11-02).** Deploy `a297b75` confirmed (VPS `HEAD=a297b75`, health 200).
+Against the live tRPC endpoints: below-floor video `cmvzdewzf…` absent from **forYou, trending and viewersPick**;
+unsourced historical video `cmvtzf9qf…` present in **all three** (the NULL branch proven on every surface, where a bare
+`notIn` would have removed it everywhere); direct link `/v/cmvzdewzf…` → 200. The fourth assertion was **mis-specified,
+not failed**: `viewersPick`'s fallback exists to avoid an empty feed and may relax the star filter, so unrated rows there
+are intended — the fixed bug was the **clause loss** (including `withdrawnAt: null`), not the presence of 0-star videos.
+**Two bugs recorded separately:** quarantine-on-viewersPick (this phase, fixed #279) and `viewersPick` never applying
+its star filter / dropping `withdrawnAt` (a **pre-existing defect found this session**, not a regression of this work).
+The fallback now carries an INTENT comment warning that removing it as "unused" is the trap that already fired.
+
 **Quarantine probed on real data (2026-11-02) — partial.** Published one below-floor output (`min identity 50`) as video
 `cmvzdewzf0001b1exbttsx1tv` with provenance written at publish time. **Passed:** the NULL-branch proof (an unsourced
 historical video appears in all three feeds) and exclusion from `forYou` + `trending`. **Failed:** the same video

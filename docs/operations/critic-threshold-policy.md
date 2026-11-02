@@ -407,3 +407,32 @@ Two things follow, and neither is a pass:
 
 1. **`viewersPick` needs its own investigation before quarantine can be called live.** It filters `starRatingCount >= 3` yet returned 14 items including a 0-star video, which suggests that filter is not taking effect — so the query may not be applying its where clause as written. Quarantine cannot be trusted on a surface whose other filters are already inert.
 2. **No creative work has ever passed the identity floor.** The above-floor control is not deferrable by choice; it does not exist. That is the strongest evidence yet that the 89% below-floor figure is a property of the library, not of the gate.
+
+## Quarantine certified on three surfaces (2026-11-02)
+
+Deploy `a297b75` confirmed (`DEPLOY=success`, VPS `HEAD=a297b75`, health 200). Assertions run against the live tRPC
+endpoints, not the source:
+
+| # | assertion | observed |
+|---|---|---|
+| 1 | below-floor video absent from forYou / trending / viewersPick | ✅ absent from **all three** (13 items each) |
+| 2 | below-floor video reachable by direct link | ✅ `/v/cmvzdewzf…` → **200** |
+| 3 | unsourced historical video appears in all three feeds | ✅ present in **forYou, trending and viewersPick** |
+| 4 | 0-star video absent from viewersPick | ❌ **mis-specified** — see below |
+
+**Assertion 3 is the NULL-branch proof on every surface**: a bare `notIn` would have removed that video from all three
+feeds. It appears in all three.
+
+**Assertion 4 was wrong as written, not failed.** `viewersPick`'s fallback exists to *avoid an empty feed* and is
+explicitly allowed to relax `starRatingCount >= 3`. With no video at 3+ ratings, the fallback runs on **every** request,
+so unrated rows there are the intended behaviour. The bug fixed in #279 was the **loss of the moderation, withdrawal and
+quarantine clauses**, not the presence of unrated videos. Asking for 0-star exclusion would have re-introduced the
+empty-feed problem the fallback exists to solve.
+
+### Two bugs, two provenances
+
+1. **Quarantine unverified on `viewersPick`** — this phase's gap. Found, fixed (#279), proven here.
+2. **`viewersPick` never applied its star filter, and its fallback dropped `withdrawnAt: null`** — a **pre-existing
+   defect found on 2026-11-02** because a feed's output was finally read instead of trusted. It is **not** a regression
+   from the quarantine work and must not be credited to it. Withdrawn videos could have appeared in a feed before this
+   fix, which is the more serious of the two.
