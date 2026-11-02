@@ -2722,7 +2722,7 @@ model CreativeOutput {
   versionId       String
   version         CreativeVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
   format          CreativeOutputFormat
-  durationSeconds Int?
+  durationSeconds Float?
   status          CreativeOutputStatus  @default(PENDING)
   assetUrl        String?
   thumbnailUrl    String?
