@@ -191,6 +191,17 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Gate defect narrowed 2026-11-03 — the null-bible hypothesis is REFUTED.** Runtime probe (no production, no credits) on
+`cmvzvo9ym…`: `include: { productionPlan, brief, bible }` returns `bible_present=true` with
+`chars=["Lighthouse Keeper","Lost Bird"]`, and `creativeBible.findFirst` agrees. So `project.bible` is **not** null and
+`castCharacters` was **not** empty — the guard's `names.length === 0` short-circuit cannot explain `NO_REFUSAL`. Static
+reading is also clean: one `produce()` implementation (`production/service.ts:324`), the router calls it
+(`routers/creative/production.ts:70`), and the deployed file has the gate (line 356) plus the include (line 303).
+**What remains is a single runtime fact: whether the gate executes and what `castCharacters.length` is when it does.**
+The next read is one log line inside the gate on the deployed build — static analysis has now been exhausted twice.
+**No production was run; the refusal was NOT produced**, so the gate remains untrusted. Credits from the earlier aborted
+run are **unconfirmed** and deliberately not quoted.
+
 **Sequence attempted 2026-11-03 and it FAILED at the gate — production does not refuse what the test refuses.**
 Deployed `449e58a`, health 200, project `cmvzvo9ym…`, cast derived correctly (`["Lighthouse Keeper","Lost Bird"]`,
 bibles-with-characters 4 → 5). Then **`production.produce()` ran without refusing** (`GATE_REFUSAL=NO_REFUSAL`) and logged
