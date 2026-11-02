@@ -130,7 +130,11 @@ describe('feed filtering', () => {
   it('R16 feed requires APPROVED and excludes withdrawn (so PENDING/REJECTED never appear)', async () => {
     const prisma = makePrisma();
     await feedRouter.createCaller({ prisma } as never).forYou({ kidsOnly: true, limit: 10 });
-    const where = prisma.video.findMany.mock.calls[0]![0].where as Record<string, unknown>;
+    // The feed now issues a quarantine lookup before the feed query, so the feed call
+    // is located by shape rather than by position — asserting "call 0" was incidental
+    // and would silently start checking the wrong query.
+    const feedCall = prisma.video.findMany.mock.calls.find((call: any) => 'status' in (call[0]?.where ?? {}));
+    const where = feedCall![0].where as Record<string, unknown>;
     expect(where.moderationStatus).toBe('APPROVED');
     expect(where.isKidsSafe).toBe(true);
     expect(where.withdrawnAt).toBeNull();
@@ -139,7 +143,11 @@ describe('feed filtering', () => {
   it('general feed excludes REJECTED and withdrawn', async () => {
     const prisma = makePrisma();
     await feedRouter.createCaller({ prisma } as never).forYou({ kidsOnly: false, limit: 10 });
-    const where = prisma.video.findMany.mock.calls[0]![0].where as Record<string, unknown>;
+    // The feed now issues a quarantine lookup before the feed query, so the feed call
+    // is located by shape rather than by position — asserting "call 0" was incidental
+    // and would silently start checking the wrong query.
+    const feedCall = prisma.video.findMany.mock.calls.find((call: any) => 'status' in (call[0]?.where ?? {}));
+    const where = feedCall![0].where as Record<string, unknown>;
     expect(where.moderationStatus).toEqual({ not: 'REJECTED' });
     expect(where.withdrawnAt).toBeNull();
   });
@@ -147,7 +155,11 @@ describe('feed filtering', () => {
   it('creator grid (byCreator) excludes withdrawn', async () => {
     const prisma = makePrisma();
     await feedRouter.createCaller({ prisma } as never).byCreator({ creatorId: 'u1', limit: 10 });
-    const where = prisma.video.findMany.mock.calls[0]![0].where as Record<string, unknown>;
+    // The feed now issues a quarantine lookup before the feed query, so the feed call
+    // is located by shape rather than by position — asserting "call 0" was incidental
+    // and would silently start checking the wrong query.
+    const feedCall = prisma.video.findMany.mock.calls.find((call: any) => 'status' in (call[0]?.where ?? {}));
+    const where = feedCall![0].where as Record<string, unknown>;
     expect(where.withdrawnAt).toBeNull();
   });
 });
