@@ -436,3 +436,38 @@ empty-feed problem the fallback exists to solve.
    defect found on 2026-11-02** because a feed's output was finally read instead of trusted. It is **not** a regression
    from the quarantine work and must not be credited to it. Withdrawn videos could have appeared in a feed before this
    fix, which is the more serious of the two.
+
+## Why no creative output has ever cleared the identity floor (read 2026-11-02)
+
+The 99 flags and the 0–50 minimums are not a calibration problem. **The creative pipeline never conditions on a
+reference image, and its still model cannot accept one.**
+
+Read side by side against the story pipeline, which scores 90 with positional binding:
+
+| question | story pipeline | creative pipeline |
+|---|---|---|
+| stills model | `fal-ai/flux-2/edit` — **reference-conditioned** (`falFlux2Edit.ts:17`) | `fal-ai/flux-2` — **text-to-image only** (`falFlux2.ts:19`) |
+| reference images passed | yes: `imageUrls` (max 4) from approved refs (`falFlux2Edit.ts:22,39`) | **no** — `FalFlux2Input` has only `prompt`, `aspectRatio`, `seed` (`falFlux2.ts:22-26`) |
+| identity in prompt | positional binding + `lockedIdentityBlock` (`lib/story/characterIdentity.ts:73`, `routers/story.ts:1604-1624`) | nothing identity-specific is composed for generation |
+| reference resolution | `characterReferencesFromScene()` at four call sites (`routers/story.ts:1604`) | no equivalent; `director/resolver.ts:28` builds `EntityReference`s for the **critic**, not for generation |
+| provider capability note | — | the media contract states it plainly for this endpoint: *"Text-to-image only (no image_url/image_urls on this endpoint)"* (`mediaProviders/fal/contracts.ts:66`) |
+
+**Outcome: case 1 — the creative pipeline does not use references at all.** The identity floor is unreachable **by
+construction**: a text-only still cannot hold a character across scenes, and the critic is correctly reporting that.
+The floor stays at 85; lowering it would only stop the measurement from telling the truth.
+
+**What follows** is a build, not a calibration tweak: route creative stills through the reference-conditioned endpoint
+and compose the identity block the story path already uses. Scope, in order:
+
+1. `generationAdapter.generateStill` gains reference URLs and calls `submitFalFlux2Edit` (or the same
+   `image_urls` path) instead of `submitFalFlux2`.
+2. The creative bible's character entries (`adapter.ts:29` reads `StoryCharacterMemory.visualDescription`) are
+   compiled into a `lockedIdentityBlock`-equivalent and a positional binding, mirroring `characterIdentity.ts`.
+3. Reference resolution at production time: the plan's `characters` per scene resolved to approved reference assets —
+   the creative path has no `characterReferencesFromScene` equivalent and needs one.
+4. Then one measured re-production: the same lighthouse idea, expecting a materially higher minimum identity. Until
+   that number exists, "the wiring works" is an assumption.
+
+**Cost and risk:** one build, no credits to develop it; the measurement run is the usual ~640 (or a single-scene
+probe at ~80). **The 97-asset backlog should wait for this** — re-rendering it under text-only stills would reproduce
+the same 0–50 scores at full price.

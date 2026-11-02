@@ -191,6 +191,17 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Identity floor unreachable BY CONSTRUCTION in the creative pipeline (read 2026-11-02).** The 0–50 minimums are not
+mis-calibration. **Stills model:** creative uses `fal-ai/flux-2` — *text-to-image only* — while story uses
+`fal-ai/flux-2/edit`, which takes `imageUrls` (max 4). **References:** `FalFlux2Input` has only `prompt`,
+`aspectRatio`, `seed`; no `imageUrls` reaches generation. **Prompt:** no identity block or positional binding is
+composed; the only `EntityReference`s are built in `director/resolver.ts` for the **critic**, not for generation.
+**Resolution:** no `characterReferencesFromScene()` equivalent exists. The media contract says it for this endpoint:
+*"Text-to-image only (no image_url/image_urls on this endpoint)"*. **Follows:** a build — route creative stills through
+the reference-conditioned endpoint, compile the identity block, add reference resolution, then re-produce and measure.
+**The floor stays at 85**, and **the 97-asset backlog should wait**: re-rendering under text-only stills would
+reproduce 0–50 at full price.
+
 **Quarantine CERTIFIED on three surfaces (2026-11-02).** Deploy `a297b75` confirmed (VPS `HEAD=a297b75`, health 200).
 Against the live tRPC endpoints: below-floor video `cmvzdewzf…` absent from **forYou, trending and viewersPick**;
 unsourced historical video `cmvtzf9qf…` present in **all three** (the NULL branch proven on every surface, where a bare
