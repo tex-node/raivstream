@@ -7,6 +7,7 @@
  * (the existing runner), which is the only layer that touches generation.
  */
 
+import { logStage } from '../stageLog';
 import type { PrismaClient } from '@raivstream/database';
 import { isCreativeDirectorEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';

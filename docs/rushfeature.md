@@ -156,6 +156,13 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Stage logging (2026-11-02): 4 of 7 shipped, 3 blocked on their own signatures.** `stageLog.ts` helper plus
+lines at **plan**, **produce**, **approval** (joining the existing **review** and **output**) — five stages
+gated. Not added: `director` (anchor mismatch, not forced), `preview` (script exited early), and
+`intent`/`bible` which carry **no projectId** at their boundary — intent runs before a project exists and the
+bible helpers take no project id, so they need a decision about what identifies a pre-project stage rather
+than a log line. **No re-run**, so all three gates remain unmeasured.
+
 **Critic scores persisted (2026-11-01).** `evaluateWithCritic` now returns `{ findings, provider, scores }`;
 `CreativeReviewRun` gains `scores Json?` (additive migration); `ReviewRunState` carries it; the run emits
 `[creative.stage] … stage=review … scores={…}`. The drop was in translation, not the provider. Still open:

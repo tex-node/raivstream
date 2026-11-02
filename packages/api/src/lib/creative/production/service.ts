@@ -8,6 +8,7 @@
  */
 
 import type { PrismaClient } from '@raivstream/database';
+import { logStage } from '../stageLog';
 import { isCreativePreviewEnabled, isCreativeProductionEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
 import type { CreativeBibleState, CreativeProjectType } from '../shared/types';
@@ -169,6 +170,7 @@ export class ProductionPlanService {
   }
 
   async plan(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<PlanResult> {
+    logStage(input.projectId, 'plan', 'start');
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
       include: { brief: true, bible: true, productionPlan: true },
@@ -319,6 +321,7 @@ export class ProductionPlanService {
    * GENERATING, and runs the (detached, resumable) production runner.
    */
   async produce(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ started: boolean; reason?: 'already_running'; runId?: string | null }> {
+    logStage(input.projectId, 'produce', 'start');
     if (!isCreativeProductionEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 production is not enabled.');
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
