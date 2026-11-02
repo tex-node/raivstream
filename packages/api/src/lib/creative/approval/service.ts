@@ -8,6 +8,7 @@
  * version) do not invalidate the CREATIVE approval.
  */
 
+import { logStage } from '../stageLog';
 import type { PrismaClient } from '@raivstream/database';
 import { isCreativeApprovalEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
@@ -38,6 +39,7 @@ export class ApprovalService {
     input: { projectId: string; versionId: string; kind: ApprovalKind; decision: ApprovalDecision; note?: string; userId?: string },
   ): Promise<ApprovalState> {
     if (!isCreativeApprovalEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 approval is not enabled.');
+    logStage(input.projectId, 'approval', 'start', { kind: input.kind, decision: input.decision });
     const version = await prisma.creativeVersion.findFirst({ where: { id: input.versionId, projectId: input.projectId } });
     if (!version) throw new CreativeError('PROJECT_NOT_FOUND', 'Version not found.');
     const status = DECISION_TO_STATUS[input.decision];
