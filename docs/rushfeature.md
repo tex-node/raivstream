@@ -156,6 +156,13 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Stage logging (2026-11-02): 7 of 9 boundaries instrumented.** `director` (start + ok, with instruction,
+directiveId, affectedSceneIds, impact) and `preview` (ok at `project.updateStatus` when status becomes
+APPROVED) joined output, review, plan, produce and approval. **Remaining: intent and bible**, which carry no
+project id at their boundary — they must be gated by a request id threaded through to project creation, or by
+their outcome, and **not** by a fabricated project id. No gated run yet, so all three measurement gates
+remain unmeasured.
+
 **Stage logging (2026-11-02): 4 of 7 shipped, 3 blocked on their own signatures.** `stageLog.ts` helper plus
 lines at **plan**, **produce**, **approval** (joining the existing **review** and **output**) — five stages
 gated. Not added: `director` (anchor mismatch, not forced), `preview` (script exited early), and
