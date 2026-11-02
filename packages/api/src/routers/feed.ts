@@ -1,5 +1,6 @@
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { z } from 'zod';
+import { feedQuarantineWhere, quarantinedProjectIds } from '../lib/films/quarantineFeed';
 import { cached } from '../lib/cache';
 
 /**
@@ -51,6 +52,18 @@ const kidsFilter = { isKidsSafe: true, moderationStatus: 'APPROVED' as const, wi
 // Non-kids feed: everything except rejected. Withdrawn content never appears in any feed.
 const nonKidsFilter = { moderationStatus: { not: 'REJECTED' as const }, withdrawnAt: null };
 
+/**
+ * Quarantine clause for every promotional feed.
+ *
+ * Computed per request: the set of sourced projects whose minimum identity is below
+ * floor. `feedQuarantineWhere` keeps the explicit NULL branch, so unsourced videos
+ * (the whole historical library) stay surfaced. See lib/films/quarantineFeed.ts for
+ * why a bare `notIn` would hide them.
+ */
+async function quarantineClause(prisma: Parameters<typeof quarantinedProjectIds>[0]) {
+  return feedQuarantineWhere(await quarantinedProjectIds(prisma));
+}
+
 export const feedRouter = router({
   // For You — recent public ready videos (MVP: ordered by publishedAt)
   forYou: publicProcedure.input(feedInput).query(async ({ ctx, input }) => {
@@ -60,6 +73,7 @@ export const feedRouter = router({
           status: 'READY',
           isPublic: true,
           ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(await quarantineClause(ctx.prisma)),
           ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
         },
         orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -115,6 +129,7 @@ export const feedRouter = router({
           status: 'READY',
           isPublic: true,
           ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(await quarantineClause(ctx.prisma)),
           ...(input.cursor ? { engagementScore: { lt: parseFloat(input.cursor) } } : {}),
         },
         orderBy: [{ engagementScore: 'desc' }, { publishedAt: 'desc' }],
@@ -140,6 +155,7 @@ export const feedRouter = router({
         isPublic: true,
         starRatingCount: { gte: 3 },
         ...(input.kidsOnly ? kidsFilter : nonKidsFilter),
+          ...(await quarantineClause(ctx.prisma)),
         ...(input.cursor ? { avgStarRating: { lt: parseFloat(input.cursor) } } : {}),
       },
       orderBy: [{ avgStarRating: 'desc' }, { starRatingCount: 'desc' }],
@@ -183,6 +199,7 @@ export const feedRouter = router({
           status: 'READY',
           isPublic: true,
           ...nonKidsFilter,
+          ...(await quarantineClause(ctx.prisma)),
           ...(input.cursor ? { publishedAt: { lt: new Date(input.cursor) } } : {}),
         },
         orderBy: { publishedAt: 'desc' },
