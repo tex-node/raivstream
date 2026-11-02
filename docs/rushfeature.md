@@ -191,6 +191,17 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Cast stage blocked by an ownership chain, read 2026-11-02.** `StoryCharacterMemory.projectId` points at
+**`StoryProject`**, and `CharacterReferenceAsset.characterId` points at `StoryCharacterMemory` — so a **creative project
+cannot own a reference attached to a character**, only one with `characterId = null`, and `resolveCreativeReferences()`
+matches by the `character.name` relation, which is null there. Literal reuse is blocked by the **schema**, not the code.
+**Bridge scoped:** add `CharacterReferenceAsset.characterName String?` written by both paths; resolver matches
+`OR: [character.name, characterName]`; cast stage generates per derived character (`projectId` = creative project,
+`characterName`, `READY`) and skips names that already have a `READY` reference; **production blocks until every cast
+character is approved** (chosen over fail-open — conditioning on nothing is the failure this chain chased for four
+sessions). **Not built this session**, so both acceptance conditions (`references>0`, a `FLUX2_EDIT` job) remain
+**unmet**, and the three free assertions were scoped rather than written against behaviour that does not exist.
+
 **Cast derivation shipped (2026-11-02): steps 1-2 of the build, proven free; step 3 and the run NOT done.**
 `deriveCast()` replaces the hardcoded `characters: []` for `STORY` — parses the creator's subject first and alone, splits
 on "and"/commas, strips articles, bounds at `MAX_CAST = 4`, de-dupes, and marks every description as a proposal pending
