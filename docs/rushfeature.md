@@ -191,6 +191,17 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Sequence attempted 2026-11-03 and it FAILED at the gate — production does not refuse what the test refuses.**
+Deployed `449e58a`, health 200, project `cmvzvo9ym…`, cast derived correctly (`["Lighthouse Keeper","Lost Bird"]`,
+bibles-with-characters 4 → 5). Then **`production.produce()` ran without refusing** (`GATE_REFUSAL=NO_REFUSAL`) and logged
+`stage=produce status=ok scene=SCENE_01 references=0 identityBlock=yes`, leaving one IMAGE in `GENERATING`. The wired gate
+has a passing test **through the same entry point**, so this is a production-vs-test disagreement — the class this project
+keeps catching. Leading hypothesis (unproven): `project.bible` is null/empty from `include: { …, bible: true }`, so
+`castCharacters` was `[]` and the gate's `names.length === 0` guard short-circuited it. **The cast stage never ran**
+(0 reference rows for the project); the script then died on a Prisma error while creating references. **Both acceptance
+conditions remain unmet**, and the more important finding is that **the gate cannot be trusted in production until the
+bible demonstrably reaches it**. Next: read `produce()`'s `project.bible` at runtime, not another run.
+
 **Cast stage blocked by an ownership chain, read 2026-11-02.** `StoryCharacterMemory.projectId` points at
 **`StoryProject`**, and `CharacterReferenceAsset.characterId` points at `StoryCharacterMemory` — so a **creative project
 cannot own a reference attached to a character**, only one with `characterId = null`, and `resolveCreativeReferences()`
