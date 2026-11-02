@@ -156,6 +156,15 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Critic score variation proven (2026-11-02), and the proof is sharper than expected.** Two scored runs on
+real assets persist distinct vectors: SCENE_01 `{80,90,85,90,80,75,90,85,80,90}` vs SCENE_03
+`{70,80,90,85,80,75,90,80,85,90}` across ten dimensions — **but both have `overall: 85`**. Exposing only the
+overall would have looked exactly like the constant-score regression; the dimensions are what make variation
+visible. **Plan duration:** the stored plan has `totalRuntimeSeconds = null` and no scored scenes array, so the
+17.13 s is not "the plan said 17" — no declared runtime reaches the output path. **Gated run not performed**:
+`intent` and `bible` still lack a stage line (no project id at that boundary), so a run now would be a partial
+measurement.
+
 **Stage logging (2026-11-02): 7 of 9 boundaries instrumented.** `director` (start + ok, with instruction,
 directiveId, affectedSceneIds, impact) and `preview` (ok at `project.updateStatus` when status becomes
 APPROVED) joined output, review, plan, produce and approval. **Remaining: intent and bible**, which carry no
