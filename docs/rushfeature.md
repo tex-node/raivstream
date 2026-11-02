@@ -156,7 +156,39 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
-**Phase 3: PROVEN (2026-11-02).** Provider restored (the first submit after funding still 403'd — propagation lag, which the
+**Phase 3: PROVEN AND CLOSED (2026-11-02).**
+
+Evidence, not adjectives:
+
+- **Nine stage lines fired** on the lighthouse run `cmvylvazc…`: intent (`request=`), bible (`projectId=`), plan,
+  preview, produce (`run_finished COMPLETED generated=8 failed=0`), review, director
+  (`affectedSceneIds=["SCENE_02"]`), approval, output (`measured=47.333333`).
+- **Four distinct critic vectors** across four scenes: overalls 85 / **70** / 85 / 85, per-dimension spread
+  including `characterIdentity: 0`.
+- **Output duration matches the probe to the millisecond**: `row=47.333333 probe=47.333333 diff=0`.
+- Credits: **1,120**.
+
+**The finding to carry: an aggregate can hide a catastrophe.** SCENE_03 scored `overall: 85` with
+**`characterIdentity: 0`** — the character was absent from the frame and the overall did not move. That is the
+concrete argument for per-dimension gating, recorded in
+`docs/operations/critic-threshold-policy.md` where that decision lives.
+
+**The gate caught a defect, and was not relaxed to pass.** The duration gate failed on the run because
+`creative_outputs.durationSeconds` was `Int?`/`integer` and stored `47` for a measured `47.333333`. The fix was a
+column migration (`Float?` / `double precision`) applied **through the deploy's migration step** — creative tables
+cannot be migrated by hand — after which the same output re-rendered at `diff=0`. The threshold never moved; the
+column did.
+
+**Deferred, named:** planner persistence (`totalRuntimeSeconds` is `null` on three independent plans — a product
+decision about what a stated duration means) and **eight acknowledged missing failure lines** (shrink-only set,
+enforced by `stageFailureCoverage.test.ts`).
+
+**Next phase (operator decision, 2026-11-02): PER-DIMENSION GATING.** Scope: one predicate that fails a creative
+asset when any dimension falls below its own threshold, even if the aggregate passes; a test matrix across the nine
+dimensions; no credits and no schema change. Blocking condition: none — the identity generalisation landed and the
+evidence above is from production. The `overall: 85` + `characterIdentity: 0` case is its first acceptance test.
+
+**Phase 3 record (superseded by the close-out above):** Provider restored (the first submit after funding still 403'd — propagation lag, which the
 provider's own code comment names as retryable — and the retry succeeded). Gated lighthouse run on `cmvylvazc…`:
 **all nine `[creative.stage]` lines fired** — intent, bible, plan, preview, produce (`run_finished COMPLETED
 generated=8 failed=0`), review, director (`affectedSceneIds=["SCENE_02"]`), approval, output. **Critic variation

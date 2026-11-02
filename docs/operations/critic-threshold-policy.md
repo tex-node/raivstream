@@ -106,3 +106,24 @@ validated.
   happens when a re-score returns `SUGGEST_REFINEMENT` on something already live
   in a feed (withdraw / flag / leave with a note). Named in
   `docs/rushfeature.md` future plans alongside the admin takedown gap.
+
+## The case that forces per-dimension gating (2026-11-02, production)
+
+The lighthouse run produced four scored assets. One of them:
+
+| scene | overall | characterIdentity | storyAlignment |
+|---|---|---|---|
+| SCENE_03 | **85** | **0** | 75 |
+
+**An overall of 85 passed the gate while the character was absent from the frame.** The other three scenes scored
+85 / 70 / 85 with characterIdentity 80 / 60 / 80, so the aggregate moved by 15 points across a 60-point spread in
+the dimension that actually matters for a character-driven film.
+
+Two consequences, both now recorded as requirements rather than observations:
+
+1. **A dimension threshold is not a stricter overall threshold.** No single aggregate cut-off separates SCENE_03
+   from SCENE_01 — both are 85. Only the per-dimension value distinguishes them.
+2. **The failure is silent by construction.** Nothing in the pipeline treats `characterIdentity: 0` as exceptional,
+   so the asset would proceed to cut with an absent character and every log line would say `status=ok`.
+
+This is the evidence base for the per-dimension gating phase; the acceptance test is the SCENE_03 row above.
