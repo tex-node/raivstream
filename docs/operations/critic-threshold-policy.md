@@ -526,3 +526,42 @@ Rejected: *reuse existing references only* (a fresh idea with new characters wou
 **Cost:** one re-production after the build — **~1,120 credits** at the last run's price.
 
 **The floor stays at 85.** The number is 0 because nothing was conditioned, not because 85 is wrong.
+
+## The cast stage's structural blocker, read 2026-11-02
+
+The story reference path was read in full, and reusing it literally is **not possible** without a bridge. The
+ownership chain forbids it:
+
+| model | key | points at |
+|---|---|---|
+| `StoryCharacterMemory` | `projectId` | **`StoryProject`** (not `CreativeProject`) |
+| `CharacterReferenceAsset` | `characterId?` | `StoryCharacterMemory` |
+| `CharacterReferenceAsset` | `projectId` | a **plain string, no relation** — so a creative project *can* own a row |
+
+So a creative project can own a `CharacterReferenceAsset` row, but **only with `characterId = null`**, because a
+creative project cannot have a `StoryCharacterMemory`. And `resolveCreativeReferences()` matches
+`character: { name: { in: names } }` — a relation that is null for such a row, so it would never match.
+
+The literal reuse is therefore blocked by the schema, not by the code.
+
+### The bridge, scoped
+
+1. **Additive column:** `CharacterReferenceAsset.characterName String?`, written by both paths (the story path sets it
+   from `character.name`; the cast stage sets it from the derived cast).
+2. **Resolver:** match `OR: [{ character: { name: { in: names } } }, { characterName: { in: names } }]` — one query,
+   covers both owners.
+3. **Cast stage:** for each derived character, compose the reference prompt from `visualDescription`, generate via the
+   shared provider path, store `CharacterReferenceAsset` with `projectId = creativeProject.id`, `characterName`, status
+   `READY`; skip any character that already has a `READY` reference for that name.
+4. **Approval gate:** production blocks until every cast character has an approved reference. Chosen over fail-open
+   because a production that silently conditions on nothing is precisely the failure this chain has been chasing for
+   four sessions; the story pipeline already requires approval before conditioning.
+
+**Acceptance is unchanged:** `references>0` in the production log **and** a `FLUX2_EDIT` job for the run.
+
+### What was NOT done this session
+
+The bridge, the cast stage and the re-production were **not built**. Both acceptance conditions remain **unmet**, and
+the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
+approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
+behaviour would be the shape of a false pass, so they are scoped rather than faked.
