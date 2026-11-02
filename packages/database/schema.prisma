@@ -457,6 +457,13 @@ model Video {
   /// an unsourced video is NOT quarantined, the same rule as an unscored asset.
   /// A link derived at read time would be an inference that can go stale, so this
   /// is written at publish or left NULL, never guessed.
+  sourceProducedAssetId String?
+
+  /// A creative output is a FILM: it derives from a version spanning many produced
+  /// assets, so there is often no single source asset. These carry the version-level
+  /// provenance the single-asset column cannot express, and quarantine reads them.
+  sourceProjectId   String?
+  sourceVersionId   String?
   awardNominations  AwardNomination[]
   
   // Metadata

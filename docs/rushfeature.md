@@ -191,6 +191,15 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Creative publish shipped (2026-11-02): approved outputs only.** `creative.output.publish` requires an APPROVED
+`CreativeApproval` and a READY output with media, is idempotent by media URL, and **writes provenance at publish time**
+(`sourceProjectId`, `sourceVersionId`, and `sourceProducedAssetId` only when the version has exactly one READY asset —
+a film spans many scenes, so guessing a single source would let a score act on an asset that did not produce the film).
+Preconditions have two-directional tests (no approval, PENDING, REJECTED, unrendered, no media) plus idempotency and
+provenance tests: 16. **Two separate spends, explicitly:** the 99-flag backlog is a **re-render** decision (~97 × 80 +
+video) that quarantine cannot reach because no video came from those assets; creative publish is **forward-looking** and
+does nothing for the backlog. Disclosure is now readable but deferred to ship with the feed clause.
+
 **Quarantine wiring (2026-11-02): the column landed, the links did not.** `Video.sourceProducedAssetId` shipped
 nullable (NULL = source unknown = fail-open, mirroring the unscored rule). **No populate path exists:** all four
 `Video`-creating paths (generation, library, story export, upload) were read and none touches a `CreativeOutput`, and
