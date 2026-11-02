@@ -191,6 +191,15 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Quarantine probed on real data (2026-11-02) — partial.** Published one below-floor output (`min identity 50`) as video
+`cmvzdewzf0001b1exbttsx1tv` with provenance written at publish time. **Passed:** the NULL-branch proof (an unsourced
+historical video appears in all three feeds) and exclusion from `forYou` + `trending`. **Failed:** the same video
+appears in **`viewersPick`**, whose source contains the clause — unexplained, and suspicious because `viewersPick`
+also returned 14 items including a **0-star** video despite filtering `starRatingCount >= 3`. **Impossible:** the
+above-floor control, because every creative project's minimum identity is 0–50 — **no project has ever cleared 85**.
+Quarantine is therefore **live on two surfaces and unverified on one**; `viewersPick`'s filter behaviour needs
+investigation before the clause can be called proven.
+
 **Creative publish shipped (2026-11-02): approved outputs only.** `creative.output.publish` requires an APPROVED
 `CreativeApproval` and a READY output with media, is idempotent by media URL, and **writes provenance at publish time**
 (`sourceProjectId`, `sourceVersionId`, and `sourceProducedAssetId` only when the version has exactly one READY asset —

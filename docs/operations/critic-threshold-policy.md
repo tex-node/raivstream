@@ -389,3 +389,21 @@ promoted. They need the identity fix and a re-render.
 Now readable — a film page can walk `Video.sourceProjectId` → assets → minimum identity — but it is not shipped in this
 pass. It is a one-line read on top of a link that now exists, and it belongs with the feed clause that consumes the same
 link.
+
+## Quarantine on real data (2026-11-02) — partial, and stated as partial
+
+One below-floor creative output was published to prove the clause on production rows rather than mocks.
+
+| check | result |
+|---|---|
+| publish writes provenance | ✅ `sourceProjectId` + `sourceVersionId` set; `sourceProducedAssetId` **null** (the film spans several assets — the designed behaviour) |
+| below-floor video (`min identity 50`) absent from `forYou` | ✅ absent (13 items) |
+| below-floor video absent from `trending` | ✅ absent |
+| below-floor video absent from `viewersPick` | ❌ **present** — clause is in that query's source, so this is **unexplained** |
+| unsourced historical video still surfaced | ✅ present in forYou, trending **and** viewersPick — the NULL branch proven on real rows |
+| above-floor control | ❌ **cannot be constructed**: every creative project's minimum identity is 0–50, so no project has ever cleared 85 |
+
+Two things follow, and neither is a pass:
+
+1. **`viewersPick` needs its own investigation before quarantine can be called live.** It filters `starRatingCount >= 3` yet returned 14 items including a 0-star video, which suggests that filter is not taking effect — so the query may not be applying its where clause as written. Quarantine cannot be trusted on a surface whose other filters are already inert.
+2. **No creative work has ever passed the identity floor.** The above-floor control is not deferrable by choice; it does not exist. That is the strongest evidence yet that the 89% below-floor figure is a property of the library, not of the gate.
