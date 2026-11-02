@@ -156,6 +156,17 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Phase 3 status: Blocked on the fal account (operator-confirmed 2026-11-02).** The operator confirmed the
+account is still locked, so this session ran no probe and no production: the previous two independent checks
+already carry the exact evidence (`fal image disabled: account locked or balance exhausted (HTTP 403)`, and
+`run_finished FAILED generated=0 failed=8`). Balance unchanged at 9,120. Everything the repository owns is
+ready: 9/9 success stage lines, the output failure line, the shrink-only failure-disposition contract test,
+critic variation proven on real assets, measured duration written in both READY paths, fourteen flags
+deploy-durable, `FAL_KEY` valid in-process. **The unblock is external and singular: restore the fal account.**
+Then one image (~80 credits), one lighthouse run (~640), and the verdict becomes *Proven* or *Proven except
+X* — with the two duration questions answered separately: (1) output row vs probe becomes answerable with an
+output; (2) plan-declared-30 s stays unanswerable while `totalRuntimeSeconds` is null.
+
 **Provider still blocked (2026-11-02, second check).** Pre-flight clean on everything the repo owns — both
 processes `RAIVSTREAM_5_ENABLED=true`, `CREATE=true`, `FAL_KEY=set`. Direct single-image submit returned
 **`fal image disabled: account locked or balance exhausted (HTTP 403)`** again. No run attempted: it would
