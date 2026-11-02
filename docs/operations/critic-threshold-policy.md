@@ -471,3 +471,58 @@ and compose the identity block the story path already uses. Scope, in order:
 **Cost and risk:** one build, no credits to develop it; the measurement run is the usual ~640 (or a single-scene
 probe at ~80). **The 97-asset backlog should wait for this** — re-rendering it under text-only stills would reproduce
 the same 0–50 scores at full price.
+
+## Why the creative bible has no characters (read 2026-11-02)
+
+Answered by reading, and by one **free** interpretation — no production, no credits.
+
+**The interpretation, verbatim:**
+
+```json
+{"projectType":"STORY","explicit":{"durationSeconds":30},
+ "summary":"I understand this as a story targeting 30s . Goal: tell a story. I'll preserve your original words: \"A 30-second animated short about a lighthouse keeper and a lost bird.\""}
+```
+
+and the derived domain knowledge:
+
+```
+characters=[]
+```
+
+### Cause: never-extracted, not extracted-then-dropped
+
+Two independent gaps, both upstream of the conditioning code:
+
+1. **`domainKnowledgeFor()` hardcodes `characters: []` for `STORY`** (`lib/creative/intelligence/service.ts:51`). Every story project therefore starts with an empty cast, by construction.
+2. **The interpreter does not populate `explicit.subject`** for this text — `explicit` came back with only `durationSeconds`. The knowledge derivation builds its text from `summary + explicit.subject`, so even a text-driven extraction would have nothing structured to work from.
+
+`seedBibleFromInterpretation()` itself is correct: it persists `bible.characters` faithfully (`bible/service.ts:49`). It is being handed `[]`.
+
+### Across the library
+
+**78 creative bibles, 4 with characters (4 characters total).** Extraction has effectively never worked for story projects; the four that exist came from a different path, not from this one.
+
+### A finding worth carrying out of the same read
+
+The intent engine **did** capture `explicit.durationSeconds: 30` — and the stored `productionPlan.totalRuntimeSeconds` is `null` on every project. So the stated duration is captured at intent and **lost between intent and plan**, which locates the planner-persistence gap precisely (still deferred; it is a product decision about what a stated duration means).
+
+## Cast stage: decided 2026-11-02 (operator)
+
+**Generate references at cast time.** After the bible, the creative chain gains a cast stage: compose a reference prompt per character, generate one reference image, require approval, then produce. This is the story pipeline's model, and it keeps approval as the human decision point — consistent with the Phase 1 finding that approval is where the human decision belongs.
+
+Rejected: *reuse existing references only* (a fresh idea with new characters would still condition on nothing — the lighthouse case exactly) and *lazy generation on first use* (fewer gates, but it makes the first render slower and less predictable, and moves the approval question into production).
+
+### Scoped build that follows
+
+| step | change |
+|---|---|
+| 1 | `domainKnowledgeFor(STORY)` derives characters from the interpretation instead of returning `[]` — names plus visual descriptions, bounded (a cast of 1–4) |
+| 2 | The interpreter populates `explicit.subject` from the idea text so step 1 has structured input |
+| 3 | A `CAS`/cast stage in the creative chain: per character, compose a reference prompt, generate one image, store it as a `CharacterReferenceAsset` (status `READY`, approval gate), owner = the project |
+| 4 | Resolution then finds them: `resolveCreativeReferences()` already reads `CharacterReferenceAsset` by character name — no change needed once rows exist |
+
+**Acceptance test:** the production log shows **`references>0`** on at least one scene, and a `FLUX2_EDIT` job exists for the run. Only then is the identity number meaningful; until then it measures text-to-image.
+
+**Cost:** one re-production after the build — **~1,120 credits** at the last run's price.
+
+**The floor stays at 85.** The number is 0 because nothing was conditioned, not because 85 is wrong.

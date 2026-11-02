@@ -191,6 +191,18 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Why the bible has no characters — read 2026-11-02: never-extracted.** `domainKnowledgeFor()` **hardcodes
+`characters: []` for `STORY`** (`intelligence/service.ts:51`), and the interpreter does not populate `explicit.subject`
+(the free interpretation of the lighthouse idea returned only `durationSeconds: 30`). `seedBibleFromInterpretation()`
+persists faithfully — it is handed `[]`. **Across 78 creative bibles, only 4 have characters.** Same read located the
+planner gap precisely: intent **captures** `durationSeconds: 30`, and `productionPlan.totalRuntimeSeconds` is null, so
+the duration is lost between intent and plan. **Operator decision: generate references at CAST TIME** (compose prompt →
+generate → approve → produce), the story pipeline's model, because approval stays the human decision point; rejected
+"reuse only" (a fresh idea conditions on nothing) and "lazy" (unpredictable first render). **Scoped build:** derive
+characters for STORY, populate `explicit.subject`, add the cast stage writing `CharacterReferenceAsset` rows, then
+resolution already works. **Acceptance: `references>0` in the log plus a `FLUX2_EDIT` job** — until then the identity
+number measures text-to-image. **Cost: one re-production, ~1,120 credits.** The floor stays at 85.
+
 **Measured re-production (2026-11-02): min identity 0, unchanged — and the cause is data, not conditioning.**
 Project `cmvzluerv…`, run `cmvzlujkm…`, 4 scenes, **1,120 credits**. Per-scene identity: **80 / 60 / 0 / 70**, min **0** — the
 same 0–50 band. **Diagnosis from the log:** every scene logged `references=0 identityBlock=no`, and the jobs are
