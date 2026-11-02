@@ -169,7 +169,14 @@ export const feedRouter = router({
       nextCursor = last.avgStarRating?.toString();
     }
 
-    // If not enough rated videos, fall back to trending.
+    // INTENT: if the primary "viewers' pick" query returns nothing, do not show an empty
+    // feed - show trending instead. That is the ONLY reason this second query exists, and
+    // it may relax ONLY the star-rating filter (`starRatingCount >= 3`). Moderation,
+    // withdrawal and the quarantine clause must all be retained here.
+    //
+    // Removing this block because "it never runs" is the trap that already fired once: with
+    // no video at 3+ ratings it runs on every request, and it used to rebuild its where from
+    // scratch, dropping those three clauses together.
     //
     // THE BUG THIS FIXES: the fallback used to build its own where from scratch, so the
     // star filter, `withdrawnAt` and the quarantine clause were all silently dropped -
