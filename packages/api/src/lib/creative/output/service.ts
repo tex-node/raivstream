@@ -8,6 +8,7 @@
  */
 
 import type { PrismaClient } from '@raivstream/database';
+import { logStage } from '../stageLog';
 import { isCreativeOutputEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
 import { approvalService } from '../approval/service';
@@ -120,6 +121,13 @@ export class OutputService {
       await prisma.creativeOutput.update({
         where: { id: row.id },
         data: { status: 'FAILED' as never, errorMessage: (error as Error).message.slice(0, 500) },
+      });
+      // The failure path logs too. A gate that only fires on success cannot tell
+      // "the output never ran" from "the output failed" - which is how the previous
+      // run produced no stage=output line at all.
+      logStage(input.projectId, 'output', 'fail', {
+        format: row.format,
+        reason: (error as Error).message.slice(0, 120),
       });
     }
     return this.serialize(prisma, row.id);
@@ -237,6 +245,13 @@ export class OutputService {
       await prisma.creativeOutput.update({
         where: { id: row.id },
         data: { status: 'FAILED' as never, errorMessage: (error as Error).message.slice(0, 500) },
+      });
+      // The failure path logs too. A gate that only fires on success cannot tell
+      // "the output never ran" from "the output failed" - which is how the previous
+      // run produced no stage=output line at all.
+      logStage(input.projectId, 'output', 'fail', {
+        format: row.format,
+        reason: (error as Error).message.slice(0, 120),
       });
     }
 
