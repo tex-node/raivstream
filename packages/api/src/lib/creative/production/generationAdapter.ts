@@ -71,13 +71,26 @@ async function persist(url: string, key: string, contentType: string): Promise<s
  */
 export async function generateStill(spec: StillSpec, projectId: string, assetId: string): Promise<GeneratedMedia> {
   await assertPromptAllowed(spec.prompt, spec.negativePrompt);
-  const model: SupportedModel = spec.sourceImageUrl ? 'FLUX_KONTEXT' : 'FLUX2';
+
+  // Three-way routing, and the ORDER matters:
+  //   1. character references  -> FLUX2_EDIT (multi-reference, max 4). This is the only
+  //      path that can hold a character across scenes, and it is why the creative
+  //      pipeline could never clear the identity floor: it had no references at all.
+  //   2. a single source photo -> FLUX_KONTEXT (subject preserved from one image).
+  //   3. neither                -> FLUX2 (text-to-image). Must keep working: the edit
+  //      endpoint requires at least one reference, so a scene with no character has to
+  //      fall through rather than fail.
+  const referenceImageUrls = (spec.referenceImageUrls ?? []).filter((url) => typeof url === 'string' && url.length > 0).slice(0, 4);
+  const hasReferences = referenceImageUrls.length > 0;
+  const model: SupportedModel = hasReferences ? 'FLUX2_EDIT' : spec.sourceImageUrl ? 'FLUX_KONTEXT' : 'FLUX2';
+
   const submitted = await submitGenerationJob({
     model,
     prompt: spec.prompt,
     negativePrompt: spec.negativePrompt,
     aspectRatio: spec.aspectRatio as '9:16' | '16:9' | '1:1' | '4:3' | '3:4',
-    ...(spec.sourceImageUrl ? { seedImageUrl: spec.sourceImageUrl } : {}),
+    ...(hasReferences ? { imageUrls: referenceImageUrls } : {}),
+    ...(!hasReferences && spec.sourceImageUrl ? { seedImageUrl: spec.sourceImageUrl } : {}),
   });
   const outputUrl = await waitForOutput(model, submitted.providerJobId, submitted.outputUrl);
   const r2Key = `creative/${projectId}/scenes/${spec.sceneId}/still-${assetId}.png`;

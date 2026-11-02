@@ -26,6 +26,21 @@ export interface StillSpec {
    * of FLUX2 (text-to-image only), preserving the subject identity from the photo.
    */
   sourceImageUrl?: string;
+
+  /**
+   * Character reference images (max 4), resolved from the SAME store the story
+   * pipeline uses (`CharacterReferenceAsset`). When present, stills route to the
+   * reference-conditioned endpoint; this is the difference between a text-only frame
+   * and one that can hold a character across scenes.
+   */
+  referenceImageUrls?: string[];
+
+  /**
+   * The scene's characters with their identity text, so the runner can resolve
+   * approved reference images and compose the identity block. Carried on the spec
+   * because the prompt is already flattened by the time production runs.
+   */
+  characterRefs?: Array<{ name: string; visualDescription?: string | null; lockedIdentityBlock?: string | null }>;
 }
 
 export interface VideoSpec {
@@ -89,6 +104,24 @@ export function routeProduction(
   const sourceImageUrl = plan.sourceReferences?.find((ref) => Boolean(ref.url))?.url;
   for (const scene of plan.scenes) {
     const still = buildPrompt(scene, 'IMAGE', bible, effectiveContext);
+    // Carry the scene's characters (with their identity text) so the runner can resolve
+    // approved references and compose the identity block. The prompt alone is not enough:
+    // it flattens names into prose, and a reference image needs a name to bind to.
+    const bibleCharacters = (bible?.characters ?? []) as Array<{
+      name?: string;
+      visualDescription?: string;
+      lockedIdentityBlock?: string | null;
+    }>;
+    const sceneNames = (scene.characters ?? []) as unknown as string[];
+    const characterRefs = bibleCharacters
+      .filter((c) => c.name && (sceneNames.length === 0 || sceneNames.includes(c.name)))
+      .slice(0, 4)
+      .map((c) => ({
+        name: c.name as string,
+        visualDescription: c.visualDescription ?? null,
+        lockedIdentityBlock: c.lockedIdentityBlock ?? null,
+      }));
+
     specs.push({
       kind: 'IMAGE',
       sceneId: scene.sceneId,
@@ -96,6 +129,7 @@ export function routeProduction(
       negativePrompt: still.negativePrompt,
       aspectRatio: '9:16',
       ...(sourceImageUrl ? { sourceImageUrl } : {}),
+      ...(characterRefs.length ? { characterRefs } : {}),
     });
     const video = buildPrompt(scene, 'VIDEO', bible, effectiveContext);
     specs.push({
