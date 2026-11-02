@@ -5,6 +5,7 @@ import { intentService } from '../../lib/creative/intent/service';
 import { intentReadinessService } from '../../lib/creative/intent/readiness';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import { CREATIVE_PROJECT_TYPES } from '../../lib/creative/shared/types';
+import { logPreProjectStage } from '../../lib/creative/stageLog';
 import { timedCreative } from '../../lib/creative/observability/metrics';
 
 function toTrpcError(error: unknown): TRPCError {
@@ -20,10 +21,21 @@ export const creativeIntentRouter = router({
     .input(z.object({
       text: z.string().min(1).max(4000),
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
+      /** Correlates this pre-project stage with the project it becomes. */
+      requestId: z.string().min(8).max(120).optional(),
     }))
     .query(async ({ input }) => {
+      // Intent runs before a project exists, so it is identified by a request id that
+      // is threaded to project.create - never by a fabricated project id.
+      const requestId = input.requestId ?? crypto.randomUUID();
+      logPreProjectStage(requestId, 'intent', 'start', { chars: input.text.length });
       try {
-        return await timedCreative('intent.interpret', async () => intentService.interpret(input.text, input.projectType));
+        const result = await timedCreative('intent.interpret', async () => intentService.interpret(input.text, input.projectType));
+        logPreProjectStage(requestId, 'intent', 'ok', {
+          projectType: (result as { projectType?: string })?.projectType ?? 'unknown',
+          requestId,
+        });
+        return { ...(result as object), requestId };
       } catch (error) {
         throw toTrpcError(error);
       }
