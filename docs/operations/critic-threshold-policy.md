@@ -246,3 +246,57 @@ provider problem was a population problem, the same class as the earlier cohort'
 
 **What this does not do:** it does not unpublish anything, does not change the original runs, and does not resolve any
 flag. Resolution is human review, and there are now 97 rows waiting for it.
+
+## Quarantine — the population treatment (shipped 2026-11-02)
+
+**Trigger:** 97 of 109 image assets scored below the `characterIdentity` floor (~89%), every flag on that one
+dimension. Revisit condition #2 fired on the first run. Per-asset review cannot absorb 89%, so the treatment is
+population-level.
+
+`packages/api/src/lib/films/quarantine.ts` — `quarantineVerdict()`, `shouldSurface()`, `feedExclusionWhere()`, 13 tests.
+
+### Three surfaces, three behaviours
+
+| surface | below floor | unscored |
+|---|---|---|
+| For You / trending / discover | **excluded** (promotion stops) | included |
+| creator's own library | included | included |
+| direct link / film page | included | included |
+
+**Quarantine fails OPEN on unknown, unlike approval which fails CLOSED.** An unscored asset is unknown, not bad;
+quarantining it would hide the entire unscored library — a threshold applied to absent data. The tests assert both
+directions explicitly, and a `null` / `''` / `NaN` identity score is treated as unscored rather than as `0`.
+
+### The finding that makes this inert today, stated plainly
+
+**The feed cannot apply quarantine yet.** `Video` carries no reference to the `CreativeProducedAsset` that produced
+it — there is no `sourceProducedAssetId`, and the publish path does not write one. A feed predicate has nothing to
+join against, and shipping one anyway would exclude zero rows while appearing to enforce a policy: the false-pass
+shape this project keeps catching. `feedQuarantineIsWired()` returns `false`, and a test asserts it, so nobody can
+ship that filter believing it works.
+
+**Prerequisite:** a `Video.sourceProducedAssetId` column populated at publish time, then a feed clause. That is a
+build with a backfill question (most existing videos have no recorded source), not a predicate.
+
+### Verified against real data (not fixtures)
+
+- **99 flags, 99 below floor** — every flagged asset is genuinely below the identity floor.
+- **109 image assets, 1 unscored, 0 unscored-but-flagged** — the unscored asset was not quarantined by the batch.
+
+### The reframe
+
+The flags are no longer *"97 assets awaiting individual review"*. They are **the backlog that quarantine absorbs**.
+The un-quarantine path is a **re-render with the identity fix**, not a review decision per asset — which is a cost
+question (~97 stills × ~80 credits, plus video), not a policy question.
+
+### Phase 1 reframe — the identity measurement was never running
+
+SCENE_03 (`overall: 85`, `characterIdentity: 0`) was **the pattern, not the outlier**. Across a 109-asset library the
+identity score sits between 0 and 80 while the aggregate stayed near 85. The Phase 1 claim that identity gating was in
+place was true of the *code* and false of the *library*: nothing had ever measured it there.
+
+### When quarantine should be lifted
+
+When the below-floor count falls under **5%** of image assets — whether by re-render with the identity fix or by the
+backlog ageing out — quarantine is no longer a population treatment and should be removed rather than kept as a
+permanent invisible state. Stated now so it cannot become one.

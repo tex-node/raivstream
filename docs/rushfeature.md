@@ -191,6 +191,16 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**Quarantine shipped (2026-11-02), with the honest wiring gap.** `lib/films/quarantine.ts` — asset below the identity
+floor stops being **promoted** (feed excludes, library and direct link include), unscored assets are **not**
+quarantined (quarantine fails open on unknown, the opposite of approval), 13 tests. **Verified on real data:** 99
+flags, 99 below floor; 109 images, 1 unscored, 0 unscored-but-flagged. **The feed cannot apply it yet:** `Video` has
+no `sourceProducedAssetId`, so a feed predicate has nothing to join against — `feedQuarantineIsWired()` returns
+`false` and a test asserts it, because shipping that filter would exclude zero rows while looking like enforcement.
+**Reframe:** the flags are the backlog quarantine absorbs, and the un-quarantine path is a re-render with the
+identity fix, not 99 review decisions. **Phase 1 reframe:** identity measurement was never running for the library —
+SCENE_03 was the pattern, not the outlier. **Lift quarantine when** below-floor falls under 5%.
+
 **802 critic re-scores — RUN (2026-11-02): 89% of scoreable images are below the identity floor, so the 5% change
 condition fired on the first run.** 109 images, 95 processed, **97 flags, all on `characterIdentity`, scores 0–80
 against floor 85**, 4 provider failures. Table `creative_review_flags` + resumable image-only runner shipped
