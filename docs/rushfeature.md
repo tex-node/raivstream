@@ -156,6 +156,12 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**Provider still blocked (2026-11-02, second check).** Pre-flight clean on everything the repo owns — both
+processes `RAIVSTREAM_5_ENABLED=true`, `CREATE=true`, `FAL_KEY=set`. Direct single-image submit returned
+**`fal image disabled: account locked or balance exhausted (HTTP 403)`** again. No run attempted: it would
+fail 8/8 assets at 0 credits and change no measurement. The unblock is external — restore the fal account —
+and the instrumentation is ready to record the next attempt either way.
+
 **Output failure gate closed; provider blocked (2026-11-02).** `output/service.ts` now logs
 `stage=output status=fail` in both catch blocks, and `stageFailureCoverage.test.ts` enumerates all nine
 stages, requiring a failure disposition for each (a real `'fail'` call, or an acknowledged-gap entry — the
