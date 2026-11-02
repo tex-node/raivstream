@@ -156,6 +156,12 @@ director, review, approval, output), leaving **studio, series and audio off**; v
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
 
+**All nine stage lines shipped (2026-11-02).** Pre-project identity decided: `intent` and `bible` are
+identified by a **request id** threaded to `project.create` (`[creative.stage] request=<uuid> stage=intent
+status=ok`, and the bible line carries `projectId` as detail), so the pre-project line joins to the project's
+`stage=plan project=<id>` line. Never a fabricated project id — four tests assert that the pre-project line
+contains `request=` and **not** `project=`. The gated run is the only thing left.
+
 **Critic score variation proven (2026-11-02), and the proof is sharper than expected.** Two scored runs on
 real assets persist distinct vectors: SCENE_01 `{80,90,85,90,80,75,90,85,80,90}` vs SCENE_03
 `{70,80,90,85,80,75,90,80,85,90}` across ten dimensions — **but both have `overall: 85`**. Exposing only the

@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { logPreProjectStage } from '../../lib/creative/stageLog';
 import { creativeProcedure, router } from '../../trpc';
 import { projectService } from '../../lib/creative/project/service';
 import { memoryService } from '../../lib/creative/memory/service';
@@ -37,6 +38,8 @@ export const creativeProjectRouter = router({
       projectType: z.enum(CREATIVE_PROJECT_TYPES).optional(),
       legacyStoryProjectId: z.string().nullable().optional(),
       attachments: z.array(z.string().min(1).max(200)).max(20).optional(),
+      /** The request id emitted by intent.interpret, so creation is joinable to it. */
+      requestId: z.string().min(8).max(120).optional(),
       /**
        * Approved HomerStoryState from the conversational Create flow.
        * When provided, written to CreativeBible.story after project creation.
@@ -59,6 +62,14 @@ export const creativeProjectRouter = router({
             ? (await import('../../lib/creative/intent/service')).intentService.interpret(input.text, input.projectType)
             : undefined,
         });
+        // The bible boundary: the bible exists now, and it belongs to the request that
+        // produced the intent, so the two pre-project lines join to this project.
+        if (input.requestId) {
+          logPreProjectStage(input.requestId, 'bible', 'ok', {
+            projectId: project.id,
+            source: input.homerStoryState ? 'homerStoryState' : 'creation',
+          });
+        }
         if (input.homerStoryState) {
           await saveHomerState(ctx.prisma, project.id, input.homerStoryState as unknown as HomerStoryState);
         }
