@@ -191,6 +191,15 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
 
+**802 critic re-scores — RUN (2026-11-02): 89% of scoreable images are below the identity floor, so the 5% change
+condition fired on the first run.** 109 images, 95 processed, **97 flags, all on `characterIdentity`, scores 0–80
+against floor 85**, 4 provider failures. Table `creative_review_flags` + resumable image-only runner shipped
+(#270–#272); the pilot caught a selection bug (VIDEO assets 400 at the critic — 10 of 20 failures that looked like a
+provider problem but were a population problem). Idempotency holds per asset via `(assetId, runId)`; a second run
+added 2 flags only because 4 assets had failed and were retried. **Implication:** the constant-90 backlog is not a
+clean-up list — the old critic was not measuring identity — and per-asset flagging cannot absorb ~89%, so the live
+content policy's revisit condition is met and needs an operator decision (wider action, or a cut-off by dimension).
+
 **802 critic re-scores — SCOPED, NOT BUILT (2026-11-02).** Re-runs the current critic and the per-dimension gate over
 the 802 assets approved under the constant-90 critic. **Writes:** new scores into `creative_review_runs.scores`, the
 gate verdict per asset, and — per the flag policy — an audit row per live rejection (new `creative_review_flags`

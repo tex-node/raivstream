@@ -212,3 +212,37 @@ Revisit — toward faster action, not toward automation for its own sake — if 
    latency stops being an acceptable price.
 
 None of these has occurred yet; they are stated now so the policy is changed by evidence rather than by discomfort.
+
+## 802 re-score batch result (run 2026-11-02)
+
+**The 5% change condition fired on the first run, by a wide margin.**
+
+| measure | value |
+|---|---|
+| image assets in the population | **109** |
+| processed | 95 (+10 skipped as already re-scored) |
+| flagged | **97** (89 from the batch, 8 from the pilot) |
+| share of scoreable images below floor | **~89%** |
+| breached dimension | `characterIdentity` — **every single flag** |
+| score range vs floor 85 | **0 – 80** |
+| failures | 4 (provider 400 on specific assets) |
+
+Two findings, and the second is the larger one:
+
+1. **The number is not a clean-up list; it is a verdict on the old critic.** 802 assets approved under the
+   constant-90 critic are, under the current per-dimension gate, overwhelmingly below the identity floor. The old
+   score of 90 was not measuring identity — the same failure the SCENE_03 row showed in miniature.
+2. **Policy revisit condition #2 is met:** more than 5% of live assets are below floor, so per-asset flagging cannot
+   keep up. The policy says that is a population problem, and the population is the backlog.
+
+**Idempotency, precisely.** No asset was flagged twice — the `(assetId, runId)` unique key and the critic-version skip
+guarantee it. A second run added **2** flags because 4 assets had *failed* the first time and were retried; a retry
+that succeeds is new information, not a double count. "Zero new flags" holds only for runs whose predecessor had no
+failures.
+
+**Selection bug found by the pilot, worth carrying:** the first version included VIDEO assets and 10 of 20 failed with
+`Creative critic provider failed with 400` — the critic scores a still frame. A 50% failure rate that looked like a
+provider problem was a population problem, the same class as the earlier cohort's cold-cache error.
+
+**What this does not do:** it does not unpublish anything, does not change the original runs, and does not resolve any
+flag. Resolution is human review, and there are now 97 rows waiting for it.
