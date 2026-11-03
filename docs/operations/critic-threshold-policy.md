@@ -565,3 +565,34 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Three negatives on the input side (measured 2026-11-03)
+
+| lever | change | identity |
+|---|---|---|
+| description quality | provisional sentence → story-grade description + story prompt shape | **70 → 70** |
+| reference count / dilution | already one labelled reference | **70** |
+| re-roll (new sample, same inputs) | second generation of the same scene | **70** |
+
+Baseline for the scene was 70. Three independent input-side changes produced the same number. **The distribution is tight at this framing**: a fresh sample is not a lottery ticket, so per-scene enforcement ("re-roll until it passes") has no headroom to exploit here.
+
+### What the within-film spread says
+
+The film's four scenes scored **80 / 70 / 70 / 70**. The 10-point spread on identical framing and identical conditioning is **sample variance**, not a framing difference — which also means a single 80 is not evidence that 80 is reachable on demand.
+
+### Experiment B (framing) was not run, and why
+
+The free version required a close-up/full-body pair from the same film. All four scenes share 9:16 framing and generic descriptions ("Establish the character and their world", "Introduce the obstacle…"), so **no such pair exists** in the data. Producing one would cost another still and, given three 70s in a row, would most likely measure the same 70. It is recorded as *untested*, not as *refuted*.
+
+### Backlog arithmetic, recomputed on the measured distribution
+
+At floor 75 the measured scores are: 1 of 4 scenes at **80** (clears), 3 of 4 at **70** (does not).
+
+- **Best case:** ~25% of 99 clear (≈24), ~75 (≈75) remain flagged.
+- **If the 80 is variance** (consistent with three 70s), the clearing share could be **0 of 99**.
+
+Spend is unchanged: **≥ 7,760 credits** for stills alone, before video and fresh cast references. So the honest range is **0–24 of 99 cleared for ≥ 7,760 credits**, and the re-roll evidence pushes toward the low end.
+
+### Credit note (corrected)
+
+These experiments spent **0 platform credits** — `generateStill` is called directly, and credit deduction lives in the production runner, not the adapter. The provider was billed for the images; the platform balance stayed at **5,760**, measured via the project→owner join before and after.
