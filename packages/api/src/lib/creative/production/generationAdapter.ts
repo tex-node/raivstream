@@ -12,6 +12,8 @@ import { mirrorUrlToR2, uploadBufferToR2 } from '../../r2';
 import { extractLastFrameAsSeedImage } from '../../lastFrameExtract';
 import { moderatePrompt, moderationRejectMessage } from '../../promptModeration';
 import { CreativeError } from '../shared/errors';
+import { createHash } from 'node:crypto';
+import { IDENTITY_FRAMING } from './identityBlock';
 import type { StillSpec, VideoSpec } from './capabilityRouter';
 
 export interface GeneratedMedia {
@@ -83,6 +85,14 @@ export async function generateStill(spec: StillSpec, projectId: string, assetId:
   const referenceImageUrls = (spec.referenceImageUrls ?? []).filter((url) => typeof url === 'string' && url.length > 0).slice(0, 4);
   const hasReferences = referenceImageUrls.length > 0;
   const model: SupportedModel = hasReferences ? 'FLUX2_EDIT' : spec.sourceImageUrl ? 'FLUX_KONTEXT' : 'FLUX2';
+
+  // PROOF POINT: composed != sent. This reads the ACTUAL payload that goes to the
+  // provider, so "the phrase was composed" and "the phrase reached the request" can be
+  // told apart - the ambiguity that made the previous two attempts unevaluable.
+  const promptHash = createHash('sha256').update(spec.prompt).digest('hex').slice(0, 12);
+  console.info(
+    `[creative.framing] scene=${spec.sceneId} framingInPrompt=${spec.prompt.includes(IDENTITY_FRAMING)} references=${referenceImageUrls.length} promptHash=${promptHash}`,
+  );
 
   const submitted = await submitGenerationJob({
     model,
