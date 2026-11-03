@@ -2620,10 +2620,18 @@ model CreativeProducedAsset {
   version       CreativeVersion?              @relation(fields: [versionId], references: [id], onDelete: SetNull)
   createdAt     DateTime                      @default(now())
   updatedAt     DateTime                      @updatedAt
+  // Take model (2026-11-03): a scene can be produced again as a NEW row, never by
+  // resetting the old one. Resetting replays the charge idempotency key and re-bills the
+  // provider while recording nothing, which is why assertNotResetAfterCharge refuses it.
+  takeNumber    Int                           @default(1)
+  parentTakeId  String?
+  isLatest      Boolean                       @default(true)
 
+  @@unique([sceneId, kind, takeNumber])
   @@index([projectId, sceneId])
   @@index([projectId, status])
   @@index([versionId])
+  @@index([parentTakeId])
   @@map("creative_produced_assets")
 }
 
