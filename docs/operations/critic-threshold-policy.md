@@ -565,3 +565,23 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Backlog decision (2026-11-03): stills only, video deferred
+
+**Decision: re-render the 99 stills at the framing rule, defer video.** Operator call, on measured numbers.
+
+| line item | rate | count | cost |
+|---|---|---|---|
+| stills | 80 (`generate:flux2`) | 99 | **7,920** |
+| video | 200 (`generate:h3_max`) | up to 99 | up to **19,800** — **deferred** |
+| cast references | per character, not per asset | small, fixed | included |
+
+**Clearing expectation:** at an 80 median against a floor of 75, nearly all 99 clear. The 7,920 buys the identity flags back; it does not buy new motion.
+
+**The trade-off, stated rather than hidden:** old clips keep their previous look. A re-rendered still sequenced against an older clip may read as discontinuous — same character, different grade. That is a visible artefact of deferring video, not a defect in the stills.
+
+## The narrow leak, closed
+
+`assertNotResetAfterCharge()` refuses an asset that is back in `QUEUED` while a charge exists for its attempt-1 key. That is precisely the state that made `deductCredits` replay: provider billed, ledger untouched.
+
+The fix **forbids the bypass** rather than adding a second charging rule — the take model already says a new attempt is a new row, and a new row mints a new key and charges normally. The refusal names the take model so the caller knows the correct move. 4 tests.

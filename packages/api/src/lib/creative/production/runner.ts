@@ -51,6 +51,38 @@ export const STALE_RUN_MS = 5 * 60 * 1000;
 /** Bounded retry per asset — transient provider failures recover without user action. */
 export const DEFAULT_MAX_ATTEMPTS = 2;
 
+/**
+ * Refuse a reset-after-charge (2026-11-03).
+ *
+ * The ledger's idempotency key is `charge(assetId, attempt)`. Resetting an asset that was
+ * ALREADY charged back to QUEUED therefore replays the original charge: the provider is
+ * billed again and the ledger records nothing. That is the leak this guard closes.
+ *
+ * The take model already encodes "a new attempt is a new row", so the fix is to forbid the
+ * bypass rather than to invent a second charging rule: if a charge exists for this asset's
+ * first attempt and the asset is back in the queue, the caller is resetting rather than
+ * taking - and the correct move is a new asset row, which mints a new key and charges.
+ */
+export const ASSET_RESET_AFTER_CHARGE = 'ASSET_RESET_AFTER_CHARGE';
+
+export async function assertNotResetAfterCharge(
+  prisma: PrismaClient,
+  input: { assetId: string; status: string; idempotencyKeyFor: (attempt: number) => string },
+): Promise<void> {
+  if (input.status !== 'QUEUED') return;
+  const existing = await prisma.creditTransaction.findUnique({
+    where: { idempotencyKey: input.idempotencyKeyFor(1) },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new CreativeError(
+      'PLAN_NOT_APPROVED',
+      `${ASSET_RESET_AFTER_CHARGE}: asset ${input.assetId} was already charged; create a new asset row (take) instead of resetting it.`,
+    );
+  }
+}
+
+
 export type ProductionRunStatus = 'COMPLETED' | 'PARTIAL' | 'FAILED';
 
 export interface ProductionRunResult {
@@ -199,6 +231,13 @@ export async function runCreativeProduction(
       for (let attempt = 1; attempt <= maxAttempts && !ready; attempt += 1) {
         logProductionEvent({ type: 'asset_started', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt });
         const ref = `creative-produce-${asset.id}-a${attempt}`;
+        // Guard: a reset-after-charge would replay the idempotency key, billing the provider
+        // without recording anything. Fail loudly and point at the take model.
+        await assertNotResetAfterCharge(prisma, {
+          assetId: asset.id,
+          status: String((asset as { status?: string }).status ?? ''),
+          idempotencyKeyFor: (n) => `creative-produce-${asset.id}-a${n}`,
+        });
           const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0) : 0;
         try {
           let media;

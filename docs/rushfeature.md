@@ -902,3 +902,10 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Backlog: stills only (7,920 credits), video deferred; leak closed by forbidding the reset.** 99 stills at
+  `generate:flux2` = 80 each = **7,920**; video (`generate:h3_max` = 200) up to 19,800 **deferred**, with the trade-off
+  recorded — old clips against new stills may read as discontinuous. At an 80 median against floor 75, nearly all 99 clear.
+  `assertNotResetAfterCharge()` refuses a `QUEUED` asset that already has a charge for its attempt-1 key: that replay is
+  what billed the provider while recording nothing. The fix forbids the bypass instead of adding a second charging rule —
+  the take model says a new attempt is a new row, and a new row mints a new key and charges. 4 tests.
