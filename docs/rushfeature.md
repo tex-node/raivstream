@@ -902,3 +902,13 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Three input-side levers measured and dead; 70 is what this framing produces.** Re-roll (a second sample
+  with identical inputs) scored **70**, joining description quality (70) and reference count (70). The film's own spread is
+  **80 / 70 / 70 / 70** on identical framing, so the 80 is sample variance rather than proof that 80 is reachable on
+  demand — and per-scene enforcement ("re-roll until it passes") has no headroom to exploit at this framing.
+  **Experiment B (framing) untested:** the free version needed a close-up/full-body pair in the same film, and all four
+  scenes share 9:16 framing with generic descriptions, so no pair exists. **Backlog recomputed on measured scores:**
+  0–24 of 99 clear floor 75 (1 scene at 80 clears, 3 at 70 do not; if the 80 is variance the low end is 0) for
+  **≥ 7,760 credits**. **Credit correction:** these experiments spent **0 platform credits** — `generateStill` is called
+  directly and deduction lives in the production runner — so the provider was billed but the balance stayed at 5,760.
