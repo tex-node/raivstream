@@ -135,12 +135,24 @@ export async function castReferences(
     const name = character.name?.trim();
     if (!name) continue;
 
+    // SCOPE THE SKIP TO THIS PROJECT (fixed 2026-11-03).
+    //
+    // This lookup used to be global: `status: READY AND (characterName = name OR character.name
+    // = name)` with no projectId. A character name shared across projects therefore matched a
+    // reference owned by ANOTHER project, the create was skipped as `already_ready`, and this
+    // project ended with zero references - created=0 while every precondition was satisfied.
+    // Ten projects were blocked by that one missing filter.
     const existing = await (prisma as never as {
       characterReferenceAsset: {
         findFirst: (args: unknown) => Promise<{ id: string } | null>;
       };
     }).characterReferenceAsset.findFirst({
-      where: { status: 'READY', assetUrl: { not: null }, OR: [{ characterName: name }, { character: { name } }] },
+      where: {
+        projectId: input.projectId,
+        status: 'READY',
+        assetUrl: { not: null },
+        OR: [{ characterName: name }, { character: { name } }],
+      },
       select: { id: true },
     });
     if (existing) {
