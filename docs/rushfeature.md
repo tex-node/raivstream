@@ -902,3 +902,14 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — The measured render: 1 asset renderable, 25 residue, and the residue is missing references, not renders.** The
+  one-query count returned **renderable_assets=1, residue_assets=25** across 11 projects — the earlier "8 renderable / 4 projects
+  with casts" conflated **casts with approved references**, and only `cmudspsa` has an approved reference. The first render attempt
+  failed with `Creative project not found` because it ran as the debit account while the project belongs to
+  `integration-5@raivstream.com` — the ownership check refusing correctly. Run as the owner: **SCENE_01 identity 90 / SCENE_02
+  identity 80, both clear floor 75**, balance `94,200 → 94,200` with **no platform credits spent** because the assets were already
+  `READY` and `produce()` reused them — a **re-score of framing-conditioned assets, not a paid re-render**. **Flags still live: 26**,
+  because scoring does not clear a flag. **Final shape: 1 cleared · 0 below floor · 25 residue (no approved reference) · 73
+  out-of-scope with audit · ~6 thin input · 2 accepted loss.** The remaining work is a **reference pass over 10 projects**, not a
+  render pass over 26 assets.
