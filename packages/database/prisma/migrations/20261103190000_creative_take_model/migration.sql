@@ -7,11 +7,11 @@ ALTER TABLE "creative_produced_assets" ADD COLUMN IF NOT EXISTS "isLatest" BOOLE
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'creative_produced_assets_sceneId_kind_takeNumber_key'
+    SELECT 1 FROM pg_constraint WHERE conname = 'creative_produced_assets_projectId_sceneId_kind_takeNumber_key'
   ) THEN
     ALTER TABLE "creative_produced_assets"
-      ADD CONSTRAINT "creative_produced_assets_sceneId_kind_takeNumber_key"
-      UNIQUE ("sceneId", "kind", "takeNumber");
+      ADD CONSTRAINT "creative_produced_assets_projectId_sceneId_kind_takeNumber_key"
+      UNIQUE ("projectId", "sceneId", "kind", "takeNumber");
   END IF;
 END $$;
 
