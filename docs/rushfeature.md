@@ -902,3 +902,13 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Ledger anomaly explained: idempotent replay, not a missing charge.** `runner.ts:202` does call
+  `deductCredits` with key `creditKeys.prodAsset.charge(asset.id, attempt)`, rates are active (`generate:flux2` = 80,
+  `generate:h3_max` = 200), and **603 creative charges exist across 62 projects** — so the path charges and always has.
+  The four-scene run charged nothing because the forced regeneration reset the **existing** assets to `QUEUED` without new
+  rows, so the ids (and keys) were unchanged and `deductCredits` took its idempotency pre-check: it returned the 8 original
+  charges and wrote nothing. **The real defect is narrow:** re-generating an asset under its existing row re-bills the
+  provider without charging credits. A genuine backlog re-render creates new rows, so it charges normally and appears in
+  the ledger — **priced at 99 × 80 = 7,920 credits for stills** (plus video and cast), and no longer blocked on this
+  question.
