@@ -925,3 +925,11 @@ Three checks catch the silent failures that make a result meaningless rather tha
   floor of 75, so this scene is a **measured ceiling**, not an un-conditioned artefact. **The charge silently failed:**
   `deductCredits` threw because the owner has **no `CreditBalance` row** and `createNewTake`'s `.catch(() => 0)` swallowed it —
   `creditsCharged=0` with **no `CreditTransaction`**, the same silent-zero class as `castReferences`, now in the newest path.
+
+- **2026-11-03 — Takes measured: one charged and cleared 20 → 90; three refused loudly for balance.** `cmvyapup SCENE_03` take 2:
+  **20 → 90**, 4 references, `framingInPrompt=true`, **charged 80 with a verified `CreditTransaction -80`** (5,480 → 5,400). `cmuzaoi6`'s three scenes
+  **refused** with *"Insufficient credits — you need 80 but have 0"* — the `chargeOrThrow` contract working; before the helper those would have been
+  `creditsCharged=0` "successes". **Counter-datum resolved:** `cmvylvaz` scored 80 un-conditioned and `cmuzaoi6` scored 70 with four references, but
+  `cmvyapup` scored **90 with four references** — so references do not suppress framing; **scene variance does**. **Floor decision: 75 stands** —
+  three measured points (90 conditioned, 80 un-conditioned, 70 conditioned) put 75 inside the distribution. The remaining tail is blocked by an
+  **account balance**, not by calibration; lowering the floor to 72–73 would admit a scene that is simply weaker than its siblings.

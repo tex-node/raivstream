@@ -604,3 +604,32 @@ DIST n=8 min=30 median=70 max=90 [30,60,70,70,70,80,90,90]
 **Per-scene enforcement**: a first-class *new take* for a scene — create a new asset row, render it with the current references and framing, score it, and keep the better of the two. That is the only lever that makes the 5 re-renderable at all, and it also converts the pipeline's "first frame wins" behaviour into a floor-aware one.
 
 Higher-resolution reference plates and framing escalation are **not attempted**: both assume a re-render path that does not exist, so testing either today would measure the reuse, not the lever.
+
+## Five takes, measured (2026-11-03)
+
+### The takes, with project attribution and real charges
+
+| project | scene | old | new | refs | framing | charge |
+|---|---|---|---|---|---|---|
+| cmuzaoi6 | SCENE_01 | **60** | **70** | 4 | `framingInPrompt=true` | **0 — refused** (owner balance 0) |
+| cmvyapup | SCENE_03 | **20** | **90** | 4 | `framingInPrompt=true` | **80, `CreditTransaction -80`**, balance 5,480 → **5,400** |
+| cmuzaoi6 | SCENE_02 / 04 | 60 | — | 4 | — | **refused loudly**: *"Insufficient credits — you need 80 but have 0"* |
+| cmvylvaz (un-conditioned control) | SCENE_01/03/04 | — | **80** | **0** | framing only | n/a |
+
+### What the distribution says
+
+- **A take can reach the floor decisively**: `cmvyapup SCENE_03` went **20 → 90** on take 2, with 4 references and the framing phrase in the payload. That is the first take that both charged and cleared.
+- **The take that could not charge failed loudly**, three times, with the reason named — the `chargeOrThrow` contract working exactly as intended. Before the helper these would have read as `creditsCharged=0` successes.
+- **`cmuzaoi6` remains at 70** because its owner (`b08acceptance@test.raivstream.com`) has a zero balance, not because the scene is ceiling-bound. Its two remaining scenes are equally blocked.
+
+### The counter-datum, and what it means
+
+`cmvylvaz` scored **80 with zero references** — framing alone cleared three scenes. Yet `cmuzaoi6` scores **70 with four references**. That is not proof that references suppress framing: `cmvyapup` scored **90 with four references**, which is higher than the un-conditioned 80. So the honest reading is:
+
+> **References do not suppress framing; scene-to-scene variance does.** With the same conditioning, one scene reached 90 and one reached 70.
+
+### The floor decision
+
+**Floor 75 stands.** The measured evidence at three points — 90 (conditioned take), 80 (un-conditioned framing), 70 (conditioned take) — shows 75 is inside this pipeline's distribution, not above it. The 70 is a per-scene outcome, not a ceiling.
+
+The tail therefore stays flagged for a **resource** reason (an account with no balance), not a calibration reason. Lowering the floor to 72–73 would admit the 70 and would not change the fact that the scene is weaker than its siblings.
