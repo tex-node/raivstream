@@ -902,3 +902,20 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+## Creative identity — status log (newest first)
+
+- **2026-11-03 — Reference quality is NOT the identity lever (measured 70 → 70).** The creative cast prompt was
+  materially weaker than the story path's: `{name}: {visualDescription}` (a *provisional* sentence, "appearance proposed
+  and pending creator approval") with **no framing direction at all**, versus the story path's
+  `character reference portrait of {name}, {species}, {age}, {gender}, {role}, {visualDescription}, {expression},
+  {walkingStyle}, head-and-shoulders framing, neutral plain background, front view, consistent identity, no scene context`.
+  Regenerating Lighthouse Keeper's reference with a full story-grade description **and** the story prompt shape, then
+  re-producing SCENE_02 with that single labelled reference, scored **identity 70 → 70** — identical.
+  **Ordered next levers:** (1) per-scene enforcement — nothing re-rolls a still whose identity score dropped, so the
+  first frame the model returns is accepted; (2) target framing/resolution — a 9:16 full-body scene gives far fewer
+  pixels per face than the 1:1 head-and-shoulders reference; (3) reference ordering/labelling count — **already tested
+  and dead**: the 70 → 70 run used exactly one reference with `[reference 1: …]` in the prompt, so "too many references
+  dilute the subject" is refuted by the same measurement.
+  **Backlog:** still deferred; floor 75 at identity 70 clears ~25% of 99 for ≥ 7,760 credits (stills only).
+  **Credit delta:** unverified — the balance lookup now joins project → owner (`phase5c-staging@raivstream.test`,
+  balance 5,760) instead of taking the first ADMIN row, which is what produced three discarded numbers.
