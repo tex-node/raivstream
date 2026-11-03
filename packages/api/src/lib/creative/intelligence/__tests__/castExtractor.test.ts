@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCastPrompt, extractCastWithLLM, parseCastResponse } from '../castExtractor';
+import { buildCastPrompt, extractCastWithLLM, gateIncludesCharacterIdentity, parseCastResponse } from '../castExtractor';
 import { MAX_CAST } from '../service';
 
 /**
@@ -60,11 +60,19 @@ describe('extractCastWithLLM fails open', () => {
     expect(result.via).toBe('fallback');
   });
 
-  it('falls back when the model throws, returns junk, or invents nothing usable', async () => {
+  it('an empty array is a valid answer, not a fallback', async () => {
+    const result = await extractCastWithLLM('Create a 30-second launch campaign for a perfume', {
+      complete: async () => JSON.stringify({ characters: [] }),
+    });
+    expect(result.via).toBe('llm');
+    expect(result.cast).toEqual([]);
+  });
+
+  it('falls back only when the reply is genuinely unparseable', async () => {
     for (const complete of [
       async () => { throw new Error('provider down'); },
       async () => 'no json',
-      async () => JSON.stringify({ characters: [] }),
+      async () => JSON.stringify({ characters: 'nope' }),
     ]) {
       const result = await extractCastWithLLM('a story about a keeper and a bird', { complete });
       expect(result.via).toBe('fallback');
@@ -75,5 +83,20 @@ describe('extractCastWithLLM fails open', () => {
     const prompt = buildCastPrompt('an idea');
     expect(prompt).toContain(String(MAX_CAST));
     expect(prompt.toLowerCase()).toContain('never invent');
+  });
+});
+
+describe('the gate is scoped to formats that can contain a character', () => {
+  it('narrative types include characterIdentity', () => {
+    for (const type of ['STORY', 'DRAMA', 'NARRATIVE']) expect(gateIncludesCharacterIdentity(type)).toBe(true);
+  });
+
+  it('commercial, education and promotion do not', () => {
+    for (const type of ['COMMERCIAL', 'EDUCATION', 'PROMOTION', 'BRAND']) expect(gateIncludesCharacterIdentity(type)).toBe(false);
+  });
+
+  it('an unknown type stays in scope rather than silently skipping the gate', () => {
+    expect(gateIncludesCharacterIdentity(null)).toBe(true);
+    expect(gateIncludesCharacterIdentity('SOMETHING_NEW')).toBe(false);
   });
 });
