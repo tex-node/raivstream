@@ -565,3 +565,51 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Why four regenerated scenes charged nothing (2026-11-03)
+
+**Not a missing deduction path.** The read, the scope, and the cause:
+
+### The deduction path exists and is wired
+
+`runner.ts:202`:
+
+```ts
+const creditsUsed = featureKey
+  ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: …`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0)
+  : 0;
+```
+
+`deductCredits` (`lib/credits.ts`) looks up `feature_credit_rates`, throws when no active rate exists, and **starts with an idempotency pre-check**: if a `CreditTransaction` already exists for the key, it returns the original charge and writes nothing.
+
+Rates are present and active: `generate:flux2` = 80, `generate:h3_max` = 200.
+
+### The scope
+
+| measure | value |
+|---|---|
+| `CreditTransaction` rows with description `Creative production:%` | **603** |
+| projects with produced assets | **62** |
+| charges attributable to project `cmvzvo9ym…` | **8** — exactly its eight assets, from the first production |
+
+So **creative production does charge**, and has for 62 projects. The earlier hypothesis "creative never charges" is refuted by 603 rows.
+
+### The cause: idempotent replay over reused asset rows
+
+The forced regeneration set the existing assets to `QUEUED` **without creating new rows**, so their ids — and therefore `creditKeys.prodAsset.charge(asset.id, attempt)` — were unchanged. `deductCredits` found the eight existing transactions and returned the original amounts, writing nothing. Balance unchanged: **correct behaviour by the ledger's own rule**.
+
+The provider, however, was billed again, because the runner re-submitted the jobs. That is the real defect, and it is narrow:
+
+> **Re-generating an asset under its existing row re-bills the provider without charging credits.**
+
+### Blast radius
+
+- Not systemic under-billing: 603 creative charges exist across 62 projects.
+- The leak is confined to **repeated provider attempts against the same asset id** (forced re-renders, retries after a reset).
+- A genuine backlog re-render **creates new asset rows**, so it charges normally and will appear in the ledger.
+
+### What this means for the backlog
+
+The backlog can be priced against a real ledger cost, because a re-render of the 99 flagged assets produces new asset ids: **99 × 80 = 7,920 credits for stills**, plus video and cast references. The earlier 7,760 figure was stills-only arithmetic; the correction is cosmetic, not structural.
+
+The cost-accounting question is answered: the ledger will record a real re-render. The provider-side leak on retries is a separate, narrower fix (charge per provider attempt, or mint a new attempt key when an asset is reset) and is **not** a blocker for the backlog decision.
