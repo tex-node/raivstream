@@ -326,7 +326,11 @@ export class ProductionPlanService {
     if (!isCreativeProductionEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 production is not enabled.');
     const project = await prisma.creativeProject.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      include: { productionPlan: true, brief: true },
+      // `bible` is NOT optional here: the cast gate reads the characters from it, and
+      // without the include `project.bible` is undefined, the gate sees an empty cast and
+      // takes its `no_cast` pass. That was the real cause of NO_REFUSAL - the gate ran,
+      // logged `castCharacters=0`, and passed a project with two unapproved characters.
+      include: { productionPlan: true, brief: true, bible: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
     // The blocking cast gate. POSITION IS THE FIX: it sits immediately after the project
