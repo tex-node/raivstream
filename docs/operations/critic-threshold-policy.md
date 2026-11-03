@@ -565,3 +565,48 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The backlog, restated against reality (2026-11-03)
+
+The extractor fix changed what the flags mean, and the numbers moved by an order of magnitude.
+
+### The re-extraction, with the empty-array branch fixed
+
+```
+VIA_LLM=38 of 38            ← every project took the model path (was 1 of 10)
+NARRATIVE=10  NON_NARRATIVE=28
+STORY_WITH_CAST=2  STORY_CHARACTERS=3
+```
+
+The empty-array fix was the whole difference: `{"characters":[]}` is a **correct answer** for a perfume commercial, and routing it to the splitter is what produced `Confrontin` and hid the true population.
+
+### The gate is now scoped by project type — decision: **unflag**
+
+**73 flags** across the 28 non-narrative projects were marked `OUT_OF_SCOPE` with their audit rows kept (`resolution`, `reviewedAt`, `note`), not deleted. Reasoning: a flag for a dimension that does not apply is noise, and noise in the flag table makes the real backlog harder to see — but deleting it would erase the evidence that the gate once scored it.
+
+**Remaining flags: 26** (down from 99).
+
+### Backfill
+
+**2 projects** now carry LLM-derived casts — **3 characters** total: `Ada`, `Mama Nkechi`, `Lighthouse Keeper`. Spot-checked against the extractor's output; the rest of the narrative set legitimately has no named characters (establishing shots, object-focused beats).
+
+### References: measured, not estimated
+
+| measure | value |
+|---|---|
+| characters in scope | 3 |
+| cost at 80 each | 240 |
+| references actually created | **1** — the others were already present and were **skipped**, not re-bought |
+| platform credits deducted | **0** (direct adapter path; deduction lives in the runner) |
+| owner balance before/after | 94,200 → 94,200 |
+
+### The backlog arithmetic, finally against a real population
+
+| measure | before this session | after |
+|---|---|---|
+| flags | 99 | **26** |
+| projects in scope | 39 | **10** |
+| stills cost at 80 | 7,920 | **2,080** |
+| category errors | 28 projects | **0** (marked out of scope) |
+
+**The backlog is 26 stills for ~2,080 credits**, not 7,920 — and the reason is not that the work got cheaper, it is that 73 of the 99 flags were a gate applied to formats that cannot contain the thing it measures. The 2 projects with no recoverable intent remain accepted losses.
