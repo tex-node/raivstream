@@ -2627,7 +2627,7 @@ model CreativeProducedAsset {
   parentTakeId  String?
   isLatest      Boolean                       @default(true)
 
-  @@unique([sceneId, kind, takeNumber])
+  @@unique([projectId, sceneId, kind, takeNumber])
   @@index([projectId, sceneId])
   @@index([projectId, status])
   @@index([versionId])

@@ -913,3 +913,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
   per-scene enforcement** — a first-class new take (new asset row, render, score, keep the better of two). Higher-resolution
   references and framing escalation were deliberately **not** attempted, because both assume the re-render path that does not
   exist and would have measured reuse rather than the lever.
+
+- **2026-11-03 — Migration applied as `supabase_admin`; the first take ran and scored 70 (from 60).** `creative_produced_assets`
+  is owned by **`supabase_admin`**, so the deploy's `postgres` migration step cannot alter it — the columns had never appeared and
+  the failure looked like a skipped runner. Applied as the owner. **The original unique constraint was impossible:**
+  `("sceneId","kind","takeNumber")` collides across projects (`SCENE_04` exists in more than one), so it is
+  `("projectId","sceneId","kind","takeNumber")` — schema and migration corrected. **The "stale client" claim was wrong:**
+  `takeNumber` was already generated (109 occurrences); the grep that said otherwise pointed at a path that does not exist here.
+  **First take:** take 2 over parent take 1, previous take **demoted not deleted** (`isLatest=false`, both `READY`),
+  `framingInPrompt=true`, `references=4`, and a score of **70 against the old take's 60** — an improvement that still misses the
+  floor of 75, so this scene is a **measured ceiling**, not an un-conditioned artefact. **The charge silently failed:**
+  `deductCredits` threw because the owner has **no `CreditBalance` row** and `createNewTake`'s `.catch(() => 0)` swallowed it —
+  `creditsCharged=0` with **no `CreditTransaction`**, the same silent-zero class as `castReferences`, now in the newest path.
