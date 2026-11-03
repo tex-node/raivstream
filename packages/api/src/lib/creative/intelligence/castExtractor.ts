@@ -79,9 +79,27 @@ export async function extractCastWithLLM(
     const raw = await deps.complete(buildCastPrompt(idea));
     if (!raw) return fallback();
     const parsed = parseCastResponse(raw);
-    if (!parsed || parsed.length === 0) return fallback();
+    // An EMPTY array is a valid answer, not a parse failure. 28 of the 39 flagged projects
+    // are commercials, lessons and promos: "no characters" is correct for them, and routing
+    // that answer to the fallback replaced it with a splitter that invents fragments
+    // (`Confrontin`). Only a genuinely unparseable reply falls back.
+    if (parsed === null) return fallback();
     return { cast: parsed, via: 'llm' };
   } catch {
     return fallback();
   }
+}
+
+/**
+ * Project types where `characterIdentity` is meaningful.
+ *
+ * A perfume commercial has no characters, so scoring it on character consistency is a
+ * category error, not a quality signal. This predicate scopes the dimension to formats
+ * that can contain a character.
+ */
+export const NARRATIVE_PROJECT_TYPES = ['STORY', 'DRAMA', 'NARRATIVE'] as const;
+
+export function gateIncludesCharacterIdentity(projectType: string | null | undefined): boolean {
+  if (!projectType) return true; // unknown stays in scope: never silently skip a gate
+  return (NARRATIVE_PROJECT_TYPES as readonly string[]).includes(projectType);
 }
