@@ -1,0 +1,222 @@
+Raivstream 5.0 — Architectural & Feature Specification
+1. Ease of Short Videos Generation (UGC & Product Ads)
+Feature Architecture & User Flow
+Mode Selector: Toggle between Character-Driven UGC, Product Showcase, or Text/Prompt-to-Video.
+
+Reference Photo & Consent Verification:
+
+Input: Users upload a high-resolution reference photo (actor or product).
+
+Legal Consent Gate: A strict modal requires explicit confirmation: "I verify I hold full commercial rights or permission to use this likeness/product."
+
+Likeness Protection: Automatic facial-embedding extraction via an inline vision model. Disallows uploads matching protected public figures or minors unless verified via account identity.
+
+Scratch Character Creator (No Photo Required):
+
+If no photo is supplied, the agent generates a Master Character Turnaround Sheet (Front, 3/4, Profile) using Flux.2.
+
+Saves the resulting vector/embedding into StoryCharacterMemory for cross-scene reuse.
+
+UGC Pipeline Execution:
+
+Applies a pre-configured UGC Style Preset (mobile camera jitter, natural indoor/outdoor ambient lighting, slight mic popping on audio).
+
+Generates a talking-head video via the VEED Fabric adapter (falVeed.ts) synchronized with ElevenLabs narration.
+
+2. Filmmaker Mode (Series, Longer Stories & Cliffhangers)
+Feature Architecture & Continuation Engine
+Dynamic Story Expansion:
+
+Extends the Claude Narrative Engine (lib/narrativeEngine.ts) to support episodic structure: Season → Episode → Act → Scene.
+
+Episode Pacing: Enforces an episodic story arc: Hook (0–15s) → Escalation → Midpoint Climax → Resolution/Cliffhanger.
+
+Spinoff & Continuation Engine:
+
+story.createEpisodeSpinoff API: Ingests the StoryProject.productionManifest and StoryCharacterMemory of a finished episode as the baseline state for the next episode.
+
+Cliffhanger Generator: Automatically appends an unresolved conflict to the final scene's minimax_video_prompt (e.g., Zoom in on character's shocked expression as an unseen shadow looms).
+
+Series Memory Ledger: Tracks long-term narrative state across episodes (character relationships, injuries, inventory, emotional arcs).
+
+3. Video Restyling & Camera Effects Engine
+Feature Architecture & Video-to-Video Processing
+AI Video Restyling (V2V):
+
+Takes an existing uploaded video or rendered scene asset and applies a new Visual Style Anchor (e.g., Cyberpunk Neon, Claymation, Vintage 1970s 16mm Film).
+
+Uses edge/depth control nets over the source frames to preserve spatial motion while completely swapping textures, lighting, and art direction.
+
+Cinematic Camera FX Operator:
+
+Direct FFmpeg and AI motion controls available in the Scene Director:
+
+Camera Motion: Dolly Zoom (Vertigo Effect), Dutch Angle Tilt, Crash Zoom, Whip Pan, Orbital Tracking.
+
+Post-FX: Anamorphic Lens Flare, Film Grain (Grain synthesis), Motion Blur, Vignette, Color Grading LUTs (Teal & Orange, Noir, Golden Hour).
+
+4. R16 Mode for Children (3D Animation & Educational Content)
+Safety Boundaries & Educational Engine
+Restricted Model Routing:
+
+Hard-gated model subset: Uses dedicated 3D Pixar/DreamWorks style presets over Flux.2 for stills, and child-safe MiniMax H3 motion models.
+
+Completely masks advanced prompting UI, provider selection, credit rates, and raw JSON manifests.
+
+Child-Safe Content Filtering:
+
+Pre-generation moderation blocks any graphic violence, fear triggers, or dark imagery.
+
+Converts complex conflict into child-friendly problem-solving narratives (e.g., Working together, sharing, exploration).
+
+Educational Modules (Raivstream Academy Integration):
+
+Templates tailored for STEM, History, and Storytelling homework (e.g., Plant Lifecycle Journey, Solar System Exploration).
+
+Produces colorful 3D-animated short clips paired with clear, friendly read-aloud voiceovers.
+
+5. Multimodal Video Engine & Camera Directing Architecture
+This is the core orchestration layer connecting image generation, image-to-video, restyling, camera controls, and automatic scene-duration matching.
+
+5.1 End-to-End Multimodal Execution Flow
+[ User Concept / Script ]
+           │
+           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Narrative & Manifest Engine (Claude + GPT-4o)            │
+│ Generates full prose, audio script, and ProductionManifest  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. Audio-First Timing Alignment Engine                      │
+│ ElevenLabs synthesizes VO ──► Calculates exact duration (s)│
+│ Sets Shot Grid: e.g., 22s VO = 4 x 5.5s chained clips       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. Stills Generation Model (FLUX2 via fal.ai)               │
+│ Renders opening keyframe locked to Master Visual Bible      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 4. Image-to-Video Engine (MiniMax H3 Turbo via fal.ai)      │
+│ Animates keyframe ──► Extracts LAST FRAME via FFmpeg        │
+│ Seeds NEXT shot in chain for seamless I2V continuity        │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 5. Restyling & Camera FX Layer                              │
+│ Applies depth/motion FX and restyles video if specified     │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 6. Movie Builder Stitching Engine (FFmpeg Worker)          │
+│ Muxes chained clips + native SFX + ElevenLabs VO + Music    │
+└─────────────────────────────────────────────────────────────┘
+5.2 Scene Breakdown & Duration-Matching Logic
+To prevent gaps between video scenes, the system enforces an Audio-Driven Timing Pipeline:
+
+Voiceover Generation First: Synthesize the ElevenLabs narration for a scene before submitting video generation jobs.
+
+Duration Measurement: Measure the precise duration of the generated narration file (e.g., 18.5 seconds).
+
+Shot Grid Allocation: Calculate the required video shots so the total video length equals or slightly exceeds the audio length:
+
+Shot Count=⌈ 
+Target Shot Duration (5s)
+Audio Duration
+​
+ ⌉
+For 18.5s narration: 4 shots of 4.625s or 3 shots of 6.2s.
+
+No-Gap Chained I2V (Last-Frame Seeding):
+
+Shot 1 takes the scene still as first_frame_image_url.
+
+When Shot 1 completes, lib/lastFrameExtract.ts extracts its last frame via FFmpeg (-sseof -0.1) and uploads it to R2.
+
+Shot 2 automatically ingests this last frame as its starting seed, ensuring physical and spatial continuity across the entire sequence without black frames or visual jumps.
+
+5.3 System Architecture & Master Schema Extensions
+To support this multimodal workflow, update your database schema in packages/database/schema.prisma with the following entities:
+
+Code snippet
+// Expanded ProductionManifest Schema inside StoryProject
+model StoryProject {
+  id                        String   @id @default(cuid())
+  userId                    String
+  title                     String
+  logline                   String?
+  visualStyle               String?  // e.g. "PHOTOREAL_CINEMATIC", "3D_ANIMATED", "UGC_MOBILE"
+  productionManifest        Json?    // Detailed multimodal execution plan
+  productionManifestUpdatedAt DateTime?
+  
+  // UGC & Reference Photo Settings
+  referencePhotoUrl         String?
+  hasConsentConfirmed       Boolean  @default(false)
+  isR16Mode                 Boolean  @default(false)
+
+  // Epics / Series Relationships
+  seriesId                  String?
+  episodeNumber             Int?
+  previousEpisodeId         String?
+
+  created_at                DateTime @default(now())
+}
+
+// Shot Grid Multi-Clip Asset Tracking
+enum AssetKind {
+  IMAGE
+  VIDEO
+  RESTYLED_VIDEO
+}
+
+model StorySceneAsset {
+  id                    String           @id @default(cuid())
+  sceneId               String
+  projectId             String
+  assetType             AssetKind        @default(IMAGE)
+  shotIndex             Int?             // Order position within 5s shot grid
+  shotGridSeedImageUrl  String?          // Last-frame seed URL from prior clip
+  
+  // Camera & FX Directing Metadata
+  cameraMotion          String?          // e.g., "Slow push-in", "Dolly zoom"
+  cameraEffect          String?          // e.g., "Anamorphic Flare", "Film Grain"
+  durationSec           Float?
+  resolution            String?          // "768P" | "1080P"
+  
+  publicUrl             String
+  status                String           @default("READY")
+  createdAt             DateTime         @default(now())
+}
+5.4 Implementation Plan for Your AI Development Agent
+Provide this step-by-step roadmap directly to your development team or agent:
+
+Implement Audio-Driven Pacing (lib/shotClipEngine.ts):
+
+Hook ElevenLabs TTS execution to run prior to video clip generation.
+
+Calculate the exact number of 4–6 second shots needed to match total audio duration.
+
+Enable Automatic Pipeline Handoff (No Manual Selection):
+
+In story.generateSceneShotClips, automatically pipe the output of FLUX2 (still) into H3_MAX (I2V animation).
+
+Extract the last frame after each clip completes to seed the next shot in the chain automatically.
+
+Build Camera & FX Controls in Scene Director UI:
+
+Add controls to SceneDirectorScreen.tsx for camera movement selection (Dolly Zoom, Pan, Orbit) and visual restyling presets.
+
+Enforce R16 Mode Constraints:
+
+When isR16Mode is active, restrict model routing exclusively to 3D-animation presets, enforce strict child-safety prompts, and surface simplified UI controls.
+
+Build Series & Spinoff Generator (story.createEpisodeSpinoff):
+
+Persist character memory and world state across episode boundaries, appending automated cliffhanger prompts to the final scene of each episode.

@@ -1,0 +1,3128 @@
+RAIVSTREAM 5.0
+Product North Star
+
+Tell Raivstream what you imagine. It figures out how to make it.
+
+Product promise
+
+Raivstream understands creative intent, develops creative direction, maintains continuity, orchestrates multimodal production, and lets creators direct the result naturally—without requiring them to learn prompting, JSON, models, or production technology.
+
+The six-phase roadmap
+PHASE 0
+FOUNDATION
+     ↓
+PHASE 1
+INTENT-DRIVEN CREATION
+     ↓
+PHASE 2
+CREATIVE INTELLIGENCE
+     ↓
+PHASE 3
+AI DIRECTOR
+     ↓
+PHASE 4
+MULTIMODAL PRODUCTION
+     ↓
+PHASE 5
+REVIEW + REFINEMENT
+     ↓
+PHASE 6
+PROFESSIONAL CREATIVE STUDIO
+
+These phases should be treated as capability gates, not arbitrary development sprints.
+
+PHASE 0 — CREATIVE FOUNDATION
+Objective
+
+Create the persistent creative state that everything else operates on.
+
+The fundamental question:
+
+What does Raivstream need to remember about a creative project?
+
+0.1 Project model
+
+Establish the canonical project:
+
+PROJECT
+├── Brief
+├── Creative Bible
+├── Creative Memory
+├── Story
+├── Characters
+├── Worlds
+├── Scenes
+├── Assets
+├── Production Plan
+├── Versions
+├── Directives
+├── Reviews
+├── Approvals
+└── Outputs
+0.2 Creative Brief
+
+Stores:
+
+original user intent
+objective
+creative type
+audience
+desired outcome
+constraints
+attachments
+initial interpretation
+
+The Brief represents:
+
+What the creator asked for.
+
+0.3 Creative Bible
+
+Represents:
+
+What Raivstream and the creator have established about the project.
+
+Contains:
+
+Story
+premise
+narrative structure
+themes
+emotional arc
+Characters
+identity
+appearance
+personality
+relationships
+states
+Worlds
+universe
+locations
+environmental rules
+Visual Language
+realism
+camera language
+lighting
+composition
+colour
+texture
+motion
+Audio Language
+voices
+music
+ambience
+sound design
+Audience
+Brand
+0.4 Creative Memory
+
+Tracks successful decisions.
+
+Examples:
+
+Maya's approved appearance.
+
+Family kitchen approved as the primary location.
+
+Warm evening lighting preferred.
+
+Natural dialogue style.
+
+This supports the original character/series memory concepts while expanding them into a general project memory system.
+
+0.5 Provenance
+
+Every important creative decision should know where it came from:
+
+USER
+INFERRED
+SUGGESTED
+APPROVED
+SYSTEM
+
+This is essential for later contradiction handling.
+
+0.6 Versions
+
+Nothing important should be overwritten.
+
+Every meaningful creative state can become:
+
+Version 1
+Version 2
+Version 3
+
+And alternative directions can branch.
+
+0.7 Approval state
+
+Introduce:
+
+DRAFT
+REVIEW
+APPROVED
+SUPERSEDED
+
+This gives Raivstream a concept of intentionality.
+
+Phase 0 acceptance criteria
+
+A project can:
+
+remember its creative brief
+maintain a Creative Bible
+maintain Creative Memory
+preserve versions
+track provenance
+preserve approved decisions
+represent characters and worlds
+represent scenes independently from generated assets
+Explicitly out of scope
+sophisticated video generation
+advanced camera controls
+campaign collaboration
+complex templates
+
+First establish the creative state.
+
+PHASE 1 — INTENT-DRIVEN CREATION
+Objective
+
+Make the first interaction with Raivstream feel radically simpler than conventional generative tools.
+
+The question becomes:
+
+Can someone describe what they want without knowing how to prompt an AI?
+
+1.1 Create experience
+
+Primary interface:
+
+What are you imagining?
+
+Supporting copy:
+
+Tell Raivstream what you want to create. Don't worry about how to describe it.
+
+No prompt terminology.
+
+1.2 Intent extraction
+
+The Intent Engine identifies:
+
+creative type
+objective
+subject
+audience
+desired outcome
+duration
+format
+style
+constraints
+attachments
+ambiguities
+1.3 Adaptive interface
+
+If the user says:
+
+"Create a skincare commercial."
+
+The interface dynamically introduces:
+
+Product
+Brand
+Audience
+Objective
+
+If the user says:
+
+"Create a short film."
+
+It introduces:
+
+Story
+Characters
+World
+Tone
+
+The interface should never begin as a massive form.
+
+1.4 Interpretation
+
+Raivstream presents:
+
+Here's what I understand.
+
+Then:
+
+Intent
+Creative direction
+Important decisions
+What I'll remember
+1.5 Consequential clarification
+
+The system should identify only decisions that materially affect the outcome.
+
+Example:
+
+How should the mother react?
+
+Not:
+
+What lens should we use?
+
+1.6 Auto
+
+Every optional decision should support:
+
+Let Raivstream decide
+
+This becomes a core product convention.
+
+1.7 Creative Direction
+
+Semantic controls:
+
+Cinematic
+Intimate
+Photorealistic
+Warm
+Suspenseful
+
+rather than technical parameters.
+
+1.8 Build Production Plan
+
+The Create flow ends with:
+
+Build Production Plan
+
+rather than:
+
+Generate.
+
+Phase 1 acceptance criteria
+
+A first-time user should be able to:
+
+describe an idea naturally
+attach relevant material
+see Raivstream's interpretation
+correct it conversationally
+answer only consequential questions
+approve a creative direction
+generate a production plan
+
+without encountering:
+
+JSON
+provider selection
+model selection
+technical prompts
+generation configuration
+PHASE 2 — CREATIVE INTELLIGENCE
+
+Now Raivstream becomes domain-aware.
+
+Objective
+
+Understand what kind of creative problem the user is solving.
+
+2.1 Story Intelligence
+
+Supports:
+
+short stories
+films
+episodes
+series
+character arcs
+scene purpose
+pacing
+dialogue
+cliffhangers
+
+The original episodic structure remains:
+
+Season → Episode → Act → Scene.
+
+But it is adaptive.
+
+A short film doesn't need a visible Season/Episode structure.
+
+2.2 Series Intelligence
+
+Preserve the original:
+
+spinoff/continuation engine
+series memory
+character state
+world state
+narrative continuity
+unresolved conflicts.
+
+But integrate them into Creative Bible rather than maintaining an isolated memory architecture.
+
+2.3 Education Intelligence
+
+Understand:
+
+learner age
+subject
+learning objective
+vocabulary
+examples
+pacing
+assessment
+
+Example:
+
+"Teach photosynthesis to eight-year-olds."
+
+Raivstream internally derives:
+
+Objective = comprehension
+Audience = 8-year-olds
+Complexity = simplified
+Visual strategy = concrete metaphor
+Pacing = short explanations
+Assessment = optional
+2.4 Commercial Intelligence
+
+Understand:
+
+brand
+product
+audience
+campaign objective
+messaging
+CTA
+visual identity
+product prominence
+variants
+
+This becomes the foundation for:
+
+Product Showcase
+UGC
+campaign creation.
+
+The original UGC/Product Ads architecture remains relevant here.
+
+2.5 Transformation Intelligence
+
+Supports:
+
+"Turn this footage into a cyberpunk sequence."
+
+or:
+
+"Make this feel like a 1970s film."
+
+The original V2V and Visual Style Anchor capabilities become implementation mechanisms for this experience.
+
+2.6 Audience intelligence
+
+Audience becomes a first-class creative input.
+
+Examples:
+
+General
+Children
+Professional
+Commercial
+Educational
+
+This influences:
+
+language
+pacing
+visual complexity
+safety
+creative choices.
+2.7 R16
+
+R16 remains a specialized constrained experience.
+
+The original roadmap's:
+
+restricted model routing
+hidden advanced prompting
+child-safe filtering
+educational modules
+
+remain valid.
+
+But the user experience is simplified rather than merely switching technical flags.
+
+Phase 2 acceptance criteria
+
+Raivstream should be able to take the same basic interaction model and intelligently adapt it for:
+
+Storytelling
+
+Education
+
+Commercial
+
+Transformation
+
+without creating four separate products.
+
+PHASE 3 — AI DIRECTOR
+
+This is the most strategically important phase.
+
+Objective
+
+Make Raivstream capable of understanding:
+
+"What do you want changed?"
+
+rather than merely:
+
+"Generate something."
+
+3.1 Director context
+
+Every Director request receives:
+
+CURRENT CONTEXT
++
+USER INSTRUCTION
++
+CREATIVE BIBLE
++
+PROJECT HISTORY
++
+APPROVED DECISIONS
+3.2 Directive engine
+
+Create a first-class Directive.
+
+Example:
+
+"Make the mother more angry."
+
+The system interprets:
+
+Target
+= Mother
+
+Change
+= Emotional performance
+
+Scope
+= Current scene
+
+Preserve
+= Story / location / appearance
+
+Production action
+= Modify performance
+
+Review
+= Required
+3.3 Impact analysis
+
+For broader changes:
+
+"Change Maya's hairstyle."
+
+Raivstream determines:
+
+4 scenes are affected.
+
+Then asks:
+
+Apply to this scene or update Maya everywhere?
+
+3.4 Preservation
+
+The Director must know what not to change.
+
+This is one of the most important engineering requirements.
+
+Example:
+
+"Make the lighting darker."
+
+Should not accidentally change:
+
+character
+wardrobe
+dialogue
+location
+music
+story.
+3.5 Semantic transformation
+
+The Director maps human concepts to production operations.
+
+Example:
+
+"Make it feel more expensive."
+
+could become:
+
+Lighting
++
+Composition
++
+Camera
++
+Production design
++
+Colour
++
+Pacing
+
+The user never has to specify those.
+
+3.6 Explore
+
+Introduce:
+
+Explore another direction
+
+rather than:
+
+Regenerate.
+
+This creates a new version/branch.
+
+3.7 Keep
+
+Introduce:
+
+Keep this
+
+which can promote a successful result into Creative Memory.
+
+3.8 Fix
+
+Review issues can produce:
+
+Fix
+
+with minimal regeneration.
+
+3.9 Director explanations
+
+When necessary:
+
+Why?
+
+The Director explains its creative reasoning.
+
+This remains secondary.
+
+Phase 3 acceptance criteria
+
+A user should be able to say:
+
+"Make it darker."
+
+"Make her more confident."
+
+"Make the ending hopeful."
+
+"Make this feel more premium."
+
+"Keep everything except the wardrobe."
+
+and Raivstream should understand the semantic intent and determine the appropriate production changes.
+
+This is the phase that makes the product genuinely differentiated.
+
+PHASE 4 — MULTIMODAL PRODUCTION ENGINE
+
+Now we activate the original production architecture at full scale.
+
+Objective
+
+Turn the Creative Plan into coherent audiovisual output.
+
+The original specification already provides the foundation:
+
+Narrative → audio-first timing → still → I2V → last-frame chaining → restyle/FX → FFmpeg assembly.
+
+4.1 Production Plan
+
+Generate:
+
+scenes
+scene purpose
+characters
+locations
+visual direction
+dialogue
+audio
+shot structure
+timing
+4.2 Audio-first timing
+
+Keep the original sequence:
+
+Generate voiceover first → measure duration → allocate shots → generate visuals.
+
+This becomes an invisible capability.
+
+4.3 Visual generation
+
+Production Engine determines:
+
+keyframes
+character references
+environments
+compositions
+shot structure.
+4.4 I2V
+
+Use generated stills as motion starting points.
+
+The user experiences:
+
+Creating motion
+
+not:
+
+I2V.
+
+4.5 Continuity Engine
+
+Last-frame chaining remains.
+
+The original specification's process of extracting the last frame and using it to seed the next shot is retained.
+
+But now it sits alongside:
+
+character continuity
+world continuity
+visual continuity
+audio continuity.
+4.6 Camera and FX
+
+The original camera/FX architecture remains available:
+
+dolly zoom
+Dutch angle
+crash zoom
+whip pan
+orbital tracking
+lens flare
+grain
+motion blur
+vignette
+grading.
+
+But:
+
+Default
+
+Semantic direction.
+
+"Make the camera more energetic."
+
+Advanced
+
+Explicit camera controls.
+
+4.7 V2V
+
+Existing footage or rendered scenes can be restyled.
+
+User:
+
+"Make this feel like vintage 16mm."
+
+The engine determines the V2V process.
+
+4.8 Assembly
+
+FFmpeg remains an internal production capability.
+
+It combines:
+
+video
+dialogue
+music
+SFX
+ambience.
+
+The original specification already establishes this assembly layer.
+
+Phase 4 acceptance criteria
+
+Raivstream can take an approved Production Plan and automatically produce:
+
+coherent scenes → continuous shots → synchronized audio → assembled video
+
+without requiring manual provider or pipeline selection.
+
+PHASE 5 — REVIEW + REFINEMENT
+
+This closes the loop.
+
+Objective
+
+Make creative quality iterative rather than one-shot.
+
+5.1 Review Engine
+
+Evaluate:
+
+Story
+
+Does the scene fulfill its purpose?
+
+Character
+
+Is identity and appearance consistent?
+
+World
+
+Is the environment consistent?
+
+Visual
+
+Does it follow the approved direction?
+
+Audio
+
+Does timing work?
+
+Instruction fidelity
+
+Did Raivstream actually do what the user asked?
+
+5.2 Review language
+
+Never:
+
+Continuity score = 82%.
+
+Instead:
+
+I noticed something you may want to improve.
+
+Example:
+
+Maya's hairstyle changes slightly in Scene 4.
+
+Actions:
+
+Fix
+
+Keep
+
+Review
+
+5.3 Creative vs technical failures
+
+The system must distinguish:
+
+Production failure
+
+Scene could not be generated.
+
+from:
+
+Creative failure
+
+Scene generated successfully but doesn't match the intended direction.
+
+These are very different problems.
+
+5.4 Direct refinement
+
+User:
+
+"Make the scene more intimate."
+
+Director determines:
+
+framing
+camera distance
+performance
+pacing
+sound
+lighting
+
+Then produces a new version.
+
+5.5 Compare
+
+Allow:
+
+Current vs Alternative
+
+with:
+
+Keep current
+
+Use alternative
+
+Direct again
+
+5.6 Approve
+
+User approves:
+
+Scene
+
+Character
+
+Direction
+
+Final project
+
+Approved assets become continuity anchors.
+
+5.7 Minimal regeneration
+
+This should be an explicit engineering goal.
+
+If only one component changes:
+
+Don't regenerate the entire project.
+
+Preserve everything that doesn't need to change.
+
+Phase 5 acceptance criteria
+
+The user can:
+
+Review → Direct → Change → Compare → Keep/Approve
+
+without losing good work.
+
+At this point, Raivstream has become an iterative creative system, rather than a generation tool.
+
+PHASE 6 — PROFESSIONAL CREATIVE STUDIO
+
+Only after the core experience works should we add the deeper professional workflows.
+
+Objective
+
+Allow professional teams to use Raivstream as a production environment.
+
+6.1 Brand DNA
+
+Store:
+
+logo
+colors
+typography
+tone
+messaging
+products
+spokesperson
+approved assets
+prohibited assets.
+6.2 Campaigns
+CAMPAIGN
+├── Brief
+├── Brand
+├── Product
+├── Audience
+├── Concepts
+├── Variations
+├── Scenes
+└── Deliverables
+6.3 Client review
+
+Client receives:
+
+Preview
+
+Can provide:
+
+"Make the product appear earlier."
+
+Raivstream interprets the comment as a Directive.
+
+6.4 Approval workflows
+
+Professional users can have:
+
+Draft
+↓
+Internal Review
+↓
+Client Review
+↓
+Approved
+↓
+Published
+6.5 Deliverables
+
+Generate multiple outputs from one approved creative project:
+
+vertical
+landscape
+square
+social cut
+campaign cut
+teaser
+full version.
+
+The underlying Creative Bible remains the source of truth.
+
+7. Cross-phase architecture
+
+Some systems should not belong to a single phase.
+
+They should operate throughout 5.0.
+
+Creative Bible
+
+Everything depends on it.
+
+Continuity Engine
+
+Everything visual depends on it.
+
+Safety
+
+Every generation path depends on it.
+
+Rights / consent
+
+Relevant whenever likeness/product rights require it.
+
+Versioning
+
+Every meaningful creative change depends on it.
+
+Asset system
+
+Everything references it.
+
+Capability Router
+
+Production depends on it.
+
+8. The capability router
+
+The production engine should never be tightly coupled to one provider.
+
+Conceptually:
+
+AI DIRECTOR
+     ↓
+PRODUCTION INTENT
+     ↓
+CAPABILITY ROUTER
+     │
+     ├── IMAGE
+     ├── VIDEO
+     ├── AUDIO
+     ├── V2V
+     ├── VOICE
+     └── FX
+          ↓
+      PROVIDERS
+
+This means providers can change without redesigning the product.
+
+9. The most important internal boundary
+
+We should enforce:
+
+CREATIVE LAYER
+      │
+      │ semantic intent
+      ↓
+PRODUCTION LAYER
+      │
+      │ technical execution
+      ↓
+PROVIDER LAYER
+
+Never:
+
+USER
+ ↓
+PROVIDER
+
+This architectural boundary will protect Raivstream from becoming provider-dependent.
+
+10. Recommended service boundaries
+
+At a high level:
+
+IntentService
+CreativeIntelligenceService
+CreativeBibleService
+DirectorService
+ProductionPlanService
+ProductionService
+ContinuityService
+ReviewService
+RefinementService
+VersionService
+ApprovalService
+AssetService
+SafetyService
+OutputService
+
+These don't necessarily need to become separate microservices.
+
+They are domain boundaries.
+
+Keep them modular inside the application first.
+
+11. Core data relationships
+User
+ │
+ └── Project
+       │
+       ├── Brief
+       ├── CreativeBible
+       │     ├── Characters
+       │     ├── Worlds
+       │     ├── VisualLanguage
+       │     └── AudioLanguage
+       │
+       ├── Scenes
+       │     └── Shots
+       │
+       ├── Assets
+       │
+       ├── Directives
+       │
+       ├── Reviews
+       │
+       ├── Versions
+       │
+       ├── Approvals
+       │
+       └── Outputs
+12. What becomes the Production Manifest?
+
+The original productionManifest remains valuable.
+
+But now:
+
+Creative Bible
+       +
+Production Plan
+       +
+Director Decisions
+       ↓
+Production Manifest
+
+The manifest becomes an execution artifact, not the project's source of creative truth.
+
+That distinction should be locked.
+
+13. The revised end-to-end architecture
+
+We can now combine everything:
+
+                    USER
+                     │
+                     ▼
+             ┌───────────────┐
+             │     CREATE    │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │ INTENT ENGINE │
+             └───────┬───────┘
+                     ↓
+          ┌──────────────────────┐
+          │ CREATIVE INTELLIGENCE│
+          └──────────┬───────────┘
+                     ↓
+             ┌───────────────┐
+             │ CREATIVE BIBLE│
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │  AI DIRECTOR  │◄──── USER DIRECTIVES
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │ PRODUCTION PLAN│
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │   MANIFEST    │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │   PRODUCTION  │
+             │     ENGINE    │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │   CONTINUITY  │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │    REVIEW     │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │  REFINEMENT   │
+             └───────┬───────┘
+                     │
+              ┌──────┴──────┐
+              ↓             ↓
+           APPROVE        EXPLORE
+              │             │
+              └──────┬──────┘
+                     ↓
+                  OUTPUT
+14. What I would call 5.0 "done"
+
+This is important because otherwise this roadmap can become endless.
+
+Raivstream 5.0 should be considered functionally complete when a user can:
+
+1. Describe
+
+"I want to make..."
+
+2. Be understood
+
+Raivstream accurately interprets the idea.
+
+3. Direct
+
+The user can correct the creative direction naturally.
+
+4. Plan
+
+Raivstream turns the direction into scenes and production.
+
+5. Produce
+
+Raivstream automatically orchestrates the multimodal pipeline.
+
+6. Review
+
+Raivstream identifies meaningful creative issues.
+
+7. Refine
+
+The user can say what should change.
+
+8. Preserve
+
+Good decisions remain intact.
+
+9. Explore
+
+Alternative directions don't destroy existing work.
+
+10. Approve
+
+The creator can lock intentional decisions.
+
+11. Output
+
+The project can become a finished deliverable.
+
+If those eleven capabilities work exceptionally well, 5.0 is a success even if there are dozens of advanced capabilities still to come.
+
+15. Explicit 5.0 non-goals
+
+I would put this section directly into the roadmap.
+
+Raivstream 5.0 will not require users to:
+write JSON
+learn advanced prompting
+choose AI providers
+choose models
+understand I2V/V2V
+manually construct shot grids
+configure FFmpeg
+manually maintain continuity
+understand embeddings
+manage generation jobs
+configure technical camera parameters
+And Raivstream 5.0 will not try to:
+replace professional NLEs entirely
+become a generic project-management system
+become a giant template marketplace
+expose every underlying AI capability as a button
+optimize for feature count over creative quality
+
+That boundary is important.
+
+16. The strategic hierarchy
+
+After everything we've worked through, I would rank Raivstream's architectural priorities without turning them into a feature ranking:
+
+USER INTENT
+     ↓
+UNDERSTANDING
+     ↓
+CREATIVE MEMORY
+     ↓
+DIRECTOR
+     ↓
+CONTINUITY
+     ↓
+PRODUCTION
+     ↓
+REVIEW
+     ↓
+REFINEMENT
+
+Generation technology sits inside Production.
+
+That is the architectural inversion that makes the whole roadmap coherent.
+
+17. The final product loop
+
+The entire product can now be expressed in one sentence:
+
+Raivstream understands what you mean, remembers what matters, figures out how to make it, creates it, shows you what needs attention, and lets you direct the result until it's right.
+
+And the user-facing loop becomes:
+
+Create → Understand → Build → Preview → Produce → Review → Direct → Approve → Output
+
+That's the Raivstream 5.0 experience we should build.
+
+
+Next: Pass 3.3 — Technical Execution Blueprint
+
+The next step is to go one level deeper and turn this master roadmap into an AI development-agent-ready implementation blueprint.
+
+That pass should define, phase by phase:
+
+exact modules/services
+database entities
+API boundaries
+frontend routes/screens
+state machines
+AI orchestration
+prompt/composer responsibilities
+generation pipeline contracts
+event flow
+queue/job architecture
+continuity data flow
+review/refinement flow
+migration strategy from the current Raivstream architecture
+testing strategy
+feature flags
+rollout gates
+
+Most importantly, we should identify what existing Raivstream components can be retained rather than rebuilt, so 5.0 becomes an evolution of the existing system rather than a rewrite.
+
+continue
+
+Absolutely. We’ll continue with Pass 3.3 — Technical Execution Blueprint.
+
+The key shift here is that we are now translating the product architecture into something an engineering/AI development agent could actually implement—without prematurely locking Raivstream into a specific codebase structure that we have not yet inspected.
+
+Pass 3.3 — Technical Execution Blueprint
+3.3.1 The technical north star
+
+The implementation should preserve one fundamental boundary:
+
+                 USER
+                  │
+                  ▼
+          ┌───────────────┐
+          │  INTENT LAYER │
+          │               │
+          │ "Make a film  │
+          │ about..."     │
+          └───────┬───────┘
+                  │
+                  ▼
+        ┌───────────────────┐
+        │ CREATIVE INTEL.   │
+        │                   │
+        │ Story             │
+        │ Education         │
+        │ Commercial        │
+        │ Transformation    │
+        └─────────┬─────────┘
+                  │
+                  ▼
+          ┌──────────────┐
+          │ CREATIVE     │
+          │ BIBLE        │
+          └──────┬───────┘
+                 │
+                 ▼
+          ┌──────────────┐
+          │ AI DIRECTOR  │
+          └──────┬───────┘
+                 │
+                 ▼
+        ┌───────────────────┐
+        │ PRODUCTION PLAN   │
+        │ Scenes / Shots    │
+        │ Audio / Assets    │
+        └─────────┬─────────┘
+                  │
+                  ▼
+        ┌───────────────────┐
+        │ PRODUCTION ENGINE │
+        │                   │
+        │ Image             │
+        │ Video             │
+        │ Voice             │
+        │ Music             │
+        │ FX                │
+        │ Assembly          │
+        └─────────┬─────────┘
+                  │
+                  ▼
+            ┌──────────┐
+            │  REVIEW  │
+            └────┬─────┘
+                 │
+                 ▼
+            ┌──────────┐
+            │ DIRECT   │
+            └────┬─────┘
+                 │
+                 └──────────────► back into Director
+
+The provider/model layer sits underneath all of this.
+
+Creative intent
+      ↓
+Raivstream intelligence
+      ↓
+Production abstraction
+      ↓
+Capability router
+      ↓
+Provider/model
+
+That distinction is critical.
+
+The original roadmap already contains sophisticated machinery—audio-first timing, still generation, I2V, last-frame chaining, V2V/restyling and FFmpeg assembly.
+
+The new architecture simply makes those capabilities implementation details rather than the user's mental model.
+
+3.3.2 Domain architecture
+
+I would establish these domains.
+
+┌──────────────────────────────────────────────┐
+│                 RAIVSTREAM                   │
+├──────────────────────────────────────────────┤
+│                                              │
+│  EXPERIENCE                                  │
+│  ├── Home                                    │
+│  ├── Create                                  │
+│  ├── Workspace                               │
+│  ├── Director                                │
+│  └── Review                                  │
+│                                              │
+├──────────────────────────────────────────────┤
+│                                              │
+│  CREATIVE INTELLIGENCE                       │
+│  ├── Intent                                  │
+│  ├── Story                                   │
+│  ├── Education                               │
+│  ├── Commercial                              │
+│  ├── Transformation                          │
+│  └── Audience                                │
+│                                              │
+├──────────────────────────────────────────────┤
+│                                              │
+│  CREATIVE STATE                              │
+│  ├── Creative Brief                          │
+│  ├── Creative Bible                          │
+│  ├── Characters                              │
+│  ├── Worlds                                  │
+│  ├── Assets                                  │
+│  ├── Directives                              │
+│  └── Creative Memory                         │
+│                                              │
+├──────────────────────────────────────────────┤
+│                                              │
+│  PRODUCTION                                  │
+│  ├── Production Plan                         │
+│  ├── Scenes                                  │
+│  ├── Shots                                   │
+│  ├── Audio                                   │
+│  ├── Generation                              │
+│  ├── Continuity                              │
+│  └── Assembly                                │
+│                                              │
+├──────────────────────────────────────────────┤
+│                                              │
+│  QUALITY                                    │
+│  ├── Review                                  │
+│  ├── Refinement                              │
+│  ├── Approval                                │
+│  └── Versioning                              │
+│                                              │
+├──────────────────────────────────────────────┤
+│                                              │
+│  PLATFORM                                    │
+│  ├── Assets                                  │
+│  ├── Jobs                                    │
+│  ├── Credits                                 │
+│  ├── Safety                                  │
+│  ├── Rights                                  │
+│  └── Capability Router                       │
+│                                              │
+└──────────────────────────────────────────────┘
+
+These should initially be treated as domain boundaries, not necessarily separate microservices.
+
+I would specifically avoid turning Raivstream into a distributed microservice architecture too early.
+
+3.3.3 Core entities
+
+The new architecture needs a canonical data model.
+
+Project
+Project
+├── id
+├── ownerId
+├── type
+├── title
+├── status
+├── creativeBriefId
+├── creativeBibleId
+├── currentVersionId
+├── createdAt
+├── updatedAt
+└── metadata
+
+type should not rigidly determine the application.
+
+For example:
+
+STORY
+EDUCATION
+COMMERCIAL
+TRANSFORMATION
+MIXED
+
+The intelligence layer decides what capabilities are relevant.
+
+3.3.4 Creative Brief
+
+The Brief represents what the creator initially asked for.
+
+CreativeBrief
+├── id
+├── projectId
+├── originalIntent
+├── interpretedIntent
+├── objective
+├── audience
+├── desiredDuration
+├── desiredFormat
+├── references
+├── attachments
+├── constraints
+└── createdAt
+
+Important:
+
+Brief is immutable history.
+
+If the creator later changes direction, don't rewrite the original request.
+
+Instead:
+
+Original Brief
+      ↓
+Directive
+      ↓
+Updated Creative Bible
+      ↓
+New Version
+
+This gives Raivstream provenance.
+
+3.3.5 Creative Bible
+
+This becomes one of the most important entities in the entire platform.
+
+CreativeBible
+├── story
+├── characters[]
+├── worlds[]
+├── visualLanguage
+├── audioLanguage
+├── audience
+├── tone
+├── themes
+├── rules
+├── continuityRules
+├── brandDNA
+├── approvedDecisions[]
+└── memory[]
+
+The original roadmap already has a concept of persistent series memory through the Series Memory Ledger.
+
+The new architecture generalizes that idea:
+
+Series Memory becomes Creative Memory inside the Creative Bible.
+
+That means the same underlying system can work for:
+
+films
+episodic stories
+educational projects
+advertising campaigns
+recurring characters
+branded content.
+3.3.6 Character model
+
+Characters should not simply be prompts.
+
+They should be structured creative entities.
+
+Character
+├── id
+├── projectId
+├── name
+├── role
+├── description
+├── appearance
+├── personality
+├── relationships
+├── voice
+├── referenceAssets[]
+├── continuityRules[]
+└── states[]
+
+The important addition is:
+
+Character State
+
+For example:
+
+Maya
+│
+├── Default State
+│   ├── Hair: braided
+│   ├── Wardrobe: casual
+│
+├── Scene 12 State
+│   ├── Hair: loose
+│   ├── Wardrobe: funeral dress
+│
+└── Episode 2 State
+    ├── Hair: short
+    └── Wardrobe: office
+
+This prevents a common AI-generation problem:
+
+A legitimate story change gets interpreted as a continuity error.
+
+The system needs to distinguish:
+
+intentional change
+        vs
+unwanted drift
+3.3.7 World model
+World
+├── id
+├── projectId
+├── name
+├── description
+├── geography
+├── architecture
+├── culture
+├── climate
+├── timePeriod
+├── visualLanguage
+├── rules
+└── locations[]
+
+Then:
+
+World
+ ├── Location: Mother's House
+ ├── Location: Lagos Airport
+ ├── Location: Street
+ └── Location: Office
+
+Locations become reusable assets.
+
+3.3.8 Visual Language
+
+Instead of exposing dozens of camera parameters, store creative intent.
+
+VisualLanguage
+├── realism
+├── cinematicStyle
+├── lighting
+├── color
+├── composition
+├── lensLanguage
+├── cameraMovement
+├── texture
+├── motionStyle
+└── references[]
+
+For example:
+
+cinematicStyle:
+    intimate Nigerian drama
+
+lighting:
+    naturalistic
+
+cameraMovement:
+    restrained
+
+composition:
+    character-focused
+
+color:
+    warm neutral
+
+realism:
+    photorealistic
+
+The user never needs to configure:
+
+35mm
+f/2.8
+ISO 800
+shutter 1/48
+
+unless we eventually expose an advanced Director mode.
+
+3.3.9 Production Plan
+
+This is the bridge between creative intelligence and generation.
+
+ProductionPlan
+├── projectId
+├── versionId
+├── scenes[]
+├── timeline
+├── audioPlan
+├── assetRequirements
+├── continuityRequirements
+└── status
+
+Each scene:
+
+Scene
+├── id
+├── productionPlanId
+├── sequence
+├── title
+├── purpose
+├── narrative
+├── emotionalIntent
+├── location
+├── characters[]
+├── dialogue
+├── audio
+├── visualDirection
+├── shots[]
+└── status
+
+The user interacts primarily with the Scene.
+
+The system creates the shots.
+
+3.3.10 Shot model
+Shot
+├── id
+├── sceneId
+├── sequence
+├── purpose
+├── composition
+├── subject
+├── action
+├── camera
+├── motion
+├── lighting
+├── duration
+├── audioSync
+├── inputAssets[]
+├── continuityInputs[]
+├── generationPlan
+└── outputAssetId
+
+But most of these fields should be generated by the Director, not manually filled by users.
+
+This is an important philosophical boundary:
+
+The shot is a production abstraction, not a user task.
+
+3.3.11 Directive model
+
+This is what makes Direct fundamentally different from editing.
+
+Directive
+├── id
+├── projectId
+├── userId
+├── instruction
+├── scope
+├── target
+├── interpretedIntent
+├── requestedChanges[]
+├── preservationRules[]
+├── impact
+├── status
+├── createdAt
+└── appliedVersionId
+
+Example:
+
+User:
+
+“Make this scene feel more tense.”
+
+Raivstream internally translates that into:
+
+Directive
+  intent:
+    increase tension
+
+  scope:
+    scene: 04
+
+  changes:
+    pacing: tighter
+    camera: more restrained
+    silence: increased
+    lighting: slightly darker
+    performance: more guarded
+
+  preserve:
+    characters
+    location
+    dialogue
+    story outcome
+
+That translation is the heart of the AI Director.
+
+3.3.12 Directive scope
+
+Every instruction should resolve to a scope.
+
+PROJECT
+  ↓
+EPISODE
+  ↓
+ACT
+  ↓
+SCENE
+  ↓
+SHOT
+  ↓
+ASSET
+
+Example:
+
+“Make the whole film warmer.”
+
+→ PROJECT
+
+“Make the ending more hopeful.”
+
+→ FINAL ACT / ENDING SCENES
+
+“Make her more emotional here.”
+
+→ SCENE
+
+“Change the background.”
+
+→ SHOT / ASSET
+
+This prevents accidental global changes.
+
+3.3.13 Impact analysis
+
+Before applying a meaningful directive:
+
+USER
+ │
+ ▼
+DIRECTIVE
+ │
+ ▼
+IMPACT ANALYSIS
+ │
+ ├── Scene 4
+ ├── Scene 5
+ ├── Character state
+ └── Audio timing
+ │
+ ▼
+PROPOSED CHANGE
+ │
+ ▼
+USER APPROVAL
+
+For example:
+
+“Change Maya's outfit to a red dress.”
+
+Raivstream might determine:
+
+Impact:
+Scene 3 — affected
+Scene 4 — affected
+Scene 5 — affected
+Character reference — affected
+Continuity assets — affected
+
+Then:
+
+This change affects 3 scenes and Maya's visual reference. Apply it across the project?
+
+This is much safer than blindly regenerating everything.
+
+3.3.14 Version architecture
+
+Every meaningful creative state should be versioned.
+
+Project
+ │
+ ├── Version 1
+ │
+ ├── Version 2
+ │
+ ├── Version 3
+ │     ├── Scene 1
+ │     ├── Scene 2
+ │     └── Scene 3
+ │
+ └── Branch
+       └── Version 3B
+
+Never:
+
+overwrite final.mp4
+
+Instead:
+
+Version
+ ├── sourceVersion
+ ├── directive
+ ├── changedEntities
+ ├── preservedEntities
+ ├── outputs
+ └── approval
+
+This enables:
+
+undo
+compare
+branch
+restore
+client review
+experimentation.
+3.3.15 Production engine
+
+The original roadmap's technical pipeline should become an internal execution graph:
+
+Production Plan
+       ↓
+Audio Plan
+       ↓
+Narrative Timing
+       ↓
+Scene Visual Development
+       ↓
+Still / Keyframe Generation
+       ↓
+Video Motion
+       ↓
+Continuity Validation
+       ↓
+Restyle / Camera / FX
+       ↓
+Assembly
+       ↓
+Review Asset
+
+The original roadmap explicitly specifies audio-first timing, still generation, I2V, last-frame chaining, restyling/FX and FFmpeg assembly.
+
+Its audio-first timing and last-frame continuity requirements should therefore remain architectural foundations.
+
+3.3.16 Capability Router
+
+This is where providers belong.
+
+Production Requirement
+        ↓
+Capability Router
+        ↓
+┌─────────────────────┐
+│ Required capability │
+├─────────────────────┤
+│ image generation    │
+│ video generation    │
+│ voice               │
+│ music               │
+│ transcription       │
+│ restyling            │
+│ vision              │
+└──────────┬──────────┘
+           ↓
+     Provider Selection
+           ↓
+        Execution
+
+The Director should never say:
+
+“Use Provider X.”
+
+It should say:
+
+“We need a photorealistic 6-second character-performance shot with continuity from the previous frame.”
+
+The Capability Router determines how.
+
+3.3.17 Generation jobs
+
+The existing generation-job concept can remain underneath the new architecture.
+
+Instead of exposing:
+
+GenerationJob
+provider
+model
+prompt
+parameters
+
+the user sees:
+
+Creating Scene 4
+
+Internally:
+
+ProductionTask
+   ↓
+GenerationJob
+   ↓
+ProviderJob
+
+This allows provider changes without changing the product architecture.
+
+3.3.18 Job state machine
+
+Generation should use meaningful states.
+
+QUEUED
+   ↓
+UNDERSTANDING
+   ↓
+PLANNING
+   ↓
+DEVELOPING
+   ↓
+GENERATING
+   ↓
+ASSEMBLING
+   ↓
+REVIEWING
+   ↓
+READY
+
+Failure:
+
+GENERATING
+    ↓
+FAILED
+    ↓
+RECOVERY STRATEGY
+
+The user should not see:
+
+JOB_983421 FAILED
+
+They should see:
+
+Scene 4 couldn't be completed because the character motion wasn't consistent with the previous shot.
+
+Then:
+
+Try again
+Change direction
+Use previous version
+Ask Raivstream to solve it
+3.3.19 Continuity Engine
+
+This deserves its own domain because continuity is one of Raivstream's differentiators.
+
+Continuity Engine
+├── Character continuity
+├── Wardrobe continuity
+├── Location continuity
+├── Prop continuity
+├── Lighting continuity
+├── Camera continuity
+├── Temporal continuity
+├── Audio continuity
+└── Story continuity
+
+The original roadmap already requires last-frame chaining to preserve visual continuity.
+
+The new system expands that from:
+
+frame continuity
+
+to:
+
+creative continuity.
+
+3.3.20 Review Engine
+
+Review should operate at multiple levels.
+
+PROJECT REVIEW
+│
+├── Story
+├── Character
+├── World
+├── Visual
+├── Audio
+├── Instruction fidelity
+├── Continuity
+└── Safety
+
+Each issue should contain:
+
+ReviewIssue
+├── category
+├── severity
+├── entity
+├── description
+├── evidence
+├── suggestedFix
+├── impact
+└── status
+
+Example:
+
+Character continuity
+
+Maya's hairstyle changes between Scenes 3 and 4 even though no story change indicates a transition.
+
+Actions:
+
+Fix
+Keep
+Review
+3.3.21 Review must distinguish two failures
+
+This is extremely important.
+
+Creative failure
+
+Raivstream misunderstood the creator.
+
+Example:
+
+User wanted a hopeful ending.
+
+Output feels tragic.
+
+→ Creative failure
+
+Technical failure
+
+Raivstream understood correctly but production failed.
+
+Example:
+
+Correct character and scene direction, but generated motion is visually corrupted.
+
+→ Production failure
+
+The recovery mechanisms should differ.
+
+Creative failure
+    ↓
+Director
+    ↓
+reinterpret / redirect
+
+Technical failure
+    ↓
+Production Engine
+    ↓
+retry / alternate capability
+3.3.22 R16 architecture
+
+The original roadmap explicitly defines a restricted R16 experience, including constrained model routing, hidden advanced controls and child-safe filtering.
+
+We should retain that principle but make it architectural:
+
+Audience
+   ↓
+Safety Policy
+   ↓
+Capability Policy
+   ↓
+Creative Intelligence
+   ↓
+Production
+
+Rather than:
+
+Generate something
+      ↓
+Check whether it is safe
+
+Safety should participate before generation.
+
+For children:
+
+R16 / Kids
+ ├── vocabulary constraints
+ ├── content constraints
+ ├── model constraints
+ ├── visual constraints
+ ├── interaction constraints
+ └── educational controls
+
+And the user should not see provider/model configuration.
+
+3.3.23 Education Intelligence
+
+Education becomes a specialized intelligence layer rather than a separate application.
+
+Education Intelligence
+├── Age
+├── Learning objective
+├── Prior knowledge
+├── Lesson structure
+├── Explanation complexity
+├── Examples
+├── Practice
+├── Quiz
+└── Assessment
+
+Example:
+
+“Explain photosynthesis to eight-year-olds.”
+
+The system internally derives:
+
+Audience:
+8 years
+
+Objective:
+understand photosynthesis
+
+Vocabulary:
+age appropriate
+
+Structure:
+hook
+→ explanation
+→ visual analogy
+→ recap
+→ optional quiz
+
+The user doesn't need to construct this structure.
+
+3.3.24 Commercial Intelligence
+
+Similarly:
+
+Commercial Intelligence
+├── Brand
+├── Product
+├── Audience
+├── Campaign objective
+├── Message
+├── Offer
+├── CTA
+├── Visual identity
+└── Variations
+
+This directly absorbs the original roadmap's UGC, product showcase and commercial video capabilities.
+
+3.3.25 Story Intelligence
+
+Story mode should support:
+
+Story
+├── premise
+├── characters
+├── relationships
+├── conflict
+├── stakes
+├── structure
+├── pacing
+├── emotional arc
+├── scenes
+├── dialogue
+└── ending
+
+For episodic projects:
+
+Series
+ ├── Season
+ │    ├── Episode
+ │    │    ├── Act
+ │    │    │    └── Scene
+
+The existing roadmap's Season → Episode → Act → Scene structure should therefore be preserved.
+
+But the UI should adapt to the project.
+
+A user creating a 30-second commercial should never be forced into:
+
+Season → Episode → Act
+3.3.26 API architecture
+
+The external application API should be semantic.
+
+Create
+POST /api/projects
+{
+  "intent": "Create a cinematic 60 second film about..."
+}
+
+Not:
+
+{
+  "prompt": "...",
+  "model": "...",
+  "steps": 50,
+  "camera": {...}
+}
+Interpret
+POST /api/projects/:id/interpret
+
+Returns:
+
+{
+  "understanding": {},
+  "creativeDirection": {},
+  "questions": [],
+  "assumptions": [],
+  "confidence": {}
+}
+Build plan
+POST /api/projects/:id/production-plan
+
+Returns:
+
+{
+  "scenes": [],
+  "assets": [],
+  "audioPlan": {},
+  "continuityRequirements": []
+}
+Direct
+POST /api/projects/:id/direct
+{
+  "instruction": "Make the ending more hopeful"
+}
+
+This is one of the most important APIs in the entire platform.
+
+Review
+POST /api/projects/:id/review
+Approve
+POST /api/projects/:id/approvals
+Generate
+POST /api/projects/:id/production
+
+The technical generation pipeline remains behind this endpoint.
+
+3.3.27 Event architecture
+
+An event-driven internal architecture will make the system easier to evolve.
+
+Examples:
+
+ProjectCreated
+IntentInterpreted
+CreativeDirectionApproved
+CreativeBibleUpdated
+ProductionPlanCreated
+SceneCreated
+ShotPlanned
+GenerationStarted
+GenerationCompleted
+ContinuityIssueDetected
+ReviewCompleted
+DirectiveCreated
+DirectiveApplied
+VersionCreated
+VersionApproved
+OutputCreated
+
+This enables downstream systems without coupling them tightly.
+
+For example:
+
+GenerationCompleted
+        │
+        ├── Review
+        ├── Continuity
+        ├── Analytics
+        ├── Asset Library
+        └── Notification
+3.3.28 Frontend state machine
+
+The frontend should not simply have:
+
+loading = true
+
+Project state should be explicit:
+
+IDEA
+ ↓
+INTERPRETING
+ ↓
+PLANNING
+ ↓
+DIRECTING
+ ↓
+GENERATING
+ ↓
+REVIEW
+ ↓
+REFINING
+ ↓
+APPROVED
+ ↓
+PUBLISHED
+
+And the UI should always know:
+
+What can the user do next?
+
+For example:
+
+PLANNING
+→ Review plan
+→ Direct changes
+→ Build preview
+
+GENERATING
+→ View progress
+→ Continue working elsewhere
+
+REVIEW
+→ Fix
+→ Keep
+→ Direct
+→ Approve
+3.3.29 The "next best action" system
+
+This should become a first-class capability.
+
+Instead of:
+
+“Project created.”
+
+Raivstream says:
+
+Your story has been understood.
+
+I recommend developing the characters next.
+
+Actions:
+
+Create characters
+
+Review story
+
+Let Raivstream continue
+
+The same system works throughout the project.
+
+Project State
++
+Creative State
++
+User History
++
+Outstanding Requirements
+=
+Next Best Action
+
+This is one of the mechanisms that makes Raivstream feel intelligent rather than like a collection of tools.
+
+3.3.30 Existing architecture migration strategy
+
+We should not rewrite Raivstream 5.0 from scratch.
+
+The correct strategy is:
+
+CURRENT RAIVSTREAM
+       │
+       ├── retain working infrastructure
+       │
+       ├── wrap existing generation
+       │
+       ├── migrate concepts
+       │
+       └── introduce new orchestration layer
+                ↓
+          RAIVSTREAM 5.0
+
+The original roadmap's existing concepts should map roughly as follows:
+
+Existing concept	5.0 destination
+Story Playground	Intent + Story Intelligence
+Character Bible	Creative Bible
+Scene Cards	Scenes
+Storybook	Preview / Output
+Generation Jobs	Production Engine
+Credits	Platform
+R2 assets	Asset System
+Hidden prompt composer	Intelligence / Production boundary
+Video generation	Production Engine
+FFmpeg	Assembly
+StoryMovie	Output
+R16 controls	Audience + Safety
+Series memory	Creative Memory
+V2V	Transformation Engine
+
+This is a migration map, not a claim about the exact current repository implementation. We should inspect the actual codebase before deciding whether any component is renamed, wrapped, split, or replaced.
+
+3.3.31 The most important migration principle
+
+Do not migrate database tables simply because the terminology changed.
+
+For example:
+
+StorySceneAsset
+
+doesn't necessarily need to disappear immediately.
+
+Instead:
+
+New Scene abstraction
+        ↓
+adapter
+        ↓
+existing StorySceneAsset
+
+Then migrate incrementally.
+
+The original roadmap already proposes extensions to StoryProject and StorySceneAsset.
+
+That means there may be value in evolving those foundations rather than throwing them away.
+
+3.3.32 Recommended implementation sequence
+
+I would now turn the roadmap into these engineering increments:
+
+5.0-A — Foundation
+Project
+Brief
+Creative Bible
+Memory
+Version
+Asset
+5.0-B — Intent
+Create
+Intent extraction
+Interpretation
+Questions
+Assumptions
+Approval
+5.0-C — Intelligence
+Story
+Education
+Commercial
+Transformation
+Audience
+5.0-D — Director
+Direct
+Directive
+Scope
+Impact
+Preservation
+Branch
+Keep
+5.0-E — Production
+Production Plan
+Scene
+Shot
+Audio
+Generation
+Continuity
+Assembly
+5.0-F — Review
+Review
+Issues
+Fix
+Compare
+Approve
+5.0-G — Professional Studio
+Brand
+Campaign
+Client Review
+Collaboration
+Deliverables
+3.3.33 Feature flags
+
+Every major 5.0 subsystem should initially be feature-flagged.
+
+Example:
+
+raivstream.intent.v1
+raivstream.creative-bible.v1
+raivstream.director.v1
+raivstream.production-plan.v1
+raivstream.continuity.v1
+raivstream.review.v1
+raivstream.semantic-refinement.v1
+raivstream.commercial.v1
+raivstream.education.v1
+
+This allows:
+
+development
+    ↓
+internal testing
+    ↓
+staging
+    ↓
+limited production
+    ↓
+full production
+
+without requiring a single large cutover.
+
+3.3.34 Testing strategy
+
+Testing needs to shift from only technical correctness to creative correctness.
+
+We need four layers.
+
+1. Unit tests
+
+Examples:
+
+intent parser
+directive parser
+scope resolver
+impact calculator
+continuity checker
+version creation
+2. Integration tests
+
+Example:
+
+User intent
+→ interpretation
+→ Creative Bible
+→ production plan
+→ generation
+→ review
+3. Creative evaluation tests
+
+These are extremely important.
+
+Create benchmark prompts such as:
+
+“Make this feel more intimate.”
+
+Expected system behavior:
+
+does not ask for camera settings
+does not expose JSON
+does not blindly regenerate
+interprets semantic intent
+preserves story
+changes appropriate creative dimensions
+4. Regression tests
+
+Every approved creative behavior becomes a test case.
+
+For example:
+
+“Change wardrobe but preserve character appearance.”
+
+Future changes must not break that behavior.
+
+3.3.35 The AI orchestration contract
+
+The AI should not have unrestricted authority over the project.
+
+Every AI operation should operate through a contract:
+
+INPUT
+├── user instruction
+├── current context
+├── Creative Bible
+├── project history
+├── existing assets
+└── safety policy
+
+PROCESS
+├── interpret
+├── reason
+├── determine scope
+├── determine impact
+├── create plan
+└── produce structured decision
+
+OUTPUT
+├── changes
+├── preserved elements
+├── questions
+├── assumptions
+├── confidence
+└── next action
+
+This makes the AI explainable and testable.
+
+3.3.36 AI should produce decisions, not raw generation instructions
+
+This is another foundational rule.
+
+Bad:
+
+AI
+ ↓
+prompt
+ ↓
+image model
+
+Better:
+
+AI
+ ↓
+creative decision
+ ↓
+production specification
+ ↓
+capability router
+ ↓
+provider
+
+Example:
+
+Creative Decision:
+
+Scene 7 should feel intimate and emotionally restrained.
+
+Preserve:
+- Maya
+- mother
+- kitchen
+- dialogue
+- time of day
+
+Change:
+- framing
+- distance
+- performance intensity
+- ambient sound
+- pacing
+
+The Production Engine then converts that into whatever technical instructions are required.
+
+3.3.37 This gives us the actual Raivstream moat
+
+The individual generation providers will change.
+
+Models will improve.
+
+Video quality will improve.
+
+Voice models will change.
+
+But this layer remains:
+
+USER INTENT
+     ↓
+RAIVSTREAM UNDERSTANDING
+     ↓
+CREATIVE MEMORY
+     ↓
+AI DIRECTOR
+     ↓
+PRODUCTION INTELLIGENCE
+     ↓
+CONTINUITY
+     ↓
+REVIEW
+     ↓
+SEMANTIC REFINEMENT
+
+That is the product.
+
+The models are infrastructure.
+
+3.3.38 Final technical architecture
+
+Putting everything together:
+
+                         RAIVSTREAM 5.0
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │    USER     │
+                       └──────┬──────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │    INTENT   │
+                       └──────┬──────┘
+                              │
+                              ▼
+                  ┌──────────────────────┐
+                  │ CREATIVE INTELLIGENCE│
+                  │                      │
+                  │ Story                │
+                  │ Education            │
+                  │ Commercial           │
+                  │ Transformation       │
+                  │ Audience             │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │   CREATIVE BIBLE     │
+                  │                      │
+                  │ Story                │
+                  │ Characters           │
+                  │ Worlds               │
+                  │ Visual Language      │
+                  │ Audio Language       │
+                  │ Audience             │
+                  │ Memory               │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │     AI DIRECTOR      │
+                  │                      │
+                  │ Interpret            │
+                  │ Direct               │
+                  │ Scope                │
+                  │ Impact               │
+                  │ Preserve             │
+                  │ Branch               │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │   PRODUCTION PLAN    │
+                  │                      │
+                  │ Scenes               │
+                  │ Shots                │
+                  │ Audio                │
+                  │ Assets               │
+                  │ Continuity           │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ PRODUCTION ENGINE    │
+                  │                      │
+                  │ Image                │
+                  │ Video                │
+                  │ Voice                │
+                  │ Music                │
+                  │ V2V                  │
+                  │ FX                   │
+                  │ Assembly             │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ CONTINUITY ENGINE    │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │    REVIEW ENGINE     │
+                  │                      │
+                  │ Story                │
+                  │ Visual               │
+                  │ Audio                │
+                  │ Continuity           │
+                  │ Instruction fidelity │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ REFINEMENT / DIRECT  │
+                  └──────────┬───────────┘
+                             │
+                             └───────────────┐
+                                             ▼
+                                      ┌─────────────┐
+                                      │   VERSION   │
+                                      └──────┬──────┘
+                                             │
+                                             ▼
+                                      ┌─────────────┐
+                                      │   OUTPUT    │
+                                      └─────────────┘
+
+
+              ──────────────────────────────────────
+                         UNDERNEATH ALL OF IT
+              ──────────────────────────────────────
+
+       Safety ─ Rights ─ Assets ─ Jobs ─ Credits
+                       │
+                       ▼
+               Capability Router
+                       │
+             ┌─────────┼─────────┐
+             ▼         ▼         ▼
+          Image      Video      Audio
+          Models     Models     Models
+The key conclusion of Pass 3.3
+
+We now have a much clearer distinction between what Raivstream is and how Raivstream works.
+
+What the user experiences
+
+I tell Raivstream what I want.
+Raivstream understands it.
+Raivstream plans it.
+I direct it.
+Raivstream makes it.
+I review it.
+I tell it what to change.
+It preserves what is already right.
+
+What the engineering system does
+
+Intent extraction → creative reasoning → persistent creative state → directive resolution → production planning → capability routing → multimodal generation → continuity → review → semantic refinement → versioning.
+
+That is the architecture I would use as the technical foundation for the 5.0 rebuild.
+
+
+
+
+3. The Six Product Pillars
+Pillar 1 — Intent
+
+Raivstream understands what the creator means.
+
+The user communicates:
+
+“Make it feel expensive.”
+
+Rather than exposing a list of parameters, Raivstream interprets that as a creative direction potentially involving:
+
+visual sophistication
+composition
+lighting
+materials
+pacing
+camera language
+sound
+typography
+colour
+performance
+
+The user doesn't need to specify those individually.
+
+Pillar 2 — Intelligence
+
+Raivstream understands what kind of creative work is being requested.
+
+The same creation system adapts to:
+
+Story
+
+Narrative intelligence.
+
+Education
+
+Learning intelligence.
+
+Commercial
+
+Brand and campaign intelligence.
+
+Transformation
+
+Visual transformation intelligence.
+
+Series
+
+Long-term story intelligence.
+
+R16
+
+Audience and safety intelligence.
+
+The existing roadmap's episodic structure, series memory, educational functionality and R16 constraints therefore become specialized intelligence layers rather than separate products.
+
+4. Pillar 3 — Creative Memory
+
+Raivstream must remember what the creator has established.
+
+This is the Creative Bible + Creative Memory system.
+
+It remembers:
+
+Story
+premise
+themes
+narrative rules
+emotional arc
+established events
+Characters
+identity
+appearance
+personality
+relationships
+wardrobe
+voice
+current state
+Worlds
+geography
+locations
+atmosphere
+visual identity
+environmental rules
+Visual language
+realism
+lighting
+colour
+camera language
+composition
+texture
+motion
+Audio language
+voices
+narration
+music
+sound design
+ambience
+Audience
+age
+sophistication
+educational level
+safety requirements
+Brand
+
+For commercial users:
+
+brand DNA
+products
+logos
+typography
+messaging
+visual identity
+spokesperson
+approved assets
+prohibited assets
+5. Pillar 4 — AI Director
+
+This becomes the central intelligence of Raivstream 5.0.
+
+The AI Director is not a prompt enhancer.
+
+It is not simply a chatbot.
+
+It is the system that translates:
+
+creative intent → creative decision → production changes
+
+Its input is:
+
+Current Context
++
+User Directive
++
+Creative Bible
++
+Creative Memory
++
+Current Version
++
+Production Plan
++
+Review Findings
++
+Project History
+
+Its output is a structured creative decision.
+
+DIRECTOR DECISION
+│
+├── What the user means
+├── What should change
+├── What should remain
+├── What is affected
+├── What is preserved
+├── Continuity implications
+├── Production changes
+├── Whether approval is needed
+└── Execution plan
+
+This is the most important new architectural layer in 5.0.
+
+6. Pillar 5 — Production
+
+Once the creator approves the direction, Raivstream handles production.
+
+The existing technical pipeline remains valuable:
+
+Narrative
+   ↓
+Audio timing
+   ↓
+Still images
+   ↓
+I2V
+   ↓
+Last-frame chaining
+   ↓
+Restyle / FX
+   ↓
+Assembly
+
+That pipeline already exists in the current roadmap.
+
+Audio-first duration matching and last-frame continuity remain core production capabilities.
+
+The difference is that the user never needs to think about this pipeline.
+
+7. Pillar 6 — Review & Refinement
+
+Generation is not the end of the workflow.
+
+Raivstream should inspect the result.
+
+It asks:
+
+Did the story remain coherent?
+Are characters consistent?
+Is the world consistent?
+Does the visual language hold?
+Does the audio match?
+Did the output follow the creator's instruction?
+Are there continuity problems?
+Are there safety issues?
+Are there brand violations?
+
+Then:
+
+I noticed something you may want to improve.
+
+The user can:
+
+Fix
+
+Keep
+
+Review
+
+Direct
+
+The existing creative-critic architecture provides a substantial foundation for this layer.

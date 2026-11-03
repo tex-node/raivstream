@@ -633,3 +633,15 @@ Higher-resolution reference plates and framing escalation are **not attempted**:
 **Floor 75 stands.** The measured evidence at three points — 90 (conditioned take), 80 (un-conditioned framing), 70 (conditioned take) — shows 75 is inside this pipeline's distribution, not above it. The 70 is a per-scene outcome, not a ceiling.
 
 The tail therefore stays flagged for a **resource** reason (an account with no balance), not a calibration reason. Lowering the floor to 72–73 would admit the 70 and would not change the fact that the scene is weaker than its siblings.
+
+## Where the floor stands at the arc's close (2026-11-03)
+
+| measure | value |
+|---|---|
+| identity at arc start | 0–50 |
+| identity now (median) | **70** |
+| best measured | **90** (conditioned take) |
+| un-conditioned control | 80 (framing only) |
+| beats clearing floor 75 | **3 of 7** |
+
+**Floor 75 stands with its consequence recorded:** most creative output will be flagged by design. A gate that accepts the median is not a quality bar; a gate that rejects most of a pipeline's output is a statement about the pipeline. Both statements are now true and written down.
