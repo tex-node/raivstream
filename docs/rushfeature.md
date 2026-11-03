@@ -902,3 +902,14 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — The 5 below-floor scenes are pre-conditioning renders the pipeline cannot re-render.** The read is unambiguous:
+  **`refs_at_production=0` on every below-floor scene** (`cmuzaoi6` 60×3, `cmvyapup` 70), so they are **un-conditioned legacy
+  renders**, not evidence against the lever — the references arrived after they were produced. Counter-datum worth keeping:
+  **`cmvylvaz` scored 80 with zero references**, so framing alone can carry a beat to the floor. Re-rendering the two projects that
+  now hold approved references returned **`newAssets=0`** — `produce()` reused `READY` rows, no score moved, no flag cleared
+  (live flags still **22**). The pipeline has **no new-take path**, and resetting is refused by `assertNotResetAfterCharge`, so
+  the 5 are **not re-renderable today**: the blocker is a missing capability, not a threshold. **Lever chosen and not yet built:
+  per-scene enforcement** — a first-class new take (new asset row, render, score, keep the better of two). Higher-resolution
+  references and framing escalation were deliberately **not** attempted, because both assume the re-render path that does not
+  exist and would have measured reuse rather than the lever.

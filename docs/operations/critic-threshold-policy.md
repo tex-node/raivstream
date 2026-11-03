@@ -565,3 +565,42 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The 5 below-floor scenes: disposition (2026-11-03)
+
+### The read — reference timing is the discriminator
+
+| project | scene | identity | refs at production | refs now |
+|---|---|---|---|---|
+| cmuzaoi6 | SCENE_01 / 02 / 04 | **60** | **0** | 1 |
+| cmvyapup | SCENE_03 | **70** | **0** | 2 |
+| cmvylvaz | SCENE_01 / 03 / 04 | **80** | 0 | **0** |
+
+Two findings, both from the timing column:
+
+1. **Every below-floor scene was produced with zero approved references.** `refs_at_production=0` on all of them. They are **un-conditioned legacy renders**, not evidence that framing-plus-references failed — the conditioning arrived afterwards.
+2. **`cmvylvaz` scored 80 with no reference at all** — text-only plus the framing phrase. That is a useful upper bound: framing alone can carry a scene to 80, and references are not strictly required for every beat.
+
+### The attempt, and why it could not run
+
+Re-rendering the two projects that now hold approved references (`cmuzaoi6` ×1, `cmvyapup` ×2):
+
+```
+PROJ cmuzaoi6 refs=1 newAssets=0 cleared=0
+PROJ cmvyapup refs=2 newAssets=0 cleared=0
+DIST n=8 min=30 median=70 max=90 [30,60,70,70,70,80,90,90]
+```
+
+**`newAssets=0`.** `produce()` found the assets already `READY` and **reused them**, so no new frame was rendered, no score moved, and no flag cleared. The pipeline has **no new-take path**: a scene can be produced once and then never re-produced, because the only route to a fresh render is deleting or resetting a row — and resetting is refused by `assertNotResetAfterCharge` (correctly, since it replays the charge).
+
+### The decision
+
+- The 5 below-floor scenes are **not the measured tail of the lever** — they are pre-conditioning renders that the current pipeline cannot re-render.
+- They are **not re-render candidates today**, because re-rendering is not possible.
+- The blocker is a **missing capability**, not a threshold, a reference, or a spend.
+
+### The one lever chosen
+
+**Per-scene enforcement**: a first-class *new take* for a scene — create a new asset row, render it with the current references and framing, score it, and keep the better of the two. That is the only lever that makes the 5 re-renderable at all, and it also converts the pipeline's "first frame wins" behaviour into a floor-aware one.
+
+Higher-resolution reference plates and framing escalation are **not attempted**: both assume a re-render path that does not exist, so testing either today would measure the reuse, not the lever.
