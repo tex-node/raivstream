@@ -565,3 +565,46 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Is reference quality the bottleneck? Tested 2026-11-03 — **no**
+
+Cheap experiment: one character given a full, concrete description, one reference regenerated, one scene re-produced and scored. One reference + one still, no film.
+
+### The prompt comparison, which is where the difference actually lives
+
+| | story pipeline | creative pipeline (as shipped) |
+|---|---|---|
+| prompt | `character reference portrait of {name}, {species}, {age}, {gender}, {role}, {visualDescription}, {favoriteExpression}, {walkingStyle}, head-and-shoulders framing, neutral plain background, front view, consistent identity, no scene context` | `{name}: {visualDescription}` |
+| description used | a locked, human-approved identity block | `"A lighthouse keeper (cinematic style); appearance proposed and pending creator approval."` |
+| framing direction | **explicit** (`head-and-shoulders, plain background, front view, no scene context`) | **none** |
+
+So the creative path was sending a provisional sentence **and no framing** — arguably making the reference a scene-like image rather than an identity plate.
+
+### The experiment and the number
+
+- Character: Lighthouse Keeper. New description: build, age, beard, oilskin coat over a fisherman's sweater, knitted cap, brass lantern.
+- New reference generated with the **story prompt shape** (`character reference portrait of …, <full description>, head-and-shoulders framing, neutral plain background, front view, consistent identity, no scene context`), approved.
+- One scene re-produced with that reference (`referenceImageUrls` present) and the identity block in the prompt.
+- Scored from `creative_review_runs` — the critic call itself, same scoring path:
+
+| scene | baseline identity | after stronger reference |
+|---|---|---|
+| SCENE_02 | **70** | **70** |
+
+**Identical. The lever did not move the number.**
+
+### What that means
+
+Reference description quality is **not** the bottleneck. Strengthening it from a provisional sentence to a locked-story-grade description — plus the framing direction the creative path was missing — changed nothing measurable on this scene.
+
+The remaining candidates, in order:
+
+1. **Binding strength** — `FLUX2_EDIT` receives up to four references with a positional label in the *prompt text*, but nothing enforces which reference maps to which subject in the image. The story pipeline's 90 comes from the same endpoint, so the difference is likely in *how many references and how they are ordered/labelled*, not the endpoint.
+2. **Per-scene enforcement** — nothing re-checks a still against the reference and re-rolls it when identity drops. The pipeline accepts the first frame the model returns.
+3. **Resolution/framing of the target still** — a 9:16 full-body scene gives the model far fewer pixels per face than the 1:1 head-and-shoulders reference.
+
+**The backlog stays deferred**, and the arithmetic is unchanged: at floor 75 a re-render at identity 70 clears ~25% of 99 for ≥ 7,760 credits. Since this session showed that better references do not raise 70, spending on a re-render now would buy new pixels at the same score.
+
+### Credit note
+
+The measured delta read **0 (5,760 → 5,760)** — but that query ran against the first `ADMIN` row, not the project's owning account (`phase5c-staging@raivstream.test`), so the figure is **not a measurement**. What this session spent is unverified and is not quoted.
