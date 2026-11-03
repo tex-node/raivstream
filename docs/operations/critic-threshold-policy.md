@@ -565,3 +565,38 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Floor calibration: per-surface floors (decided 2026-11-03)
+
+**Decision: story stays at 85, creative assets move to 75.** Operator call, on measured evidence.
+
+### The comparison, written down so it cannot quietly erode
+
+| pipeline | identity with reference conditioning | before conditioning |
+|---|---|---|
+| story | **90** | 80 |
+| creative | **70–80** (min 70; one scene 80) | 0–50 |
+
+The floors differ **because the pipelines differ in what they can achieve**, and the difference is measured, not assumed. The same conditioning mechanism produces 90 in one and 70–80 in the other — that gap is the pipeline, not the threshold. Lowering a single global floor to 75 would have held the proven-90 story pipeline to a bar set by the weaker one; keeping 85 would have rejected every feasible creative asset and made the gate a permanent no.
+
+### What the decision does not mean
+
+- It is **not** a claim that 70–80 is good enough in absolute terms. It is a claim that 75 is what this pipeline can currently hold, and that assets below it are the ones worth rejecting.
+- The floor is **surface-specific by measurement**, so a future change must bring new measurements — not discomfort.
+
+## Backlog arithmetic against the chosen floor (numbers first)
+
+The 99 flagged assets were scored **0–50** under the text-only pipeline. Re-rendered under conditioning, the measured distribution for this pipeline is:
+
+- 1 of 4 scenes at **80** → clears 75
+- 3 of 4 scenes at **70** → still below 75
+- 0 of 4 at or above 85
+
+| floor | expected to clear | expected to remain flagged |
+|---|---|---|
+| 75 (chosen, creative) | **≈25%** (~24 of 99) | **≈75%** (~75 of 99) |
+| 85 (unchanged) | **0%** | **99 of 99** |
+
+**Spend:** stills alone are computable — 97 × 80 credits ≈ **7,760** — plus video re-render at a per-asset rate that is not verified this session, plus fresh cast references per character. The total is therefore a floor, not an estimate: **≥ 7,760 credits**, before video and cast.
+
+**The honest conclusion of the arithmetic:** at floor 75 a re-render buys roughly a quarter of the backlog clearing, at a five-figure credit cost, and the other three quarters stay flagged after the spend. That is a materially different proposition from "re-render and expect clearing", and it should be decided as a spend, not assumed as a fix.

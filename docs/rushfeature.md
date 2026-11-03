@@ -257,6 +257,18 @@ wiring/data gap, not a conditioning failure and not a calibration question.** Ne
 time and map them to reference assets at plan time; only then is `references>0` reachable. **The 99-flag backlog stays
 deferred** — re-rendering while stills call FLUX with no references would repeat this spend for the same number.
 
+**Creative identity: measured at 70–80, floor calibrated to 75 for creative surfaces (2026-11-03).** The production ran
+end to end: enum types created and verified in `pg_type` (`CharacterReferenceCategory`, `CharacterReferenceReviewStatus`),
+the cast stage created and approved 2 references, `FLUX2_EDIT:COMPLETED` appears in the job table, 8 assets READY, project
+at REVIEW. **Per-scene identity: 80 / 70 / 70 / 70 — minimum 70**, against a 0–50 baseline and a story pipeline that
+reaches 90 with the same conditioning. **Operator decision: per-surface floors — story 85, creative 75** — with the
+measured comparison recorded so it cannot erode. **Backlog arithmetic:** at floor 75 the measured distribution implies
+~25% of the 99 (≈24) would clear and ~75% (≈75) would remain flagged after a re-render costing **≥ 7,760 credits**
+(stills only, before video and cast); at floor 85 it is 0% cleared for 99 of 99. **Two facts remain unverified:** the
+per-scene `references=` count (the run executed under a tsx process whose stdout was lost when the connection dropped;
+pm2 logs do not contain it) and the exact credit delta (balance is 5,760 now, with no prior reading for that account).
+Neither is quoted as if known.
+
 **Identity floor unreachable BY CONSTRUCTION in the creative pipeline (read 2026-11-02).** The 0–50 minimums are not
 mis-calibration. **Stills model:** creative uses `fal-ai/flux-2` — *text-to-image only* — while story uses
 `fal-ai/flux-2/edit`, which takes `imageUrls` (max 4). **References:** `FalFlux2Input` has only `prompt`,
