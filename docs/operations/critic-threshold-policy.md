@@ -565,3 +565,55 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Where the idea actually lives (survey 2026-11-03) — and a correction
+
+The previous session concluded that most flagged projects have **no stored idea**. That was wrong: the idea was captured all along, in a field the backfill never read.
+
+### The field survey
+
+| field | readable for | note |
+|---|---|---|
+| **`CreativeBrief.originalIntent`** | **37 of 39** | the creator's own words, e.g. *"Create a 5-minute photorealistic short film about a young Nigerian woman returning home after 10 years abroad"* |
+| `bible.story.premise` | 7 | Raivstream's paraphrase, not the creator's text |
+| `bible.canon.originalIntent.subject` | subset of the above | often absent |
+| `creativeProject.title` | 30, **but unusable** | the title is the interpretation summary — `"I understand this as a story in Short Film targeting 300s"` |
+| `storyProject.originalIdea` / `.premise` | **0** | no `legacyStoryProjectId` links for these projects |
+| genuinely absent | **2** | no brief, no premise, no usable title |
+
+### The recovery map
+
+| category | count | meaning |
+|---|---|---|
+| **verbatim, in `CreativeBrief.originalIntent`** | **37** | the backfill is a **change of field**, not a data migration |
+| summary-only (premise but no brief) | 7 (overlapping) | paraphrased — usable for extraction, not verbatim |
+| genuinely absent | **2** | permanently unbackfillable |
+
+**37 of 39 are recoverable verbatim.** The two genuinely absent names are recorded as an accepted loss, not as pending work.
+
+### The correction, stated plainly
+
+The previous session's finding — *"the majority of historical projects have no idea text on file; that's a data-capture debt"* — was **an artefact of looking in the wrong field**. `bible.story.premise` holds Raivstream's paraphrase; `CreativeBrief.originalIntent` holds what the creator typed. The backfill read the first and concluded the second didn't exist.
+
+That is the same error class as this arc's earlier ones: a confident conclusion from an incomplete read. It was caught by enumerating the schema's candidate fields before querying, which is why that step was mandatory.
+
+### The cast source, scoped and not built
+
+| option | scope | cost |
+|---|---|---|
+| **LLM extraction over `CreativeBrief.originalIntent`** | 37 projects | fractions of a cent each — **negligible** |
+| `deriveCast()` against the same field | 37 projects | **free**, but still splits clauses into fragments |
+| human pass | 2 genuinely absent projects | small, bounded |
+
+**Recommendation: LLM extraction** — the text is now known to exist and to be a sentence about a subject; a parser that splits on "and" will keep producing `Confrontin`, while a small model call will return *"the young Nigerian woman"* with a description. Cost is rounding error against the 5,900 references it unlocks.
+
+### Revised arithmetic
+
+| stage | scope | cost |
+|---|---|---|
+| LLM cast extraction | 37 projects | ≈0 (fractions of a cent each) |
+| references | ~2 characters × 37 × 80 | **≈5,900** |
+| stills re-render | 99 × 80 | **7,920** |
+| **total** | | **≈13,820** |
+
+The backlog is a **recoverable data problem**, not a rendering problem and not a data-capture debt. The capability is built; the input exists; what is missing is a cast extractor that reads the right field.

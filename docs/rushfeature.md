@@ -902,3 +902,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — The idea lives in `CreativeBrief.originalIntent`: 37 of 39 flagged projects recover verbatim, and the
+  previous "no stored idea" finding was a wrong-field error.** Field survey: `CreativeBrief.originalIntent` readable for
+  **37/39** (*"Create a 5-minute photorealistic short film about a young Nigerian woman returning home after 10 years
+  abroad"*); `bible.story.premise` for 7 (paraphrase); `creativeProject.title` for 30 but **unusable** (it is the
+  interpretation summary — *"I understand this as a story in Short Film targeting 300s"*); `storyProject.originalIdea` for
+  **0** (no legacy links); **2 genuinely absent**, recorded as accepted loss. **The correction:** the prior session's "data
+  capture debt" was an artefact of reading `bible.story.premise` and concluding the creator's text didn't exist — the same
+  confident-conclusion-from-partial-read class as this arc's earlier errors, caught by enumerating schema fields first.
+  **Cast source recommended (not built): LLM extraction over `originalIntent`** — fractions of a cent per project, versus
+  `deriveCast()` which still returns fragments. **Revised arithmetic: ≈0 extraction + ≈5,900 references + 7,920 stills =
+  ≈13,820**, and the backlog is a recoverable data problem, not a rendering one. **Spent: 0 credits.**
