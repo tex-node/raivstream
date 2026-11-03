@@ -902,3 +902,14 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — The backlog bulk is STOPPED: the sample found the assets have no cast and no approved references.**
+  Measured, not inferred: of **39** projects with flagged assets, **36 have zero characters** in their bible, 2 have any, and
+  **0 have an approved reference**. `applyIdentityFraming` classifies on `spec.characterRefs` (built from the bible), so
+  every backlog still would be `no-character`; and with no approved references `resolveCreativeReferences` returns `[]`.
+  A re-render would therefore fall back to **text-to-image** — the 0–50 band this arc began in — for 7,920 credits. That is
+  worse than the fourth predicted outcome ("7,920 for 70s"). **Why it looked ready and wasn't:** the assets predate the cast
+  derivation, the reference writes and the framing rule; the render was never the missing input-collection step.
+  **Next job, priced:** derive casts for the 36 character-less projects (free), generate and approve ~2 references each
+  (≈5,800–6,200 credits), then the 7,920 still-render has something to clear against — **≈14,000 total**, not 7,920.
+  **Zero credits spent this session.**

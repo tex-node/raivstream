@@ -565,3 +565,37 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The backlog sample: the bulk is stopped, and the reason is upstream of framing (2026-11-03)
+
+The sample was meant to cost three stills and prevent a 7,920-credit mistake. It cost **zero** and prevented a larger one.
+
+### What the data says
+
+| measure | value |
+|---|---|
+| projects with flagged assets | **39** |
+| projects whose bible has **0 characters** | **36** |
+| projects whose bible has characters | 2 |
+| projects with an **approved reference** | **0** |
+
+### The outcome: the fourth case, and worse than the fourth case predicted
+
+The fourth outcome was *"all three classify as non-identity-bearing → the bulk is 7,920 for 70s."* The measurement is worse: these projects have **no characters and no approved references**, so a re-render would not even reach 70 — it would fall back to **text-to-image**, which is the 0–50 band the whole arc started from.
+
+`applyIdentityFraming` classifies on `spec.characterRefs`, which `routeProduction` builds from the bible's characters. With none, every backlog still is `no-character` → no framing phrase → and `resolveCreativeReferences` returns `[]` → no reference either. **The 7,920 would buy a regression.**
+
+### Why the backlog looked ready and wasn't
+
+The gate scores `characterIdentity`, the backlog was flagged for it, and the framing rule fixes it — but only for assets whose projects carry a cast and approved references. The 99 flagged assets predate both: the cast derivation, the reference store writes, and the framing rule all arrived after they were produced. Fixing the *render* does nothing for assets whose *inputs* were never collected.
+
+### The next job, and its price
+
+Two cheap steps **before** any re-render:
+
+1. **Derive casts for the 36 character-less flagged projects** — free, uses `deriveCast()` on each project's stored idea/subject.
+2. **Generate and approve references** — ~80 credits per character; at ~2 characters per project that is **≈5,800–6,200 credits** across 36 projects.
+
+Only then does the 7,920 still-render clear anything. **Revised total: ~14,000 credits**, not 7,920 — the earlier price was for a pipeline that had inputs it does not have.
+
+**The bulk is stopped.** No credits were spent this session.
