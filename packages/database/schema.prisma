@@ -1414,6 +1414,11 @@ model CharacterReferenceAsset {
   @@index([projectId, category])
   @@index([userId])
   @@map("character_reference_assets")
+  /// When a human approved this reference for conditioning. Creative projects cannot own a
+  /// StoryCharacterMemory, so their approval has to live on the asset itself; story-owned
+  /// rows keep reading approval from StoryCharacterMemory.approvedReferenceAssetId, and the
+  /// gate's query accepts either.
+  approvedAt      DateTime?
 }
 
 model CharacterReferenceMedia {
