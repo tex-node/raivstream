@@ -173,3 +173,38 @@ describe('the gate is wired into the production path, not just exported', () => 
     expect(String((gateError as Error)?.message ?? '')).not.toMatch(/CAST_NOT_APPROVED/);
   });
 });
+
+describe('the gate is ABOVE the early returns (the placement bug)', () => {
+  // Production evidence: project stuck in GENERATING returned already_running and never
+  // reached the gate, so production did not refuse while the unit test passed. A gate an
+  // earlier return can skip is not blocking. This test constructs exactly that state.
+  function prismaFor(status: string, approved: string[]) {
+    const prisma: any = {
+      creativeProject: {
+        findFirst: async () => ({ id: 'p1', userId: 'u1', status, projectType: 'STORY', productionPlan: { plan: { scenes: [] } }, brief: null, bible: { characters: [{ name: 'Lighthouse Keeper' }] } }),
+      },
+      characterReferenceAsset: { findMany: async () => approved.map((characterName) => ({ characterName })) },
+      creativeProductionRun: { findFirst: async () => null, create: async () => ({ id: 'run1' }) },
+      creativeProducedAsset: { findMany: async () => [], count: async () => 0, updateMany: async () => ({ count: 0 }) },
+    };
+    return prisma;
+  }
+
+  it('refuses even when the project would take the already_running early return', async () => {
+    process.env.RAIVSTREAM_5_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_PRODUCTION_ENABLED = 'true';
+    const { ProductionPlanService } = await import('../service');
+    // GENERATING is the state that returned already_running and skipped the gate.
+    await expect(
+      new ProductionPlanService().produce(prismaFor('GENERATING', []), { projectId: 'p1', userId: 'u1' }),
+    ).rejects.toThrow(/CAST_NOT_APPROVED.*Lighthouse Keeper/);
+  });
+
+  it('still returns already_running once the cast is approved', async () => {
+    process.env.RAIVSTREAM_5_ENABLED = 'true';
+    process.env.RAIVSTREAM_5_PRODUCTION_ENABLED = 'true';
+    const { ProductionPlanService } = await import('../service');
+    const result = await new ProductionPlanService().produce(prismaFor('GENERATING', ['Lighthouse Keeper']), { projectId: 'p1', userId: 'u1' });
+    expect(result).toEqual({ started: false, reason: 'already_running' });
+  });
+});

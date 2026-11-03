@@ -196,7 +196,12 @@ export async function assertCastApproved(
   input: { projectId: string; characters: CreativeCharacterRef[] },
 ): Promise<void> {
   const names = input.characters.map((character) => character.name?.trim()).filter((name): name is string => Boolean(name));
-  if (names.length === 0) return;
+  // Logged on BOTH paths: a refusal-only log cannot distinguish "the gate never ran"
+  // from "it ran and passed", which is exactly the ambiguity that cost two sessions.
+  if (names.length === 0) {
+    console.info(`[creative.gate] projectId=${input.projectId} reached=true castCharacters=0 approved=true refusing=false reason=no_cast`);
+    return;
+  }
 
   const approved = await (prisma as never as {
     characterReferenceAsset: {
@@ -215,6 +220,10 @@ export async function assertCastApproved(
   const approvedNames = new Set(approved.map((row) => (row.characterName ?? '').toLowerCase()).filter(Boolean));
   const missing = names.filter((name) => !approvedNames.has(name.toLowerCase()));
   if (missing.length > 0) {
+    console.info(
+      `[creative.gate] projectId=${input.projectId} reached=true castCharacters=${names.length} approved=false refusing=true missing=${missing.join(',')}`,
+    );
     throw new Error(`CAST_NOT_APPROVED: approve the reference for ${missing.join(', ')} before producing.`);
   }
+  console.info(`[creative.gate] projectId=${input.projectId} reached=true castCharacters=${names.length} approved=true refusing=false`);
 }

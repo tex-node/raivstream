@@ -329,20 +329,11 @@ export class ProductionPlanService {
       include: { productionPlan: true, brief: true },
     });
     if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
-    await this.assertSourceReady(prisma, project as never);
-    if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build and approve a production plan before producing.');
-    // The first production requires an approved preview; a refinement after a
-    // directive (REVIEW / REFINING / DIRECTING) may regenerate affected scenes.
-    const producible = project.status === 'APPROVED' || project.status === 'REVIEW' || project.status === 'REFINING' || project.status === 'DIRECTING';
-    if (!producible) {
-      if (project.status === 'GENERATING') return { started: false, reason: 'already_running' };
-      throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the preview before producing.');
-    }
-
-    // The blocking cast gate, wired into the production path itself so it refuses real
-    // productions and not just the unit test. It runs AFTER the project (and so its bible)
-    // is loaded and BEFORE any generation: a gate placed after the first asset would be
-    // reporting, not blocking.
+    // The blocking cast gate. POSITION IS THE FIX: it sits immediately after the project
+    // fetch and ABOVE every early return below it (assertSourceReady, the plan check, the
+    // status / already_running branch). Placed lower, a project stuck in GENERATING took
+    // `already_running` and skipped the gate entirely - which is why production did not
+    // refuse while the unit test passed. A gate an earlier return can skip is not blocking.
     //
     // The bible comes from the project row - no second query, which is what broke four
     // production stubs the first time this was attempted.
@@ -357,6 +348,23 @@ export class ProductionPlanService {
     } catch (error) {
       logStage(input.projectId, 'produce', 'fail', { reason: (error as Error).message.slice(0, 120) });
       throw new CreativeError('PLAN_NOT_APPROVED', (error as Error).message);
+    }
+
+    // Debug stop: reach the gate, then stop BEFORE any generation. Used to prove the
+    // refusal on a deployed build without spending credits.
+    if (process.env.CREATIVE_PRODUCE_DRY_RUN === '1') {
+      logStage(input.projectId, 'produce', 'ok', { dryRun: true, gate: 'passed' });
+      return { started: false, reason: 'already_running' };
+    }
+
+    await this.assertSourceReady(prisma, project as never);
+    if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build and approve a production plan before producing.');
+    // The first production requires an approved preview; a refinement after a
+    // directive (REVIEW / REFINING / DIRECTING) may regenerate affected scenes.
+    const producible = project.status === 'APPROVED' || project.status === 'REVIEW' || project.status === 'REFINING' || project.status === 'DIRECTING';
+    if (!producible) {
+      if (project.status === 'GENERATING') return { started: false, reason: 'already_running' };
+      throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the preview before producing.');
     }
 
     // Idempotent production operations (Phase 9): never start a second run while
