@@ -565,3 +565,54 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Framing proven end to end (2026-11-03)
+
+The composition path is no longer "probably the same as the adapter path". With the proof point reading the **actual provider payload**, and a forced regeneration of all four scenes, the question is settled.
+
+### Build and instrumentation, confirmed before anything was read
+
+```
+DEPLOYED_HEAD=ad4f080 · PROOF_POINT=1   (grep of the deployed file, not the repo)
+BALANCE_BEFORE=5760                     (project→owner join)
+FORCED_REGEN ready_before=8 now=0       (no READY asset could be reused)
+```
+
+### The proof that the phrase reaches the render
+
+```
+[creative.framing] scene=SCENE_01 framingInPrompt=true references=3 promptHash=9f3bdb507ffc
+[creative.framing] scene=SCENE_02 framingInPrompt=true references=3 promptHash=6f433e12f873
+[creative.framing] scene=SCENE_03 framingInPrompt=true references=3 promptHash=4424a1ebb895
+[creative.framing] scene=SCENE_04 framingInPrompt=true references=3 promptHash=158e568132a5
+```
+
+**All four scenes: `framingInPrompt=true`**, computed from the string handed to the provider. Composed *and* sent.
+
+### The distribution
+
+| scene | identity (full-body) | identity (framing rule) |
+|---|---|---|
+| SCENE_01 | 80 | **80** |
+| SCENE_02 | 70 | **80** |
+| SCENE_03 | 70 | **80** |
+| SCENE_04 | 70 | **80** |
+
+**Min 80 · median 80**, against a previous distribution of 80/70/70/70. Three scenes moved +10; the one at 80 stayed. The single 80 that was earlier read as variance is now the **floor of the distribution**, not its ceiling.
+
+### The floor, restated against the distribution
+
+**Floor 75 now has a measured basis.** The minimum across four regenerated scenes is **80**, five points above the floor, with the framing phrase proven present in the payload for each. This is not a single draw: it is four of four.
+
+### Backlog, re-priced
+
+| re-render framing | measured identity | clears floor 75 | spend |
+|---|---|---|---|
+| full-body (old) | 70 median | ≈0–24 of 99 | ≥ 7,760 credits |
+| **framing rule (now)** | **80 median, 80 minimum** | **all of them, if the distribution holds** | ≥ 7,760 credits (stills) + video + cast |
+
+The re-render is now a defensible spend rather than a five-figure gamble at 70. It remains **deferred** — priced here, decided separately.
+
+### Credit note
+
+Balance **5,760 → 5,760**: the four-scene regeneration deducted **no platform credits** on this account. The provider was billed for eight assets; the platform ledger did not move. That is worth investigating before the backlog run, because a re-render whose cost does not appear in the ledger cannot be budgeted from the ledger.

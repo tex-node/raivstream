@@ -902,3 +902,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Framing PROVEN end to end: all four scenes regenerated at identity 80, phrase present in the payload.**
+  Build confirmed by reading the deployed file (`DEPLOYED_HEAD=ad4f080`, `PROOF_POINT=1`), balance via the project→owner
+  join (5,760), and the READY assets cleared (`8 → 0`) so nothing could be reused. The new proof point reads the actual
+  provider payload: `[creative.framing] scene=SCENE_0N framingInPrompt=true references=3 promptHash=…` for **all four**
+  scenes. **Distribution 80 / 80 / 80 / 80** (min 80, median 80), against 80/70/70/70 before — three scenes moved +10, and
+  the single 80 previously read as variance is now the distribution's floor. **Floor 75 has a measured basis:** four of
+  four regenerated scenes sit five points above it with the phrase proven in the request. **Backlog re-priced:** at an 80
+  median, essentially all 99 would clear floor 75 for ≥ 7,760 credits (stills) plus video and cast — a defensible spend
+  rather than a gamble at 70; still deferred, priced here and decided separately. **Anomaly to investigate first:** the
+  four-scene regeneration deducted **no platform credits** (5,760 → 5,760) while the provider was billed for eight assets
+  — a re-render whose cost never appears in the ledger cannot be budgeted from it.
