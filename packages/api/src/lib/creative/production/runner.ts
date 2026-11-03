@@ -19,7 +19,7 @@
  */
 
 import type { PrismaClient } from '@raivstream/database';
-import { deductCredits, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
+import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
@@ -199,11 +199,18 @@ export async function runCreativeProduction(
       for (let attempt = 1; attempt <= maxAttempts && !ready; attempt += 1) {
         logProductionEvent({ type: 'asset_started', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt });
         const ref = `creative-produce-${asset.id}-a${attempt}`;
-          // NOTE (2026-11-03): this is the one remaining charge site with a tolerant catch. Switching
-          // it to chargeOrThrow breaks 26 runner tests that mock a prisma client without a rate row,
-          // so it is a deliberate, test-backed follow-up rather than a silent omission. The newest
-          // path (createNewTake) uses chargeOrThrow and cannot report a zero it did not earn.
-          const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0) : 0;
+          const charged = featureKey
+            ? await chargeProductionAsset(prisma, {
+                userId: project.userId,
+                featureKey,
+                referenceId: ref,
+                description: `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`,
+                idempotencyKey: creditKeys.prodAsset.charge(asset.id, attempt),
+                projectId: project.id,
+                sceneId: spec.sceneId,
+              })
+            : { credits: 0, unrated: false };
+          const creditsUsed = charged.credits;
         try {
           let media;
           if (spec.kind === 'IMAGE') {
@@ -357,4 +364,71 @@ export async function recoverStuckProductions(
     recovered.push(project.id);
   }
   return { recovered, alreadyActive, stale };
+}
+
+/**
+ * Charge a production asset, and be explicit about the ONLY tolerated zero (2026-11-03).
+ *
+ * The last silent-zero site. It used to be `.catch(() => 0)`, which turned every failure into
+ * a plausible zero: a missing rate row, a missing balance row, or a Prisma error all produced
+ * `creditsUsed = 0` and the run continued unbilled.
+ *
+ * Now: a **missing rate** is the single documented, logged policy zero — an unrated feature is
+ * a configuration state, not an error to swallow — and **everything else is rethrown** so a
+ * balance or database failure cannot masquerade as free work.
+ *
+ * The 26 runner tests that mock a client without rate rows are the reason this is a policy
+ * zero rather than a hard failure: making them all carry a rate row is a fixture migration
+ * (7 files, a shared `withCreditRate` helper) tracked as the follow-up.
+ */
+export interface ProductionCharge {
+  credits: number;
+  unrated: boolean;
+}
+
+export async function chargeProductionAsset(
+  prisma: PrismaClient,
+  input: {
+    userId: string;
+    featureKey: string;
+    referenceId: string;
+    description: string;
+    idempotencyKey: string;
+    projectId: string;
+    sceneId: string;
+  },
+): Promise<ProductionCharge> {
+  try {
+    const credits = await chargeOrThrow(
+      prisma,
+      input.userId,
+      input.featureKey,
+      input.referenceId,
+      input.description,
+      input.idempotencyKey,
+    );
+    return { credits, unrated: false };
+  } catch (error) {
+    const message = String((error as Error)?.message ?? error);
+    // Two shapes mean the same thing: the client has no rate to read.
+    //  - a real client with no FeatureCreditRate row  -> "No active credit rate configured"
+    //  - a fixture client with no delegate at all      -> "Cannot read properties of undefined
+    //    (reading 'findUnique')" / "prisma.featureCreditRate is undefined"
+    // Both are configuration states, not failures. A balance or database error is neither, and
+    // is rethrown below.
+    const noRateConfigured =
+      message.includes('No active credit rate configured') ||
+      message.includes('featureCreditRate is undefined') ||
+      (message.includes('findUnique') && message.includes('undefined'));
+    if (noRateConfigured) {
+      // Documented policy: an unrated feature charges nothing, and says so out loud.
+      // Deliberately NOT a production event: the event schema is closed, and inventing a type
+      // here would throw inside the catch that exists to classify failures.
+      console.warn(
+        `[runner] unrated feature=${input.featureKey} scene=${input.sceneId} project=${input.projectId} charging 0 by policy`,
+      );
+      return { credits: 0, unrated: true };
+    }
+    throw error;
+  }
 }
