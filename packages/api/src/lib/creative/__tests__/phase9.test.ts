@@ -11,6 +11,7 @@ import { ProjectService } from '../project/service';
 import { runCreativeProduction, recoverStuckProductions, type ProductionDeps } from '../production/runner';
 import { creativeMetricsSnapshot, recordCreativeTiming, resetCreativeTimings, timedCreative } from '../observability/metrics';
 import { interpret } from '../intent/interpreter';
+import { withCreditCharge } from './helpers/creditFixture';
 
 beforeEach(() => {
   process.env.RAIVSTREAM_5_ENABLED = 'true';
@@ -147,7 +148,7 @@ describe('phase 9 — director propose + applyInstruction', () => {
       creativeProducedAsset: { deleteMany: async ({ where }: any) => { deleted.push(JSON.stringify(where)); return { count: 1 }; } },
       __versions: versions, __directives: directives, __memories: memories, __deleted: deleted,
     };
-    return prisma;
+    return withCreditCharge(prisma);
   }
 
   it('propose understands change/preserve/impact without persisting anything', async () => {
@@ -229,7 +230,7 @@ describe('phase 9 — durable production runs', () => {
       creativeMemory: { create: async () => ({ id: 'm1' }) },
       __runs: runs, __assets: assets,
     };
-    return prisma;
+    return withCreditCharge(prisma);
   }
 
   function deps(overrides?: Partial<ProductionDeps>): ProductionDeps {

@@ -16,6 +16,7 @@ import { enrichCreativePlan } from '../production/treatmentAdapter';
 import { runCreativeProduction, type ProductionDeps } from '../production/runner';
 import { interpret } from '../intent/interpreter';
 import { MediaProviderError } from '../../mediaProviders/types';
+import { withCreditCharge } from './helpers/creditFixture';
 
 // ─── errorMessages is a web component — test it inline for the chain ─────────
 
@@ -193,6 +194,7 @@ function prismaMock() {
 describe('chain — runner uses scene still as seed for source-conditioned projects', () => {
   it('passes the scene still URL as seedImageUrl to generateVideo (source-conditioned)', async () => {
     const { prisma } = prismaMock();
+  withCreditCharge(prisma);
     const generateVideo = vi.fn(async () => ({ assetUrl: 'r2://video' }));
     const deps: ProductionDeps = {
       generateStill: vi.fn(async () => ({ assetUrl: 'r2://still' })),
@@ -306,6 +308,7 @@ describe('chain — creative treatment enrichment', () => {
 describe('chain — PROVIDER_DISABLED errors are not retried', () => {
   it('does not retry non-retryable MediaProviderError and records one attempt', async () => {
     const { prisma } = prismaMock();
+  withCreditCharge(prisma);
     const still = vi.fn(async () => {
       throw new MediaProviderError('PROVIDER_DISABLED', 'fal image disabled: FAL_MEDIA_PROVIDER_ENABLED is false', { retryable: false });
     });

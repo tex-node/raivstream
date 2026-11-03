@@ -19,6 +19,7 @@ import { analyzeImpact, planSceneIds } from '../director/impact';
 import { buildCreativePlan } from '../production/plan';
 import { interpret } from '../intent/interpreter';
 import { runCreativeProduction, type ProductionDeps } from '../production/runner';
+import { withCreditCharge } from './helpers/creditFixture';
 
 // ─── shared fixtures ──────────────────────────────────────────────────────────
 
@@ -258,7 +259,7 @@ function runnerPrismaMock(opts: {
     },
     __assets: assets,
   };
-  return prisma;
+  return withCreditCharge(prisma);
 }
 
 describe('E — produced-asset version tracking', () => {

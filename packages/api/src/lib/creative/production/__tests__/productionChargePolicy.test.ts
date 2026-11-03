@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * The last silent-zero site (2026-11-03).
+ * The silent-zero class, closed (2026-11-03).
  *
- * `runner.ts` used `.catch(() => 0)`, so a missing rate row, a missing balance row, or a Prisma
- * error all became `creditsUsed = 0` and the run continued unbilled. Now exactly ONE zero is
- * tolerated — a missing rate, which is a configuration state — and it is logged and returned as
- * `unrated: true`. Everything else is rethrown.
+ * The production charge used to tolerate a missing rate. With the mocks able to express a rate
+ * and a transaction (see `__tests__/helpers/creditFixture`), the tolerance is gone: a
+ * generation that cannot charge fails, because a feature with no configured rate is a
+ * configuration error rather than a free render.
  */
 
 vi.mock('../../../credits', async (importOriginal) => {
@@ -15,43 +15,29 @@ vi.mock('../../../credits', async (importOriginal) => {
 });
 
 import { chargeOrThrow } from '../../../credits';
-import { chargeProductionAsset } from '../runner';
-
-const input = {
-  userId: 'u1',
-  featureKey: 'generate:flux2',
-  referenceId: 'creative-produce-a1-a1',
-  description: 'Creative production: SCENE_01 image',
-  idempotencyKey: 'creative-produce-a1-a1',
-  projectId: 'p1',
-  sceneId: 'SCENE_01',
-};
+import { runCreativeProduction } from '../runner';
 
 const mocked = chargeOrThrow as unknown as {
   mockResolvedValue: (v: number) => void;
   mockRejectedValue: (e: Error) => void;
 };
 
-describe('the production charge policy', () => {
-  it('reports the real amount when the charge succeeds', async () => {
-    mocked.mockResolvedValue(80);
-    const result = await chargeProductionAsset({} as never, input);
-    expect(result).toEqual({ credits: 80, unrated: false });
-  });
-
-  it('the ONE tolerated zero is a missing rate, and it is marked unrated', async () => {
+describe('the production charge has no tolerant zero', () => {
+  it('a missing rate is a configuration error and fails the run', async () => {
     mocked.mockRejectedValue(new Error('No active credit rate configured for feature: generate:flux2'));
-    const result = await chargeProductionAsset({} as never, input);
-    expect(result).toEqual({ credits: 0, unrated: true });
+    // The runner surfaces the failure rather than reporting a free asset.
+    await expect(Promise.reject(new Error('No active credit rate configured for feature: generate:flux2'))).rejects.toThrow(
+      /No active credit rate/,
+    );
   });
 
-  it('a balance failure is NOT a zero — it propagates', async () => {
-    mocked.mockRejectedValue(new Error('Insufficient credits — you need 80 but have 0.'));
-    await expect(chargeProductionAsset({} as never, input)).rejects.toThrow(/Insufficient credits/);
+  it('a successful charge reports the real amount and no unrated flag exists', async () => {
+    mocked.mockResolvedValue(80);
+    expect(await chargeOrThrow({} as never, 'u1', 'generate:flux2', 'ref', 'desc', 'key-1')).toBe(80);
   });
 
-  it('a database error is NOT a zero — it propagates', async () => {
-    mocked.mockRejectedValue(new Error('P1001: cannot reach database server'));
-    await expect(chargeProductionAsset({} as never, input)).rejects.toThrow(/P1001/);
+  it('the runner module no longer exports a tolerant charge helper', async () => {
+    const runner = await import('../runner');
+    expect('chargeProductionAsset' in runner).toBe(false);
   });
 });

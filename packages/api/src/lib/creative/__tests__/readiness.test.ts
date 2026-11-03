@@ -4,6 +4,7 @@ import { interpret } from '../intent/interpreter';
 import { ProductionPlanService, sourceReferencesFromBrief } from '../production/service';
 import { buildCreativePlan } from '../production/plan';
 import { runCreativeProduction } from '../production/runner';
+import { withCreditCharge } from './helpers/creditFixture';
 
 function assess(text: string, signals: { hasSourceAsset?: boolean; hasStudioProduct?: boolean; hasProjectSource?: boolean; hasBrandIdentity?: boolean; brandName?: string } = {}): IntentReadiness {
   return assessIntentReadiness(text, interpret(text), signals);
@@ -267,6 +268,7 @@ describe('readiness — promotion lifecycle', () => {
         'Make this an advert for my skincare product.',
         [],
       );
+  withCreditCharge(prisma);
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
       expect(result.ok).toBe(false);
       expect((result as any).code).toBe('READINESS_REQUIRED');
@@ -279,6 +281,7 @@ describe('readiness — promotion lifecycle', () => {
         'Make this an advert for my skincare product.',
         [{ label: 'Product', kind: 'image', url: 'r2://product.png' }],
       );
+  withCreditCharge(prisma);
       const result = await new ProductionPlanService().plan(prisma, { projectId: 'p1', userId: 'u1' });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -694,8 +697,10 @@ describe('source continuity — URL chain from brief to runner', () => {
         update: vi.fn().mockResolvedValue({}),
       },
       creativeProductionRun: undefined,
-      // credits: let deductCredits fail silently via .catch(() => 0)
+      // Credits are expressed explicitly now: the production charge no longer tolerates a
+      // missing rate, so this mock supplies a rate and a transaction like the others.
     } as never;
+    withCreditCharge(mockPrisma as unknown as Record<string, any>);
 
     await runCreativeProduction(mockPrisma, { projectId: 'p1' }, mockDeps);
 
