@@ -235,3 +235,44 @@ export async function assertCastApproved(
   }
   console.info(`[creative.gate] projectId=${input.projectId} reached=true castCharacters=${names.length} approved=true refusing=false`);
 }
+
+/**
+ * Identity-bearing framing (measured 2026-11-03: 70 -> 80).
+ *
+ * A full-body 9:16 still gives the face ~12k px against a ~250k px reference plate - a
+ * ~20:1 signal loss - and the critic scores identity on what it can see. Medium/waist-up
+ * framing closes most of that gap. This is a DEFAULT for stills that carry identity, not a
+ * mandate for every frame: a film of nothing but medium shots is a different product, and
+ * the critic scores composition as well as identity. A beat may override, and the override
+ * is logged so the trade-off is visible rather than silent.
+ */
+export const IDENTITY_FRAMING = 'Medium shot, waist-up, the character fills the frame.';
+
+export interface FramingDecision {
+  prompt: string;
+  applied: boolean;
+  reason: 'identity-bearing' | 'no-character' | 'beat-override';
+}
+
+/**
+ * The rule, in one place:
+ *  - a still whose prompt/beat names a character gets identity framing;
+ *  - a still with no character does not;
+ *  - a beat that asks for a wide keeps it, and says so.
+ */
+export function applyIdentityFraming(
+  prompt: string,
+  options: { characters?: readonly CreativeCharacterRef[]; wideShotRequired?: boolean } = {},
+): FramingDecision {
+  if (options.wideShotRequired) {
+    return { prompt, applied: false, reason: 'beat-override' };
+  }
+  const named = (options.characters ?? []).some((character) => Boolean(character.name?.trim()));
+  if (!named) {
+    return { prompt, applied: false, reason: 'no-character' };
+  }
+  if (prompt.includes(IDENTITY_FRAMING)) {
+    return { prompt, applied: true, reason: 'identity-bearing' };
+  }
+  return { prompt: `${prompt} ${IDENTITY_FRAMING}`, applied: true, reason: 'identity-bearing' };
+}

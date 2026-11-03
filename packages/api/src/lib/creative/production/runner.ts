@@ -30,6 +30,7 @@ import type { CreativeProductionPlanState } from './plan';
 import { logStage } from '../stageLog';
 import { logProductionEvent } from '../observability/metrics';
 import {
+  applyIdentityFraming,
   composeCreativeIdentityBlock,
   resolveCreativeReferences,
   withIdentityBlock,
@@ -208,15 +209,24 @@ export async function runCreativeProduction(
             const sceneCharacters = ((spec as StillSpec).characterRefs ?? []) as CreativeCharacterRef[];
             const identityBlock = composeCreativeIdentityBlock(sceneCharacters);
             const referenceImageUrls = await resolveCreativeReferences(prisma, sceneCharacters);
+            // Identity-bearing stills get medium framing by default; a beat may override.
+            const framing = applyIdentityFraming((spec as StillSpec).prompt, {
+              characters: sceneCharacters,
+              wideShotRequired: Boolean((spec as { wideShotRequired?: boolean }).wideShotRequired),
+            });
+            if (framing.reason === 'beat-override') {
+              logStage(project.id, 'produce', 'ok', { scene: spec.sceneId, framing: 'beat-override' });
+            }
             const stillSpec: StillSpec = {
               ...(spec as StillSpec),
-              prompt: withIdentityBlock((spec as StillSpec).prompt, identityBlock),
+              prompt: withIdentityBlock(framing.prompt, identityBlock),
               ...(referenceImageUrls.length ? { referenceImageUrls } : {}),
             };
             logStage(project.id, 'produce', 'ok', {
               scene: spec.sceneId,
               references: referenceImageUrls.length,
               identityBlock: identityBlock ? 'yes' : 'no',
+              framing: framing.reason,
             });
             media = await deps.generateStill(stillSpec, project.id, asset.id);
           } else {
