@@ -565,3 +565,44 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## Framing is the lever (measured 2026-11-03)
+
+The last untested hypothesis, settled with one still and one score.
+
+### The pixel measurement, before the spend
+
+| image | dimensions | face share of frame (estimated) |
+|---|---|---|
+| creative still (9:16) | **576 × 1024** | full-body subject → face ≈ 1/8 of frame height ≈ **~12k px** |
+| story reference plate (1:1) | **1024 × 1024** | head-and-shoulders → face ≈ 55% of height ≈ **~250k px** |
+
+**Ratio ≈ 20:1.** At that gap the hypothesis was near-certain before generating anything: identity is being judged on roughly a twentieth of the face signal the reference carries.
+
+### The test — only the framing differs
+
+Same scene (`SCENE_02`), same character, same reference, same setting and action. The only prompt change: `Medium shot, waist-up, the character fills the frame.` Same 9:16 aspect, so framing is isolated from aspect ratio.
+
+| variant | identity | overall |
+|---|---|---|
+| full-body 9:16 (original) | **70** | 75 |
+| **medium/waist-up 9:16** | **80** | 75 |
+
+**Framing is the lever. +10 points, and it is the only change that has moved the number at all** — description quality, reference count, and re-roll each returned exactly 70.
+
+### The floor, restated against the measured ceiling
+
+The pipeline's ceiling is **80 at medium-shot framing** and **70 at full-body framing**. The creative floor stays **75**, but it is only reachable **with the framing change** — and that must be recorded as a pipeline dependency, not left as an unexplained threshold:
+
+- **Floor 75 stands**, because 80 is measured and reachable.
+- It is **not** reachable at the current full-body framing, where every asset sits at 70 and would fail by construction.
+- Therefore the framing change is **required for the floor to discriminate** rather than permanently refuse. A floor nothing can clear is a calibration defect; a floor that requires a specific framing is a documented dependency.
+
+### Backlog, recomputed against the framing result
+
+| framing of the re-render | expected to clear 75 | spend |
+|---|---|---|
+| full-body (today) | **0–24 of 99** (only the variance 80s) | ≥ 7,760 credits |
+| **medium/waist-up** | **materially higher** — the measured sample moved 70 → 80, clearing 75 | ≥ 7,760 credits + the framing change |
+
+So the orden is: **ship the framing change first, then price the re-render.** Re-rendering at today's full-body framing remains the wrong spend — the previous three negatives were measuring a pipeline whose target framing suppresses the very signal the gate scores.

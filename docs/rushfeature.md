@@ -902,3 +902,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Framing is the lever: 70 → 80 with a medium shot, everything else held constant.** Pixel measurement first
+  (free): the creative still is **576×1024** with a full-body subject (face ≈ ~12k px) against a **1024×1024**
+  head-and-shoulders reference plate (face ≈ ~250k px) — a **~20:1** signal gap. One still, only the shot description
+  changed (`Medium shot, waist-up, the character fills the frame.`), same reference, same setting, same 9:16 aspect:
+  **identity 70 → 80**, overall 75. This is the first lever in four to move the number (description quality, reference
+  count, and re-roll each returned exactly 70). **Floor:** creative stays **75** — reachable, since 80 is measured — but
+  it is **only** reachable with the framing change and fails by construction at today's full-body framing; the framing
+  dependency is now recorded rather than left as an unexplained threshold. **Backlog:** re-render stays deferred; at
+  full-body framing 0–24 of 99 clear for ≥ 7,760 credits, at medium framing the measured sample clears, so the order is
+  **ship the framing change, then price the re-render**. Spend: **0 platform credits** (direct adapter path; balance
+  5,760 before and after, via the project→owner join).
