@@ -565,3 +565,47 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The cast backfill, sampled before any spend (2026-11-03) — **stop**
+
+`deriveCast()` was run over the 36 flagged projects that have no characters. It costs nothing, and it was sampled by hand before a single reference credit was authorised.
+
+### The backfill totals
+
+| measure | value |
+|---|---|
+| flagged projects without characters | **36** |
+| projects for which `deriveCast()` produced ≥1 character | **6** (17%) |
+| total characters derived | **11** |
+| projects with **no stored idea at all** | most of the sample — `(no stored idea)` or a non-text `[object Object]` |
+
+### The sample, classified by hand
+
+| derived cast | classification |
+|---|---|
+| `["Young Nigerian Woman Returning Home After 10 Years Abroad", "Confrontin"]` | **ambiguous** (a sentence) + **nonsense** (truncated fragment) |
+| `["Lagos Street Musician Who Finds A Lost Violin", "Lagos Street Musician"]` | **ambiguous** + **plausible** |
+| `["Young Girl Who Discovers A Glowing Object In An Abandoned Garden", "Young Girl"]` | **ambiguous** + **plausible** |
+| `[]` (four sampled projects) | **nothing** — no stored idea |
+| `[]` (`[object Object]` premise) | **nothing** — the stored idea is not text |
+
+Of the five casts that exist in the sample: **1 plausible, 3 ambiguous, 2 nonsense fragments** (a project can be more than one). That is not a population a reference spend can be justified against.
+
+### The decision: stop
+
+Per the pre-agreed rule — *majority nonsense → stop, the backfill needs an LLM extraction or a human pass, not a reference spend* — **no references are generated**.
+
+Two distinct problems, and only one is about parsing:
+
+1. **The parser produces sentence fragments as names.** `deriveCast` splits English on "and"/commas; an idea written as a clause ("…who finds a lost violin") yields a character called `Lagos Street Musician Who Finds A Lost Violin`. It is doing what it was built to do — and what it was built to do is not name extraction.
+2. **Most of these projects have no stored idea to parse.** `story.premise` is empty or not text for the majority of the sample. The backfill cannot derive a cast from prose that was never stored, which is the same class as the planner gap: input captured at one stage and lost before the next.
+
+### Revised arithmetic
+
+| stage | scope | cost |
+|---|---|---|
+| references for the 6 parseable projects | ~11 characters × 80 | **≈880** |
+| references for all 36 | ~72 characters × 80 | ≈5,760 — **not justified** |
+| stills re-render | 99 × 80 | 7,920 — **still gated on usable casts** |
+
+Spending ≈880 on 6 projects whose names are mostly fragments would buy references for characters like `Confrontin`. **The reference spend is withheld**, and the next job is a cast source that can read an idea — an LLM extraction or a human pass — plus recovering the stored idea for the projects that have none.
