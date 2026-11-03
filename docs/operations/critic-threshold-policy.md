@@ -565,3 +565,45 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The measured render and the final backlog shape (2026-11-03)
+
+### The measured count — one query, no prediction
+
+```
+MEASURED renderable_assets=1  residue_assets=25  projects=11
+ROW cmudspsa flags=1 refs=1  RENDER
+ROW cmuzaoi6|cmue9mg8|cmugl35j|cmuzxhg8|cmvylvaz|cmudsjee|cmudwgtg|cmvyapup|cmudswor|cmughdkl  refs=0  RESIDUE
+```
+
+**One** flagged asset sits in a project with an approved reference. Twenty-five do not. The earlier "8 renderable / 4 projects with casts" conflated **casts with approved references**: a bible character is not a reference asset, and only `cmudspsa` has one approved.
+
+### The render, and the ownership check that stopped the first attempt
+
+The first attempt produced `Creative project not found` — because the call ran as the **debit account** (`phase5c-staging@…`) while the project belongs to **`integration-5@raivstream.com`**. The ownership check refused it correctly. A render must run as the project's owner, and the charge debits that owner, not a global account.
+
+Re-run as the owner:
+
+| scene | identity | overall |
+|---|---|---|
+| SCENE_01 | **90** | 85 |
+| SCENE_02 | **80** | 75 |
+
+**Both clear the floor of 75.** Balance `94,200 → 94,200` — **no platform credits spent**, because the project's assets were already `READY` and `produce()` reused them rather than minting new rows. So this is a **re-score of framing-conditioned assets**, not a fresh render; the honest description matters, because a reuse that reports 80–90 is evidence of the pipeline's capability, not of a paid re-render.
+
+### The final backlog shape
+
+| category | assets | projects | disposition |
+|---|---|---|---|
+| cleared (≥75 on the renderable project) | **1** | 1 | done |
+| rendered below floor | **0** | 0 | none |
+| **residue: flagged, no approved reference** | **25** | 10 | blocked on references, not on rendering |
+| out-of-scope (non-narrative) | 73 | 28 | closed with audit |
+| thin input / no intent | ~6 of the 25 | 2 | deferred — needs creator input |
+| accepted loss (no recoverable intent) | — | 2 | closed |
+
+**Flags still live: 26.** Scoring does not clear a flag; only a resolution decision does, and 25 of the 26 cannot be cleared by rendering until their projects have approved references.
+
+### What this means for the "close"
+
+The backlog is not closed, and the reason is now measured rather than vague: **25 of 26 flagged assets belong to projects with zero approved references.** The pipeline can condition at 80–90 — proven again here — but only where references exist, and they exist for one project. The remaining work is a reference pass over 10 projects, not a render pass over 26 assets.
