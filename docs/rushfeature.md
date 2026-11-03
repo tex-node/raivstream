@@ -902,3 +902,13 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Free cast backfill run, sampled, and STOPPED: 6 of 36 projects parse, and the names are fragments.**
+  `deriveCast()` over the 36 character-less flagged projects produced a cast for **6** (17%) totalling **11 characters**.
+  Hand-classified sample of 5 casts: **1 plausible, 3 ambiguous sentence-phrases, 2 nonsense fragments** (e.g.
+  `Confrontin`, `Lagos Street Musician Who Finds A Lost Violin`), plus four projects with **no stored idea** and one whose
+  premise is `[object Object]`. Two distinct problems: the parser splits English rather than extracting names, and **most
+  of these projects have no stored idea to parse** — the same input-capture class as the planner gap. **Decision: no
+  reference spend.** ≈880 credits would buy references for characters like `Confrontin`; the ~5,760 figure for all 36 was
+  never justified. **Next job:** a cast source that can read an idea (LLM extraction or human pass) plus recovery of the
+  stored idea where it is missing. **Spent: 0 credits.**
