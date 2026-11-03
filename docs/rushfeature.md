@@ -902,3 +902,14 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — The zero was one missing filter: `castReferences` skipped across projects.** Its skip lookup ran
+  `status: READY AND (characterName = name OR character.name = name)` **with no projectId**, so a shared character name matched
+  another project's reference and the calling project created none — `created=0, skipped>0` while every precondition held. Adding
+  `projectId: input.projectId` fixed it; **4 tests** now pin *zero because nothing was needed* vs *zero because something broke*.
+  Re-run on the fixed build (`5ef3597`, `TEST_PRESENT=1`): **REFS_CREATED=4, SILENT_ZEROS=0**, three projects rendered,
+  **FLAGS_CLEARED=3, LIVE 25 → 22**, **280 credits measured** (`phase5c-staging@…` 5,760 → 5,480; other owners unchanged because
+  `produce()` reused READY assets). **Distribution n=10: min 30, median 80, max 90** — `[30,60,70,70,70,80,80,90,90,90]` — so
+  **5 of 10 clear the floor** and the spread is far wider than the four-scene proof implied. **Also recorded:** PR #318 first
+  reported merged while `main` had not moved (merge ran before checks registered), which cost a full executor run against the old
+  build; the reliable signal was `TEST_PRESENT`, not a `grep` that matched an unrelated line in the same file.

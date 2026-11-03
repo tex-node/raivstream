@@ -565,3 +565,66 @@ The bridge, the cast stage and the re-production were **not built**. Both accept
 the three "free assertions" could not be written meaningfully: two of them (approval gate blocks production, existing
 approved reference is not regenerated) describe behaviour that does not exist yet. Writing tests against absent
 behaviour would be the shape of a false pass, so they are scoped rather than faked.
+
+## The zero was one missing filter (2026-11-03)
+
+### The defect, named
+
+```ts
+// castReferences, before
+where: { status: 'READY', assetUrl: { not: null }, OR: [{ characterName: name }, { character: { name } }] }
+```
+
+The skip lookup searched **every project**. A character name shared with any other project matched that project's reference, the create was skipped as `already_ready`, and the calling project ended with **zero references of its own** — `created=0`, `skipped>0`, every precondition satisfied. Ten projects were blocked by that one filter.
+
+```ts
+// after
+where: { projectId: input.projectId, status: 'READY', assetUrl: { not: null }, OR: [...] }
+```
+
+The skip-existing rule survives; only what counts as "existing" was narrowed. **4 tests** pin the distinction between *zero because nothing was needed* (`created=0, skipped>0`) and *zero because something broke*, plus an assertion that the skip query carries `projectId`.
+
+### The executor, re-run on the fixed build
+
+```
+DEPLOYED_HEAD=5ef3597  TEST_PRESENT=1
+CAST cmudswor  created=1 skipped=0
+CAST cmuzaoi6  created=1 skipped=0
+CAST cmvyapup  created=2 skipped=0
+REFS_CREATED=4  SILENT_ZEROS=0
+DIST n=10  min=30  median=80  max=90   [30,60,70,70,70,80,80,90,90,90]
+FLAGS_CLEARED=3   LIVE_AFTER=22
+```
+
+### Spend, measured
+
+| owner | before | after | delta |
+|---|---|---|---|
+| `phase5c-staging@raivstream.test` (cmvyapup) | 5,760 | 5,480 | **280** |
+| `integration-5@raivstream.com` (cmudswor) | 94,200 | 94,200 | 0 — assets reused |
+| `b08acceptance@…` (cmuzaoi6) | no balance row | — | 0 |
+
+**280 credits measured**, against **4 references created and 3 flags cleared.** The other two projects reused existing `READY` assets, so no new rows and no charge — recorded as reuse, not as a free render.
+
+### The distribution at population scale
+
+| score band | scenes |
+|---|---|
+| below floor (<75) | **5** — 30, 60, 70, 70, 70 |
+| at or above floor | **5** — 80, 80, 90, 90, 90 |
+| median | **80** |
+| spread | **30 → 90** |
+
+The 80 median holds at n=10, but the **spread is much wider than the four-scene proof suggested**: one scene at 30 and one at 60 show that framing plus references does not guarantee the floor. Those five remain flagged, with the reason recorded rather than explained away.
+
+### Final shape
+
+| category | assets | disposition |
+|---|---|---|
+| cleared and resolved | **4** | done (1 earlier + 3 now) |
+| rendered below floor | **5** | live flag, needs a stronger lever |
+| no cast — thin input or absent intent | 7 projects | deferred, needs creator input |
+| out-of-scope (non-narrative) | 73 | closed with audit |
+| accepted loss | 2 projects | closed |
+
+**Live flags: 25 → 22.**
