@@ -60,3 +60,34 @@ Live flags: **22**, and the count is accurate — the resolution pass asserts `R
 ## The arc, in one paragraph
 
 The creative pipeline went from **0–50 to a median of 70 with a 90 at the top**; conditioning is proven end to end in the provider payload; takes are chargeable and loud on failure; and the floor of 75 is measured rather than guessed. What the arc could not do is make the pipeline clear 75 routinely — **3 of 7 measured beats** — and the record now says so plainly, instead of another round of re-reading.
+
+## Silent-zero closure: the remaining scope, measured (2026-11-03)
+
+The production charge now tolerates exactly one condition and rethrows the rest (PR #327). Completing the closure means deleting that last tolerance, which requires the runner mocks to be able to express a charge. The read found why that is not a one-line fixture.
+
+### Three mock shapes, not one
+
+| file | shape |
+|---|---|
+| `runner.test.ts`, `phase5`, `phase9`, `safety` | `function prismaMock()` returning the client object; `return prisma;` present |
+| `chain.test.ts` | `function prismaMock()` returning `{ prisma: { … } }` — the client is nested |
+| `launch.test.ts` | `prismaMock()` called inline at each test site; no shared return |
+| `readiness.test.ts` | `prismaForWithRefined(…)` — a purpose-built factory, not a generic mock |
+
+### The deeper obstacle
+
+`deductCredits` is not a single call — it runs the balance decrement and the audit insert inside **`prisma.$transaction`**:
+
+```ts
+await prisma.$transaction(async (tx) => {
+  const result = await tx.creditBalance.updateMany({...});
+  const updated  = await tx.creditBalance.findUnique({...});
+  await tx.creditTransaction.create({...});
+});
+```
+
+**None of the runner mocks implement `$transaction`.** A fixture therefore has to supply a transaction shim (`fn(tx)` with `creditBalance` and `creditTransaction`), a `featureCreditRate.findUnique` returning an active rate, and a `creditTransaction.findUnique` returning `null` for the idempotency pre-check. A rate row alone is not enough, and that is why the first attempt — helper plus a `return withCreditRate(prisma)` wrap — left **21 tests red across 7 files** and was reverted rather than shipped red.
+
+### The acceptance criterion, unchanged
+
+A missing rate fails loudly unless explicitly configured as free. The work is a fixture migration with a contract: `withCreditRate(client, { rate, featureKey, balance })` providing the four delegates above, applied at each file's own construction point, with **no assertion weakened**.
