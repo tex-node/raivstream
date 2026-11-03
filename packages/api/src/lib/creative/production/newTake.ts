@@ -10,7 +10,7 @@
  * `isLatest = false` and kept as history.
  */
 import type { PrismaClient } from '@raivstream/database';
-import { deductCredits, MODEL_FEATURE_KEY } from '../../credits';
+import { chargeOrThrow, MODEL_FEATURE_KEY } from '../../credits';
 import { applyIdentityFraming, composeCreativeIdentityBlock, resolveCreativeReferences, type CreativeCharacterRef } from './identityBlock';
 import { generateStill } from './generationAdapter';
 import type { StillSpec } from './capabilityRouter';
@@ -72,14 +72,16 @@ export async function createNewTake(prisma: PrismaClient, input: NewTakeInput): 
     select: { id: true },
   });
 
-  const creditsCharged = await deductCredits(
+  // No `.catch(() => 0)`: a take that cannot charge must fail, not report zero. The previous
+  // version swallowed the throw and reported creditsCharged=0 as if it were an outcome.
+  const creditsCharged = await chargeOrThrow(
     prisma,
     owner.userId,
     MODEL_FEATURE_KEY.FLUX2,
     `creative-take-${row.id}-a1`,
     `Creative take: ${input.sceneId} image`,
     `creative-take-${row.id}-a1`,
-  ).catch(() => 0);
+  );
 
   try {
     const media = await generateStill(

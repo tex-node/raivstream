@@ -14,13 +14,14 @@ vi.mock('../generationAdapter', () => ({
 vi.mock('../../../credits', () => ({
   MODEL_FEATURE_KEY: { FLUX2: 'generate:flux2', H3_MAX: 'generate:h3_max' },
   deductCredits: vi.fn(async () => 80),
+  chargeOrThrow: vi.fn(async () => 80),
 }));
 vi.mock('../identityBlock', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../identityBlock')>();
   return { ...actual, resolveCreativeReferences: vi.fn(async () => ['https://cdn.example/ref.png']) };
 });
 
-import { deductCredits } from '../../../credits';
+import { chargeOrThrow } from '../../../credits';
 import { createNewTake } from '../newTake';
 
 function makePrisma(opts: { previous?: { id: string; takeNumber: number } | null } = {}) {
@@ -83,7 +84,7 @@ describe('a new take is a new row', () => {
     const { prisma } = makePrisma({ previous: { id: 'take_1', takeNumber: 1 } });
     const result = await createNewTake(prisma, input);
     expect(result.creditsCharged).toBe(80);
-    const call = (deductCredits as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+    const call = (chargeOrThrow as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
     expect(String(call[3])).toContain('creative-take-take_2-a1');
   });
 
