@@ -203,21 +203,29 @@ export async function assertCastApproved(
     return;
   }
 
-  const approved = await (prisma as never as {
-    characterReferenceAsset: {
-      findMany: (args: unknown) => Promise<Array<{ characterName: string | null }>>;
-    };
-  }).characterReferenceAsset.findMany({
+  // NO `as never` CAST HERE. The previous version cast the client to `unknown`, which is
+  // how `approvedReferenceAssetId` on an asset survived three sessions of review: the
+  // compiler could not see the where clause, and the mock could not disagree with it.
+  // Typed, the invalid field is a compile error rather than a Prisma stack in production.
+  const approved = await prisma.characterReferenceAsset.findMany({
     where: {
       status: 'READY',
       assetUrl: { not: null },
-      approvedReferenceAssetId: { not: null },
-      OR: [{ characterName: { in: names } }, { character: { name: { in: names } } }],
+      OR: [
+        // Creative-owned: approval recorded on the asset itself.
+        { approvedAt: { not: null }, characterName: { in: names } },
+        // Story-owned: approval recorded on the character, unchanged behaviour.
+        { character: { name: { in: names }, approvedReferenceAssetId: { not: null } } },
+      ],
     },
-    select: { characterName: true },
+    select: { characterName: true, character: { select: { name: true } } },
   });
 
-  const approvedNames = new Set(approved.map((row) => (row.characterName ?? '').toLowerCase()).filter(Boolean));
+  const approvedNames = new Set(
+    approved
+      .map((row) => (row.characterName ?? row.character?.name ?? '').toLowerCase())
+      .filter(Boolean),
+  );
   const missing = names.filter((name) => !approvedNames.has(name.toLowerCase()));
   if (missing.length > 0) {
     console.info(
