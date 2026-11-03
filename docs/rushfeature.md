@@ -935,3 +935,16 @@ Three checks catch the silent failures that make a result meaningless rather tha
   **account balance**, not by calibration; lowering the floor to 72–73 would admit a scene that is simply weaker than its siblings.
 
 - **2026-11-03 — ARC CLOSE.** Capability: 0–50 → **median 70, best 90**, conditioning proven in the payload. Floor: **75 stands**, ~3 of 7 measured beats clear it, most creative output flagged by design. Takes: live, chargeable (verified −80 per take), parent demoted not deleted, guard intact. Silent-zero: `chargeOrThrow` makes it impossible on the newest path; one annotated tolerant site remains (`runner.ts:202`). Residue: **22 live flags** — 5 below-floor scenes with measured conditioned takes, 7 thin-input projects, 73 out-of-scope with audit, 2 accepted loss, 4 resolved. Infrastructure debts named: creative-table ownership (`supabase_admin`), projectId-scoped take constraint, and the branch ruleset requiring checks on the **current head** (a stale base produces "2 of 2 required status checks are expected" even when every check on the old head passed — `gh pr update-branch`, not a re-push). Full record: `docs/operations/creative-arc-close.md`.
+
+- **2026-11-03 — Silent-zero class CLOSED: the transaction shim exists and the tolerance is gone.** The read named the
+  exact shape `deductCredits` needs — idempotency `findUnique` (null by default, forceable), `featureCreditRate.findUnique`
+  (`{creditsPerUnit, isActive}`), `prisma.$transaction(fn)`, and inside it `creditBalance.updateMany` (`{count:1}`/`{count:0}`),
+  `creditBalance.findUnique` (post-decrement), `creditTransaction.create`. **`withCreditCharge()`** supplies all of it and
+  mutates-and-returns the client, so **one shim serves four mock shapes** across all **7** runner files (factory-return,
+  nested client, inline factory, purpose-built factory) — verified by grep, no assertion weakened. **One fixture bug found and
+  fixed on the way:** the first version rated only `generate:flux2`, so video assets (`generate:h3_max`) failed as
+  missing-rate — it now rates every key by default with an explicit `featureKeys` restriction. **Tolerance deleted:**
+  `chargeProductionAsset()` and its `unrated` branch are gone; the runner calls `chargeOrThrow` unconditionally because a
+  missing rate is a **configuration error, not a free render** (the rate table is seeded and active in production). Class
+  state: `castReferences` fixed (#318), `createNewTake` fixed (#323), `runner` fixed here — **no credit path can report zero
+  without charging or throwing**. Suite green at **2,274 tests**.

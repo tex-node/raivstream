@@ -3,6 +3,7 @@ import { buildRunDiagnostics } from '../production/diagnostics';
 import { runCreativeProduction, type ProductionDeps } from '../production/runner';
 import { buildCreativePlan } from '../production/plan';
 import { interpret } from '../intent/interpreter';
+import { withCreditCharge } from './helpers/creditFixture';
 
 beforeEach(() => {
   process.env.RAIVSTREAM_5_ENABLED = 'true';
@@ -43,7 +44,7 @@ describe('launch — production run diagnostics', () => {
   }
 
   it('returns the full provenance chain and sanitized failures', async () => {
-    const d = await buildRunDiagnostics(prismaMock(), { projectId: 'p1', userId: 'u1' });
+    const d = await buildRunDiagnostics(withCreditCharge(prismaMock()), { projectId: 'p1', userId: 'u1' });
     expect(d.provenance.seriesId).toBe('s1');
     expect(d.provenance.campaignId).toBe('c1');
     expect(d.provenance.versions[0].versionNumber).toBe(1);
@@ -58,7 +59,7 @@ describe('launch — production run diagnostics', () => {
   });
 
   it('never exposes raw provider/model/prompt internals', async () => {
-    const d = await buildRunDiagnostics(prismaMock(), { projectId: 'p1', userId: 'u1' });
+    const d = await buildRunDiagnostics(withCreditCharge(prismaMock()), { projectId: 'p1', userId: 'u1' });
     const serialized = JSON.stringify(d);
     expect(serialized).not.toContain('fal.ai');
     expect(serialized).not.toContain('minimax');
@@ -105,6 +106,7 @@ describe('launch — reliability failure matrix', () => {
 
   it('provider timeout fails only the timed-out asset and the run continues', async () => {
     const { prisma, assets } = prismaMock();
+  withCreditCharge(prisma);
     const still = vi.fn(async (spec: any) => {
       if (spec.sceneId === 'SCENE_02') throw new Error('Generation is taking longer than expected. Please try again.');
       return { assetUrl: 'r2://still' };
@@ -120,6 +122,7 @@ describe('launch — reliability failure matrix', () => {
 
   it('storage (R2) failure fails only that asset and never corrupts others', async () => {
     const { prisma, assets } = prismaMock();
+  withCreditCharge(prisma);
     const video = vi.fn(async (spec: any) => {
       if (spec.sceneId === 'SCENE_01') throw new Error('R2 upload failed');
       return { assetUrl: 'r2://video' };
@@ -134,6 +137,7 @@ describe('launch — reliability failure matrix', () => {
 
   it('repeated retry is bounded and does not loop forever', async () => {
     const { prisma } = prismaMock();
+  withCreditCharge(prisma);
     const still = vi.fn(async () => { throw new Error('provider rejected'); });
     const result = await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps({ generateStill: still }), { maxAttempts: 2 });
     // 1 image per scene × 2 attempts (bounded) — never unbounded.
@@ -146,6 +150,7 @@ describe('launch — reliability failure matrix', () => {
 
   it('a fully failed run is FAILED, not COMPLETED', async () => {
     const { prisma } = prismaMock();
+  withCreditCharge(prisma);
     const failing = vi.fn(async () => { throw new Error('provider down'); });
     const result = await runCreativeProduction(prisma as never, { projectId: 'p1' }, deps({ generateStill: failing, generateVideo: failing }), { maxAttempts: 1 });
     expect(result.status).toBe('FAILED');

@@ -27,6 +27,7 @@ vi.mock('../../r2', () => ({
 vi.mock('../../lastFrameExtract', () => ({ extractLastFrameAsSeedImage: async () => null }));
 
 import { generateStill, generateVideo } from '../production/generationAdapter';
+import { withCreditCharge } from './helpers/creditFixture';
 
 const { submitGenerationJob, pollJobStatus, moderatePrompt } = mocks;
 
@@ -104,7 +105,7 @@ describe('safety — content rejection fails only the affected asset and is neve
       },
       __assets: assets,
     };
-    return prisma;
+    return withCreditCharge(prisma);
   }
   const PLAN = buildCreativePlan({ projectType: interpret('a commercial').projectType });
 

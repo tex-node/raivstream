@@ -91,3 +91,56 @@ await prisma.$transaction(async (tx) => {
 ### The acceptance criterion, unchanged
 
 A missing rate fails loudly unless explicitly configured as free. The work is a fixture migration with a contract: `withCreditRate(client, { rate, featureKey, balance })` providing the four delegates above, applied at each file's own construction point, with **no assertion weakened**.
+
+## Silent-zero closure: COMPLETE (2026-11-03)
+
+The tolerance is gone. The fixture that made it necessary exists, and the class is closed on both sides.
+
+### The read, before any code
+
+`deductCredits` is five calls in a fixed order:
+
+| step | call | what the fixture must return |
+|---|---|---|
+| 0 | `creditTransaction.findUnique` | `null` (idempotency miss), parameterized so a test can force a hit |
+| 1 | `featureCreditRate.findUnique` | `{ creditsPerUnit, isActive }` |
+| 2 | `prisma.$transaction(fn)` | invokes `fn(tx)` |
+| 2a | `tx.creditBalance.updateMany` | `{ count: 1 }` when affordable, `{ count: 0 }` otherwise |
+| 2b | `tx.creditBalance.findUnique` | the post-decrement balance |
+| 2c | `tx.creditTransaction.create` | the audit row |
+| 3 | on `P2002`, `creditTransaction.findUnique` again | the concurrent winner |
+
+### The fixture — one shim, four injection shapes
+
+`packages/api/src/lib/creative/__tests__/helpers/creditFixture.ts` exports `withCreditCharge(client, { rate, featureKey, balance, featureKeys, idempotentHit })`. It **mutates and returns the client**, which is what lets one shim serve four different mock constructions:
+
+| shape | files | how the shim is injected |
+|---|---|---|
+| factory returns the client | `runner`, `phase5`, `phase9`, `safety` | `return withCreditCharge(prisma);` |
+| client nested in an object | `chain` | `withCreditCharge(prisma);` after the destructure |
+| factory called inline at each site | `launch` | `withCreditCharge(prismaMock())` and after `const { prisma, assets } = …` |
+| purpose-built factory | `readiness` | after each `prismaForWithRefined(...)` assignment, plus one hand-built mock that had relied on the tolerance |
+
+**A rate for every feature key by default.** The first version rated only `generate:flux2`; runner tests that produce video (`generate:h3_max`) then failed with a missing rate — a fixture bug of exactly the class this work exists to eliminate. `featureKeys` now restricts deliberately, and omitting it rates everything.
+
+### The tolerance, removed
+
+`chargeProductionAsset()` and its `unrated` branch are **deleted**. The runner calls `chargeOrThrow` unconditionally:
+
+```ts
+const creditsUsed = featureKey
+  ? await chargeOrThrow(prisma, project.userId, featureKey, ref, …, creditKeys.prodAsset.charge(asset.id, attempt))
+  : 0;
+```
+
+**A missing rate is a configuration error, not a free render** — established from the code, not preference: the rate table is seeded and active in production, so its absence can only mean a misconfigured deployment, and the previous behaviour rendered a film unbilled and called it success.
+
+### The class, closed
+
+| original instance | state |
+|---|---|
+| `castReferences` returning `created=0` | fixed (#318) — skip scoped to the project |
+| `createNewTake` reporting `creditsCharged=0` | fixed (#323) — `chargeOrThrow`, no catch |
+| `runner.ts` charge tolerating a missing rate | **fixed here** — tolerance deleted, mocks express a charge |
+
+**No credit path in this codebase can report zero without either charging or throwing.** 7 files verified by grep; no assertion weakened; suite green at **2,274 tests**.

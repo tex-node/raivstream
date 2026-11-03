@@ -5,6 +5,7 @@ import { buildCreativePlan } from '../production/plan';
 import { interpret } from '../intent/interpreter';
 import { ProductionPlanService } from '../production/service';
 import { CreativeError } from '../shared/errors';
+import { withCreditCharge } from './helpers/creditFixture';
 
 beforeEach(() => {
   process.env.RAIVSTREAM_5_ENABLED = 'true';
@@ -46,7 +47,7 @@ function prismaMock(initial: { project: any; plan: any; bible?: any }) {
     __assets: assets,
     __statusLog: state.statusLog,
   };
-  return prisma;
+  return withCreditCharge(prisma);
 }
 
 const COMMERCIAL = interpret('Create a 60-second cinematic commercial for a new Nigerian premium skincare brand. Make it feel luxurious, confident and modern.');
