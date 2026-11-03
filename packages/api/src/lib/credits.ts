@@ -675,3 +675,25 @@ export async function compensateFailedGeneration(
   );
   return 'refunded';
 }
+
+/**
+ * Charge or fail. (2026-11-03)
+ *
+ * The most expensive defect class in this codebase is a `catch` that turns a failure into a
+ * plausible zero: `castReferences` returning `created=0`, `resubmitPublication` reporting
+ * success while changing nothing, and `createNewTake` reporting `creditsCharged=0` because the
+ * owner had no balance row. Every one of those reads as a result.
+ *
+ * This helper has NO internal catch. It writes the transaction or it throws, so a caller that
+ * wants to tolerate a charge failure has to say so explicitly.
+ */
+export async function chargeOrThrow(
+  prisma: PrismaClient,
+  userId: string,
+  featureKey: string,
+  referenceId: string,
+  description: string,
+  idempotencyKey: string,
+): Promise<number> {
+  return deductCredits(prisma, userId, featureKey, referenceId, description, idempotencyKey);
+}

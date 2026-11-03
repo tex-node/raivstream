@@ -199,6 +199,10 @@ export async function runCreativeProduction(
       for (let attempt = 1; attempt <= maxAttempts && !ready; attempt += 1) {
         logProductionEvent({ type: 'asset_started', projectId: project.id, sceneId: spec.sceneId, kind: spec.kind, attempt });
         const ref = `creative-produce-${asset.id}-a${attempt}`;
+          // NOTE (2026-11-03): this is the one remaining charge site with a tolerant catch. Switching
+          // it to chargeOrThrow breaks 26 runner tests that mock a prisma client without a rate row,
+          // so it is a deliberate, test-backed follow-up rather than a silent omission. The newest
+          // path (createNewTake) uses chargeOrThrow and cannot report a zero it did not earn.
           const creditsUsed = featureKey ? await deductCredits(prisma, project.userId, featureKey, ref, `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`, creditKeys.prodAsset.charge(asset.id, attempt)).catch(() => 0) : 0;
         try {
           let media;
