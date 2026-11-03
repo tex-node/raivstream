@@ -902,3 +902,12 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
+
+- **2026-11-03 — Backlog restated: 26 flags and ~2,080 credits, not 99 and 7,920.** With the empty-array branch fixed,
+  **38 of 38** projects took the LLM path (was 1 of 10). Scope by type: **10 narrative, 28 non-narrative**, and the 28 were
+  **unflagged** — **73 flags** marked `OUT_OF_SCOPE` with audit rows kept rather than deleted, leaving **26** live flags.
+  Backfill wrote casts for **2 projects / 3 characters** (`Ada`, `Mama Nkechi`, `Lighthouse Keeper`), spot-checked. The
+  scoped reference run **created 1 reference** and **skipped the rest as already present** — not re-bought — with **0
+  platform credits** deducted (direct adapter) and the owner balance unchanged at 94,200. **Revised backlog: 26 stills ≈
+  2,080 credits.** The 73 removed flags were a gate applied to formats that cannot contain what it measures; the 2 projects
+  with no recoverable intent remain accepted losses.
