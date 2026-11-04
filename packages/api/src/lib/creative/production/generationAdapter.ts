@@ -84,6 +84,19 @@ export async function generateStill(spec: StillSpec, projectId: string, assetId:
   //      fall through rather than fail.
   const referenceImageUrls = (spec.referenceImageUrls ?? []).filter((url) => typeof url === 'string' && url.length > 0).slice(0, 4);
   const hasReferences = referenceImageUrls.length > 0;
+
+  // CALL-SITE INSTRUMENT (2026-11-04).
+  //
+  // `characterRefs` is the SEMANTIC list (names + descriptions); `referenceImageUrls` is the
+  // RESOLVED list the provider actually receives. Only the runner resolves one into the other.
+  // A caller that passes the semantic list and no URLs gets a silent text-to-image render - the
+  // `references=0` line that took two sessions to attribute. The two counts are logged together
+  // so the mismatch is visible at the moment the request is built.
+  const characterRefCount = ((spec as { characterRefs?: unknown[] }).characterRefs ?? []).length;
+  console.info(
+    `[creative.spec] scene=${spec.sceneId} semanticRefs=${characterRefCount} resolvedRefs=${referenceImageUrls.length}` +
+      `${characterRefCount > 0 && referenceImageUrls.length === 0 ? ' MISMATCH=char_refs_unresolved' : ''}`,
+  );
   const model: SupportedModel = hasReferences ? 'FLUX2_EDIT' : spec.sourceImageUrl ? 'FLUX_KONTEXT' : 'FLUX2';
 
   // PROOF POINT: composed != sent. This reads the ACTUAL payload that goes to the
