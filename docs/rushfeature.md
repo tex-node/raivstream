@@ -223,27 +223,33 @@ inconsistent characters.
 ---
 
 
-### Prerequisite for re-entry: planner persistence (scoped 2026-11-04)
+### Planner persistence — CORRECTED AND CLOSED (2026-11-04)
 
-**The debt.** `explicit.durationSeconds` is captured at intent — `intent/interpreter.ts:117-118` sets it from
-`extractDurationSeconds(text)` — and the plan never carries a runtime. Read result: **`totalRuntimeSeconds` is not
-declared anywhere** (grep over `packages/api/src` and `schema.prisma` returns no declaration), yet two consumers read
-it: `audio/service.ts:401` does `Math.max(1, Math.round(plan.totalRuntimeSeconds))`, and `output/derivation.ts:42`
-takes it as an input. So this is not a field that exists and is not written — it is a **field two consumers require
-and no producer provides**, which makes the audio path compute `NaN` instead of a runtime.
+**The earlier entry in this document said `totalRuntimeSeconds` was "declared nowhere". That was wrong, and it is
+recorded here because the wrong version shaped a scoped build plan.** The field is **declared at `plan.ts:70`** on
+`CreativeProductionPlanState` and **produced at `plan.ts:315`** (`totalRuntimeSeconds: cursor`, the ordered sum of the
+scene durations). The earlier claim came from a `Get-ChildItem` invocation that errored on a bad path and returned no
+output — a failed command read as evidence of absence.
 
-**Scope (not built this session — a producer plus a type, not a one-liner):**
+**What was actually missing was a test.** `musicChargeRace.test.ts` supplied `plan: { totalRuntimeSeconds: 30 }` as a
+fixture literal, so the suite would have stayed green if the builder stopped producing the field.
 
-1. Declare `totalRuntimeSeconds: number` on the plan state the builder returns.
-2. Produce it in `buildCreativePlan` from the ordered shot durations it already sums (`estimatedDurationSeconds`,
-   `plan.ts:281`); where `brief.durationSeconds` is set, assert the produced runtime matches the creator's target
-   rather than merely the sum.
-3. Consume it: `audio/service.ts:401` and `output/derivation.ts:42` keep the same path — no change expected, but the
-   audio rounding must be re-checked once a real number arrives.
+**Shipped:**
 
-**Acceptance criterion.** A plan built from a 30-second idea carries `totalRuntimeSeconds === 30`; a plan with no stated
-duration carries the sum of its scene durations; both asserted by test, and the audio path's first cue starts at 0 with
-the plan's runtime rather than `NaN`.
+1. `planRuntimePersistence.test.ts` — three assertions against a plan the builder actually made: a 30-second idea
+   carries `targetDurationSeconds === 30` and a runtime equal to the sum of its scenes; no stated duration carries
+   `undefined` target and the summed runtime; and the runtime is finite, which is what the two consumers need.
+2. The `musicChargeRace` fixture now builds its plan with `buildCreativePlan`, so removing the production of
+   `totalRuntimeSeconds` breaks it.
+3. The "consumers computing NaN" claim is withdrawn: with the field always produced, `Math.max(1, Math.round(...))` in
+   `audio/service.ts:401` and `output/derivation.ts:42` receives a finite number. The NaN path was reachable only for a
+   plan object constructed outside the builder — which is exactly what the old fixture did, and no longer does.
+
+**The design decision this session settled:** `totalRuntimeSeconds` is what the plan *builds* (the ordered sum), and
+`targetDurationSeconds` is what the creator *asked for*. They stay separate — collapsing them would make the timeline
+disagree with the runtime and hide a pacing mismatch the plan already reports in `notes`.
+
+**Phase 3 re-entry is unblocked.**
 
 ## Phase 3 — Staged production surface and a named manual studio
 
@@ -513,7 +519,7 @@ Read from the plan and the history, not from any session summary. Every classifi
 | **0 — Baseline proof** | **complete** (2026-11-04) | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
 | **1 — Identity store** | **in progress — externally blocked** | identity measured and conditioned (median 70, best 90, control 80); 3 of 7 measured beats clear the floor and 22 flags remain — the remaining coverage is **blocked on creator input for 7 thin-intent projects**, not an engineering queue item |
 | **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
-| **3 — Staged production surface** | **complete** | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
+| **3 — Staged production surface** | **complete** (2026-11-04: re-entry unblocked) | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
 | **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
 | **4 — Scoped director** | **not started** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
 | **5 — Cinematic vocabulary** | **not started** | dependency: Phase 2 |
@@ -536,7 +542,7 @@ Dependencies: met (Phase 1's reference store exists; takes exist on both tables 
 
 | debt | blocks which phase | disposition |
 |---|---|---|
-| **Planner persistence** (`explicit.durationSeconds` captured at intent, lost at plan) | **Phase 3's stage contract** — a stage cannot be approved if the plan it produced drops what the creator asked for | **prerequisite to any Phase 3 re-entry**, parallel to Phase 2 |
+| **Planner persistence** (`explicit.durationSeconds` captured at intent, lost at plan) | **Phase 3's stage contract** — a stage cannot be approved if the plan it produced drops what the creator asked for | **closed 2026-11-04** — the read found the field produced; the gap was a test, not a builder |
 | **The eight acknowledged failure lines** | **Phase 0's exit** ("both surfaces proven end-to-end") | **prerequisite to calling Phase 0 complete**, parallel to Phase 2 |
 | **Video re-render** (deferred; discontinuity trade-off recorded) | **Phase 3.5 distribution quality** — flagged films cannot be promoted without it | **parallel**; no phase's exit criterion requires it |
 | **Thin-input projects** (7) | **Phase 1's exit** ("every generated shot carries the reference") | **parallel, external dependency** — needs better creator input, not a pipeline change |
