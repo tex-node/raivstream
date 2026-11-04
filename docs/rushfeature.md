@@ -948,3 +948,13 @@ Three checks catch the silent failures that make a result meaningless rather tha
   missing rate is a **configuration error, not a free render** (the rate table is seeded and active in production). Class
   state: `castReferences` fixed (#318), `createNewTake` fixed (#323), `runner` fixed here — **no credit path can report zero
   without charging or throwing**. Suite green at **2,274 tests**.
+
+- **2026-11-04 — Take constraint verified in the database and pinned by a class test.** Read all three layers: `pg_indexes`
+  shows `creative_produced_assets_projectId_sceneId_kind_takeNumber_key UNIQUE (projectId, sceneId, kind, takeNumber)`;
+  `schema.prisma` and the migration agree. **Shipped:** `schemaScope.test.ts` asserts that every project-scoped model's unique
+  constraint keyed on `sceneId` carries `projectId` — the exact shape that made the take migration unappliable — and pins the
+  corrected constraint specifically. The rule is narrow on purpose (`assetId`/`versionId`/`runId`/`seriesId` are globally
+  unique, so requiring `projectId` there would be noise and the rule would be disabled within a week). **Finding:** the same
+  defect exists **pre-existing in `StorySceneAsset`** — `@@unique([sceneId, assetType, takeNumber])` and
+  `@@unique([sceneId, idempotencyKey])` — recorded as **shrink-only named exceptions**, so a new violation fails the test and
+  removing one also fails it. Suite green at **2,276 tests**.
