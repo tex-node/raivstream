@@ -56,10 +56,11 @@ describe('unique constraints carry their scope', () => {
     // The two StorySceneAsset rows below are the same class of defect, pre-existing, in the
     // story take model. They are recorded rather than fixed here so this list stays
     // shrink-only: a NEW violation fails the test, and removing one of these fails it too.
-    const RECORDED_EXCEPTIONS = [
-      'StorySceneAsset: @@unique([sceneId, assetType, takeNumber])',
-      'StorySceneAsset: @@unique([sceneId, idempotencyKey])',
-    ];
+    // EMPTY as of 2026-11-04: StorySceneAsset's two keys were scoped to projectId in both the
+    // schema and the database (migration 20261104020000_story_scene_asset_scope). The list
+    // stays because it is the mechanism: a new violation must be added deliberately, and the
+    // fix of an existing one shows up as a failing test until the entry is removed.
+    const RECORDED_EXCEPTIONS: string[] = [];
 
     const violations: string[] = [];
     for (const block of blocks) {
