@@ -321,6 +321,8 @@ re-renders with a better interface.
 
 ---
 
+**CORRECTION 2026-11-04 — this phase is blocked by the take model's granularity.** The exit criterion is *"Direct shot 12C regenerates only that shot's take"*, but takes are keyed `(projectId, sceneId, kind, takeNumber)` (`schema.prisma:2630`) — **no `shotId`**, even though `CreativeProducedAsset.shotId` exists (`:2612`). Two shots in one scene would therefore collide on the same take number and violate the unique index. Shot-level takes need the constraint extended to include `shotId` — the same class as the scene-scoped constraint fixed in `20261104020000_story_scene_asset_scope`. **Phase 4 is not startable until that lands; its exit criterion is unreachable today.**
+
 ## Phase 5 — Cinematic vocabulary and look
 
 **Goal.** Make "look" a first-class object rather than a prompt fragment.
@@ -335,6 +337,10 @@ controls; a resolution ladder with plan gating, mirroring the existing credit-ra
 **Does not do.** No new provider, no new model.
 
 ---
+
+**Status 2026-11-04 — first slice shipped.** `look.ts` defines the object (lens, movement, lighting, grade, 9:16 resolution ladder); `buildLook()` normalises rather than passing values through (an out-of-ladder value falls back to the default, because a look applies to every shot and one typo should not become an unparseable prompt fragment); `lookToPrompt()` projects deterministically; `lookResolution()` keeps the ladder on 9:16. **8 tests.**
+
+**Remaining for the exit criterion** (*"a look is saved, named, and reusable"*): persistence. Scope: a `CinematicLook` table (projectId, name, the five fields, unique on `(projectId, name)` — scoped, per the constraint rule), a save/rename/list service, and the consumer that applies a stored look in place of a literal. **Acceptance criterion:** a look is saved under a name, survives a re-read, is applied to a production through the director controls, and a second production can apply it without re-entering the fields. Deliberately not shipped with the pure slice: migrating a table for a type that had not been exercised is how the take model acquired an impossible constraint.
 
 ## Phase 6 — Presets and LoRAs as product objects
 
@@ -521,8 +527,8 @@ Read from the plan and the history, not from any session summary. Every classifi
 | **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
 | **3 — Staged production surface** | **complete** (2026-11-04: re-entry unblocked) | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
 | **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
-| **4 — Scoped director** | **not started** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
-| **5 — Cinematic vocabulary** | **not started** | dependency: Phase 2 |
+| **4 — Scoped director** | **not started — blocked** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
+| **5 — Cinematic vocabulary** | **in progress** (first slice 2026-11-04) | dependency: Phase 2 |
 | **6 — Presets and LoRAs** | **not started** | dependency: Phase 5 |
 | **7 — Auto mode** | **not started** | dependency: Phase 2 |
 | **8 — Motion/object operator** | **not started** (optional) | dependency: Phase 1 |
