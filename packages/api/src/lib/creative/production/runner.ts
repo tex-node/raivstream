@@ -267,6 +267,13 @@ export async function runCreativeProduction(
             const lookPrompt = lookFragment
               ? composeWithLook((spec as StillSpec).prompt, lookFragment)
               : (spec as StillSpec).prompt;
+            if (lookFragment) {
+              // Call-site evidence that the stored look reached the payload: this logs the exact
+              // fragment about to be composed, at the point of composition, not at save time.
+              console.info(
+                `[creative.look] scene=${spec.sceneId} name=${options.lookName} fragmentChars=${lookFragment.length} inPrompt=${lookPrompt.includes(lookFragment)}`,
+              );
+            }
             const framing = applyIdentityFraming(lookPrompt, {
               characters: sceneCharacters,
               wideShotRequired: Boolean((spec as { wideShotRequired?: boolean }).wideShotRequired),
