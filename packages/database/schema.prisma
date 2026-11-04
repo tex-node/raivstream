@@ -2496,6 +2496,7 @@ model CreativeProject {
   @@index([status])
   @@index([legacyStoryProjectId])
   @@map("creative_projects")
+    looks                CinematicLook[]
 }
 
 model CreativeBrief {
@@ -3115,4 +3116,28 @@ model CreativeReviewFlag {
   @@index([projectId, createdAt])
   @@index([reviewedAt])
   @@map("creative_review_flags")
+}
+
+/// A saved, named, reusable cinematic look (Phase 5 persistence).
+///
+/// Scoped to the project, not the user: a look is reusable across every production in one film,
+/// which is what "reusable" means for a director working on a single project. The constraint is
+/// (projectId, name) - a name collision inside one project is a conflict to surface, not a second
+/// row; the same name in another project is a different look.
+model CinematicLook {
+  id         String          @id @default(cuid())
+  projectId  String
+  project    CreativeProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name       String
+  lens       Int
+  movement   String
+  lighting   String
+  grade      String
+  resolution Int
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("cinematic_looks")
 }

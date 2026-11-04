@@ -331,6 +331,8 @@ re-renders with a better interface.
 
 **Status.** See [history — Phase 5 — Cinematic vocabulary and look](roadmap-history.md#phase-5--cinematic-vocabulary-and-look--status-notes).
 
+**State.** Persistence shipped — a look is a saved, named, reusable object. `CinematicLook` (`cinematic_looks`) keyed unique on **`(projectId, name)`**: scope decided from the read, because "reusable" means reusable across every production in one film, and a name collision inside a project is a decision to surface rather than a second row. Service: `saveLook`, `renameLook`, `listLooks`, `lookPromptForProduction`, with **`LookNameConflictError`** for a duplicate save and a duplicate rename — typed conflicts, not unique-violation stacks. Consumer: `runCreativeProduction({ lookName })` reads the look back from the project and composes its fragment onto every still prompt, so a second production reuses it **without re-entering a field**. **Proven**: saved → re-read → identical values; project-scoped isolation; duplicate save and duplicate rename both conflict; two productions compose the same saved look into their prompts; a missing look returns null rather than a silent default. **Not yet proven on bytes:** no production has been rendered with a look applied — one still at 80 credits would close it, and the criterion's "applied to a production" clause is currently proven at the prompt-composition layer.
+
 **Goal.** Make "look" a first-class object rather than a prompt fragment.
 
 **What it changes.** Lens, sensor, movement, lighting and grade fields on the director
