@@ -2627,6 +2627,10 @@ model CreativeProducedAsset {
   parentTakeId  String?
   isLatest      Boolean                       @default(true)
 
+  // Scene-level take uniqueness. The DATABASE carries TWO PARTIAL unique indexes since
+  // 20261104090000_creative_take_shot_scope - this one for shotId IS NULL and a
+  // five-column one for shotId IS NOT NULL. Prisma cannot express partial indexes, so this
+  // declaration is the scene-level half only and the migration is the authority.
   @@unique([projectId, sceneId, kind, takeNumber])
   @@index([projectId, sceneId])
   @@index([projectId, status])

@@ -305,6 +305,8 @@ semantics (one story = nine feed items). That is a different product, not a miss
 
 ## Phase 4 — Scoped director
 
+**Dependency resolved 2026-11-04.** The block recorded above was real: takes were keyed without `shotId`, so two shots in one scene collided on take number. The constraint is now **two partial unique indexes** — `creative_produced_assets_scene_take_key` for `shotId IS NULL`, `creative_produced_assets_shot_take_key` for `shotId IS NOT NULL` — because a plain five-column unique would have treated `NULL` shot ids as distinct and silently allowed two scene-level takes to share a take number. Verified in `pg_indexes`; the old constraint dropped; 435 rows, 0 collisions before the change. `takeShotScope.test.ts` pins both halves. **Phase 4 is startable.**
+
 **Goal.** One conversational interface over script, scene, shot, and bible — scope-aware.
 
 **What it changes.**
@@ -527,7 +529,7 @@ Read from the plan and the history, not from any session summary. Every classifi
 | **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
 | **3 — Staged production surface** | **complete** (2026-11-04: re-entry unblocked) | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
 | **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
-| **4 — Scoped director** | **not started — blocked** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
+| **4 — Scoped director** | **not started — dependency met** (2026-11-04) | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
 | **5 — Cinematic vocabulary** | **in progress** (first slice 2026-11-04) | dependency: Phase 2 |
 | **6 — Presets and LoRAs** | **not started** | dependency: Phase 5 |
 | **7 — Auto mode** | **not started** | dependency: Phase 2 |
