@@ -37,6 +37,7 @@ export const creativeIntentRouter = router({
         });
         return { ...(result as object), requestId };
       } catch (error) {
+      logPreProjectStage(requestId, 'intent', 'fail', { reason: 'interpret_failed' });
         throw toTrpcError(error);
       }
     }),

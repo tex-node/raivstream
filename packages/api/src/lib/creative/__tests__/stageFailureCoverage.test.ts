@@ -34,14 +34,16 @@ const STAGES = [
  * Each entry names why it has no failure path yet.
  */
 const ACKNOWLEDGED_WITHOUT_FAIL_PATH = new Set<string>([
-  'intent', // service throws before any project-scoped log; the router maps to a tRPC error
-  'bible', // seeding failure aborts project creation, so there is no project to name
-  'plan', // builder throws out of the procedure; no catch at the service boundary
-  'preview', // status update rejects invalid transitions with an exception
-  'produce', // run failure is reported by [creative.production] run_finished, not a stage line
-  'review', // per-asset failures are written into the run row, not a stage line
-  'director', // failure throws before a directive exists
-  'approval', // invalid decisions throw; no persisted row to annotate
+  // EMPTY as of 2026-11-04. All nine stages log a failure disposition:
+  //   intent / bible  -> logPreProjectStage(..., 'fail', ...) at the request boundary
+  //   plan / preview  -> guard clauses that log before throwing
+  //   produce         -> the cast-gate catch
+  //   review          -> the per-asset catch, naming the scene
+  //   director        -> the project/plan guards
+  //   approval        -> the version guard
+  //   output          -> already had one (this test's original subject)
+  // The list stays as the mechanism: a new stage without a fail line must be added here
+  // deliberately, and fixing one shows up as a failing test until its entry is removed.
 ]);
 
 const SRC = resolve(__dirname, '../../../../../..');
@@ -77,9 +79,7 @@ describe('every stage has a success and a failure disposition', () => {
   });
 
   it('the acknowledged gap is exactly the known set — it may shrink, not grow', () => {
-    expect([...ACKNOWLEDGED_WITHOUT_FAIL_PATH].sort()).toEqual(
-      ['approval', 'bible', 'director', 'intent', 'plan', 'preview', 'produce', 'review'].sort(),
-    );
+    expect([...ACKNOWLEDGED_WITHOUT_FAIL_PATH].sort()).toEqual([]);
   });
 
   it('output is NOT in the gap — it has a real failure line', () => {

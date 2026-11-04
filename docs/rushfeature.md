@@ -57,6 +57,9 @@ claims to improve actually works on both surfaces.
 
 ---
 
+
+**Closed 2026-11-04.** The eight acknowledged failure lines were the only thing keeping this phase open. All eight now emit a `[creative.stage] stage=<name> status=fail reason=<what failed>` line — `intent` and `bible` at the request boundary via `logPreProjectStage`, `plan`/`preview`/`director`/`approval` at their guard clauses before the throw, `produce` at the cast gate and `review` in the per-asset catch naming the scene. The shrink-only set in `stageFailureCoverage.test.ts` is **empty** (verified by reading the file, not by the test exiting 0), and `stageFailureFiring.test.ts` observes three of them firing — `approval reason=version_not_found`, `director reason=project_not_found`, `preview reason=invalid_state_transition` — because a line that exists and never runs is instrumentation by assertion.
+
 ## Phase 1 — Identity store
 
 **Goal.** Replace re-described identity text with named, typed, reusable reference assets —
@@ -484,7 +487,7 @@ Read from the plan and the history, not from any session summary. Every classifi
 
 | phase | classification | evidence |
 |---|---|---|
-| **0 — Baseline proof** | **in progress** | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
+| **0 — Baseline proof** | **complete** (2026-11-04) | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
 | **1 — Identity store** | **in progress** | identity is measured and conditioned (history: median 70, best 90, control 80), but only 3 of 7 measured beats clear the floor and 22 flags remain — "every generated shot carries the reference" is not yet true across the library |
 | **2 — Take model** | **in progress** | the creative take path shipped and is proven (take 2, 20 → 90, charge verified); the **story** take model's scoped constraints landed last session; the take-aware **export re-assembly** is still unbuilt (history: "piece (2) started") |
 | **3 — Staged production surface** | **complete** | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |

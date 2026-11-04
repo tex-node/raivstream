@@ -176,7 +176,10 @@ export class ProductionPlanService {
       where: { id: input.projectId, userId: input.userId },
       include: { brief: true, bible: true, productionPlan: true },
     });
-    if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    if (!project) {
+      logStage(input.projectId, 'plan', 'fail', { reason: 'project_not_found' });
+      throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    }
 
     // Primary gate: return structured readiness requirement before creating any plan.
     const planReadiness = await this.checkPlanReadiness(prisma, project as never);
