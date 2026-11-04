@@ -222,6 +222,29 @@ inconsistent characters.
 
 ---
 
+
+### Prerequisite for re-entry: planner persistence (scoped 2026-11-04)
+
+**The debt.** `explicit.durationSeconds` is captured at intent — `intent/interpreter.ts:117-118` sets it from
+`extractDurationSeconds(text)` — and the plan never carries a runtime. Read result: **`totalRuntimeSeconds` is not
+declared anywhere** (grep over `packages/api/src` and `schema.prisma` returns no declaration), yet two consumers read
+it: `audio/service.ts:401` does `Math.max(1, Math.round(plan.totalRuntimeSeconds))`, and `output/derivation.ts:42`
+takes it as an input. So this is not a field that exists and is not written — it is a **field two consumers require
+and no producer provides**, which makes the audio path compute `NaN` instead of a runtime.
+
+**Scope (not built this session — a producer plus a type, not a one-liner):**
+
+1. Declare `totalRuntimeSeconds: number` on the plan state the builder returns.
+2. Produce it in `buildCreativePlan` from the ordered shot durations it already sums (`estimatedDurationSeconds`,
+   `plan.ts:281`); where `brief.durationSeconds` is set, assert the produced runtime matches the creator's target
+   rather than merely the sum.
+3. Consume it: `audio/service.ts:401` and `output/derivation.ts:42` keep the same path — no change expected, but the
+   audio rounding must be re-checked once a real number arrives.
+
+**Acceptance criterion.** A plan built from a 30-second idea carries `totalRuntimeSeconds === 30`; a plan with no stated
+duration carries the sum of its scene durations; both asserted by test, and the audio path's first cue starts at 0 with
+the plan's runtime rather than `NaN`.
+
 ## Phase 3 — Staged production surface and a named manual studio
 
 **Goal.** Expose the staged production model that already exists in the 5.0 creative layer as
@@ -488,8 +511,8 @@ Read from the plan and the history, not from any session summary. Every classifi
 | phase | classification | evidence |
 |---|---|---|
 | **0 — Baseline proof** | **complete** (2026-11-04) | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
-| **1 — Identity store** | **in progress** | identity is measured and conditioned (history: median 70, best 90, control 80), but only 3 of 7 measured beats clear the floor and 22 flags remain — "every generated shot carries the reference" is not yet true across the library |
-| **2 — Take model** | **in progress** | the creative take path shipped and is proven (take 2, 20 → 90, charge verified); the **story** take model's scoped constraints landed last session; the take-aware **export re-assembly** is still unbuilt (history: "piece (2) started") |
+| **1 — Identity store** | **in progress — externally blocked** | identity measured and conditioned (median 70, best 90, control 80); 3 of 7 measured beats clear the floor and 22 flags remain — the remaining coverage is **blocked on creator input for 7 thin-intent projects**, not an engineering queue item |
+| **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
 | **3 — Staged production surface** | **complete** | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
 | **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
 | **4 — Scoped director** | **not started** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
