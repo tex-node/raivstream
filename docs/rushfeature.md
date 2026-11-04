@@ -305,6 +305,8 @@ semantics (one story = nine feed items). That is a different product, not a miss
 
 **Status.** See [history — Phase 4 — Scoped director](roadmap-history.md#phase-4--scoped-director--status-notes).
 
+**Per-shot conditioning: the previous claim was wrong (corrected in place).** The plan said the per-shot spec "never carries character references". Reading both branches of `routeProduction` side by side shows they build `characterRefs` identically (`capabilityRouter.ts`, the per-shot push spreads the same `characterRefs` as the composite), and a direct comparison against project `cmvzvo9y` / `SCENE_01` returned **refs=2 and 4 resolved references for both arms** — no difference. `perShotConditioning.test.ts` (4 tests) now pins that: both arms non-empty, the per-shot refs **equal** the composite's, the shot prompt still differs (addressing survives conditioning), and a bible with no characters yields empty refs in both arms. **What is not explained:** the live run logged `references=0 framingInPrompt=false` with the bible passed and a prompt hash identical to the un-conditioned run. That evidence stands and the mechanism is unknown, so Phase 4's gap is restated as **unreproduced**: the next step is to log `spec.characterRefs.length` in the same process immediately before any generate call — zero spend — rather than to change the router, which the read shows is correct.
+
 **Goal.** One conversational interface over script, scene, shot, and bible — scope-aware.
 
 **What it changes.**
