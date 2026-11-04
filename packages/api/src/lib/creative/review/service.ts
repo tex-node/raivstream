@@ -70,6 +70,7 @@ export class ReviewService {
         });
         runs.push({ id: run.id, projectId: project.id, sceneId: asset.sceneId, assetId: asset.id, status, findings, provider: evaluated?.provider ?? null, scores: evaluated?.scores ?? null, createdAt: run.createdAt });
       } catch (error) {
+        logStage(project.id, 'review', 'fail', { scene: asset.sceneId, reason: (error as Error).message.slice(0, 120) });
         await prisma.creativeReviewRun.update({
           where: { id: run.id },
           data: {

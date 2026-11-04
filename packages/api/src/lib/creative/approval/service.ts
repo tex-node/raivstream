@@ -41,7 +41,10 @@ export class ApprovalService {
     if (!isCreativeApprovalEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 approval is not enabled.');
     logStage(input.projectId, 'approval', 'start', { kind: input.kind, decision: input.decision });
     const version = await prisma.creativeVersion.findFirst({ where: { id: input.versionId, projectId: input.projectId } });
-    if (!version) throw new CreativeError('PROJECT_NOT_FOUND', 'Version not found.');
+    if (!version) {
+      logStage(input.projectId, 'approval', 'fail', { reason: 'version_not_found', kind: input.kind });
+      throw new CreativeError('PROJECT_NOT_FOUND', 'Version not found.');
+    }
     const status = DECISION_TO_STATUS[input.decision];
     const row = await prisma.creativeApproval.upsert({
       where: { versionId_kind: { versionId: input.versionId, kind: input.kind as never } },

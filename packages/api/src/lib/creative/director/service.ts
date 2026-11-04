@@ -174,8 +174,14 @@ export class DirectorService {
       where: { id: input.projectId, userId: input.userId },
       include: { productionPlan: true, bible: true },
     });
-    if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
-    if (!project.productionPlan) throw new CreativeError('PLAN_NOT_APPROVED', 'Build a plan before directing.');
+    if (!project) {
+      logStage(input.projectId, 'director', 'fail', { reason: 'project_not_found' });
+      throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
+    }
+    if (!project.productionPlan) {
+      logStage(input.projectId, 'director', 'fail', { reason: 'plan_not_approved' });
+      throw new CreativeError('PLAN_NOT_APPROVED', 'Build a plan before directing.');
+    }
     const plan = project.productionPlan.plan as unknown as CreativeProductionPlanState;
     const bible = project.bible as unknown as CreativeBibleState | null;
     const interpretation = interpretDirective(input.instruction, plan);

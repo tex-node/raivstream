@@ -82,6 +82,9 @@ export const creativeProjectRouter = router({
         }
         return project;
       } catch (error) {
+        if (input.requestId) {
+          logPreProjectStage(input.requestId, 'bible', 'fail', { reason: 'project_creation_failed' });
+        }
         throw toTrpcError(error, 'Project creation failed.');
       }
     }),

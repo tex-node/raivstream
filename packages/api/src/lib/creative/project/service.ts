@@ -167,6 +167,7 @@ export class ProjectService {
     // allowed, so a project can never be silently pushed into an impossible state.
     const to = input.status as CreativeProjectState['status'];
     if (to !== project.status && !canTransition(project.status, to)) {
+      logStage(input.projectId, 'preview', 'fail', { reason: 'invalid_state_transition', from: project.status, to: input.status });
       throw new CreativeError('INVALID_STATE_TRANSITION', `Cannot move a project from ${project.status} to ${to}.`);
     }
     const updated = await prisma.creativeProject.update({
