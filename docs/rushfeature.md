@@ -477,3 +477,42 @@ Three checks catch the silent failures that make a result meaningless rather tha
   A flag can be true in storage and `undefined` in every consumer.
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
+
+## Sequence determination (2026-11-04)
+
+Read from the plan and the history, not from any session summary. Every classification cites its evidence.
+
+| phase | classification | evidence |
+|---|---|---|
+| **0 — Baseline proof** | **in progress** | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
+| **1 — Identity store** | **in progress** | identity is measured and conditioned (history: median 70, best 90, control 80), but only 3 of 7 measured beats clear the floor and 22 flags remain — "every generated shot carries the reference" is not yet true across the library |
+| **2 — Take model** | **in progress** | the creative take path shipped and is proven (take 2, 20 → 90, charge verified); the **story** take model's scoped constraints landed last session; the take-aware **export re-assembly** is still unbuilt (history: "piece (2) started") |
+| **3 — Staged production surface** | **complete** | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
+| **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
+| **4 — Scoped director** | **not started** | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
+| **5 — Cinematic vocabulary** | **not started** | dependency: Phase 2 |
+| **6 — Presets and LoRAs** | **not started** | dependency: Phase 5 |
+| **7 — Auto mode** | **not started** | dependency: Phase 2 |
+| **8 — Motion/object operator** | **not started** (optional) | dependency: Phase 1 |
+| **9 — Academy content** | **not started** | dependency: Phases 1–5 shipped |
+
+### The next phase: **Phase 2 — Take model (remaining work)**
+
+Exit criterion: *"Change scene 3 → only scene 3 re-renders and the film re-assembles; the other scenes keep their existing takes."*
+
+What remains is the half that has no code: the **take-aware export path** — a story export keyed on the ordered per-scene-take composition, so a new take re-assembles with N-1 segment-cache hits. The creative side of the same idea is done and proven; the story side is not.
+
+Dependencies: met (Phase 1's reference store exists; takes exist on both tables with project-scoped constraints).
+
+### Debt-to-phase mapping
+
+| debt | blocks which phase | disposition |
+|---|---|---|
+| **Planner persistence** (`explicit.durationSeconds` captured at intent, lost at plan) | **Phase 3's stage contract** — a stage cannot be approved if the plan it produced drops what the creator asked for | **prerequisite to any Phase 3 re-entry**, parallel to Phase 2 |
+| **The eight acknowledged failure lines** | **Phase 0's exit** ("both surfaces proven end-to-end") | **prerequisite to calling Phase 0 complete**, parallel to Phase 2 |
+| **Video re-render** (deferred; discontinuity trade-off recorded) | **Phase 3.5 distribution quality** — flagged films cannot be promoted without it | **parallel**; no phase's exit criterion requires it |
+| **Thin-input projects** (7) | **Phase 1's exit** ("every generated shot carries the reference") | **parallel, external dependency** — needs better creator input, not a pipeline change |
+| **The ledger writer** | **Phase 3.5 revenue** | **blocked** on a revenue pool that does not exist; parallel |
+| **Ruleset-requires-current-head** | nothing | **parallel infrastructure** — it blocks merges, not phases; mitigated by `gh pr update-branch` |
+
+**One consequence worth stating:** Phase 2 is the next phase, and **no debt blocks it**. The two debts that are prerequisites (planner persistence, the eight failure lines) gate Phase 3 re-entry and Phase 0's closure respectively — so they can be worked in parallel without delaying the sequence.
