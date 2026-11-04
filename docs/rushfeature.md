@@ -500,7 +500,9 @@ Read from the plan and the history, not from any session summary. Every classifi
 
 Exit criterion: *"Change scene 3 → only scene 3 re-renders and the film re-assembles; the other scenes keep their existing takes."*
 
-What remains is the half that has no code: the **take-aware export path** — a story export keyed on the ordered per-scene-take composition, so a new take re-assembles with N-1 segment-cache hits. The creative side of the same idea is done and proven; the story side is not.
+**CORRECTION 2026-11-04.** The paragraph that stood here said *"what remains is the half that has no code: the take-aware export path … the story side is not."* **That was wrong, and it is preserved here so the record shows both the claim and the correction.** The read found the mechanism already built: `computeSourceHash` hashes ordered `sceneId:assetId` pairs and `buildExportSegmentKey` keys on `sourceAssetId` — both asset-id keyed, so a new take changes exactly one key by construction, and the story export already passes `projectId` into `renderOutputDerivative` so the cache can key segments.
+
+What was missing was **evidence**, not code. It now exists: `exportTakeComposition.test.ts` drives the renderer's own cache decision across three arms and asserts **hit = N−1, miss = 1**, that the missed key is scene 3's and not another segment, that the assembled timeline signature is identical, and that the source hash changes only because scene 3 changed. Phase 2's exit criterion is met **by construction and now by test**.
 
 Dependencies: met (Phase 1's reference store exists; takes exist on both tables with project-scoped constraints).
 
