@@ -25,6 +25,7 @@ import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
 import { MediaProviderError } from '../../mediaProviders/types';
 import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } from './capabilityRouter';
+import { composeWithLook, lookPromptForProduction } from '../look/service';
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
 import { logStage } from '../stageLog';
@@ -70,6 +71,11 @@ export interface ProductionRunOptions {
   perShot?: boolean;
   /** Restrict a run to specific scenes. Experiments need one scene, not the whole film. */
   sceneIds?: string[];
+  /**
+   * A saved look to apply to every still in this run (Phase 5). Read back from the project by
+   * name - the production never re-enters lens/grade/movement, which is what "reusable" means.
+   */
+  lookName?: string;
   /** Restrict a run to specific spec kinds, so an image comparison does not also buy video. */
   kinds?: Array<'IMAGE' | 'VIDEO'>;
 
@@ -152,6 +158,13 @@ export async function runCreativeProduction(
       asset,
     ]),
   );
+
+  // Resolve the saved look once per run, so every still carries the same fragment.
+  let lookFragment: string | null = null;
+  if (options.lookName) {
+    const resolved = await lookPromptForProduction(prisma as never, { projectId: project.id, name: options.lookName });
+    lookFragment = resolved?.fragment ?? null;
+  }
 
   const runId = input.runId ?? (await startRun(prisma, project.id, { totalScenes: plan.scenes.length, attempt: input.attempt ?? 1, contextSnapshot: plan.contextSnapshot }));
   const startedAt = now().getTime();
@@ -249,7 +262,12 @@ export async function runCreativeProduction(
             const identityBlock = composeCreativeIdentityBlock(sceneCharacters);
             const referenceImageUrls = await resolveCreativeReferences(prisma, sceneCharacters);
             // Identity-bearing stills get medium framing by default; a beat may override.
-            const framing = applyIdentityFraming((spec as StillSpec).prompt, {
+            // A saved look (Phase 5) is composed onto the prompt before identity framing, so the
+            // look describes the image and framing still governs how the character is held.
+            const lookPrompt = lookFragment
+              ? composeWithLook((spec as StillSpec).prompt, lookFragment)
+              : (spec as StillSpec).prompt;
+            const framing = applyIdentityFraming(lookPrompt, {
               characters: sceneCharacters,
               wideShotRequired: Boolean((spec as { wideShotRequired?: boolean }).wideShotRequired),
             });
