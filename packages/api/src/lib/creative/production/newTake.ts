@@ -18,6 +18,12 @@ import type { StillSpec } from './capabilityRouter';
 export interface NewTakeInput {
   projectId: string;
   sceneId: string;
+  /**
+   * Shot addressing (2026-11-04). Omitted = a scene-level take, which is what every existing
+   * row is (0 of 435 carried a shotId). When present, takes are scoped to that shot: the
+   * previous take found and demoted is that shot's, and the other shots keep theirs.
+   */
+  shotId?: string | null;
   characters: CreativeCharacterRef[];
   scenePrompt: string;
   wideShotRequired?: boolean;
@@ -29,14 +35,18 @@ export interface NewTakeResult {
   parentTakeId: string | null;
   assetUrl: string;
   identityBlock: string;
+  shotId: string | null;
   framing: string;
   promptsFramed: boolean;
   creditsCharged: number;
 }
 
 export async function createNewTake(prisma: PrismaClient, input: NewTakeInput): Promise<NewTakeResult> {
+  // Scope to the take SLOT: the same scene with a different shot is a different slot, which is
+  // what the two partial unique indexes encode (shotId IS NULL vs IS NOT NULL).
+  const shotId = input.shotId ?? null;
   const previous = await prisma.creativeProducedAsset.findFirst({
-    where: { projectId: input.projectId, sceneId: input.sceneId, kind: 'IMAGE' },
+    where: { projectId: input.projectId, sceneId: input.sceneId, shotId, kind: 'IMAGE' },
     orderBy: [{ takeNumber: 'desc' }, { createdAt: 'desc' }],
     select: { id: true, takeNumber: true },
   });
@@ -63,6 +73,7 @@ export async function createNewTake(prisma: PrismaClient, input: NewTakeInput): 
     data: {
       projectId: input.projectId,
       sceneId: input.sceneId,
+      shotId,
       kind: 'IMAGE',
       status: 'QUEUED',
       takeNumber,
@@ -116,6 +127,7 @@ export async function createNewTake(prisma: PrismaClient, input: NewTakeInput): 
       parentTakeId: previous?.id ?? null,
       assetUrl: media.assetUrl,
       identityBlock,
+      shotId,
       framing: framing.reason,
       promptsFramed: framing.applied,
       creditsCharged,
