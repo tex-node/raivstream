@@ -1,9 +1,3 @@
-# Roadmap history
-
-Dated narrative for the [Rush parity roadmap](../rushfeature.md). The plan is **edited**;
-this document is **appended**. Two documents because append-driven erosion is the failure mode:
-one file cannot hold one rule for intent and another for history without one of them winning.
-
 ## Status log (newest first)
 
 Dated status entries, most recent first. These were previously appended to the end of
@@ -105,6 +99,7 @@ section; they are collected here so the current shape is findable (2026-11-04).
   An earlier draft said "~720 credits for nine clips" — wrong twice: 720 is nine *images* at 80
   credits, and it assumed the images already existed. Budget images **and** clips, and expect to
   start by funding the account.
+**Closed 2026-11-04.** The eight acknowledged failure lines were the only thing keeping this phase open. All eight now emit a `[creative.stage] stage=<name> status=fail reason=<what failed>` line — `intent` and `bible` at the request boundary via `logPreProjectStage`, `plan`/`preview`/`director`/`approval` at their guard clauses before the throw, `produce` at the cast gate and `review` in the per-asset catch naming the scene. The shrink-only set in `stageFailureCoverage.test.ts` is **empty** (verified by reading the file, not by the test exiting 0), and `stageFailureFiring.test.ts` observes three of them firing — `approval reason=version_not_found`, `director reason=project_not_found`, `preview reason=invalid_state_transition` — because a line that exists and never runs is instrumentation by assertion.
 
 ## Phase 2 — Take model — status notes
 
@@ -115,9 +110,7 @@ is not enabled". Enabled the core chain in production (master, create, intent, b
 director, review, approval, output), leaving **studio, series and audio off**; verified the flag in the
 running process (`pm2 jlist` on web and worker), then verified the gate opens (`creative.project.create`
 succeeded and `list` returned 1). Health 200, `/create` 200. Rollback: remove ten env lines and restart.
-
 **Phase 3: PROVEN AND CLOSED (2026-11-02).**
-
 **Live-content policy decided (2026-11-02): flag, do not unpublish.** A rejected live asset is flagged for human
 review and stays visible until someone looks; an automated gate does not get unilateral power over published
 content. Every live rejection writes an audit row naming the asset, the breached dimension, its score and floor, the
@@ -125,7 +118,6 @@ run and the critic version — without it, "flagged" is indistinguishable from "
 **prospective**: the gate has zero production rejections so far. Revisit if a flag sits unreviewed past 14 days, if
 the re-score batch finds more than 5% of live assets below floor, or if a viewer reports a flagged asset whose
 dimension is below half its floor. Details in `docs/operations/critic-threshold-policy.md`.
-
 **Gate defect narrowed 2026-11-03 — the null-bible hypothesis is REFUTED.** Runtime probe (no production, no credits) on
 `cmvzvo9ym…`: `include: { productionPlan, brief, bible }` returns `bible_present=true` with
 `chars=["Lighthouse Keeper","Lost Bird"]`, and `creativeBible.findFirst` agrees. So `project.bible` is **not** null and
@@ -136,7 +128,6 @@ reading is also clean: one `produce()` implementation (`production/service.ts:32
 The next read is one log line inside the gate on the deployed build — static analysis has now been exhausted twice.
 **No production was run; the refusal was NOT produced**, so the gate remains untrusted. Credits from the earlier aborted
 run are **unconfirmed** and deliberately not quoted.
-
 **Sequence attempted 2026-11-03 and it FAILED at the gate — production does not refuse what the test refuses.**
 Deployed `449e58a`, health 200, project `cmvzvo9ym…`, cast derived correctly (`["Lighthouse Keeper","Lost Bird"]`,
 bibles-with-characters 4 → 5). Then **`production.produce()` ran without refusing** (`GATE_REFUSAL=NO_REFUSAL`) and logged
@@ -147,7 +138,6 @@ keeps catching. Leading hypothesis (unproven): `project.bible` is null/empty fro
 (0 reference rows for the project); the script then died on a Prisma error while creating references. **Both acceptance
 conditions remain unmet**, and the more important finding is that **the gate cannot be trusted in production until the
 bible demonstrably reaches it**. Next: read `produce()`'s `project.bible` at runtime, not another run.
-
 **Cast stage blocked by an ownership chain, read 2026-11-02.** `StoryCharacterMemory.projectId` points at
 **`StoryProject`**, and `CharacterReferenceAsset.characterId` points at `StoryCharacterMemory` — so a **creative project
 cannot own a reference attached to a character**, only one with `characterId = null`, and `resolveCreativeReferences()`
@@ -158,7 +148,6 @@ matches by the `character.name` relation, which is null there. Literal reuse is 
 character is approved** (chosen over fail-open — conditioning on nothing is the failure this chain chased for four
 sessions). **Not built this session**, so both acceptance conditions (`references>0`, a `FLUX2_EDIT` job) remain
 **unmet**, and the three free assertions were scoped rather than written against behaviour that does not exist.
-
 **Cast derivation shipped (2026-11-02): steps 1-2 of the build, proven free; step 3 and the run NOT done.**
 `deriveCast()` replaces the hardcoded `characters: []` for `STORY` — parses the creator's subject first and alone, splits
 on "and"/commas, strips articles, bounds at `MAX_CAST = 4`, de-dupes, and marks every description as a proposal pending
@@ -169,7 +158,6 @@ named *"a lost bird I understand this as a story targeting 30s"*. **Still missin
 and approves one reference per character.** Without it no `CharacterReferenceAsset` rows exist for these characters, so
 `references` stays 0 and both acceptance conditions (`references>0`, a `FLUX2_EDIT` job) remain **unmet** — recorded as
 unmet, not approximated. Next session: build the cast stage, then one re-production (~1,120 credits).
-
 **Why the bible has no characters — read 2026-11-02: never-extracted.** `domainKnowledgeFor()` **hardcodes
 `characters: []` for `STORY`** (`intelligence/service.ts:51`), and the interpreter does not populate `explicit.subject`
 (the free interpretation of the lighthouse idea returned only `durationSeconds: 30`). `seedBibleFromInterpretation()`
@@ -181,7 +169,6 @@ generate → approve → produce), the story pipeline's model, because approval 
 characters for STORY, populate `explicit.subject`, add the cast stage writing `CharacterReferenceAsset` rows, then
 resolution already works. **Acceptance: `references>0` in the log plus a `FLUX2_EDIT` job** — until then the identity
 number measures text-to-image. **Cost: one re-production, ~1,120 credits.** The floor stays at 85.
-
 **Measured re-production (2026-11-02): min identity 0, unchanged — and the cause is data, not conditioning.**
 Project `cmvzluerv…`, run `cmvzlujkm…`, 4 scenes, **1,120 credits**. Per-scene identity: **80 / 60 / 0 / 70**, min **0** — the
 same 0–50 band. **Diagnosis from the log:** every scene logged `references=0 identityBlock=no`, and the jobs are
@@ -191,7 +178,6 @@ be resolved (`scene.characters` was empty too, so the name filter matched nothin
 wiring/data gap, not a conditioning failure and not a calibration question.** Next: populate `bible.characters` at intent
 time and map them to reference assets at plan time; only then is `references>0` reachable. **The 99-flag backlog stays
 deferred** — re-rendering while stills call FLUX with no references would repeat this spend for the same number.
-
 **Identity floor unreachable BY CONSTRUCTION in the creative pipeline (read 2026-11-02).** The 0–50 minimums are not
 mis-calibration. **Stills model:** creative uses `fal-ai/flux-2` — *text-to-image only* — while story uses
 `fal-ai/flux-2/edit`, which takes `imageUrls` (max 4). **References:** `FalFlux2Input` has only `prompt`,
@@ -202,7 +188,6 @@ composed; the only `EntityReference`s are built in `director/resolver.ts` for th
 the reference-conditioned endpoint, compile the identity block, add reference resolution, then re-produce and measure.
 **The floor stays at 85**, and **the 97-asset backlog should wait**: re-rendering under text-only stills would
 reproduce 0–50 at full price.
-
 **Quarantine CERTIFIED on three surfaces (2026-11-02).** Deploy `a297b75` confirmed (VPS `HEAD=a297b75`, health 200).
 Against the live tRPC endpoints: below-floor video `cmvzdewzf…` absent from **forYou, trending and viewersPick**;
 unsourced historical video `cmvtzf9qf…` present in **all three** (the NULL branch proven on every surface, where a bare
@@ -212,7 +197,6 @@ are intended — the fixed bug was the **clause loss** (including `withdrawnAt: 
 **Two bugs recorded separately:** quarantine-on-viewersPick (this phase, fixed #279) and `viewersPick` never applying
 its star filter / dropping `withdrawnAt` (a **pre-existing defect found this session**, not a regression of this work).
 The fallback now carries an INTENT comment warning that removing it as "unused" is the trap that already fired.
-
 **Quarantine probed on real data (2026-11-02) — partial.** Published one below-floor output (`min identity 50`) as video
 `cmvzdewzf0001b1exbttsx1tv` with provenance written at publish time. **Passed:** the NULL-branch proof (an unsourced
 historical video appears in all three feeds) and exclusion from `forYou` + `trending`. **Failed:** the same video
@@ -221,7 +205,6 @@ also returned 14 items including a **0-star** video despite filtering `starRatin
 above-floor control, because every creative project's minimum identity is 0–50 — **no project has ever cleared 85**.
 Quarantine is therefore **live on two surfaces and unverified on one**; `viewersPick`'s filter behaviour needs
 investigation before the clause can be called proven.
-
 **Creative publish shipped (2026-11-02): approved outputs only.** `creative.output.publish` requires an APPROVED
 `CreativeApproval` and a READY output with media, is idempotent by media URL, and **writes provenance at publish time**
 (`sourceProjectId`, `sourceVersionId`, and `sourceProducedAssetId` only when the version has exactly one READY asset —
@@ -230,7 +213,6 @@ Preconditions have two-directional tests (no approval, PENDING, REJECTED, unrend
 provenance tests: 16. **Two separate spends, explicitly:** the 99-flag backlog is a **re-render** decision (~97 × 80 +
 video) that quarantine cannot reach because no video came from those assets; creative publish is **forward-looking** and
 does nothing for the backlog. Disclosure is now readable but deferred to ship with the feed clause.
-
 **Quarantine wiring (2026-11-02): the column landed, the links did not.** `Video.sourceProducedAssetId` shipped
 nullable (NULL = source unknown = fail-open, mirroring the unscored rule). **No populate path exists:** all four
 `Video`-creating paths (generation, library, story export, upload) were read and none touches a `CreativeOutput`, and
@@ -240,7 +222,6 @@ flagged assets is a video's source. **Named number: 14/14 videos (100%) have NUL
 cannot reach, stated rather than implied. `feedQuarantineIsWired(videosWithSource)` now reports on **data, not
 schema**: a column is not wiring, one populated row is. The inert test was updated (not deleted) to assert the
 pre-populate state. Disclosure still deferred: nothing to read yet.
-
 **Quarantine shipped (2026-11-02), with the honest wiring gap.** `lib/films/quarantine.ts` — asset below the identity
 floor stops being **promoted** (feed excludes, library and direct link include), unscored assets are **not**
 quarantined (quarantine fails open on unknown, the opposite of approval), 13 tests. **Verified on real data:** 99
@@ -250,7 +231,6 @@ no `sourceProducedAssetId`, so a feed predicate has nothing to join against — 
 **Reframe:** the flags are the backlog quarantine absorbs, and the un-quarantine path is a re-render with the
 identity fix, not 99 review decisions. **Phase 1 reframe:** identity measurement was never running for the library —
 SCENE_03 was the pattern, not the outlier. **Lift quarantine when** below-floor falls under 5%.
-
 **802 critic re-scores — RUN (2026-11-02): 89% of scoreable images are below the identity floor, so the 5% change
 condition fired on the first run.** 109 images, 95 processed, **97 flags, all on `characterIdentity`, scores 0–80
 against floor 85**, 4 provider failures. Table `creative_review_flags` + resumable image-only runner shipped
@@ -259,7 +239,6 @@ provider problem but were a population problem). Idempotency holds per asset via
 added 2 flags only because 4 assets had failed and were retried. **Implication:** the constant-90 backlog is not a
 clean-up list — the old critic was not measuring identity — and per-asset flagging cannot absorb ~89%, so the live
 content policy's revisit condition is met and needs an operator decision (wider action, or a cut-off by dimension).
-
 **802 critic re-scores — SCOPED, NOT BUILT (2026-11-02).** Re-runs the current critic and the per-dimension gate over
 the 802 assets approved under the constant-90 critic. **Writes:** new scores into `creative_review_runs.scores`, the
 gate verdict per asset, and — per the flag policy — an audit row per live rejection (new `creative_review_flags`
@@ -270,12 +249,10 @@ under the current critic version. **Acceptance:** after the batch, the number of
 every one has an audit row — the output is a **number, not a cleanup**. **It does not unpublish anything** (the
 policy is flag); it does not modify scores on the original runs; and it does not act on assets whose project is
 inactive. Blocked on nothing except the flag table and the runner.
-
 **Next phase (operator decision, 2026-11-02): PER-DIMENSION GATING.** Scope: one predicate that fails a creative
 asset when any dimension falls below its own threshold, even if the aggregate passes; a test matrix across the nine
 dimensions; no credits and no schema change. Blocking condition: none — the identity generalisation landed and the
 evidence above is from production. The `overall: 85` + `characterIdentity: 0` case is its first acceptance test.
-
 **Phase 3 status: Blocked on the fal account (operator-confirmed 2026-11-02).** The operator confirmed the
 account is still locked, so this session ran no probe and no production: the previous two independent checks
 already carry the exact evidence (`fal image disabled: account locked or balance exhausted (HTTP 403)`, and
@@ -286,13 +263,11 @@ deploy-durable, `FAL_KEY` valid in-process. **The unblock is external and singul
 Then one image (~80 credits), one lighthouse run (~640), and the verdict becomes *Proven* or *Proven except
 X* — with the two duration questions answered separately: (1) output row vs probe becomes answerable with an
 output; (2) plan-declared-30 s stays unanswerable while `totalRuntimeSeconds` is null.
-
 **Provider still blocked (2026-11-02, second check).** Pre-flight clean on everything the repo owns — both
 processes `RAIVSTREAM_5_ENABLED=true`, `CREATE=true`, `FAL_KEY=set`. Direct single-image submit returned
 **`fal image disabled: account locked or balance exhausted (HTTP 403)`** again. No run attempted: it would
 fail 8/8 assets at 0 credits and change no measurement. The unblock is external — restore the fal account —
 and the instrumentation is ready to record the next attempt either way.
-
 **Output failure gate closed; provider blocked (2026-11-02).** `output/service.ts` now logs
 `stage=output status=fail` in both catch blocks, and `stageFailureCoverage.test.ts` enumerates all nine
 stages, requiring a failure disposition for each (a real `'fail'` call, or an acknowledged-gap entry — the
@@ -301,13 +276,11 @@ gap set is asserted to be exactly the known eight, so it may shrink but not grow
 ("account locked or balance exhausted"), not configuration. **No run attempted** — it would fail identically.
 **Phase 3 verdict: Blocked**, on the fal account; the two duration questions remain: (1) output-row-vs-probe
 unanswerable without an output; (2) plan-declared-30 s unanswerable while `totalRuntimeSeconds` is null.
-
 **All nine stage lines shipped (2026-11-02).** Pre-project identity decided: `intent` and `bible` are
 identified by a **request id** threaded to `project.create` (`[creative.stage] request=<uuid> stage=intent
 status=ok`, and the bible line carries `projectId` as detail), so the pre-project line joins to the project's
 `stage=plan project=<id>` line. Never a fabricated project id — four tests assert that the pre-project line
 contains `request=` and **not** `project=`. The gated run is the only thing left.
-
 **Critic score variation proven (2026-11-02), and the proof is sharper than expected.** Two scored runs on
 real assets persist distinct vectors: SCENE_01 `{80,90,85,90,80,75,90,85,80,90}` vs SCENE_03
 `{70,80,90,85,80,75,90,80,85,90}` across ten dimensions — **but both have `overall: 85`**. Exposing only the
@@ -316,34 +289,29 @@ visible. **Plan duration:** the stored plan has `totalRuntimeSeconds = null` and
 17.13 s is not "the plan said 17" — no declared runtime reaches the output path. **Gated run not performed**:
 `intent` and `bible` still lack a stage line (no project id at that boundary), so a run now would be a partial
 measurement.
-
 **Stage logging (2026-11-02): 7 of 9 boundaries instrumented.** `director` (start + ok, with instruction,
 directiveId, affectedSceneIds, impact) and `preview` (ok at `project.updateStatus` when status becomes
 APPROVED) joined output, review, plan, produce and approval. **Remaining: intent and bible**, which carry no
 project id at their boundary — they must be gated by a request id threaded through to project creation, or by
 their outcome, and **not** by a fabricated project id. No gated run yet, so all three measurement gates
 remain unmeasured.
-
 **Stage logging (2026-11-02): 4 of 7 shipped, 3 blocked on their own signatures.** `stageLog.ts` helper plus
 lines at **plan**, **produce**, **approval** (joining the existing **review** and **output**) — five stages
 gated. Not added: `director` (anchor mismatch, not forced), `preview` (script exited early), and
 `intent`/`bible` which carry **no projectId** at their boundary — intent runs before a project exists and the
 bible helpers take no project id, so they need a decision about what identifies a pre-project stage rather
 than a log line. **No re-run**, so all three gates remain unmeasured.
-
 **Critic scores persisted (2026-11-01).** `evaluateWithCritic` now returns `{ findings, provider, scores }`;
 `CreativeReviewRun` gains `scores Json?` (additive migration); `ReviewRunState` carries it; the run emits
 `[creative.stage] … stage=review … scores={…}`. The drop was in translation, not the provider. Still open:
 the eight per-stage `[creative.stage]` lines (intent, bible, plan, preview, produce, director, approval) and
 the gated re-run. **Phase 3: functionally proven, unmeasured, one gate closer.**
-
 **Phase 3 measurement fixes (2026-11-01): 1 of 3 shipped, no re-run.** Shipped: `creative_outputs.
 durationSeconds` now persists the renderer's **measured** duration in both READY writers, plus a
 `[creative.stage] … stage=output` line. Remaining: per-stage `[creative.stage]` lines for
 intent/bible/plan/preview/produce/review/director/approval, and critic score exposure — `review/service.ts`
 builds from `evaluated?.findings` while the nine scores live on `CreativeCriticRun`, so they are dropped in
 translation. **Phase 3 is functionally proven and still unmeasured.**
-
 **First real creator run through the 5.0 chain (2026-11-01): all stages succeeded, three gates failed.** Idea
 *"A 30-second animated short about a lighthouse keeper and a lost bird"* → create, plan, produce (after
 preview approval), REVIEW, critic findings, director (`affectedSceneIds: ["SCENE_02"]`, LOCAL, version 1),
@@ -352,7 +320,6 @@ both formats. Credits: 640 production, 0 approval/outputs. **Failures named:** n
 this project (log gate unmet); critic returned findings but **no per-dimension scores** (variation unproven);
 **17.13 s against a 30 s idea**, and `creative_outputs.durationSeconds` is null while the file measures
 17.133333. **Verdict: functionally proven end-to-end, not yet measured.**
-
 **5.0 env gap closed (2026-11-01), and one false assurance removed.** All fourteen runtime flags are now
 declared in `ecosystem.config.cjs` for both apps — ten enabled, three (`STUDIO`, `SERIES`, `AUDIO`)
 **explicitly `'false'`** — because pm2 does not read `env_file` and the deploy workflow sources
@@ -364,7 +331,6 @@ them, so the config is the only authority. Verified after a real deploy: core ch
 purchases in 90 days, 108 watch-history rows over 9 videos. The pro-rata input is real; the money side is
 empty. Unblocked by a first revenue period or a decision to seed a pool for testing. See the "Ledger Writer:
 Blocked On" section in `docs/operations/phase-3.5-watch-scoping.md`.
-
 **Phase 3.5 UI shipped (2026-11-01).** Four pages: `/submit` (effective terms shown before the button,
 rejection-finality copy, already-submitted disabled), `/watch` (attribution from the join on every
 render), `/filmmakers/[username]` (profile + accepted films, **no earnings panel**), `/admin/films` (queue
@@ -375,7 +341,6 @@ Verified live: `watch=1` with attribution `Rotimi Babs`, `filmmaker films=1`, `t
 `pm2 restart --update-env`, so the deploy lost it and the pages returned 200 over empty API responses.
 Root: **pm2 does not read `env_file`**; flags must be declared in `ecosystem.config.cjs` (now done for both
 apps) or live in the env file the app loads. Ledger writer still pending a revenue period.
-
 **Payout trigger decided (2026-11-01): revenue-period close, pool + pro-rata.** Not on approval (pays
 before the film earns anything and makes `shareBps` decorative) and not manual (a placeholder in a money
 path). The decision surfaced a gap: **no revenue basis exists** — `WatchHistory` has watch time, not value,
@@ -387,7 +352,6 @@ so the writer needs an operator-set `poolCents` per period:
 the rule, the filmmaker list offers "Submit a new film", and the admin queue never offers "re-open".
 **No UI may preview payouts:** `/admin/films` has no payout field, `/filmmakers/[username]` has no earnings
 panel until a period exists. See docs/operations/phase-3.5-payout-decision.md.
-
 **Phase 3.5 ingestion shipped and the acceptance loop run (2026-11-01).** `films` router over
 `submissionService`: `currentTerms`, `submit`, `mine`, `approved`, `filmmaker`, `queue`, `review`.
 Terms pinned **at submission** (the terms on screen at consent), decline reason required, approval
@@ -400,7 +364,6 @@ left it `<absent>` in both processes). **Found by running it:** `FilmSubmission.
 declined film cannot be resubmitted — the filmmaker needs a new video, which is defensible but should be a
 stated rule. UI pages (`/submit`, `/watch`, `/filmmakers/[username]`, `/admin/films`) and payouts remain
 to build; the ledger table is untouched.
-
 **Phase 3.5 schema shipped (2026-11-01).** `CreatorProfile`, `FilmSubmission`, `RevenueTerms`,
 `FilmPayout` added additively (no existing column altered; no call site changed). **Terms pinning decided
 and tested before any consumer exists:** a film is paid under the terms pinned at acceptance
@@ -410,14 +373,12 @@ bug. Seven tests: editing the terms table leaves an accepted film's terms and pa
 unpinned submission is refused rather than priced; integer basis points floor to the cent. Migration is
 additive and **not yet applied** to production. Next: `/submit` + the admin queue, then `/watch` and
 `/filmmakers/[username]`.
-
 **Phase 2 complete (2026-11-01) — the flag is default-on for projects that iterate.** Flipped
 `takeAwareExportEnabled` using `max(video takeNumber) > 1`: **57 of 166 projects** enabled (the criterion is
 take history; 40 of those are also export-ready). Verified after the change: 57 enabled, worker `ready`
 with `export_segment_sweep scanned=60 deleted=0`, health 200. The obsolete `RENDER_SEGMENTS_ENABLED` was
 removed from the production env — the renderer reads only `CACHE_SEGMENTS_ENABLED`, and the enforcement
 test keeps the deleted flag deleted. Reversible with one `UPDATE ... SET = false`.
-
 **Idempotency collapse resolved at the source (2026-11-01).** The UI now sends one
 `crypto.randomUUID()` key **per regenerate press**, so two quick presses are two intents and two takes; the
 derived 60-second bucket remains only as a fallback for API callers that supply no key. Decision: option 1
@@ -425,7 +386,6 @@ derived 60-second bucket remains only as a fallback for API callers that supply 
 it. The flag decision is now policy: default-on for `max_take > 1` is defensible on five projects of
 evidence, and the remaining question is which projects should get revision semantics, not whether the
 mechanism works.
-
 **Three-project cohort, both arms (2026-11-01) — 3/3 PASS.** Cold `hit=0 miss=5`, `0/6`, `0/6`; new takes
 8, 5, 5 each with a parent and `isLatest`; warm `hit=4 miss=1`, `5/1`, `5/1`; every arm gated on
 `[export.path] segments=true`. Two GENERAL projects and one KIDS project, so the surface difference is
@@ -435,7 +395,6 @@ covered. **Five projects of evidence total.** Harness finding: export eligibilit
 **Widening proposal:** default-on for `max_take > 1` (40 projects) is now defensible; the one open risk is
 that the derived-idempotency bucket collapses two *intentional* regenerations within 60 s into one take.
 That is a product decision, not a correctness one.
-
 **Cohort population (2026-11-01, measured before running).** 40 projects meet the original conditions;
 38 have no failed generation in 7 days; **9 are cold-eligible** (newest asset newer than newest export);
 **7 pass both**: `cmuakvg9u`, `cmubjeepf`, `cmv0wzock`, `cmuh3t0ow`, `cmucb152g`, `cmud2cjve`,
@@ -445,7 +404,6 @@ achievable with seven candidates, but only just, and the selection must be compu
 **Criterion decision:** each project yields two numbers (cold `hit=0 miss=N`, warm `hit=N−1 miss=1`).
 Measured as **three projects × both arms** is stronger than five projects × one number, because the arm
 pair is what proves the loop; the breadth question is answered by three differently-shaped projects.
-
 **Warm-cache loop, corrected (2026-11-01).** Gates held (`SELECTION_COUNT=5`, `ENABLED=5`). Two of five
 projects reproduced the claim with `[export.path] segments=true`: **hit=12 miss=1** and **hit=5 miss=1**.
 The other three were unmeasurable for two reasons that are not the cache: their **cold** export reused an
@@ -453,7 +411,6 @@ existing row (unchanged composition hash — correct idempotency, but it populat
 regenerations failed at the provider again. Lesson: the cold arm needs a composition the export row does
 not already have, or a project with no prior export. The policy split is visible in the logs:
 `attempt=11 latest=10 parent=…` — numbering reads max, semantics read `isLatest`.
-
 **Cohort run (2026-11-01).** Selection enforced both conditions in SQL and returned exactly 5;
 enablement through a generated SQL file verified `ENABLED=5` before anything ran. **3 of 5 projects
 took a new take with a parent and made it latest**; **2 failed at the provider** (take 3 FAILED, latest
@@ -465,7 +422,6 @@ generation consumes a take number and leaves a FAILED take (correct as history, 
 revisions); and the cohort assertion was mis-specified for cold caches. **Decision: do not widen.**
 Flag returned to 0 of 166. Prerequisites for a wider rollout: a warm-cache iteration loop per project
 and an answer on whether failed attempts consume take numbers.
-
 **Cohort attempt (2026-11-01) — not run, reasons recorded.** The unconditional-numbering split (#236) is
 verified: two consecutive **flag-off** regenerates produced takes **15 then 16, each with a parent, no
 collision**. The cohort itself did not execute: the `UPDATE ... WHERE id IN (...)` meant to enable five
@@ -473,7 +429,6 @@ projects was malformed and enabled none (verified `enabled=0`), and the first se
 export-ready (`3 scene(s) do not have a ready video yet`). **Selection criteria for the next attempt:**
 export-ready (scenes = ready videos) *and* take history; enable via a generated SQL file, then assert
 `enabled=N` before running. The flag remains 0 of 166.
-
 **Iteration-loop measurement (2026-11-01).** Flag off: 101,025 ms total for regenerate-3 → export →
 regenerate-5 → export, both exports **hit=5 miss=1**. Flag on: 84,171 ms, both exports **hit=5 miss=1**.
 Identical cache behaviour; the 17% difference is regenerate-time noise. **The take model does not speed
@@ -483,7 +438,6 @@ collide on the unique index and be rescued by the takeNumber retry, which is not
 non-take-aware project would silently start numbering takes. Numbering must become unconditional
 (correctness under the constraint) while idempotency and conflict stay behind the flag. Widening to a
 cohort is blocked on that fix.
-
 **A/B result (2026-11-01, one project, flag toggled in the DB).** Stale revision → typed
 `REGENERATION_CONFLICT` (expected 1, current 7). Regenerate at the current take → take 8 written with
 `parentTakeId` = take 7, `isLatest` true, take 7 demoted — the take-row assertion passed on real data.
@@ -501,12 +455,12 @@ documented decision (a retry a minute later is a new intent), not a defect. No r
 inside the same bucket, so the `(sceneId, idempotencyKey)` reuse branch has not executed in production.
 Also found by running it (#231): take numbers are per `(sceneId, assetType)`, not per scene — the
 backfill numbered images and videos together, so video takes collided with image takes.
-
 **Status 2026-11-01.** Piece (1) complete: the renderer split is the only pipeline (the
 single-graph branch is deleted, enforcement test in `output.test.ts`), segments cache by
 `sourceAssetId`, and the cache is proven under chained iteration. Piece (2) started: `takeNumber`,
 `parentTakeId` and `idempotencyKey` are additive columns on `StorySceneAsset`, backfilled; the
 take-aware export path and its per-project flag are not yet built.
+### Planner persistence — CORRECTED AND CLOSED (2026-11-04)
 
 ## Other status notes
 
@@ -522,3 +476,46 @@ results are what the Phase 1 and Phase 2 sections above are now scoped against.
 - **2026-11-04 — Phase 4 first slice: shot-scoped take regeneration, proven on a fixture that builds the missing state.** The read found shots exist in the plan (`PlanShot.shotId`, `plan.ts:14`) and reach the provider manifest (`adapter.ts:54`) but **`shotId` is **never written to a produced asset** — 0 of 435 rows, 0 scenes with two shots — so shot-level production does not exist yet. `createNewTake()` now takes an optional `shotId`, scoping the previous-take lookup and the demotion to that slot (`shotId IS NULL` for scene-level), reusing `chargeOrThrow`, parent demotion and `assertNotResetAfterCharge` rather than a parallel take path. `shotTakeRegeneration.test.ts` (5 tests) **builds the state the database lacks** — two shots in one scene, each with take 1 — and asserts the "only that shot" half: shot B take 2 created with shot B take 1 as parent, shot B take 1 demoted, **shot A take 1 untouched** (same id, `isLatest` true, same url), and the charge written on the new row key. **What remains for the exit criterion:** the production path that emits per-shot assets at all — without it "direct shot 12C" has no shot to address.
 - **2026-11-04 — Per-shot production shipped (opt-in): the take capability now has its subject, and the multiplier was stated first.** The collapse was `routeProduction` (`capabilityRouter.ts:97`): it looped scenes and pushed one `IMAGE` spec each, ignoring `scene.shots`, which is why `shotId` was never written to a row. It now accepts `{ perShot: true }` and emits one IMAGE spec per shot with its `shotId` and a prompt naming that shot; the runner persists `shotId`. **Cost, stated before building:** every scene template carries **three** `shotIdeas` (15 arrays, all length 3), so per-shot triples stills — **4 scenes: 4 stills / 320 credits → 12 stills / 960 credits** at 80 each, before video. That is why it is **opt-in**, not default: a default that triples a production's cost is a spend decision. **Proven** by `perShotProduction.test.ts` (5 tests: default one still per scene with no `shotId`; per-shot one per shot with unique ids; prompt names the shot; the multiplier asserted), together with `shotTakeRegeneration.test.ts` the chain is complete at code level — regenerating shot B leaves shot A untouched. **Named gap:** the end-to-end proof on a real production is bounded at ~960 credits and is not spent here.
 - **2026-11-04 — Shot-level proof: 160 credits spent, scores identical, and my own proof design was confounded.** Project `cmvzvo9y`, scene `SCENE_01` (3 shots), owner balance 5,400. Two shot stills via `routeProduction(..., { perShot: true })`, each charged **80 through `chargeOrThrow`**; balance **5,400 -> 5,240**, spend measured. **Control** (existing composite `cmvzvof0`, reused not re-bought): identity **80**, composition **85**, overall **85**. **Shot arm**: `SCENE_01_SHOT_01` and `_SHOT_02`, both identity **80**, composition **85**, overall **85** - equal to the composite, prompts distinct (`66d440ac...` vs `d3e91aa3...`). **The confound, recorded rather than smoothed:** the shot arm ran with `framingInPrompt=false references=0` because the proof passed `bible: null` into `routeProduction`, so no character references and no identity framing reached the provider. This is shot-prompt-only versus a fully conditioned composite. It establishes that a plain shot prompt matched conditioned output at 80/85/85 - encouraging, and silent on whether per-shot *improves* identity. **Phase 4 stays open** with the gap named: a conditioned per-shot comparison (~160 more credits) is owed.
+
+## Phase 4 — Scoped director — status notes
+
+**Dependency resolved 2026-11-04.** The block recorded above was real: takes were keyed without `shotId`, so two shots in one scene collided on take number. The constraint is now **two partial unique indexes** — `creative_produced_assets_scene_take_key` for `shotId IS NULL`, `creative_produced_assets_shot_take_key` for `shotId IS NOT NULL` — because a plain five-column unique would have treated `NULL` shot ids as distinct and silently allowed two scene-level takes to share a take number. Verified in `pg_indexes`; the old constraint dropped; 435 rows, 0 collisions before the change. `takeShotScope.test.ts` pins both halves. **Phase 4 is startable.**
+
+**First slice shipped 2026-11-04 — shot-scoped take regeneration.** The read found that shots exist in the plan (`PlanShot.shotId`, `plan.ts:14`) and are named in the provider manifest (`adapter.ts:54`), but **`shotId` is never written to a produced asset**: 0 of 435 rows carry one, so shot-level production does not exist yet. `createNewTake()` now accepts an optional `shotId` and scopes the previous-take lookup and demotion to that slot (`shotId IS NULL` for scene-level, the value otherwise), reusing the existing charge/demotion/reset-guard machinery rather than a parallel path. `shotTakeRegeneration.test.ts` builds the state the database lacks — **two shots in one scene, each holding take 1** — and proves the "only that shot" half: shot B take 2 is created with shot B take 1 as its parent, shot B take 1 is demoted, and **shot A take 1 is untouched** (`isLatest` still true, same id, same url). **Still to build for the exit criterion:** the production path that emits per-shot assets in the first place — today every asset is scene-level, so "direct shot 12C" has no shot 12C to address until that exists.
+
+**Per-shot production shipped 2026-11-04 — the take capability now has its subject.** The read named where shots collapse: `routeProduction` (`capabilityRouter.ts:97`) looped `plan.scenes` and pushed exactly one `IMAGE` spec per scene, ignoring `scene.shots`, so `shotId` was never written to a row. `routeProduction(plan, bible, context, { perShot: true })` now emits one IMAGE spec per shot, each carrying its `shotId` and a prompt naming that shot; the runner writes `shotId` onto the asset row. **The multiplier is stated before the build, not discovered after:** every scene template carries **three** `shotIdeas` (15 arrays, all length 3), so per-shot production triples the stills — a 4-scene project goes from **4 stills (320 credits)** to **12 (960 credits)** at 80 each, before video. Because a default that triples cost is a spend decision, per-shot is **opt-in**; the scene-level composite remains the default. **Proven** (`perShotProduction.test.ts`, 5 tests): default emits one still per scene with no `shotId`; per-shot emits one per shot with unique ids; each prompt names its shot; the multiplier assertion is in the test. Combined with `shotTakeRegeneration.test.ts`, the chain is complete at the code level — **regenerating shot B leaves shot A untouched**. **Remaining for the exit criterion's full proof:** a real production with `perShot` enabled, bounded at ~960 credits for a 4-scene project, which is a spend decision and is not made here.
+
+**Shot-level proof, spent 2026-11-04 — 160 credits, and a confound in the design.** Ran the shot arm on `cmvzvo9y` `SCENE_01` (3 shots, owner balance 5,400): two shot stills through `routeProduction(..., { perShot: true })`, each charged **80 via `chargeOrThrow`** — balance **5,400 → 5,240**, the spend measured rather than estimated. **Control:** the existing scene composite (`cmvzvof0`), whose latest critic run is identity **80**, composition **85**, overall **85**. **Shot arm:** `SCENE_01_SHOT_01` and `_SHOT_02`, both identity **80**, composition **85**, overall **85** — identical to the composite, with distinct prompts (hashes `66d440ac...` and `d3e91aa3...`). **The confound:** the shot specs ran with `framingInPrompt=false references=0`, because the proof called `routeProduction(plan, null)` — no bible, so no character references and no identity framing. The comparison is shot-prompt-only versus fully-conditioned composite, not like-for-like. What it does establish: a shot-level prompt with no conditioning matched a conditioned composite at 80/85/85, a positive signal for shot prompts and silent on whether per-shot improves identity. **Named gap:** a conditioned per-shot comparison (two shot stills with references and framing, ~160 credits) is still owed before Phase 4 can be called met on real bytes.
+
+**CORRECTION 2026-11-04 — this phase is blocked by the take model's granularity.** The exit criterion is *"Direct shot 12C regenerates only that shot's take"*, but takes are keyed `(projectId, sceneId, kind, takeNumber)` (`schema.prisma:2630`) — **no `shotId`**, even though `CreativeProducedAsset.shotId` exists (`:2612`). Two shots in one scene would therefore collide on the same take number and violate the unique index. Shot-level takes need the constraint extended to include `shotId` — the same class as the scene-scoped constraint fixed in `20261104020000_story_scene_asset_scope`. **Phase 4 is not startable until that lands; its exit criterion is unreachable today.**
+
+## Phase 5 — Cinematic vocabulary and look — status notes
+
+**Status 2026-11-04 — first slice shipped.** `look.ts` defines the object (lens, movement, lighting, grade, 9:16 resolution ladder); `buildLook()` normalises rather than passing values through (an out-of-ladder value falls back to the default, because a look applies to every shot and one typo should not become an unparseable prompt fragment); `lookToPrompt()` projects deterministically; `lookResolution()` keeps the ladder on 9:16. **8 tests.**
+
+## Sequence determination — status notes
+
+| phase | classification | evidence |
+|---|---|---|
+| **0 — Baseline proof** | **complete** (2026-11-04) | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
+| **1 — Identity store** | **in progress — externally blocked** | identity measured and conditioned (median 70, best 90, control 80); 3 of 7 measured beats clear the floor and 22 flags remain — the remaining coverage is **blocked on creator input for 7 thin-intent projects**, not an engineering queue item |
+| **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
+| **3 — Staged production surface** | **complete** (2026-11-04: re-entry unblocked) | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
+| **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
+| **4 — Scoped director** | **in progress** (take capability 2026-11-04) | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
+| **5 — Cinematic vocabulary** | **in progress** (first slice 2026-11-04) | dependency: Phase 2 |
+| **6 — Presets and LoRAs** | **not started** | dependency: Phase 5 |
+| **7 — Auto mode** | **not started** | dependency: Phase 2 |
+| **8 — Motion/object operator** | **not started** (optional) | dependency: Phase 1 |
+| **9 — Academy content** | **not started** | dependency: Phases 1–5 shipped |
+
+**CORRECTION 2026-11-04.** The paragraph that stood here said *"what remains is the half that has no code: the take-aware export path … the story side is not."* **That was wrong, and it is preserved here so the record shows both the claim and the correction.** The read found the mechanism already built: `computeSourceHash` hashes ordered `sceneId:assetId` pairs and `buildExportSegmentKey` keys on `sourceAssetId` — both asset-id keyed, so a new take changes exactly one key by construction, and the story export already passes `projectId` into `renderOutputDerivative` so the cache can key segments.
+
+| debt | blocks which phase | disposition |
+|---|---|---|
+| **Planner persistence** (`explicit.durationSeconds` captured at intent, lost at plan) | **Phase 3's stage contract** — a stage cannot be approved if the plan it produced drops what the creator asked for | **closed 2026-11-04** — the read found the field produced; the gap was a test, not a builder |
+| **The eight acknowledged failure lines** | **Phase 0's exit** ("both surfaces proven end-to-end") | **prerequisite to calling Phase 0 complete**, parallel to Phase 2 |
+| **Video re-render** (deferred; discontinuity trade-off recorded) | **Phase 3.5 distribution quality** — flagged films cannot be promoted without it | **parallel**; no phase's exit criterion requires it |
+| **Thin-input projects** (7) | **Phase 1's exit** ("every generated shot carries the reference") | **parallel, external dependency** — needs better creator input, not a pipeline change |
+| **The ledger writer** | **Phase 3.5 revenue** | **blocked** on a revenue pool that does not exist; parallel |
+| **Ruleset-requires-current-head** | nothing | **parallel infrastructure** — it blocks merges, not phases; mitigated by `gh pr update-branch` |
