@@ -33,13 +33,25 @@ vi.mock('../../../credits', async (importOriginal) => {
 });
 
 import { generateMusicForVersion } from '../service';
+import { buildCreativePlan } from '../../production/plan';
 import { creditKeys } from '../../../credits/idempotencyKeys';
 
 function makePrisma() {
   let createCount = 0;
   return {
     creativeApproval: { findUnique: vi.fn(async () => ({ status: 'APPROVED' })) },
-    creativeVersion: { findUnique: vi.fn(async () => ({ snapshot: { plan: { totalRuntimeSeconds: 30 } } })) },
+    // Built by the real planner, not hand-written: a literal here would keep passing if the
+    // builder stopped producing totalRuntimeSeconds (2026-11-04).
+    creativeVersion: {
+      findUnique: vi.fn(async () => ({
+        snapshot: {
+          plan: buildCreativePlan({
+            projectType: 'STORY' as never,
+            brief: { originalIntent: 'A lighthouse keeper finds a lost bird', durationSeconds: 30 } as never,
+          }),
+        },
+      })),
+    },
     creativeProject: { findUnique: vi.fn(async () => ({ bible: null })) },
     audioPerformancePlan: { findFirst: vi.fn(async () => ({ id: 'plan1' })) },
     audioTrack: { findFirst: vi.fn(async () => ({ id: 'track1' })) },
