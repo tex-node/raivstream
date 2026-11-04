@@ -970,3 +970,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
   `UNIQUE (projectId, sceneId, idempotencyKey)`; `RECORDED_EXCEPTIONS` in `schemaScope.test.ts` is now **empty**, with the
   mechanism retained so a new violation must be added deliberately and a fixed one fails until its entry is removed.
   Suite green at **2,276 tests**.
+
+- **2026-11-04 — Identity disclosure shipped: the film page now says why a film is not promoted.** The read found the film
+  page (`apps/web/src/app/v/[id]/page.tsx`) is a client component reading `video.getById`, and `videoCardSelect` did **not**
+  carry `sourceProjectId`; `projectIdentity()` already existed in `quarantineFeed.ts` and its own comment states that *"the feed
+  clause and the film-page disclosure BOTH call this"* — the intended design, one level short of wired. **Shipped:** `sourceProjectId`
+  added to the card select; a new **`video.identityDisclosure`** procedure returning `{ scored, minIdentity, belowFloor, floor }`
+  computed by **the same `projectIdentity()`** the feed uses (a label and an exclusion computed twice could disagree); and an
+  `IdentityDisclosure` label on the film page carrying the number — *"scored 62 against a floor of 85 for live content. It is not
+  promoted in feeds."* — hidden on R16. **4 tests, both cases:** below-floor shows with its score and floor; above-floor shows
+  nothing; unsourced film is not scored; a sourced film with no scores is not labelled. Note the floor here is
+  **`QUARANTINE_IDENTITY_FLOOR` = 85** (live content), distinct from the creative production floor of 75 — the disclosure reports
+  the rule that actually excludes the film, not a different one.

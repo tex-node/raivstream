@@ -15,6 +15,13 @@ export default function VideoPage() {
   const isR16 = useR16();
 
   const { data, isLoading } = trpc.video.getById.useQuery({ id });
+  // Identity disclosure (2026-11-04). The feed excludes below-floor films from promotion; this
+  // tells the viewer why, using the same projectIdentity() the feed clause uses - a label and an
+  // exclusion computed twice could disagree, and that is the false-pass shape in UI clothes.
+  const { data: identity } = trpc.video.identityDisclosure.useQuery(
+    { id },
+    { enabled: Boolean(data?.sourceProjectId) },
+  );
 
   if (isLoading) {
     return (
@@ -61,6 +68,9 @@ export default function VideoPage() {
           />
         </div>
       </div>
+      {!isR16 && identity?.belowFloor && identity.minIdentity !== null && (
+        <IdentityDisclosure minIdentity={identity.minIdentity} floor={identity.floor} />
+      )}
       {isOwner && <PublicationControl videoId={id} />}
       {isOwner && !isR16 && <ShareMenu videoId={id} />}
     </div>
@@ -226,6 +236,26 @@ function PublicationControl({ videoId }: { videoId: string }) {
         {body}
       </div>
       {err && <p className="mt-2 text-xs text-red-300" role="alert">{err.message}</p>}
+    </div>
+  );
+}
+
+/**
+ * Identity disclosure (2026-11-04).
+ *
+ * The feed has excluded below-floor films from promotion since #277 with no explanation to the
+ * viewer. This is the one line that makes the exclusion legible - and it carries the number,
+ * because a label that says "below threshold" without saying what scored is the same shape as a
+ * log line that fires but cannot be read.
+ */
+function IdentityDisclosure({ minIdentity, floor }: { minIdentity: number; floor: number }) {
+  return (
+    <div className="absolute inset-x-0 top-16 z-30 flex justify-center px-4 pointer-events-none">
+      <p className="max-w-md rounded-full border border-amber-400/40 bg-black/70 px-4 py-2 text-center text-xs text-amber-100 backdrop-blur-sm">
+        Character consistency below threshold — this film&apos;s identity check scored{' '}
+        <span className="font-semibold">{Math.round(minIdentity)}</span> against a floor of{' '}
+        <span className="font-semibold">{floor}</span> for live content. It is not promoted in feeds.
+      </p>
     </div>
   );
 }
