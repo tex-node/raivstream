@@ -42,6 +42,8 @@ alongside the per-phase status notes. This document states intent; that one reco
 
 ## Phase 0 — Baseline proof
 
+**Status.** See [history — Phase 0 — Baseline proof](roadmap-history.md#phase-0--baseline-proof--status-notes).
+
 **Goal.** Close the unexercised paths before layering anything on top of them.
 
 **What it changes.** Nothing in the product; it establishes that the pipeline the roadmap
@@ -56,9 +58,6 @@ claims to improve actually works on both surfaces.
 **Does not do.** No new capability, no schema change, no UI.
 
 ---
-
-
-**Closed 2026-11-04.** The eight acknowledged failure lines were the only thing keeping this phase open. All eight now emit a `[creative.stage] stage=<name> status=fail reason=<what failed>` line — `intent` and `bible` at the request boundary via `logPreProjectStage`, `plan`/`preview`/`director`/`approval` at their guard clauses before the throw, `produce` at the cast gate and `review` in the per-asset catch naming the scene. The shrink-only set in `stageFailureCoverage.test.ts` is **empty** (verified by reading the file, not by the test exiting 0), and `stageFailureFiring.test.ts` observes three of them firing — `approval reason=version_not_found`, `director reason=project_not_found`, `preview reason=invalid_state_transition` — because a line that exists and never runs is instrumentation by assertion.
 
 ## Phase 1 — Identity store
 
@@ -106,6 +105,8 @@ performer field is the seam for a later Actor Programme; that marketplace is def
 ---
 
 ## Phase 2 — Take model
+
+**Status.** See [history — Phase 2 — Take model](roadmap-history.md#phase-2--take-model--status-notes).
 
 **Goal.** Make a scene's video a **take with a revision**, so regenerating one shot does not
 invalidate the whole film.
@@ -222,9 +223,6 @@ inconsistent characters.
 
 ---
 
-
-### Planner persistence — CORRECTED AND CLOSED (2026-11-04)
-
 **The earlier entry in this document said `totalRuntimeSeconds` was "declared nowhere". That was wrong, and it is
 recorded here because the wrong version shaped a scoped build plan.** The field is **declared at `plan.ts:70`** on
 `CreativeProductionPlanState` and **produced at `plan.ts:315`** (`totalRuntimeSeconds: cursor`, the ordered sum of the
@@ -305,13 +303,7 @@ semantics (one story = nine feed items). That is a different product, not a miss
 
 ## Phase 4 — Scoped director
 
-**Dependency resolved 2026-11-04.** The block recorded above was real: takes were keyed without `shotId`, so two shots in one scene collided on take number. The constraint is now **two partial unique indexes** — `creative_produced_assets_scene_take_key` for `shotId IS NULL`, `creative_produced_assets_shot_take_key` for `shotId IS NOT NULL` — because a plain five-column unique would have treated `NULL` shot ids as distinct and silently allowed two scene-level takes to share a take number. Verified in `pg_indexes`; the old constraint dropped; 435 rows, 0 collisions before the change. `takeShotScope.test.ts` pins both halves. **Phase 4 is startable.**
-
-**First slice shipped 2026-11-04 — shot-scoped take regeneration.** The read found that shots exist in the plan (`PlanShot.shotId`, `plan.ts:14`) and are named in the provider manifest (`adapter.ts:54`), but **`shotId` is never written to a produced asset**: 0 of 435 rows carry one, so shot-level production does not exist yet. `createNewTake()` now accepts an optional `shotId` and scopes the previous-take lookup and demotion to that slot (`shotId IS NULL` for scene-level, the value otherwise), reusing the existing charge/demotion/reset-guard machinery rather than a parallel path. `shotTakeRegeneration.test.ts` builds the state the database lacks — **two shots in one scene, each holding take 1** — and proves the "only that shot" half: shot B take 2 is created with shot B take 1 as its parent, shot B take 1 is demoted, and **shot A take 1 is untouched** (`isLatest` still true, same id, same url). **Still to build for the exit criterion:** the production path that emits per-shot assets in the first place — today every asset is scene-level, so "direct shot 12C" has no shot 12C to address until that exists.
-
-**Per-shot production shipped 2026-11-04 — the take capability now has its subject.** The read named where shots collapse: `routeProduction` (`capabilityRouter.ts:97`) looped `plan.scenes` and pushed exactly one `IMAGE` spec per scene, ignoring `scene.shots`, so `shotId` was never written to a row. `routeProduction(plan, bible, context, { perShot: true })` now emits one IMAGE spec per shot, each carrying its `shotId` and a prompt naming that shot; the runner writes `shotId` onto the asset row. **The multiplier is stated before the build, not discovered after:** every scene template carries **three** `shotIdeas` (15 arrays, all length 3), so per-shot production triples the stills — a 4-scene project goes from **4 stills (320 credits)** to **12 (960 credits)** at 80 each, before video. Because a default that triples cost is a spend decision, per-shot is **opt-in**; the scene-level composite remains the default. **Proven** (`perShotProduction.test.ts`, 5 tests): default emits one still per scene with no `shotId`; per-shot emits one per shot with unique ids; each prompt names its shot; the multiplier assertion is in the test. Combined with `shotTakeRegeneration.test.ts`, the chain is complete at the code level — **regenerating shot B leaves shot A untouched**. **Remaining for the exit criterion's full proof:** a real production with `perShot` enabled, bounded at ~960 credits for a 4-scene project, which is a spend decision and is not made here.
-
-**Shot-level proof, spent 2026-11-04 — 160 credits, and a confound in the design.** Ran the shot arm on `cmvzvo9y` `SCENE_01` (3 shots, owner balance 5,400): two shot stills through `routeProduction(..., { perShot: true })`, each charged **80 via `chargeOrThrow`** — balance **5,400 → 5,240**, the spend measured rather than estimated. **Control:** the existing scene composite (`cmvzvof0`), whose latest critic run is identity **80**, composition **85**, overall **85**. **Shot arm:** `SCENE_01_SHOT_01` and `_SHOT_02`, both identity **80**, composition **85**, overall **85** — identical to the composite, with distinct prompts (hashes `66d440ac...` and `d3e91aa3...`). **The confound:** the shot specs ran with `framingInPrompt=false references=0`, because the proof called `routeProduction(plan, null)` — no bible, so no character references and no identity framing. The comparison is shot-prompt-only versus fully-conditioned composite, not like-for-like. What it does establish: a shot-level prompt with no conditioning matched a conditioned composite at 80/85/85, a positive signal for shot prompts and silent on whether per-shot improves identity. **Named gap:** a conditioned per-shot comparison (two shot stills with references and framing, ~160 credits) is still owed before Phase 4 can be called met on real bytes.
+**Status.** See [history — Phase 4 — Scoped director](roadmap-history.md#phase-4--scoped-director--status-notes).
 
 **Goal.** One conversational interface over script, scene, shot, and bible — scope-aware.
 
@@ -329,9 +321,9 @@ re-renders with a better interface.
 
 ---
 
-**CORRECTION 2026-11-04 — this phase is blocked by the take model's granularity.** The exit criterion is *"Direct shot 12C regenerates only that shot's take"*, but takes are keyed `(projectId, sceneId, kind, takeNumber)` (`schema.prisma:2630`) — **no `shotId`**, even though `CreativeProducedAsset.shotId` exists (`:2612`). Two shots in one scene would therefore collide on the same take number and violate the unique index. Shot-level takes need the constraint extended to include `shotId` — the same class as the scene-scoped constraint fixed in `20261104020000_story_scene_asset_scope`. **Phase 4 is not startable until that lands; its exit criterion is unreachable today.**
-
 ## Phase 5 — Cinematic vocabulary and look
+
+**Status.** See [history — Phase 5 — Cinematic vocabulary and look](roadmap-history.md#phase-5--cinematic-vocabulary-and-look--status-notes).
 
 **Goal.** Make "look" a first-class object rather than a prompt fragment.
 
@@ -345,8 +337,6 @@ controls; a resolution ladder with plan gating, mirroring the existing credit-ra
 **Does not do.** No new provider, no new model.
 
 ---
-
-**Status 2026-11-04 — first slice shipped.** `look.ts` defines the object (lens, movement, lighting, grade, 9:16 resolution ladder); `buildLook()` normalises rather than passing values through (an out-of-ladder value falls back to the default, because a look applies to every shot and one typo should not become an unparseable prompt fragment); `lookToPrompt()` projects deterministically; `lookResolution()` keeps the ladder on 9:16. **8 tests.**
 
 **Remaining for the exit criterion** (*"a look is saved, named, and reusable"*): persistence. Scope: a `CinematicLook` table (projectId, name, the five fields, unique on `(projectId, name)` — scoped, per the constraint rule), a save/rename/list service, and the consumer that applies a stored look in place of a literal. **Acceptance criterion:** a look is saved under a name, survives a re-read, is applied to a production through the director controls, and a second production can apply it without re-entering the fields. Deliberately not shipped with the pure slice: migrating a table for a type that had not been exercised is how the take model acquired an impossible constraint.
 
@@ -524,43 +514,20 @@ Three checks catch the silent failures that make a result meaningless rather tha
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
 
-## Sequence determination (2026-11-04)
+## Sequence determination
+
+**Status.** See [history — Sequence determination](roadmap-history.md#sequence-determination--status-notes).
 
 Read from the plan and the history, not from any session summary. Every classification cites its evidence.
-
-| phase | classification | evidence |
-|---|---|---|
-| **0 — Baseline proof** | **complete** (2026-11-04) | `**Status.**` pointer at line 50; the eight acknowledged failure lines are unexercised paths, which is what this phase exists to close |
-| **1 — Identity store** | **in progress — externally blocked** | identity measured and conditioned (median 70, best 90, control 80); 3 of 7 measured beats clear the floor and 22 flags remain — the remaining coverage is **blocked on creator input for 7 thin-intent projects**, not an engineering queue item |
-| **2 — Take model** | **complete** (2026-11-04) | creative take path proven (take 2, 20 → 90, charge verified); story take constraints landed; the take-aware export is **proven by `exportTakeComposition.test.ts`** — three arms, **hit = N−1, miss = 1**, the missed key established by identity, and an identical timeline signature (history: "piece (2) started") |
-| **3 — Staged production surface** | **complete** (2026-11-04: re-entry unblocked) | history: *"Phase 3 (2026-11-01) — SHIPPED"* and *"Phase 3: PROVEN AND CLOSED (2026-11-02)"*; the staged surface, approval, and manual studio exist as routes |
-| **3.5 — Watch and Submit Films** | **complete** | history: schema, ingestion, and UI shipped 2026-11-01 (`/submit`, films router, `FilmSubmission`/`RevenueTerms`/`CreatorProfile`) |
-| **4 — Scoped director** | **in progress** (take capability 2026-11-04) | dependency: Phase 2 take addressing ("*direct shot 12C* regenerates only that shot's take") — the creative take path exists, the **story** per-shot addressing does not |
-| **5 — Cinematic vocabulary** | **in progress** (first slice 2026-11-04) | dependency: Phase 2 |
-| **6 — Presets and LoRAs** | **not started** | dependency: Phase 5 |
-| **7 — Auto mode** | **not started** | dependency: Phase 2 |
-| **8 — Motion/object operator** | **not started** (optional) | dependency: Phase 1 |
-| **9 — Academy content** | **not started** | dependency: Phases 1–5 shipped |
 
 ### The next phase: **Phase 2 — Take model (remaining work)**
 
 Exit criterion: *"Change scene 3 → only scene 3 re-renders and the film re-assembles; the other scenes keep their existing takes."*
-
-**CORRECTION 2026-11-04.** The paragraph that stood here said *"what remains is the half that has no code: the take-aware export path … the story side is not."* **That was wrong, and it is preserved here so the record shows both the claim and the correction.** The read found the mechanism already built: `computeSourceHash` hashes ordered `sceneId:assetId` pairs and `buildExportSegmentKey` keys on `sourceAssetId` — both asset-id keyed, so a new take changes exactly one key by construction, and the story export already passes `projectId` into `renderOutputDerivative` so the cache can key segments.
 
 What was missing was **evidence**, not code. It now exists: `exportTakeComposition.test.ts` drives the renderer's own cache decision across three arms and asserts **hit = N−1, miss = 1**, that the missed key is scene 3's and not another segment, that the assembled timeline signature is identical, and that the source hash changes only because scene 3 changed. Phase 2's exit criterion is met **by construction and now by test**.
 
 Dependencies: met (Phase 1's reference store exists; takes exist on both tables with project-scoped constraints).
 
 ### Debt-to-phase mapping
-
-| debt | blocks which phase | disposition |
-|---|---|---|
-| **Planner persistence** (`explicit.durationSeconds` captured at intent, lost at plan) | **Phase 3's stage contract** — a stage cannot be approved if the plan it produced drops what the creator asked for | **closed 2026-11-04** — the read found the field produced; the gap was a test, not a builder |
-| **The eight acknowledged failure lines** | **Phase 0's exit** ("both surfaces proven end-to-end") | **prerequisite to calling Phase 0 complete**, parallel to Phase 2 |
-| **Video re-render** (deferred; discontinuity trade-off recorded) | **Phase 3.5 distribution quality** — flagged films cannot be promoted without it | **parallel**; no phase's exit criterion requires it |
-| **Thin-input projects** (7) | **Phase 1's exit** ("every generated shot carries the reference") | **parallel, external dependency** — needs better creator input, not a pipeline change |
-| **The ledger writer** | **Phase 3.5 revenue** | **blocked** on a revenue pool that does not exist; parallel |
-| **Ruleset-requires-current-head** | nothing | **parallel infrastructure** — it blocks merges, not phases; mitigated by `gh pr update-branch` |
 
 **One consequence worth stating:** Phase 2 is the next phase, and **no debt blocks it**. The two debts that are prerequisites (planner persistence, the eight failure lines) gate Phase 3 re-entry and Phase 0's closure respectively — so they can be worked in parallel without delaying the sequence.
