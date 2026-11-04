@@ -61,6 +61,18 @@ export interface ProductionRunResult {
 }
 
 export interface ProductionRunOptions {
+  /**
+   * Per-shot production (2026-11-04). The runner previously called
+   * `routeProduction(plan, bible)` with no options, so per-shot specs were unreachable from the
+   * only path that resolves `characterRefs` into `referenceImageUrls` — the reason every earlier
+   * experiment had to call `generateStill` directly and lost conditioning.
+   */
+  perShot?: boolean;
+  /** Restrict a run to specific scenes. Experiments need one scene, not the whole film. */
+  sceneIds?: string[];
+  /** Restrict a run to specific spec kinds, so an image comparison does not also buy video. */
+  kinds?: Array<'IMAGE' | 'VIDEO'>;
+
   maxAttempts?: number;
   now?: () => Date;
 }
@@ -123,9 +135,23 @@ export async function runCreativeProduction(
 
   const plan = project.productionPlan.plan as unknown as CreativeProductionPlanState;
   const bible = project.bible as unknown as CreativeBibleState | null;
-  const specs: GenerationSpec[] = routeProduction(plan, bible);
+  const allSpecs: GenerationSpec[] = routeProduction(plan, bible, null, { perShot: options.perShot });
+  const specs: GenerationSpec[] = allSpecs.filter(
+    (spec) =>
+      (!options.sceneIds || options.sceneIds.includes(spec.sceneId)) &&
+      (!options.kinds || options.kinds.includes(spec.kind as 'IMAGE' | 'VIDEO')),
+  );
   const existing = (await prisma.creativeProducedAsset.findMany({ where: { projectId: project.id } })) as unknown as ExistingAsset[];
-  const byKey = new Map(existing.map((asset) => [`${asset.sceneId}:${asset.kind}`, asset]));
+  // Resume key includes the shot (2026-11-04). Without it, a per-shot spec is considered
+  // already produced the moment the scene has any IMAGE asset: `SCENE_01:IMAGE` matched the
+  // scene-level composite, so every shot spec was skipped and a per-shot run generated 0
+  // assets while reporting COMPLETED.
+  const byKey = new Map(
+    existing.map((asset) => [
+      `${asset.sceneId}:${(asset as { shotId?: string | null }).shotId ?? '-'}:${asset.kind}`,
+      asset,
+    ]),
+  );
 
   const runId = input.runId ?? (await startRun(prisma, project.id, { totalScenes: plan.scenes.length, attempt: input.attempt ?? 1, contextSnapshot: plan.contextSnapshot }));
   const startedAt = now().getTime();
@@ -141,7 +167,7 @@ export async function runCreativeProduction(
 
   try {
     for (const spec of specs) {
-      const key = `${spec.sceneId}:${spec.kind}`;
+      const key = `${spec.sceneId}:${(spec as StillSpec).shotId ?? '-'}:${spec.kind}`;
       const prior = byKey.get(key);
       if (prior && prior.status === 'READY') {
         if (spec.kind === 'VIDEO' && prior.assetUrl) lastClipUrl = prior.assetUrl;
@@ -156,7 +182,8 @@ export async function runCreativeProduction(
 
       let seedImageUrl: string | undefined;
       if (spec.kind === 'VIDEO') {
-        const still = byKey.get(`${spec.sceneId}:IMAGE`);
+        // VIDEO is always scene-level, so its seed still is the scene key, never a shot key.
+        const still = byKey.get(`${spec.sceneId}:-:IMAGE`);
         if (sourceSeedUrl) {
           // Source-conditioned project (product photo uploaded): prefer the scene's
           // own generated still — it already encodes the source identity via FLUX
