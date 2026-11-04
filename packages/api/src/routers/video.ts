@@ -6,6 +6,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { scanAndUpdateVideo } from '../lib/contentScanner';
 import { analytics } from '../lib/analytics';
 import { invalidateFeedCaches } from '../lib/cache';
+import { QUARANTINE_IDENTITY_FLOOR } from '../lib/films/quarantine';
+import { projectIdentity } from '../lib/films/quarantineFeed';
 
 function getR2Client() {
   return new S3Client({
@@ -36,6 +38,9 @@ const videoCardSelect = {
   avgStarRating: true,
   starRatingCount: true,
   isPremiumOnly: true,
+  // Needed by the film page's identity disclosure: the feed's quarantine and the label must
+  // read the same source project (2026-11-04).
+  sourceProjectId: true,
   tags: true,
   creator: {
     select: {
@@ -49,6 +54,26 @@ const videoCardSelect = {
 } as const;
 
 export const videoRouter = router({
+  /**
+   * Identity disclosure for the film page (2026-11-04).
+   *
+   * The feed has excluded below-floor films since #277 with no user-facing explanation. This
+   * returns the SAME verdict the feed computes - `projectIdentity()` is the single source of
+   * truth, called here and in the feed clause - so a label and an exclusion cannot disagree.
+   */
+  identityDisclosure: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const video = await ctx.prisma.video.findUnique({
+        where: { id: input.id },
+        select: { sourceProjectId: true },
+      });
+      if (!video?.sourceProjectId) {
+        return { scored: 0, minIdentity: null, belowFloor: false, floor: QUARANTINE_IDENTITY_FLOOR };
+      }
+      const identity = await projectIdentity(ctx.prisma, video.sourceProjectId);
+      return { ...identity, floor: QUARANTINE_IDENTITY_FLOOR };
+    }),
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
