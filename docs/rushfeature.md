@@ -53,6 +53,92 @@ almost the **entire consumption/distribution half**. Those are the phases.
 
 ---
 
+## Status log (newest first)
+
+Dated status entries, most recent first. These were previously appended to the end of
+the document by tooling, which put the live state of the work underneath a template
+section; they are collected here so the current shape is findable (2026-11-04).
+
+- **2026-11-04 — Take constraint verified in the database and pinned by a class test.** Read all three layers: `pg_indexes`
+  shows `creative_produced_assets_projectId_sceneId_kind_takeNumber_key UNIQUE (projectId, sceneId, kind, takeNumber)`;
+  `schema.prisma` and the migration agree. **Shipped:** `schemaScope.test.ts` asserts that every project-scoped model's unique
+  constraint keyed on `sceneId` carries `projectId` — the exact shape that made the take migration unappliable — and pins the
+  corrected constraint specifically. The rule is narrow on purpose (`assetId`/`versionId`/`runId`/`seriesId` are globally
+  unique, so requiring `projectId` there would be noise and the rule would be disabled within a week). **Finding:** the same
+  defect exists **pre-existing in `StorySceneAsset`** — `@@unique([sceneId, assetType, takeNumber])` and
+  `@@unique([sceneId, idempotencyKey])` — recorded as **shrink-only named exceptions**, so a new violation fails the test and
+  removing one also fails it. Suite green at **2,276 tests**.
+
+- **2026-11-04 — StorySceneAsset's two unscoped constraints closed in schema, database and test.** Read first:
+  `pg_indexes` showed `UNIQUE (sceneId, assetType, takeNumber)` and `UNIQUE (sceneId, idempotencyKey)`, owner
+  **`supabase_admin`**. **Collision check before the change:** 0 duplicate `(projectId, sceneId, assetType, takeNumber)` rows;
+  2,741 rows, 814 distinct `sceneId`s, and **0 `sceneId`s shared across projects** — so widening was safe rather than lucky.
+  **The migration caught its own mistake:** `ALTER TABLE … DROP CONSTRAINT` **silently skipped**, because Prisma creates
+  **unique indexes**, not table constraints — `pg_indexes` then showed *five* unique indexes instead of three, and
+  `DROP INDEX IF EXISTS` removed the leftovers. Exit code was 0 both times, which is why the verification is the index list,
+  not the exit code. **Final state:** pkey + `UNIQUE (projectId, sceneId, assetType, takeNumber)` +
+  `UNIQUE (projectId, sceneId, idempotencyKey)`; `RECORDED_EXCEPTIONS` in `schemaScope.test.ts` is now **empty**, with the
+  mechanism retained so a new violation must be added deliberately and a fixed one fails until its entry is removed.
+  Suite green at **2,276 tests**.
+
+- **2026-11-04 — Identity disclosure shipped: the film page now says why a film is not promoted.** The read found the film
+  page (`apps/web/src/app/v/[id]/page.tsx`) is a client component reading `video.getById`, and `videoCardSelect` did **not**
+  carry `sourceProjectId`; `projectIdentity()` already existed in `quarantineFeed.ts` and its own comment states that *"the feed
+  clause and the film-page disclosure BOTH call this"* — the intended design, one level short of wired. **Shipped:** `sourceProjectId`
+  added to the card select; a new **`video.identityDisclosure`** procedure returning `{ scored, minIdentity, belowFloor, floor }`
+  computed by **the same `projectIdentity()`** the feed uses (a label and an exclusion computed twice could disagree); and an
+  `IdentityDisclosure` label on the film page carrying the number — *"scored 62 against a floor of 85 for live content. It is not
+  promoted in feeds."* — hidden on R16. **4 tests, both cases:** below-floor shows with its score and floor; above-floor shows
+  nothing; unsourced film is not scored; a sourced film with no scores is not labelled. Note the floor here is
+  **`QUARANTINE_IDENTITY_FLOOR` = 85** (live content), distinct from the creative production floor of 75 — the disclosure reports
+  the rule that actually excludes the film, not a different one.
+
+- **2026-11-03 — The 5 below-floor scenes are pre-conditioning renders the pipeline cannot re-render.** The read is unambiguous:
+  **`refs_at_production=0` on every below-floor scene** (`cmuzaoi6` 60×3, `cmvyapup` 70), so they are **un-conditioned legacy
+  renders**, not evidence against the lever — the references arrived after they were produced. Counter-datum worth keeping:
+  **`cmvylvaz` scored 80 with zero references**, so framing alone can carry a beat to the floor. Re-rendering the two projects that
+  now hold approved references returned **`newAssets=0`** — `produce()` reused `READY` rows, no score moved, no flag cleared
+  (live flags still **22**). The pipeline has **no new-take path**, and resetting is refused by `assertNotResetAfterCharge`, so
+  the 5 are **not re-renderable today**: the blocker is a missing capability, not a threshold. **Lever chosen and not yet built:
+  per-scene enforcement** — a first-class new take (new asset row, render, score, keep the better of two). Higher-resolution
+  references and framing escalation were deliberately **not** attempted, because both assume the re-render path that does not
+  exist and would have measured reuse rather than the lever.
+
+- **2026-11-03 — Migration applied as `supabase_admin`; the first take ran and scored 70 (from 60).** `creative_produced_assets`
+  is owned by **`supabase_admin`**, so the deploy's `postgres` migration step cannot alter it — the columns had never appeared and
+  the failure looked like a skipped runner. Applied as the owner. **The original unique constraint was impossible:**
+  `("sceneId","kind","takeNumber")` collides across projects (`SCENE_04` exists in more than one), so it is
+  `("projectId","sceneId","kind","takeNumber")` — schema and migration corrected. **The "stale client" claim was wrong:**
+  `takeNumber` was already generated (109 occurrences); the grep that said otherwise pointed at a path that does not exist here.
+  **First take:** take 2 over parent take 1, previous take **demoted not deleted** (`isLatest=false`, both `READY`),
+  `framingInPrompt=true`, `references=4`, and a score of **70 against the old take's 60** — an improvement that still misses the
+  floor of 75, so this scene is a **measured ceiling**, not an un-conditioned artefact. **The charge silently failed:**
+  `deductCredits` threw because the owner has **no `CreditBalance` row** and `createNewTake`'s `.catch(() => 0)` swallowed it —
+  `creditsCharged=0` with **no `CreditTransaction`**, the same silent-zero class as `castReferences`, now in the newest path.
+
+- **2026-11-03 — Takes measured: one charged and cleared 20 → 90; three refused loudly for balance.** `cmvyapup SCENE_03` take 2:
+  **20 → 90**, 4 references, `framingInPrompt=true`, **charged 80 with a verified `CreditTransaction -80`** (5,480 → 5,400). `cmuzaoi6`'s three scenes
+  **refused** with *"Insufficient credits — you need 80 but have 0"* — the `chargeOrThrow` contract working; before the helper those would have been
+  `creditsCharged=0` "successes". **Counter-datum resolved:** `cmvylvaz` scored 80 un-conditioned and `cmuzaoi6` scored 70 with four references, but
+  `cmvyapup` scored **90 with four references** — so references do not suppress framing; **scene variance does**. **Floor decision: 75 stands** —
+  three measured points (90 conditioned, 80 un-conditioned, 70 conditioned) put 75 inside the distribution. The remaining tail is blocked by an
+  **account balance**, not by calibration; lowering the floor to 72–73 would admit a scene that is simply weaker than its siblings.
+
+- **2026-11-03 — ARC CLOSE.** Capability: 0–50 → **median 70, best 90**, conditioning proven in the payload. Floor: **75 stands**, ~3 of 7 measured beats clear it, most creative output flagged by design. Takes: live, chargeable (verified −80 per take), parent demoted not deleted, guard intact. Silent-zero: `chargeOrThrow` makes it impossible on the newest path; one annotated tolerant site remains (`runner.ts:202`). Residue: **22 live flags** — 5 below-floor scenes with measured conditioned takes, 7 thin-input projects, 73 out-of-scope with audit, 2 accepted loss, 4 resolved. Infrastructure debts named: creative-table ownership (`supabase_admin`), projectId-scoped take constraint, and the branch ruleset requiring checks on the **current head** (a stale base produces "2 of 2 required status checks are expected" even when every check on the old head passed — `gh pr update-branch`, not a re-push). Full record: `docs/operations/creative-arc-close.md`.
+
+- **2026-11-03 — Silent-zero class CLOSED: the transaction shim exists and the tolerance is gone.** The read named the
+  exact shape `deductCredits` needs — idempotency `findUnique` (null by default, forceable), `featureCreditRate.findUnique`
+  (`{creditsPerUnit, isActive}`), `prisma.$transaction(fn)`, and inside it `creditBalance.updateMany` (`{count:1}`/`{count:0}`),
+  `creditBalance.findUnique` (post-decrement), `creditTransaction.create`. **`withCreditCharge()`** supplies all of it and
+  mutates-and-returns the client, so **one shim serves four mock shapes** across all **7** runner files (factory-return,
+  nested client, inline factory, purpose-built factory) — verified by grep, no assertion weakened. **One fixture bug found and
+  fixed on the way:** the first version rated only `generate:flux2`, so video assets (`generate:h3_max`) failed as
+  missing-rate — it now rates every key by default with an explicit `featureKeys` restriction. **Tolerance deleted:**
+  `chargeProductionAsset()` and its `unrated` branch are gone; the runner calls `chargeOrThrow` unconditionally because a
+  missing rate is a **configuration error, not a free render** (the rate table is seeded and active in production). Class
+  state: `castReferences` fixed (#318), `createNewTake` fixed (#323), `runner` fixed here — **no credit path can report zero
+  without charging or throwing**. Suite green at **2,274 tests**.
+
 ## Phase 0 — Baseline proof
 
 **Goal.** Close the unexercised paths before layering anything on top of them.
@@ -901,84 +987,3 @@ Three checks catch the silent failures that make a result meaningless rather tha
   A flag can be true in storage and `undefined` in every consumer.
 - **Guard the branch before committing**, the same way a gate's exit code is checked before
   merging. A tool that reports success while doing something else is the default failure mode.
-
-
-- **2026-11-03 — The 5 below-floor scenes are pre-conditioning renders the pipeline cannot re-render.** The read is unambiguous:
-  **`refs_at_production=0` on every below-floor scene** (`cmuzaoi6` 60×3, `cmvyapup` 70), so they are **un-conditioned legacy
-  renders**, not evidence against the lever — the references arrived after they were produced. Counter-datum worth keeping:
-  **`cmvylvaz` scored 80 with zero references**, so framing alone can carry a beat to the floor. Re-rendering the two projects that
-  now hold approved references returned **`newAssets=0`** — `produce()` reused `READY` rows, no score moved, no flag cleared
-  (live flags still **22**). The pipeline has **no new-take path**, and resetting is refused by `assertNotResetAfterCharge`, so
-  the 5 are **not re-renderable today**: the blocker is a missing capability, not a threshold. **Lever chosen and not yet built:
-  per-scene enforcement** — a first-class new take (new asset row, render, score, keep the better of two). Higher-resolution
-  references and framing escalation were deliberately **not** attempted, because both assume the re-render path that does not
-  exist and would have measured reuse rather than the lever.
-
-- **2026-11-03 — Migration applied as `supabase_admin`; the first take ran and scored 70 (from 60).** `creative_produced_assets`
-  is owned by **`supabase_admin`**, so the deploy's `postgres` migration step cannot alter it — the columns had never appeared and
-  the failure looked like a skipped runner. Applied as the owner. **The original unique constraint was impossible:**
-  `("sceneId","kind","takeNumber")` collides across projects (`SCENE_04` exists in more than one), so it is
-  `("projectId","sceneId","kind","takeNumber")` — schema and migration corrected. **The "stale client" claim was wrong:**
-  `takeNumber` was already generated (109 occurrences); the grep that said otherwise pointed at a path that does not exist here.
-  **First take:** take 2 over parent take 1, previous take **demoted not deleted** (`isLatest=false`, both `READY`),
-  `framingInPrompt=true`, `references=4`, and a score of **70 against the old take's 60** — an improvement that still misses the
-  floor of 75, so this scene is a **measured ceiling**, not an un-conditioned artefact. **The charge silently failed:**
-  `deductCredits` threw because the owner has **no `CreditBalance` row** and `createNewTake`'s `.catch(() => 0)` swallowed it —
-  `creditsCharged=0` with **no `CreditTransaction`**, the same silent-zero class as `castReferences`, now in the newest path.
-
-- **2026-11-03 — Takes measured: one charged and cleared 20 → 90; three refused loudly for balance.** `cmvyapup SCENE_03` take 2:
-  **20 → 90**, 4 references, `framingInPrompt=true`, **charged 80 with a verified `CreditTransaction -80`** (5,480 → 5,400). `cmuzaoi6`'s three scenes
-  **refused** with *"Insufficient credits — you need 80 but have 0"* — the `chargeOrThrow` contract working; before the helper those would have been
-  `creditsCharged=0` "successes". **Counter-datum resolved:** `cmvylvaz` scored 80 un-conditioned and `cmuzaoi6` scored 70 with four references, but
-  `cmvyapup` scored **90 with four references** — so references do not suppress framing; **scene variance does**. **Floor decision: 75 stands** —
-  three measured points (90 conditioned, 80 un-conditioned, 70 conditioned) put 75 inside the distribution. The remaining tail is blocked by an
-  **account balance**, not by calibration; lowering the floor to 72–73 would admit a scene that is simply weaker than its siblings.
-
-- **2026-11-03 — ARC CLOSE.** Capability: 0–50 → **median 70, best 90**, conditioning proven in the payload. Floor: **75 stands**, ~3 of 7 measured beats clear it, most creative output flagged by design. Takes: live, chargeable (verified −80 per take), parent demoted not deleted, guard intact. Silent-zero: `chargeOrThrow` makes it impossible on the newest path; one annotated tolerant site remains (`runner.ts:202`). Residue: **22 live flags** — 5 below-floor scenes with measured conditioned takes, 7 thin-input projects, 73 out-of-scope with audit, 2 accepted loss, 4 resolved. Infrastructure debts named: creative-table ownership (`supabase_admin`), projectId-scoped take constraint, and the branch ruleset requiring checks on the **current head** (a stale base produces "2 of 2 required status checks are expected" even when every check on the old head passed — `gh pr update-branch`, not a re-push). Full record: `docs/operations/creative-arc-close.md`.
-
-- **2026-11-03 — Silent-zero class CLOSED: the transaction shim exists and the tolerance is gone.** The read named the
-  exact shape `deductCredits` needs — idempotency `findUnique` (null by default, forceable), `featureCreditRate.findUnique`
-  (`{creditsPerUnit, isActive}`), `prisma.$transaction(fn)`, and inside it `creditBalance.updateMany` (`{count:1}`/`{count:0}`),
-  `creditBalance.findUnique` (post-decrement), `creditTransaction.create`. **`withCreditCharge()`** supplies all of it and
-  mutates-and-returns the client, so **one shim serves four mock shapes** across all **7** runner files (factory-return,
-  nested client, inline factory, purpose-built factory) — verified by grep, no assertion weakened. **One fixture bug found and
-  fixed on the way:** the first version rated only `generate:flux2`, so video assets (`generate:h3_max`) failed as
-  missing-rate — it now rates every key by default with an explicit `featureKeys` restriction. **Tolerance deleted:**
-  `chargeProductionAsset()` and its `unrated` branch are gone; the runner calls `chargeOrThrow` unconditionally because a
-  missing rate is a **configuration error, not a free render** (the rate table is seeded and active in production). Class
-  state: `castReferences` fixed (#318), `createNewTake` fixed (#323), `runner` fixed here — **no credit path can report zero
-  without charging or throwing**. Suite green at **2,274 tests**.
-
-- **2026-11-04 — Take constraint verified in the database and pinned by a class test.** Read all three layers: `pg_indexes`
-  shows `creative_produced_assets_projectId_sceneId_kind_takeNumber_key UNIQUE (projectId, sceneId, kind, takeNumber)`;
-  `schema.prisma` and the migration agree. **Shipped:** `schemaScope.test.ts` asserts that every project-scoped model's unique
-  constraint keyed on `sceneId` carries `projectId` — the exact shape that made the take migration unappliable — and pins the
-  corrected constraint specifically. The rule is narrow on purpose (`assetId`/`versionId`/`runId`/`seriesId` are globally
-  unique, so requiring `projectId` there would be noise and the rule would be disabled within a week). **Finding:** the same
-  defect exists **pre-existing in `StorySceneAsset`** — `@@unique([sceneId, assetType, takeNumber])` and
-  `@@unique([sceneId, idempotencyKey])` — recorded as **shrink-only named exceptions**, so a new violation fails the test and
-  removing one also fails it. Suite green at **2,276 tests**.
-
-- **2026-11-04 — StorySceneAsset's two unscoped constraints closed in schema, database and test.** Read first:
-  `pg_indexes` showed `UNIQUE (sceneId, assetType, takeNumber)` and `UNIQUE (sceneId, idempotencyKey)`, owner
-  **`supabase_admin`**. **Collision check before the change:** 0 duplicate `(projectId, sceneId, assetType, takeNumber)` rows;
-  2,741 rows, 814 distinct `sceneId`s, and **0 `sceneId`s shared across projects** — so widening was safe rather than lucky.
-  **The migration caught its own mistake:** `ALTER TABLE … DROP CONSTRAINT` **silently skipped**, because Prisma creates
-  **unique indexes**, not table constraints — `pg_indexes` then showed *five* unique indexes instead of three, and
-  `DROP INDEX IF EXISTS` removed the leftovers. Exit code was 0 both times, which is why the verification is the index list,
-  not the exit code. **Final state:** pkey + `UNIQUE (projectId, sceneId, assetType, takeNumber)` +
-  `UNIQUE (projectId, sceneId, idempotencyKey)`; `RECORDED_EXCEPTIONS` in `schemaScope.test.ts` is now **empty**, with the
-  mechanism retained so a new violation must be added deliberately and a fixed one fails until its entry is removed.
-  Suite green at **2,276 tests**.
-
-- **2026-11-04 — Identity disclosure shipped: the film page now says why a film is not promoted.** The read found the film
-  page (`apps/web/src/app/v/[id]/page.tsx`) is a client component reading `video.getById`, and `videoCardSelect` did **not**
-  carry `sourceProjectId`; `projectIdentity()` already existed in `quarantineFeed.ts` and its own comment states that *"the feed
-  clause and the film-page disclosure BOTH call this"* — the intended design, one level short of wired. **Shipped:** `sourceProjectId`
-  added to the card select; a new **`video.identityDisclosure`** procedure returning `{ scored, minIdentity, belowFloor, floor }`
-  computed by **the same `projectIdentity()`** the feed uses (a label and an exclusion computed twice could disagree); and an
-  `IdentityDisclosure` label on the film page carrying the number — *"scored 62 against a floor of 85 for live content. It is not
-  promoted in feeds."* — hidden on R16. **4 tests, both cases:** below-floor shows with its score and floor; above-floor shows
-  nothing; unsourced film is not scored; a sourced film with no scores is not labelled. Note the floor here is
-  **`QUARANTINE_IDENTITY_FLOOR` = 85** (live content), distinct from the creative production floor of 75 — the disclosure reports
-  the rule that actually excludes the film, not a different one.
