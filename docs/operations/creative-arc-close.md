@@ -144,3 +144,33 @@ const creditsUsed = featureKey
 | `runner.ts` charge tolerating a missing rate | **fixed here** — tolerance deleted, mocks express a charge |
 
 **No credit path in this codebase can report zero without either charging or throwing.** 7 files verified by grep; no assertion weakened; suite green at **2,274 tests**.
+
+## Take constraint: verified in the database, pinned by a test (2026-11-04)
+
+Chosen as the session's debt because it is the smallest infrastructure item with the widest blast radius: a constraint that omits its scope silently re-inherits onto the next table.
+
+### The read — all three layers agree
+
+```
+pg_indexes → creative_produced_assets_projectId_sceneId_kind_takeNumber_key
+             UNIQUE (projectId, sceneId, kind, takeNumber)
+schema.prisma → @@unique([projectId, sceneId, kind, takeNumber])
+migration     → ADD CONSTRAINT ... UNIQUE ("projectId", "sceneId", "kind", "takeNumber")
+```
+
+The corrected constraint is live in the database, not merely written down.
+
+### The class test
+
+`schemaScope.test.ts` reads `schema.prisma` and asserts, for every project-scoped model, that **a unique constraint keyed on `sceneId` carries `projectId`** — `sceneId` is only unique within a project, which is precisely why `(sceneId, kind, takeNumber)` could not apply.
+
+The rule is deliberately narrow: `assetId`, `versionId`, `runId` and `seriesId` are globally unique, so including `projectId` there would be noise, and a rule that flagged them would be switched off in a week.
+
+### What it found: the same defect, pre-existing, in the story take model
+
+```
+StorySceneAsset: @@unique([sceneId, assetType, takeNumber])
+StorySceneAsset: @@unique([sceneId, idempotencyKey])
+```
+
+Recorded as **named exceptions**, not fixed here — the list is shrink-only: a new violation fails the test, and removing one also fails it, so the debt cannot quietly grow or quietly disappear.
