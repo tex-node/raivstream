@@ -174,3 +174,46 @@ StorySceneAsset: @@unique([sceneId, idempotencyKey])
 ```
 
 Recorded as **named exceptions**, not fixed here — the list is shrink-only: a new violation fails the test, and removing one also fails it, so the debt cannot quietly grow or quietly disappear.
+
+## StorySceneAsset: the last unscoped-constraint instance, closed (2026-11-04)
+
+`schemaScope.test.ts` found this class in the story take model one session after pinning the creative fix. This closes it.
+
+### The read — before any migration
+
+```
+pg_indexes (before)
+  story_scene_assets_sceneId_assetType_takeNumber_key  UNIQUE (sceneId, assetType, takeNumber)
+  story_scene_assets_sceneId_idempotencyKey_key        UNIQUE (sceneId, idempotencyKey)
+owner: supabase_admin
+```
+
+Collision check, run **before** touching the constraint:
+
+| query | result |
+|---|---|
+| duplicate `(projectId, sceneId, assetType, takeNumber)` | **0 rows** |
+| rows in the table | 2,741 |
+| distinct `sceneId` values | 814 |
+| `sceneId` values used by more than one project | **0** |
+
+**No data collision, so the widening was safe** — and worth knowing rather than discovering: if any `sceneId` had been shared, it would have been a data migration first.
+
+### The migration, and the mistake it caught
+
+Applied as **`supabase_admin`** (the table's owner; `postgres` cannot alter it — the same constraint that blocked the creative take migration).
+
+The first attempt used `ALTER TABLE … DROP CONSTRAINT`, which **silently skipped**: Prisma creates **unique indexes**, not table constraints, so the old unscoped keys survived alongside the new scoped ones. The verification caught it — `pg_indexes` listed five unique indexes instead of three — and `DROP INDEX IF EXISTS` removed them.
+
+**That is why the check is `pg_indexes` and not the migration's exit code.** The exit code was 0 both times.
+
+```
+pg_indexes (after)
+  story_scene_assets_pkey
+  story_scene_assets_projectId_sceneId_assetType_takeNumber_key  UNIQUE (projectId, sceneId, assetType, takeNumber)
+  story_scene_assets_projectId_sceneId_idempotencyKey_key        UNIQUE (projectId, sceneId, idempotencyKey)
+```
+
+### The class test, now with no exceptions
+
+`RECORDED_EXCEPTIONS` is **empty**. The mechanism stays: a new violation must be added deliberately, and fixing an existing one shows up as a failing test until its entry is removed — which is how this session's fix was confirmed.

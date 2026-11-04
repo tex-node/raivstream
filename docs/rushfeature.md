@@ -958,3 +958,15 @@ Three checks catch the silent failures that make a result meaningless rather tha
   defect exists **pre-existing in `StorySceneAsset`** — `@@unique([sceneId, assetType, takeNumber])` and
   `@@unique([sceneId, idempotencyKey])` — recorded as **shrink-only named exceptions**, so a new violation fails the test and
   removing one also fails it. Suite green at **2,276 tests**.
+
+- **2026-11-04 — StorySceneAsset's two unscoped constraints closed in schema, database and test.** Read first:
+  `pg_indexes` showed `UNIQUE (sceneId, assetType, takeNumber)` and `UNIQUE (sceneId, idempotencyKey)`, owner
+  **`supabase_admin`**. **Collision check before the change:** 0 duplicate `(projectId, sceneId, assetType, takeNumber)` rows;
+  2,741 rows, 814 distinct `sceneId`s, and **0 `sceneId`s shared across projects** — so widening was safe rather than lucky.
+  **The migration caught its own mistake:** `ALTER TABLE … DROP CONSTRAINT` **silently skipped**, because Prisma creates
+  **unique indexes**, not table constraints — `pg_indexes` then showed *five* unique indexes instead of three, and
+  `DROP INDEX IF EXISTS` removed the leftovers. Exit code was 0 both times, which is why the verification is the index list,
+  not the exit code. **Final state:** pkey + `UNIQUE (projectId, sceneId, assetType, takeNumber)` +
+  `UNIQUE (projectId, sceneId, idempotencyKey)`; `RECORDED_EXCEPTIONS` in `schemaScope.test.ts` is now **empty**, with the
+  mechanism retained so a new violation must be added deliberately and a fixed one fails until its entry is removed.
+  Suite green at **2,276 tests**.
