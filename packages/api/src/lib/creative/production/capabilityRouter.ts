@@ -15,6 +15,8 @@ import { contextPromptLine, type ProductionContext } from './contextAdapter';
 export type GenerationKind = 'IMAGE' | 'VIDEO';
 
 export interface StillSpec {
+  /** Shot addressing (2026-11-04). Absent = the scene-level composite still. */
+  shotId?: string;
   kind: 'IMAGE';
   sceneId: string;
   prompt: string;
@@ -98,6 +100,15 @@ export function routeProduction(
   plan: CreativeProductionPlanState,
   bible?: CreativeBibleState | null,
   context?: ProductionContext | null,
+  /**
+   * Per-shot production (Phase 4, 2026-11-04) — OPT-IN, never the default.
+   *
+   * Every scene template carries three `shotIdeas`, so emitting an asset per shot multiplies
+   * stills by 3: a 4-scene project goes from 4 assets (320 credits at 80 each) to 12 (960).
+   * A default that triples a production's cost is a spend decision, not an implementation
+   * detail, so the scene-level composite still stays the default and this is requested.
+   */
+  options: { perShot?: boolean } = {},
 ): GenerationSpec[] {
   const specs: GenerationSpec[] = [];
   const effectiveContext = context ?? plan.contextSnapshot ?? null;
@@ -122,15 +133,31 @@ export function routeProduction(
         lockedIdentityBlock: c.lockedIdentityBlock ?? null,
       }));
 
-    specs.push({
-      kind: 'IMAGE',
-      sceneId: scene.sceneId,
-      prompt: still.prompt,
-      negativePrompt: still.negativePrompt,
-      aspectRatio: '9:16',
-      ...(sourceImageUrl ? { sourceImageUrl } : {}),
-      ...(characterRefs.length ? { characterRefs } : {}),
-    });
+    if (options.perShot && Array.isArray((scene as { shots?: unknown[] }).shots) && (scene as { shots: unknown[] }).shots.length > 0) {
+      // One IMAGE spec per shot, each carrying its shotId so the asset row can address it.
+      for (const shot of (scene as { shots: Array<{ shotId: string; description?: string; camera?: string }> }).shots) {
+        specs.push({
+          kind: 'IMAGE',
+          sceneId: scene.sceneId,
+          shotId: shot.shotId,
+          prompt: [still.prompt, shot.description, shot.camera].filter(Boolean).join('. '),
+          negativePrompt: still.negativePrompt,
+          aspectRatio: '9:16',
+          ...(sourceImageUrl ? { sourceImageUrl } : {}),
+          ...(characterRefs.length ? { characterRefs } : {}),
+        });
+      }
+    } else {
+      specs.push({
+        kind: 'IMAGE',
+        sceneId: scene.sceneId,
+        prompt: still.prompt,
+        negativePrompt: still.negativePrompt,
+        aspectRatio: '9:16',
+        ...(sourceImageUrl ? { sourceImageUrl } : {}),
+        ...(characterRefs.length ? { characterRefs } : {}),
+      });
+    }
     const video = buildPrompt(scene, 'VIDEO', bible, effectiveContext);
     specs.push({
       kind: 'VIDEO',
