@@ -17,12 +17,18 @@ import { autoResolveIntent, type AutoResolveResult } from './resolve';
 /**
  * The auto path's ceiling, and why this number.
  *
- * A composite still costs 80 credits. The plan builder produces one still per scene for a typical
- * six-beat film, so 6 x 80 = 480 covers a full film at scene granularity and nothing more. Per-shot
- * production would be three times that for the same film, which is why auto mode spends on the
- * composite and leaves shot-level work to a deliberate request.
+ * CORRECTED TWICE, by measurement rather than arithmetic.
+ *
+ * First value 480 counted only stills (6 x 80) and ignored the VIDEO spec production emits per
+ * scene. Second value 960 assumed the draft video rate of 80; a real run showed the runner charging
+ * `generate:h3_max` at **200**, so a four-scene film spent 920 and the fifth charge was refused at
+ * 1,120. The ceiling is therefore 6 x (80 still + 200 video) = **1680**, and it is derived from the
+ * rate the run actually uses, not the one the table lists cheapest.
+ *
+ * Per-shot production would add two more stills per scene (three shots vs one composite), which is
+ * why auto mode stays on composites and leaves shot-level work to a deliberate request.
  */
-export const AUTO_DEFAULT_CEILING = 480;
+export const AUTO_DEFAULT_CEILING = 1680;
 
 export interface AutoProductionDeps {
   interpret: (text: string) => Promise<CreativeInterpretation>;

@@ -393,6 +393,8 @@ generation and shareable between creators.
 
 **Not yet proven on bytes:** no auto run has produced a film. The path is proven at the composition boundary (13 tests: order of steps, explicit ceiling, blocked-question short circuit, decisions reported) with a bounded real run available at one to two scenes, 80–160 credits, which this session did not spend.
 
+**Bounded auto run attempted — the cap fired, and that is the finding.** One sentence (*"A lighthouse keeper finds an injured bird and teaches it to fly again"*) through `runAutoProduction` on the deployed build: the interpretation auto-resolved every question, the project was created, the plan built **4 scenes**, and production ran under an explicit ceiling. **Spend 920 credits, balance 4,920 → 4,000**, ceiling 960: the cap refused the charge that would have taken the run to 1,120 and did so **before** it spent. **What the run proves:** one sentence in, no follow-up questions, a real production under a ceiling, and a ceiling that stops an overrun rather than reporting it afterwards. **What it does not prove:** a complete, publishable film — 7 of 8 assets are READY (4 stills, 3 videos) and the fourth video is the one the cap refused. **Two defects the run exposed:** (1) the ceiling was derived from the draft video rate (80) while the runner charges `generate:h3_max` at **200**, so the default is now **1680** = 6 × (80 + 200); (2) the refusal surfaced as a failed asset on a run whose status is still `COMPLETED`, so a caller cannot tell a capped run from a finished one without comparing `creditsSpent` to `creditCeiling`. Phase 7 stays open on the completeness clause.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 

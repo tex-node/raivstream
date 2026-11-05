@@ -117,3 +117,22 @@ describe('a blocked question stops the flow before anything is spent', () => {
     expect(result.status === 'blocked' && result.decisions.map((dec) => dec.id)).toEqual(['tone']);
   });
 });
+
+describe('the default ceiling covers a whole film, not just its stills', () => {
+  // The first value (480) counted stills only and would have aborted every real run midway:
+  // production emits a VIDEO spec per scene too. At the draft video rate of 80, a six-beat film is
+  // 6 x (80 still + 80 video) = 960. This test exists so the number cannot drift back to a
+  // stills-only derivation.
+  const STILL = 80;
+  const DRAFT_VIDEO = 80;
+  const SCENES_IN_FILM = 6;
+
+  it('is at least the cost of a six-scene film with video', () => {
+    expect(AUTO_DEFAULT_CEILING).toBeGreaterThanOrEqual(SCENES_IN_FILM * (STILL + DRAFT_VIDEO));
+  });
+
+  it('is not inflated beyond one film at composite granularity', () => {
+    // Per-shot would be 6 x (3 stills + video) = 1920; auto mode stays on composites.
+    expect(AUTO_DEFAULT_CEILING).toBeLessThan(SCENES_IN_FILM * (3 * STILL + DRAFT_VIDEO));
+  });
+});
