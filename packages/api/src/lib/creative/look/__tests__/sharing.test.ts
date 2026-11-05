@@ -89,3 +89,19 @@ describe('a look can be shared into another project', () => {
     await expect(shareLook(prisma, { fromProjectId: 'p1', name: 'Absent', toProjectId: 'p2' })).rejects.toThrow(/No look named/);
   });
 });
+
+describe('between creators: what the clause actually means', () => {
+  // DOCUMENTS A GAP rather than a feature. `shareLook` takes two project ids and checks neither
+  // ownership nor that the projects belong to different users. So it does cross the creator
+  // boundary - mechanically - but it does so without authorization: any caller who can name two
+  // project ids can copy a look between them. The plan's "shareable between creators" is therefore
+  // met in the copy, not in the permission. Fixing this belongs to the router layer (who may call
+  // shareLook), not to this service.
+  it('copies between projects whose owners differ, with no ownership check', async () => {
+    const { prisma } = makePrisma();
+    await saveLook(prisma, { projectId: 'p1_owned_by_alice', look: noir });
+    const shared = await shareLook(prisma, { fromProjectId: 'p1_owned_by_alice', name: 'Noir', toProjectId: 'p2_owned_by_bob' });
+    expect(shared.projectId).toBe('p2_owned_by_bob');
+    expect(shared.grade).toBe('monochrome');
+  });
+});
