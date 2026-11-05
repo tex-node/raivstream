@@ -375,6 +375,12 @@ generation and shareable between creators.
 
 ## Phase 7 — Auto mode
 
+**Read before building — the gap is the policy, not the plumbing, and the cap does not exist.** The plan's "skips the guided question flow, chooses defaults" describes a layer that is half-wired: `IntentQuestion.canAutoDecide` exists (`shared/types.ts`, "the UI offers a 'Let Raivstream decide' choice") and is consumed by **exactly one thing** — the interpretation panel — plus tests. **No server code ever decides a deferrable question.** The flag is rendered and never applied. The second, harder gap: **"capped credits" has no mechanism.** The codebase contains character ceilings and ffmpeg wall-clock ceilings, and no per-film or per-run credit ceiling anywhere; every charge is a per-asset rate. **"Cheap" is verified, not assumed:** `generate:flux2` is **80 credits and active**, `generate:flux` 80 and inactive, so per-shot regeneration costs 80 per still — 12 stills for a 4-scene film at three shots each, **960 credits**, against **320** for scene composites. Cheap per shot, not cheap per film.
+
+**First slice shipped:** `autoResolveIntent(interpretation)` — the server half of the flag. It decides every `canAutoDecide` question (using the creator's own words when an option matches, otherwise the first option, never an empty answer) and **refuses** when a question cannot be deferred, returning `blockedBy` instead of inventing a choice. 7 tests, including that a blocked question never receives a decision. Reuses the existing interpretation type; no new intent, plan or charge path.
+
+**Scoped out, with the mechanism named:** the credit cap. A per-run ceiling carried on `CreativeProductionRun` (or the run options) and checked **before each charge** in the runner loop, aborting the run before it spends past the ceiling rather than discovering the overrun in the ledger afterwards. Until that exists, auto mode cannot honestly claim "capped" — it can claim "defaulted".
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
