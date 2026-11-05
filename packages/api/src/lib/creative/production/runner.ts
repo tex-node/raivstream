@@ -21,6 +21,7 @@
 import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { nextChargeAttempt } from '../../credits/attempts';
+import { assertWithinCeiling, loadRunBudget } from '../../credits/cap';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
@@ -77,6 +78,11 @@ export interface ProductionRunOptions {
    * name - the production never re-enters lens/grade/movement, which is what "reusable" means.
    */
   lookName?: string;
+  /**
+   * Per-run credit ceiling (Phase 7). Persisted on the run so a resumed attempt remembers its
+   * budget; null means uncapped.
+   */
+  creditCeiling?: number;
   /** Restrict a run to specific spec kinds, so an image comparison does not also buy video. */
   kinds?: Array<'IMAGE' | 'VIDEO'>;
 
@@ -168,6 +174,15 @@ export async function runCreativeProduction(
   }
 
   const runId = input.runId ?? (await startRun(prisma, project.id, { totalScenes: plan.scenes.length, attempt: input.attempt ?? 1, contextSnapshot: plan.contextSnapshot }));
+
+  // A ceiling is written once, then read back from the row: the run's budget must survive a resume.
+  if (options.creditCeiling !== undefined && runId) {
+    await prisma.creativeProductionRun.update({
+      where: { id: runId },
+      data: { creditCeiling: options.creditCeiling } as never,
+    }).catch(() => undefined);
+  }
+  let budget = await loadRunBudget(prisma, runId).catch(() => ({ ceiling: null, spent: 0 }));
   const startedAt = now().getTime();
   logProductionEvent({ type: 'run_started', projectId: project.id, runId, totalScenes: plan.scenes.length, attempt: input.attempt ?? 1 });
 
@@ -246,6 +261,14 @@ export async function runCreativeProduction(
           // A reused row has already been paid for once; its attempt comes from that history, so
           // the key differs and the re-render is billed. A fresh row starts at the loop attempt.
           const chargeAttempt = prior ? await nextChargeAttempt(prisma, asset.id) : attempt;
+          // Checked BEFORE the charge: the cap refuses the next asset rather than reporting an
+          // overrun the ledger already recorded.
+          const rate = featureKey
+            ? ((await prisma.featureCreditRate
+                .findUnique({ where: { featureKey }, select: { creditsPerUnit: true } })
+                .catch(() => null)) as { creditsPerUnit: number } | null)
+            : null;
+          assertWithinCeiling({ runId, ceiling: budget.ceiling, spent: budget.spent, nextCost: rate?.creditsPerUnit ?? 0 });
           const creditsUsed = featureKey
             ? await chargeOrThrow(
                 prisma,
@@ -256,6 +279,13 @@ export async function runCreativeProduction(
                 creditKeys.prodAsset.charge(asset.id, chargeAttempt),
               )
             : 0;
+          // Persist the spend so a resumed run starts from it, not from zero.
+          if (creditsUsed > 0 && runId) {
+            budget = { ...budget, spent: budget.spent + creditsUsed };
+            await prisma.creativeProductionRun
+              .update({ where: { id: runId }, data: { creditsSpent: budget.spent } as never })
+              .catch(() => undefined);
+          }
         try {
           let media;
           if (spec.kind === 'IMAGE') {

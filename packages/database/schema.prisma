@@ -2653,6 +2653,12 @@ model CreativeProductionRun {
   idempotencyKey  String?
   contextSnapshot Json?
   lastError       String?
+  /// Per-run credit ceiling (Phase 7). Null = uncapped. Persisted so a resumed run remembers its
+  /// budget: a money ceiling in ephemeral state resets on every restart.
+  creditCeiling   Int?
+  /// Credits actually charged by this run, incremented after each successful charge so the cap
+  /// counts RUN spend, not per-asset spend.
+  creditsSpent    Int                          @default(0)
   startedAt       DateTime                     @default(now())
   heartbeatAt     DateTime                     @default(now())
   finishedAt      DateTime?
