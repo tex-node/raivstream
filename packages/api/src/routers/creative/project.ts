@@ -4,6 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { logPreProjectStage } from '../../lib/creative/stageLog';
 import { creativeProcedure, router } from '../../trpc';
+import { autoProductionDeps, runAutoProduction } from '../../lib/creative/auto/run';
 import { projectService } from '../../lib/creative/project/service';
 import { memoryService } from '../../lib/creative/memory/service';
 import { isCreativeEnabled } from '../../lib/creative/featureFlags';
@@ -32,6 +33,29 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
 }
 
 export const creativeProjectRouter = router({
+  /**
+   * Auto mode (Phase 7): one sentence in, a capped production out.
+   *
+   * Composes the pieces that shipped separately — `autoResolveIntent` for defaults and refusal,
+   * `runCreativeProduction` for the ceiling — rather than re-implementing either. A blocked
+   * question returns `status: 'blocked'` with the question named and nothing spent; the ceiling is
+   * always explicit on this path, because a null ceiling is the unbounded-spend state the cap
+   * exists to prevent.
+   */
+  auto: creativeProcedure
+    .input(z.object({
+      text: z.string().min(1).max(4000),
+      /** Optional per-run ceiling. Omitted means the documented auto default. */
+      creditCeiling: z.number().int().min(80).max(100000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return runAutoProduction(autoProductionDeps(ctx.prisma as never), {
+        userId: ctx.user.id,
+        text: input.text,
+        ...(input.creditCeiling !== undefined ? { creditCeiling: input.creditCeiling } : {}),
+      });
+    }),
+
   create: creativeProcedure
     .input(z.object({
       text: z.string().min(1).max(4000),

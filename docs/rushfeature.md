@@ -385,6 +385,14 @@ generation and shareable between creators.
 
 **Migration:** `20261105160000_production_run_credit_cap` — additive and nullable, so every existing run stays uncapped. Applied as `supabase_admin` and verified in `information_schema` (`creditCeiling` nullable integer, `creditsSpent` integer NOT NULL default 0). **Tests:** 11 — within, exactly-on, and over the ceiling; the refusal naming ceiling/spend/next; a partially-completed run continuing; a null ceiling staying uncapped; a resumed run inheriting the previous attempt's ceiling *and* spend; a missing run row being uncapped rather than silently zero; and source assertions that the guard is evaluated before `chargeOrThrow` and that `creditsSpent` is persisted.
 
+**The path shipped: `creative.project.auto`.** One procedure composes the pieces that shipped separately — `intentService.interpret` → `autoResolveIntent` → `projectService.createFromIntent` → `productionPlanService.plan` → `runCreativeProduction` with an explicit ceiling. Nothing is re-implemented: the refusal and the cap are the shipped functions, called in order, and the composition lives in `runAutoProduction` with every step injected so the path is testable without a database.
+
+**The blocked contract:** a non-deferrable question returns `status: "blocked"` with `blockedBy` **and** the question prompts, before a project exists and before any charge — tested by asserting `createProject`, `buildPlan` and `runProduction` are never called. The creator sees which question stopped them, and the decisions already made are returned too, so they are not asked twice.
+
+**The default ceiling is 480**, and the rationale is arithmetic rather than taste: a composite still costs 80 credits and the plan builder emits one still per scene for a six-beat film, so 6 × 80 covers a full film at scene granularity and nothing more. Per-shot production would be three times that for the same film, which is why auto mode spends on composites and leaves shot-level work to a deliberate request. The ceiling is never null on this path.
+
+**Not yet proven on bytes:** no auto run has produced a film. The path is proven at the composition boundary (13 tests: order of steps, explicit ceiling, blocked-question short circuit, decisions reported) with a bounded real run available at one to two scenes, 80–160 credits, which this session did not spend.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
