@@ -135,3 +135,31 @@ export function composeWithLook(prompt: string, fragment: string): string {
   const trimmed = prompt.trim().replace(/\.$/, '');
   return `${trimmed}. ${fragment}.`;
 }
+
+/**
+ * Sharing a look between creators (Phase 6, first slice).
+ *
+ * The plan asks for looks that can be "applied, shared, and reused". Applied and reused already
+ * work inside a project (Phase 5). Sharing is the genuinely new capability, and it does NOT need a
+ * new table: a shared look is the same object copied into another project under the same name,
+ * with the existing conflict rule deciding what happens on a collision.
+ *
+ * Deliberately not built here: "variant" and "strength". Strength is a LoRA parameter, and the
+ * provider layer accepts no LoRA argument at all (FluxInput has prompt/steps/guidance/seed), so a
+ * strength control would be an object nothing can apply.
+ */
+export async function shareLook(
+  prisma: PrismaClient,
+  input: { fromProjectId: string; name: string; toProjectId: string; overwrite?: boolean },
+): Promise<StoredLook> {
+  const source = await lookPromptForProduction(prisma, { projectId: input.fromProjectId, name: input.name });
+  if (!source) {
+    throw new Error(`No look named "${input.name}" in project ${input.fromProjectId}.`);
+  }
+  const { name, lens, movement, lighting, grade, resolution } = source.look;
+  return saveLook(prisma, {
+    projectId: input.toProjectId,
+    look: { name, lens, movement, lighting, grade, resolution },
+    ...(input.overwrite ? { overwrite: true } : {}),
+  });
+}

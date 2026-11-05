@@ -354,6 +354,10 @@ controls; a resolution ladder with plan gating, mirroring the existing credit-ra
 
 ## Phase 6 — Presets and LoRAs as product objects
 
+**Read before building — two halves of this phase are not what they look like.** *Applied and reused* already ship: Phase 5's `CinematicLook` is project-scoped, applied through `runCreativeProduction({ lookName })`, and reusable across a project's productions. The genuinely new capability in this phase is **sharing between creators**, which needs **no new table** — a shared look is the same object copied into another project, with the existing `LookNameConflictError` deciding collisions. **The LoRA half is blocked by the provider, not by the plan:** `FluxInput` carries `prompt`, `steps`, `guidance`, `seed` and no LoRA or adapter argument, and the only `.safetensors` references in the codebase are CogVideoX model filenames on a network volume. A `strength` control would therefore be an object nothing can apply — the plan's "variant and a strength control" describes a capability the provider layer does not expose.
+
+**First slice shipped:** `shareLook(fromProjectId, name, toProjectId, overwrite?)` reusing `lookPromptForProduction` + `saveLook`, so there is no parallel path for a similar object. 6 tests: fields copied not subsets, the shared look applies in the receiving project through the Phase 5 consumer, the source is untouched, a collision is the same typed conflict, overwrite is explicit, and a missing source fails loudly. **Scoped out with named blockers:** LoRAs (no provider parameter), "variant" (no definition distinguishing it from the look fields), and any new table (nothing in the shipped slice needs one — the Phase 5 precedent is that a table shipped before its type was exercised had to be corrected).
+
 **Goal.** Saved looks that can be applied, shared, and reused across productions.
 
 **What it changes.** A preset entity with a variant and a strength control, selectable per
