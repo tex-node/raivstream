@@ -21,7 +21,7 @@
 import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { nextChargeAttempt } from '../../credits/attempts';
-import { assertWithinCeiling, loadRunBudget } from '../../credits/cap';
+import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../../credits/cap';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
@@ -189,6 +189,8 @@ export async function runCreativeProduction(
   let lastClipUrl: string | null = null;
   let generated = 0;
   let failed = 0;
+  // Set when the ceiling refuses a charge: the run must report PARTIAL, not COMPLETED.
+  let capHit: { ceiling: number; spent: number; assetIndex: number } | null = null;
   let firstVisualLogged = false;
   // The same source readiness approved: a resolvable reference the generation
   // capability (H3 I2V) can actually use as the opening seed.
@@ -344,6 +346,16 @@ export async function runCreativeProduction(
             logProductionEvent({ type: 'asset_ready', projectId: project.id, sceneId: spec.sceneId, kind: 'FIRST_VISUAL', durationMs: now().getTime() - startedAt });
           }
         } catch (error) {
+          if (error instanceof CreditCapExceededError) {
+            const capped = error;
+            // Stop attempting further assets: every remaining charge would be refused the same way.
+            capHit = { ceiling: capped.ceiling, spent: capped.spent, assetIndex: specs.indexOf(spec) + 1 };
+            failed += 1;
+            await prisma.creativeProducedAsset
+              .update({ where: { id: asset.id }, data: { status: 'FAILED' as never, errorMessage: capped.code } as never })
+              .catch(() => undefined);
+            break;
+          }
           lastError = error as Error;
           // CONTENT_REJECTED and non-retryable MediaProviderError (e.g. PROVIDER_DISABLED)
           // are deterministic — never retry. Both fail only this asset (smallest scope).
@@ -370,12 +382,19 @@ export async function runCreativeProduction(
       await heartbeat(prisma, runId, { readyScenes: byKey.size, failedScenes: failed }, now);
     }
   } finally {
-    const status: ProductionRunStatus = failed === 0 ? 'COMPLETED' : generated > 0 ? 'PARTIAL' : 'FAILED';
+    // A capped run is PARTIAL with a machine-readable reason. The cap changed what the run DID;
+    // this changes what it SAYS, which is the half that was missing.
+    const status: ProductionRunStatus = finalRunStatus({ capHit: Boolean(capHit), generated, failed });
+    const stopReason = capHit
+      ? capStopReason({ ceiling: capHit.ceiling, spent: capHit.spent, assetIndex: capHit.assetIndex, totalAssets: specs.length })
+      : failed > 0
+        ? 'Some scenes could not be generated.'
+        : null;
     const model = runModel(prisma);
     if (runId && model?.update) {
       await model.update({
         where: { id: runId },
-        data: { status, readyScenes: generated, failedScenes: failed, stage: 'ready', finishedAt: now(), heartbeatAt: now(), lastError: failed > 0 ? 'Some scenes could not be generated.' : null },
+        data: { status, readyScenes: generated, failedScenes: failed, stage: 'ready', finishedAt: now(), heartbeatAt: now(), lastError: stopReason },
       }).catch(() => undefined);
     }
     logProductionEvent({ type: 'run_finished', projectId: project.id, runId, status, generated, failed });

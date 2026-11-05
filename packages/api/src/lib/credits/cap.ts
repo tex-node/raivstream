@@ -59,3 +59,34 @@ export async function loadRunBudget(prisma: PrismaClient, runId: string | null):
   })) as { creditCeiling: number | null; creditsSpent: number } | null;
   return { ceiling: row?.creditCeiling ?? null, spent: row?.creditsSpent ?? 0 };
 }
+
+/**
+ * How a capped run should REPORT itself (2026-11-05).
+ *
+ * The cap refused a charge correctly and the run still said COMPLETED: the guard changed what the
+ * run DID and not what the run SAID. A guard that stops work must change the report, or every
+ * capped run misreports as a success.
+ *
+ * `PARTIAL` is the honest status - some assets were produced and the run stopped short - and the
+ * reason is machine-readable rather than prose, so a caller can branch on it without parsing.
+ */
+export type ProductionRunStatus = 'COMPLETED' | 'PARTIAL' | 'FAILED';
+
+export function capStopReason(input: {
+  ceiling: number;
+  spent: number;
+  assetIndex: number;
+  totalAssets: number;
+}): string {
+  return `CREDIT_CAP_EXCEEDED ceiling=${input.ceiling} spent=${input.spent} stoppedAt=${input.assetIndex}/${input.totalAssets}`;
+}
+
+/**
+ * A capped run is PARTIAL. A run that finished under its ceiling is COMPLETED - the fix must not
+ * make every run look partial, or the status stops carrying information.
+ */
+export function finalRunStatus(input: { capHit: boolean; generated: number; failed: number }): ProductionRunStatus {
+  if (input.capHit) return 'PARTIAL';
+  if (input.generated === 0 && input.failed > 0) return 'FAILED';
+  return 'COMPLETED';
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CreditCapExceededError, assertWithinCeiling, loadRunBudget } from '../cap';
+import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../cap';
 
 /**
  * The per-run credit ceiling (Phase 7).
@@ -82,5 +82,45 @@ describe('the runner checks the cap before charging and persists the spend after
 
   it('persists creditsSpent so a resume does not reset the budget', () => {
     expect(source).toContain('creditsSpent: budget.spent');
+  });
+});
+
+describe('a capped run reports PARTIAL, and says why', () => {
+  it('a capped run is never COMPLETED, even when assets were produced', () => {
+    expect(finalRunStatus({ capHit: true, generated: 7, failed: 1 })).toBe('PARTIAL');
+  });
+
+  it('a run that finished under its ceiling is still COMPLETED - the fix does not make everything partial', () => {
+    expect(finalRunStatus({ capHit: false, generated: 8, failed: 0 })).toBe('COMPLETED');
+  });
+
+  it('a run that produced nothing and failed is FAILED, not PARTIAL', () => {
+    expect(finalRunStatus({ capHit: false, generated: 0, failed: 4 })).toBe('FAILED');
+  });
+
+  it('the stop reason is machine-readable: ceiling, spend, and where it stopped', () => {
+    const reason = capStopReason({ ceiling: 1680, spent: 920, assetIndex: 4, totalAssets: 8 });
+    expect(reason).toBe('CREDIT_CAP_EXCEEDED ceiling=1680 spent=920 stoppedAt=4/8');
+    // a caller can branch on it without parsing prose
+    expect(reason.startsWith('CREDIT_CAP_EXCEEDED ')).toBe(true);
+    expect(reason).toContain('ceiling=1680');
+    expect(reason).toContain('stoppedAt=4/8');
+  });
+});
+
+describe('the runner reports the cap instead of swallowing it', () => {
+  const source = readFileSync(join(__dirname, '..', '..', 'creative', 'production', 'runner.ts'), 'utf8');
+
+  it('the final status comes from finalRunStatus, not an inline ternary', () => {
+    expect(source).toContain('finalRunStatus({ capHit: Boolean(capHit), generated, failed })');
+  });
+
+  it('the cap error is detected and stops the loop', () => {
+    expect(source).toContain('error instanceof CreditCapExceededError');
+    expect(source).toContain('capHit = { ceiling: capped.ceiling, spent: capped.spent, assetIndex: specs.indexOf(spec) + 1 };');
+  });
+
+  it('the run row records the stop reason', () => {
+    expect(source).toContain('lastError: stopReason');
   });
 });
