@@ -20,6 +20,7 @@
 
 import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
+import { nextChargeAttempt } from '../../credits/attempts';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
@@ -242,6 +243,9 @@ export async function runCreativeProduction(
           // No tolerance and no documented zero: a generation that cannot charge fails.
           // A missing FeatureCreditRate is a configuration error, not a free render - the mocks
           // express a rate and a transaction now, so the old excuse for catching is gone.
+          // A reused row has already been paid for once; its attempt comes from that history, so
+          // the key differs and the re-render is billed. A fresh row starts at the loop attempt.
+          const chargeAttempt = prior ? await nextChargeAttempt(prisma, asset.id) : attempt;
           const creditsUsed = featureKey
             ? await chargeOrThrow(
                 prisma,
@@ -249,7 +253,7 @@ export async function runCreativeProduction(
                 featureKey,
                 ref,
                 `Creative production: ${spec.sceneId} ${spec.kind.toLowerCase()}`,
-                creditKeys.prodAsset.charge(asset.id, attempt),
+                creditKeys.prodAsset.charge(asset.id, chargeAttempt),
               )
             : 0;
         try {
