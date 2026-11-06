@@ -407,6 +407,12 @@ generation and shareable between creators.
 
 **Still open:** the film has not been produced complete. With the fallback, a flagged scene is now a documented hole rather than a silent one, but the next full run (~840–1,120 credits) has not been spent, and the **type-classification gap** (a story sentence read as EDUCATION because of the word "teaches") remains untouched and is the likeliest cause of a second flag.
 
+**Type classification fixed: narrative form now outranks a lone verb.** The read named the mechanism — a **keyword count** (`signalScore`, `interpreter.ts`, substring match against `TYPE_SIGNALS`) with a bare `teach` in the EDUCATION list, so *"teaches it to fly"* scored EDUCATION and won a 1–0 vote. The consequence chain is real: the type drives which questions are generated, and auto-resolve then answered *"what age group are we teaching?"* for a lighthouse story. **The fix is about form, not vocabulary:** bare `teach`/`learn`/`learner` are gone, replaced by pedagogical **phrases** (`teach children`, `lesson about`, `learn how`, `let's talk about`, `how does`), and a **narrative-form rule** promotes STORY when the sentence opens on a protagonist performing a story action. A story that mentions teaching is now a story; a genuine lesson still is a lesson.
+
+**Both directions tested** (`classification.test.ts`, 7 tests): the lighthouse sentence and two other teaching-free stories classify STORY and are asked no education question; *"Let's talk about how volcanoes work"*, *"Explain photosynthesis to eight-year-olds"* and *"A lesson about the water cycle for students"* classify EDUCATION and still get their own questions. **The educational path was not sacrificed:** removing bare `teach` broke *"Teach children how gravity works"* and two Phase 10 tests, which is exactly the regression the phrase list exists to prevent — a classifier that never returns EDUCATION would be a different bug.
+
+**Still open:** the film is unproven and the next full run costs **~840–1,120 credits**.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
