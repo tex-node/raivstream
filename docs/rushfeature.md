@@ -433,6 +433,8 @@ generation and shareable between creators.
 
 **Cost:** the hypothesis was answered for **0 credits**. The fifth run now buys a different thing: a film whose prompts are known to pass pre-flight before a single credit is spent.
 
+**Whole-film pre-flight run free, and it found the reason four runs paid for rejections: the softening never worked.** Moderating all eight composed prompts (four stills, four videos) before any spend: **5 pass, 0 soften, 3 refused**. Every refusal reported **`no_rewrite`**, and the read explains it - `suggestSafeRewrite` returns `{ flaggedPhrase, safeRewrite }`, while **every caller read `.rewritten`**, a field that does not exist. The fallback has been a no-op since it was written, and the pre-flight inherited the same wrong name. **Fixed** (code, no spend): both call sites read `safeRewrite`. **Two further findings the table produced:** the `VIOLENCE_REPLACEMENTS` map has **no rule for the injury phrasing** this story uses (*"injured bird"*), so even a working rewrite would be offered nothing; and the moderation result is **not deterministic** - SCENE_04's still was refused in the first table and allowed in the second, minutes apart, with no prompt change. **Decision: do not run the fifth film.** Three of eight assets are refused with no rewrite available, and one asset flipped state between identical checks, so ~720 credits would buy a documented partial judged by a flaky filter. **Next, in order:** extend the replacement map for injury phrasing; treat pre-flight as a sample rather than a guarantee (repeat or accept variance); then run.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
