@@ -421,6 +421,10 @@ generation and shareable between creators.
 
 **Still open:** the film is unproven. Next full run cost **~720 credits**; with the fallback now covering video, a second rejection becomes a recorded drop rather than a silent short fall.
 
+**Fourth full run: the guard exists now, and the rewrite does not clear the video filter.** Same sentence, ceiling 1680: classification **STORY**, decisions *"Should the ending feel hopeful...?"* and *"Who is this story for?"*, **all four stills READY**, **net spend 720** (balance 2,440 -> 1,720), run **PARTIAL**, 6 of 8 READY. **The same two videos failed** (SCENE_01, SCENE_02) with the same moderation message, so the widened fallback either did not soften enough or never fired for them. **Two measurement defects make that undecidable from the data:** the outer failure handler overwrites `errorMessage` with `lastError.message`, destroying any `SCENE_DROPPED` marker (so `dropped=0` proves nothing), and nothing records whether a softened retry was attempted. **The likely cause, stated as a hypothesis rather than a finding:** the stills passed first time this run, so `sceneSoftened` was empty and the video kept the original scene text - the propagation only helps when a still was softened, and here nothing needed softening but the video still tripped the filter on the same phrase. That points at **moderation tuning for video**, not at the fallback's scope.
+
+**Open, in order:** (1) stop overwriting `errorMessage` so a drop is visible; (2) record whether a retry was attempted and what text it used; (3) decide whether video prompts should be softened proactively - the still's text passes and the video's does not, so the difference is the motion/camera additions crossing a threshold. Next full run: **~720 credits**.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
