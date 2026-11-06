@@ -292,7 +292,7 @@ export async function runCreativeProduction(
           const rewrite = moderation.allowed ? null : await suggestRewriteForPreflight((spec as StillSpec).prompt).catch(() => null);
           const decision = preflightDecision({
             initial: moderation as never,
-            rewritten: (rewrite as { rewritten?: string } | null)?.rewritten ?? null,
+            rewritten: (rewrite as { safeRewrite?: string } | null)?.safeRewrite ?? null,
             alreadySoftened: softenedOnce,
           });
           if (decision.action === 'pass') break;
@@ -448,7 +448,7 @@ export async function runCreativeProduction(
             const decision = decideAfterRejection({
               alreadyRetried: false,
               originalPrompt: (spec as StillSpec).prompt,
-              rewritten: (suggestion as { rewritten?: string } | null)?.rewritten ?? null,
+              rewritten: (suggestion as { safeRewrite?: string } | null)?.safeRewrite ?? null,
             });
             if (decision.action === 'retry') {
               moderationRetries += 1;
