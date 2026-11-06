@@ -429,6 +429,10 @@ generation and shareable between creators.
 
 **Still open:** the fifth run, now able to say what it did. Cost **~720 credits**.
 
+**Pre-flight moderation shipped, and it answered the video hypothesis for free.** The check now runs on the composed prompt **before** the ceiling guard and the charge: a rejected prompt gets one softening attempt and is re-checked; if it still fails, the asset is refused with `PREFLIGHT_REFUSED kind=<K> reason=<r>` and **nothing is charged and no provider call is made**. A passing prompt behaves exactly as before. **The free finding:** moderating run 4's own composed prompts showed **SCENE_01's still ALLOWED and its video FLAGGED** for the same scene text - hypothesis **confirmed**. The video prompt differs only by `Motion sequence` vs `Key visual` plus the `Camera:` line, and the flagged phrase is the scene description itself (*"Character Lighthouse Keeper Finds An Injured Bird: A lighthouse keeper finds an..."*). SCENE_02 was flagged in **both** arms, which is consistent with run 4 having softened that still and having never softened its video.
+
+**Cost:** the hypothesis was answered for **0 credits**. The fifth run now buys a different thing: a film whose prompts are known to pass pre-flight before a single credit is spent.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
