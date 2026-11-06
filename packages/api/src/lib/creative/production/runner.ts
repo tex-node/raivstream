@@ -22,7 +22,7 @@ import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { nextChargeAttempt } from '../../credits/attempts';
 import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../../credits/cap';
-import { decideAfterRejection, netSpendAfterRefund } from './moderationFallback';
+import { applySoftenedPrompt, decideAfterRejection, dropReason, netSpendAfterRefund } from './moderationFallback';
 import { suggestSafeRewrite } from '../../promptModeration';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
@@ -198,6 +198,9 @@ export async function runCreativeProduction(
   const droppedScenes = new Set<string>();
   // One softened retry per asset, never a loop.
   const moderationRetried = new Set<string>();
+  // A still's softened rewrite must reach the same scene's video, or the video retries the phrase
+  // that was just rejected.
+  const sceneSoftened = new Map<string, { original: string; softened: string }>();
   let firstVisualLogged = false;
   // The same source readiness approved: a resolvable reference the generation
   // capability (H3 I2V) can actually use as the opening seed.
@@ -219,7 +222,7 @@ export async function runCreativeProduction(
         failed += 1;
         console.info(`[creative.moderation] scene=${spec.sceneId} action=skip_video reason=scene_dropped`);
         await prisma.creativeProducedAsset
-          .create({ data: { projectId: project.id, sceneId: spec.sceneId, shotId: null, kind: spec.kind, status: 'FAILED', errorMessage: 'SCENE_DROPPED moderation_rejected' } as never })
+          .create({ data: { projectId: project.id, sceneId: spec.sceneId, shotId: null, kind: spec.kind, status: 'FAILED', errorMessage: dropReason(spec.kind) } as never })
           .catch(() => undefined);
         continue;
       }
@@ -230,6 +233,11 @@ export async function runCreativeProduction(
 
       let seedImageUrl: string | undefined;
       if (spec.kind === 'VIDEO') {
+        // Carry a still's softened rewrite into the video prompt: same scene text, same flag.
+        (spec as { prompt: string }).prompt = applySoftenedPrompt(
+          (spec as { prompt: string }).prompt,
+          sceneSoftened.get(spec.sceneId),
+        );
         // VIDEO is always scene-level, so its seed still is the scene key, never a shot key.
         const still = byKey.get(`${spec.sceneId}:-:IMAGE`);
         if (sourceSeedUrl) {
@@ -389,7 +397,7 @@ export async function runCreativeProduction(
                 .catch(() => undefined);
             }
           }
-          if (rejected && spec.kind === 'IMAGE' && !moderationRetried.has(asset.id)) {
+          if (rejected && !moderationRetried.has(asset.id)) {
             moderationRetried.add(asset.id);
             const suggestion = await suggestSafeRewrite((spec as StillSpec).prompt).catch(() => null);
             const decision = decideAfterRejection({
@@ -398,6 +406,9 @@ export async function runCreativeProduction(
               rewritten: (suggestion as { rewritten?: string } | null)?.rewritten ?? null,
             });
             if (decision.action === 'retry') {
+              if (spec.kind === 'IMAGE') {
+                sceneSoftened.set(spec.sceneId, { original: (spec as StillSpec).prompt, softened: decision.prompt });
+              }
               (spec as { prompt: string }).prompt = decision.prompt;
               console.info(`[creative.moderation] scene=${spec.sceneId} action=retry softened=true`);
               continue;
@@ -405,7 +416,7 @@ export async function runCreativeProduction(
           }
           if (rejected) {
             droppedScenes.add(spec.sceneId);
-            console.info(`[creative.moderation] scene=${spec.sceneId} action=drop reason=moderation_rejected`);
+            console.info(`[creative.moderation] scene=${spec.sceneId} kind=${spec.kind} action=drop reason=moderation_rejected`);
           }
           const isFinal = rejected || providerFinal || attempt >= maxAttempts;
           const logCategory = providerFinal ? `PROVIDER_DISABLED: ${(error as MediaProviderError).code}` : undefined;

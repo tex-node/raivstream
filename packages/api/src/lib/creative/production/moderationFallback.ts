@@ -49,3 +49,27 @@ export function netSpendAfterRefund(spent: number, refunded: number): number {
 export function canSeedVideo(input: { sceneDropped: boolean; stillReady: boolean }): boolean {
   return !input.sceneDropped && input.stillReady;
 }
+
+/** The drop record names the asset kind, so "scene dropped" can be told from "its video dropped". */
+export function dropReason(kind: 'IMAGE' | 'VIDEO'): string {
+  return `SCENE_DROPPED moderation_rejected kind=${kind}`;
+}
+
+/**
+ * Propagate a still's softened rewrite to the same scene's video (2026-11-06).
+ *
+ * The video prompt is built from the same scene text as the still, so softening the still alone
+ * left the video carrying the phrase that was just rejected - which is exactly what happened:
+ * SCENE_01's and SCENE_02's videos were flagged for the phrase "finds an injured bird" after their
+ * stills had passed.
+ */
+export function applySoftenedPrompt(
+  prompt: string,
+  rewrite: { original: string; softened: string } | undefined,
+): string {
+  if (!rewrite) return prompt;
+  const original = rewrite.original.trim();
+  const softened = rewrite.softened.trim();
+  if (!original || !softened || original === softened) return prompt;
+  return prompt.includes(original) ? prompt.split(original).join(softened) : prompt;
+}
