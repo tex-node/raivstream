@@ -413,6 +413,10 @@ generation and shareable between creators.
 
 **Still open:** the film is unproven and the next full run costs **~840–1,120 credits**.
 
+**Third full run: the classifier fix worked, and the failure moved to video prompts.** Same sentence, default ceiling 1680: classification **STORY** (signals {COMMERCIAL:0, EDUCATION:0, TRANSFORMATION:0, STORY:1}), auto-resolved decisions "Should the ending feel hopeful...?" and "Who is this story for?" - **no teaching questions**. All **four stills are READY**, including SCENE_01, whose still the first run had rejected: the classifier fix removed that flag. **Net spend 720** (balance 3,160 -> 2,440), ceiling 1680, run **PARTIAL**, 6 of 8 READY. **The two failures are videos** - SCENE_01 and SCENE_02 rejected with "Your prompt was flagged for graphic violence" - and **the fallback does not cover them**: the retry/drop path is gated on the IMAGE kind, so a rejected video gets no softened retry and no drop record (dropped=0). The film is short two videos, and the gap is in the fallback's scope rather than in the classifier.
+
+**Next:** extend the moderation fallback to VIDEO specs (retry once, then record the drop) and inspect why the video prompt trips a violence filter that its own still passes - the two prompts are built differently and only the video one is flagged. Cost of the next full run: **~720 credits**.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
