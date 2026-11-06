@@ -22,6 +22,8 @@ import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { nextChargeAttempt } from '../../credits/attempts';
 import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../../credits/cap';
+import { decideAfterRejection, netSpendAfterRefund } from './moderationFallback';
+import { suggestSafeRewrite } from '../../promptModeration';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
@@ -191,6 +193,11 @@ export async function runCreativeProduction(
   let failed = 0;
   // Set when the ceiling refuses a charge: the run must report PARTIAL, not COMPLETED.
   let capHit: { ceiling: number; spent: number; assetIndex: number } | null = null;
+  // Scenes dropped by the moderation fallback: recorded so the run reports PARTIAL with a gap
+  // rather than COMPLETED with a silent hole.
+  const droppedScenes = new Set<string>();
+  // One softened retry per asset, never a loop.
+  const moderationRetried = new Set<string>();
   let firstVisualLogged = false;
   // The same source readiness approved: a resolvable reference the generation
   // capability (H3 I2V) can actually use as the opening seed.
@@ -207,6 +214,16 @@ export async function runCreativeProduction(
 
       // Reuse a prior non-READY asset row (resumability + retry-only-affected):
       // never create a duplicate for the same scene+kind.
+      // A dropped scene cannot seed a video: record the skip instead of failing for want of a seed.
+      if (spec.kind === 'VIDEO' && droppedScenes.has(spec.sceneId)) {
+        failed += 1;
+        console.info(`[creative.moderation] scene=${spec.sceneId} action=skip_video reason=scene_dropped`);
+        await prisma.creativeProducedAsset
+          .create({ data: { projectId: project.id, sceneId: spec.sceneId, shotId: null, kind: spec.kind, status: 'FAILED', errorMessage: 'SCENE_DROPPED moderation_rejected' } as never })
+          .catch(() => undefined);
+        continue;
+      }
+
       const asset = prior
         ? await prisma.creativeProducedAsset.update({ where: { id: prior.id }, data: { status: 'GENERATING' as never } })
         : await prisma.creativeProducedAsset.create({ data: { projectId: project.id, sceneId: spec.sceneId, shotId: (spec as StillSpec).shotId ?? null, kind: spec.kind, status: 'GENERATING', versionId: project.currentVersionId ?? null } as never });
@@ -362,7 +379,33 @@ export async function runCreativeProduction(
           const rejected = error instanceof CreativeError && error.code === 'CONTENT_REJECTED';
           const providerFinal = error instanceof MediaProviderError && !error.retryable;
           if (creditsUsed > 0 && featureKey) {
-            await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed', creditKeys.prodAsset.refund(asset.id, attempt)).catch(() => undefined);
+            await refundCredits(prisma, project.userId, creditsUsed, featureKey, ref, 'Creative production failed', creditKeys.prodAsset.refund(asset.id, chargeAttempt)).catch(() => undefined);
+            // A refunded charge must not count against the ceiling: the money went back, so the
+            // run's NET spend drops with it.
+            if (runId) {
+              budget = { ...budget, spent: netSpendAfterRefund(budget.spent, creditsUsed) };
+              await prisma.creativeProductionRun
+                .update({ where: { id: runId }, data: { creditsSpent: budget.spent } as never })
+                .catch(() => undefined);
+            }
+          }
+          if (rejected && spec.kind === 'IMAGE' && !moderationRetried.has(asset.id)) {
+            moderationRetried.add(asset.id);
+            const suggestion = await suggestSafeRewrite((spec as StillSpec).prompt).catch(() => null);
+            const decision = decideAfterRejection({
+              alreadyRetried: false,
+              originalPrompt: (spec as StillSpec).prompt,
+              rewritten: (suggestion as { rewritten?: string } | null)?.rewritten ?? null,
+            });
+            if (decision.action === 'retry') {
+              (spec as { prompt: string }).prompt = decision.prompt;
+              console.info(`[creative.moderation] scene=${spec.sceneId} action=retry softened=true`);
+              continue;
+            }
+          }
+          if (rejected) {
+            droppedScenes.add(spec.sceneId);
+            console.info(`[creative.moderation] scene=${spec.sceneId} action=drop reason=moderation_rejected`);
           }
           const isFinal = rejected || providerFinal || attempt >= maxAttempts;
           const logCategory = providerFinal ? `PROVIDER_DISABLED: ${(error as MediaProviderError).code}` : undefined;
@@ -384,7 +427,7 @@ export async function runCreativeProduction(
   } finally {
     // A capped run is PARTIAL with a machine-readable reason. The cap changed what the run DID;
     // this changes what it SAYS, which is the half that was missing.
-    const status: ProductionRunStatus = finalRunStatus({ capHit: Boolean(capHit), generated, failed });
+    const status: ProductionRunStatus = finalRunStatus({ capHit: Boolean(capHit), generated, failed, droppedScenes: droppedScenes.size });
     const stopReason = capHit
       ? capStopReason({ ceiling: capHit.ceiling, spent: capHit.spent, assetIndex: capHit.assetIndex, totalAssets: specs.length })
       : failed > 0
@@ -410,7 +453,11 @@ export async function runCreativeProduction(
     }
   }
 
-  return { generated, failed, runId, status: failed === 0 ? 'COMPLETED' : generated > 0 ? 'PARTIAL' : 'FAILED' };
+  // The returned status must be the one that was persisted: an inline expression here meant the run
+
+  // row said PARTIAL while the caller was told FAILED.
+
+  return { generated, failed, runId, status: finalRunStatus({ capHit: Boolean(capHit), generated, failed, droppedScenes: droppedScenes.size }) } as ProductionRunResult;
 }
 
 export interface RecoveryResult {

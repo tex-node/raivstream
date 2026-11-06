@@ -16,7 +16,7 @@ vi.mock('../../../generators', () => ({
 }));
 vi.mock('../../../r2', () => ({ mirrorUrlToR2: async (url: string) => url, uploadBufferToR2: async () => 'r2' }));
 vi.mock('../../../lastFrameExtract', () => ({ extractLastFrameAsSeedImage: async () => null }));
-vi.mock('../../../promptModeration', () => ({ moderatePrompt: async () => ({ allowed: true }), moderationRejectMessage: () => 'blocked' }));
+vi.mock('../../../promptModeration', () => ({ moderatePrompt: async () => ({ allowed: true }), moderationRejectMessage: () => 'blocked', suggestSafeRewrite: async () => ({ rewritten: null }) }));
 
 import { generateStill } from '../generationAdapter';
 import {

@@ -112,7 +112,7 @@ describe('the runner reports the cap instead of swallowing it', () => {
   const source = readFileSync(join(__dirname, '..', '..', 'creative', 'production', 'runner.ts'), 'utf8');
 
   it('the final status comes from finalRunStatus, not an inline ternary', () => {
-    expect(source).toContain('finalRunStatus({ capHit: Boolean(capHit), generated, failed })');
+    expect(source).toContain('finalRunStatus({ capHit: Boolean(capHit), generated, failed, droppedScenes: droppedScenes.size })');
   });
 
   it('the cap error is detected and stops the loop', () => {

@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../featureFlags', () => ({ isCreativeAudioEnabled: () => true }));
-vi.mock('../../../promptModeration', () => ({ moderatePrompt: vi.fn(async () => ({ allowed: true })) }));
+vi.mock('../../../promptModeration', () => ({ moderatePrompt: vi.fn(async () => ({ allowed: true })), suggestSafeRewrite: async () => ({ rewritten: null }) }));
 vi.mock('../../../r2', () => ({ uploadBufferToR2: vi.fn(async () => 'https://cdn.test/music.mp3') }));
 vi.mock('../../../generators/lyriaMusic', () => ({
   isLyriaMusicEnabled: () => true,

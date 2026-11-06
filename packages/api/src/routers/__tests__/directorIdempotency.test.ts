@@ -39,7 +39,8 @@ vi.mock('../../lib/movieDirector', () => ({
 vi.mock('../../lib/promptModeration', () => ({
   moderatePrompt: mocks.moderatePrompt,
   moderationRejectMessage: mocks.moderationRejectMessage,
-}));
+    suggestSafeRewrite: async () => ({ rewritten: null }),
+  }));
 
 import { directorRouter, DIRECTOR_FEATURE_KEY } from '../director';
 import { creditKeys } from '../../lib/credits/idempotencyKeys';

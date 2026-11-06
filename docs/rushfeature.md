@@ -403,6 +403,10 @@ generation and shareable between creators.
 
 **Phase 7 remains open on completeness**, with the blocker named: a publishable film needs all assets READY, and the path currently lets one moderation rejection remove a scene without a fallback.
 
+**Moderation fallback shipped: retry once, then drop the scene and say so.** The read found the mechanism already existed — `suggestSafeRewrite` (`promptModeration.ts:190`) — and that the runner treated a rejection as final: `if (rejected || providerFinal) break;`, so one flag produced a failed still, a video with no seed, and a run that reported success. Now a rejection on a still gets **one softened retry** with the rewritten prompt; if that is rejected too, the scene is **dropped and recorded** (`SCENE_DROPPED moderation_rejected`), its video is skipped with `action=skip_video reason=scene_dropped` instead of failing for want of a seed, and the run finalises **PARTIAL** because `droppedScenes > 0`. **A rewrite identical to the original is not a retry** — it would be rejected again and cost a second charge to learn nothing. **Net spend:** a refunded charge now comes off `creditsSpent` (`netSpendAfterRefund`), so the cap counts money that was actually kept; the real run's 920-vs-840 divergence is closed by construction, and the refund key now matches the charge key.
+
+**Still open:** the film has not been produced complete. With the fallback, a flagged scene is now a documented hole rather than a silent one, but the next full run (~840–1,120 credits) has not been spent, and the **type-classification gap** (a story sentence read as EDUCATION because of the word "teaches") remains untouched and is the likeliest cause of a second flag.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 

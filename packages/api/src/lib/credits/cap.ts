@@ -85,8 +85,18 @@ export function capStopReason(input: {
  * A capped run is PARTIAL. A run that finished under its ceiling is COMPLETED - the fix must not
  * make every run look partial, or the status stops carrying information.
  */
-export function finalRunStatus(input: { capHit: boolean; generated: number; failed: number }): ProductionRunStatus {
+export function finalRunStatus(input: {
+  capHit: boolean;
+  generated: number;
+  failed: number;
+  /** Scenes dropped by the moderation fallback: a documented gap, so the run is PARTIAL, never COMPLETED. */
+  droppedScenes?: number;
+}): ProductionRunStatus {
   if (input.capHit) return 'PARTIAL';
+  if ((input.droppedScenes ?? 0) > 0) return 'PARTIAL';
+  // Some assets were produced and some failed: the run is short, not finished. This is the
+  // original semantics and it must survive the cap and drop cases above.
+  if (input.failed > 0 && input.generated > 0) return 'PARTIAL';
   if (input.generated === 0 && input.failed > 0) return 'FAILED';
   return 'COMPLETED';
 }

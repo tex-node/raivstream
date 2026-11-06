@@ -34,7 +34,8 @@ vi.mock('../../r2', () => ({
 }));
 vi.mock('../../promptModeration', () => ({
   moderatePrompt: mocks.moderatePrompt,
-}));
+    suggestSafeRewrite: async () => ({ rewritten: null }),
+  }));
 vi.mock('../../credits', () => ({
   resolveFeatureCreditRate: mocks.resolveFeatureCreditRate,
   deductCredits: mocks.deductCredits,
