@@ -23,6 +23,8 @@ import { chargeOrThrow, refundCredits, MODEL_FEATURE_KEY } from '../../credits';
 import { nextChargeAttempt } from '../../credits/attempts';
 import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../../credits/cap';
 import { applySoftenedPrompt, decideAfterRejection, dropReason, netSpendAfterRefund } from './moderationFallback';
+import { preflightDecision, preflightRecord } from './preflight';
+import { moderatePrompt, suggestSafeRewrite as suggestRewriteForPreflight } from '../../promptModeration';
 import { suggestSafeRewrite } from '../../promptModeration';
 import { creditKeys } from '../../credits/idempotencyKeys';
 import type { CreativeBibleState } from '../shared/types';
@@ -280,6 +282,46 @@ export async function runCreativeProduction(
 
       const featureKey = spec.kind === 'IMAGE' ? MODEL_FEATURE_KEY.FLUX2 : MODEL_FEATURE_KEY.H3_MAX;
       let lastError: Error | null = null;
+      // PRE-FLIGHT (2026-11-06): moderation is free, generation is not. Check the composed prompt
+      // BEFORE the ceiling guard and the charge, so a refusal costs nothing and a prompt that can
+      // pass is made to pass first.
+      {
+        let moderation = await moderatePrompt((spec as StillSpec).prompt).catch(() => ({ allowed: true }) as never);
+        let softenedOnce = false;
+        for (let pass = 0; pass < 2; pass += 1) {
+          const rewrite = moderation.allowed ? null : await suggestRewriteForPreflight((spec as StillSpec).prompt).catch(() => null);
+          const decision = preflightDecision({
+            initial: moderation as never,
+            rewritten: (rewrite as { rewritten?: string } | null)?.rewritten ?? null,
+            alreadySoftened: softenedOnce,
+          });
+          if (decision.action === 'pass') break;
+          if (decision.action === 'softened') {
+            (spec as { prompt: string }).prompt = decision.prompt;
+            softenedOnce = true;
+            moderationRetries += 1;
+            console.info(
+              `[creative.moderation] preflight=softened kind=${spec.kind} softenedChars=${decision.prompt.length}`,
+            );
+            moderation = await moderatePrompt(decision.prompt).catch(() => ({ allowed: true }) as never);
+            continue;
+          }
+          console.info(`[creative.moderation] preflight=refused kind=${spec.kind} reason=${String(decision.reason).slice(0, 40)}`);
+          await prisma.creativeProducedAsset.update({
+            where: { id: asset.id },
+            data: { status: 'FAILED' as never, errorMessage: preflightRecord(spec.kind, decision.reason) } as never,
+          });
+          failed += 1;
+          lastError = new Error(preflightRecord(spec.kind, decision.reason));
+          break;
+        }
+        if (lastError) {
+          await heartbeat(prisma, runId, { readyScenes: byKey.size, failedScenes: failed }, now);
+          continue;
+        }
+      }
+
+
       let ready = false;
 
       for (let attempt = 1; attempt <= maxAttempts && !ready; attempt += 1) {
