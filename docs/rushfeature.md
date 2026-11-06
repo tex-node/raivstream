@@ -399,6 +399,10 @@ generation and shareable between creators.
 
 **Still unproven:** no single sentence has produced a **complete** film. The last run spent 920 of 960 and withheld the fourth video; at the corrected 1680 a full run costs roughly **1,120** (four scenes), which this session did not spend.
 
+**Full auto run at the corrected ceiling — the cap held, the film is still not complete, and the cause is moderation, not money.** Same sentence, default ceiling 1680: **4 scenes, spent 920 of 1680, run `COMPLETED` with 6 of 8 assets READY**, balance 4,000 → 3,160 (**net 840**). The two failures share one cause: `SCENE_01`'s still was **rejected by content moderation** — *"Your prompt was flagged for graphic violence"* — and its video then failed because H3-Max is image-to-video and had no seed. One rejection cascaded into two missing assets, so the film is a scene short. **Three findings, none of them the cap:** (1) the auto path inherits the moderation gate and has no recovery — it does not retry with a softened prompt or drop the scene, so a single flag costs a whole scene; (2) the sentence was classified **EDUCATION**, not STORY (*"teaches it to fly"*), so auto-decided questions were *"What age group are we teaching?"* and *"How long should the lesson be?"* — the classification, not the answers, is wrong; (3) `creditsSpent` counts a charge that was **refunded**, reporting 920 against a measured net of 840, so the run counter and the ledger disagree by the refunded amount.
+
+**Phase 7 remains open on completeness**, with the blocker named: a publishable film needs all assets READY, and the path currently lets one moderation rejection remove a scene without a fallback.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
