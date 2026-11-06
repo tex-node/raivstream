@@ -425,6 +425,10 @@ generation and shareable between creators.
 
 **Open, in order:** (1) stop overwriting `errorMessage` so a drop is visible; (2) record whether a retry was attempted and what text it used; (3) decide whether video prompts should be softened proactively - the still's text passes and the video's does not, so the difference is the motion/camera additions crossing a threshold. Next full run: **~720 credits**.
 
+**Instrumentation fixed first, and the fourth run's silence is now explainable.** The read found four writers of the asset's `errorMessage` and one of them — the outer `if (!ready)` failure handler — ran **after** the drop and overwrote `SCENE_DROPPED` with `lastError.message`. That is why `dropped=0` proved nothing. **Drops are now structured:** `creative_production_runs.droppedAssets` (JSONB, `[{sceneId, kind, reason}]`) and `moderationRetries` (INT), both written at finalisation, plus a guard so the failure handler keeps a drop's reason instead of erasing it. **Retries are observable:** every softened retry increments the counter and logs `asset=<id> kind=<K> attempt=<n> rewritten=true softenedChars=<n>` — counts and length, never prompt text, because moderation terms are content. **The proactive-softening decision is recorded as the next step, not implemented:** a **pre-flight moderation check is feasible and free** — `moderatePrompt` is the function `assertPromptAllowed` already calls, so the composed video prompt can be checked *before* the charge and softened before submission. That converts a **paid rejection into a free refusal** and is a better shape than proactive rewriting, which would alter every video prompt including the ones that would have passed.
+
+**Still open:** the fifth run, now able to say what it did. Cost **~720 credits**.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
