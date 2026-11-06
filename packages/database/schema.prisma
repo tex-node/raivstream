@@ -2659,6 +2659,12 @@ model CreativeProductionRun {
   /// Credits actually charged by this run, incremented after each successful charge so the cap
   /// counts RUN spend, not per-asset spend.
   creditsSpent    Int                          @default(0)
+  /// Structured record of scenes dropped by the moderation fallback:
+  /// [{ sceneId, kind, reason }]. A separate field because `errorMessage` is a message string that
+  /// the outer failure handler overwrites - an instrument that can be overwritten is not one.
+  droppedAssets   Json?
+  /// Moderation retries attempted by this run, so a retry is observable without parsing logs.
+  moderationRetries Int                       @default(0)
   startedAt       DateTime                     @default(now())
   heartbeatAt     DateTime                     @default(now())
   finishedAt      DateTime?

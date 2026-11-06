@@ -201,6 +201,9 @@ export async function runCreativeProduction(
   // A still's softened rewrite must reach the same scene's video, or the video retries the phrase
   // that was just rejected.
   const sceneSoftened = new Map<string, { original: string; softened: string }>();
+  // Structured instrumentation: these survive the outer failure handler, unlike errorMessage.
+  const droppedAssets: Array<{ sceneId: string; kind: string; reason: string }> = [];
+  let moderationRetries = 0;
   let firstVisualLogged = false;
   // The same source readiness approved: a resolvable reference the generation
   // capability (H3 I2V) can actually use as the opening seed.
@@ -406,16 +409,21 @@ export async function runCreativeProduction(
               rewritten: (suggestion as { rewritten?: string } | null)?.rewritten ?? null,
             });
             if (decision.action === 'retry') {
+              moderationRetries += 1;
+              console.info(
+                `[creative.moderation] asset=${asset.id} kind=${spec.kind} attempt=${attempt} rewritten=true softenedChars=${decision.prompt.length}`,
+              );
               if (spec.kind === 'IMAGE') {
                 sceneSoftened.set(spec.sceneId, { original: (spec as StillSpec).prompt, softened: decision.prompt });
               }
               (spec as { prompt: string }).prompt = decision.prompt;
-              console.info(`[creative.moderation] scene=${spec.sceneId} action=retry softened=true`);
+
               continue;
             }
           }
           if (rejected) {
             droppedScenes.add(spec.sceneId);
+            droppedAssets.push({ sceneId: spec.sceneId, kind: spec.kind, reason: dropReason(spec.kind) });
             console.info(`[creative.moderation] scene=${spec.sceneId} kind=${spec.kind} action=drop reason=moderation_rejected`);
           }
           const isFinal = rejected || providerFinal || attempt >= maxAttempts;
@@ -428,7 +436,14 @@ export async function runCreativeProduction(
       if (!ready) {
         await prisma.creativeProducedAsset.update({
           where: { id: asset.id },
-          data: { status: 'FAILED', errorMessage: (lastError?.message ?? 'Generation failed').slice(0, 500) },
+          data: {
+          status: 'FAILED',
+          // A dropped asset keeps its reason: the failure handler is later than the drop and used
+          // to erase it, which is why dropped=0 proved nothing after the fourth run.
+          errorMessage: droppedScenes.has(spec.sceneId)
+            ? dropReason(spec.kind)
+            : (lastError?.message ?? 'Generation failed').slice(0, 500),
+        },
         });
         failed += 1;
       }
@@ -448,7 +463,17 @@ export async function runCreativeProduction(
     if (runId && model?.update) {
       await model.update({
         where: { id: runId },
-        data: { status, readyScenes: generated, failedScenes: failed, stage: 'ready', finishedAt: now(), heartbeatAt: now(), lastError: stopReason },
+        data: {
+          status,
+          readyScenes: generated,
+          failedScenes: failed,
+          stage: 'ready',
+          finishedAt: now(),
+          heartbeatAt: now(),
+          lastError: stopReason,
+          ...(droppedAssets.length > 0 ? { droppedAssets } : {}),
+          moderationRetries,
+        },
       }).catch(() => undefined);
     }
     logProductionEvent({ type: 'run_finished', projectId: project.id, runId, status, generated, failed });
