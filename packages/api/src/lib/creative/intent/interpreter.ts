@@ -34,10 +34,19 @@ const TYPE_SIGNALS: Record<Exclude<CreativeProjectType, 'UNKNOWN'>, string[]> = 
     'promotional', 'promotion', 'launch', 'market', 'sell', 'boost', 'cta', 'offer',
     'skincare', 'makeup', 'fashion', 'premium', 'luxurious', 'modern brand',
   ],
+  // EDUCATION is intent and FORM, not a lone verb (2026-11-06). "teaches it to fly" is an action
+  // inside a narrative; "explain photosynthesis" is a lesson. Bare 'teach'/'learn' were removed
+  // because they matched any story that happens to mention teaching, which then produced the wrong
+  // questions ("what age group are we teaching?") and the wrong plan shape.
   EDUCATION: [
-    'teach', 'lesson', 'explain', 'learn', 'learner', 'students', 'tutorial',
-    'curriculum', 'science', 'math', 'photosynthesis', 'physics', 'grammar',
-    'eight-year-old', 'for kids', 'children learn', 'educational',
+    'lesson', 'explain', 'students', 'tutorial', 'curriculum', 'educational',
+    "let's talk about", 'how does', 'how do', 'classroom', 'worksheet',
+    // 'teach' counts only with a pedagogical OBJECT: "teach children how gravity works" is a
+    // lesson; "teaches it to fly" is a story action.
+    'teach children', 'teach kids', 'teach students', 'teach a class', 'teaching children',
+    'learn about', 'learn how', 'lesson about',
+    'science', 'math', 'photosynthesis', 'physics', 'grammar',
+    'eight-year-old', 'for kids', 'children learn',
   ],
   TRANSFORMATION: [
     'transform', 'makeover', 'before and after', 'routine', 'glow up', 'change her look',
@@ -48,6 +57,13 @@ const TYPE_SIGNALS: Record<Exclude<CreativeProjectType, 'UNKNOWN'>, string[]> = 
     'journey', 'ending', 'narrative', 'scenes', 'plot',
   ],
 };
+
+/**
+ * A sentence that opens on a protagonist and a story action is a narrative, whatever else it
+ * mentions. This is evidence of FORM: "A lighthouse keeper finds an injured bird and teaches it to
+ * fly again" is a story that contains teaching, not a lesson.
+ */
+const NARRATIVE_FORM = /\b(a|an|the)\s+[a-z][a-z\s-]{2,40}?\b(finds|found|discovers|returns|learns|teaches|rescues|saves|flees|meets|befriends|grows|loses|drifts|wanders|waits|watches|remembers|dreams|walks|runs|climbs|hides|escapes|searches|follows|arrives|leaves|begins|ends)\b/i;
 
 function signalScore(text: string, signals: string[]): number {
   const lower = text.toLowerCase();
@@ -60,6 +76,11 @@ export function detectProjectType(text: string): { type: CreativeProjectType; co
     score: signalScore(text, TYPE_SIGNALS[type]),
   }));
   const signals = Object.fromEntries(scores.map(({ type, score }) => [type, score]));
+  // Narrative form promotes STORY by one, so a single education noun cannot outvote a story.
+  if (NARRATIVE_FORM.test(text)) {
+    const story = scores.find((entry) => entry.type === 'STORY');
+    if (story) { story.score += 1; signals.STORY = story.score; }
+  }
   const best = scores.sort((a, b) => b.score - a.score)[0];
   if (!best || best.score === 0) return { type: 'UNKNOWN', confidence: 0, signals };
   const total = scores.reduce((sum, s) => sum + s.score, 0);
