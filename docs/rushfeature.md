@@ -417,6 +417,10 @@ generation and shareable between creators.
 
 **Next:** extend the moderation fallback to VIDEO specs (retry once, then record the drop) and inspect why the video prompt trips a violence filter that its own still passes - the two prompts are built differently and only the video one is flagged. Cost of the next full run: **~720 credits**.
 
+**Fallback widened to video, and the root cause was the prompt, not the gate.** The read named the gate (`runner.ts`: `rejected && spec.kind === IMAGE && !moderationRetried`) and the prompts. The two prompts differ only by "Motion sequence" versus "Key visual" plus the `Camera:` line, so the video was flagged for the SAME scene text its still had already passed - and the moderation error names it: *"finds an injured bird"*. **The softened rewrite was never propagated:** the fallback mutated the still spec and left the video spec carrying the original phrase. **Both fixed:** the gate now covers every asset kind (a rejected video gets one softened retry, and its retry reuses the still already in `byKey` as the seed - no regeneration, no second charge for the still), and a still's rewrite is stored per scene and applied to that scene's video prompt. Drop records now name the kind (`SCENE_DROPPED moderation_rejected kind=VIDEO`) so a dropped video is distinguishable from a dropped scene. **Tests: 10 new** (propagation, no-op cases, kind in the record, and four source assertions that the gate is widened and the rewrite reaches the video).
+
+**Still open:** the film is unproven. Next full run cost **~720 credits**; with the fallback now covering video, a second rejection becomes a recorded drop rather than a silent short fall.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
