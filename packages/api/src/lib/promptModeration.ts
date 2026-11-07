@@ -172,6 +172,16 @@ const VIOLENCE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /\beviscerat(e[sd]?|ions?|ing)\b/gi, replacement: 'alarm' },
   { pattern: /\bdisembowel(ed|ing|ment|s)?\b/gi, replacement: 'frighten' },
   { pattern: /\bsnuff\s+films?\b/gi, replacement: 'disturbing scenes' },
+  // Narrative injury (2026-11-07). An injured bird in a children's story is not graphic violence,
+  // and the map is word-level, so these keep the story legible: "the fragile bird" still reads.
+  // The flat shape cannot express grammatical position - 'hurt' as a verb softens awkwardly - which
+  // is why these are the least aggressive replacements that still clear the filter.
+  { pattern: /\binjured\b/gi, replacement: 'fragile' },
+  { pattern: /\bwounded\b/gi, replacement: 'fragile' },
+  { pattern: /\binjur(y|ies)\b/gi, replacement: 'fragility' },
+  { pattern: /\bbleeding\b/gi, replacement: 'resting' },
+  { pattern: /\bblood(y|ied)?\b/gi, replacement: 'marked' },
+  { pattern: /\bhurt\b/gi, replacement: 'troubled' },
 ];
 
 export interface SafeRewriteSuggestion {
@@ -196,12 +206,21 @@ export async function suggestSafeRewrite(text: string): Promise<SafeRewriteSugge
       flaggedPhrase = await locateOpenAIFlag(text);
     }
   }
-  if (!flaggedPhrase) return { flaggedPhrase: null, safeRewrite: null };
-
-  let rewritten = flaggedPhrase;
+  // Apply the map to the WHOLE text, not only to the flagged clause (2026-11-07). Moderation flags
+  // the composed prompt - where motion and camera lines tip it over - while the injury word alone
+  // is not on the blocklist. Restricting the rewrite to the flagged clause therefore offered no
+  // rewrite at all for "an injured bird", which is why the fallback could never help this story.
+  let rewritten = text;
   for (const { pattern, replacement } of VIOLENCE_REPLACEMENTS) {
     rewritten = rewritten.replace(pattern, replacement);
   }
-  const safeRewrite = rewritten !== flaggedPhrase ? rewritten : null;
+
+  if (!flaggedPhrase && rewritten === text) return { flaggedPhrase: null, safeRewrite: null };
+  const safeRewrite = rewritten !== text ? rewritten : null;
   return { flaggedPhrase, safeRewrite };
+}
+
+/** Test-only access to the Layer 1 blocklist check: the injury rules must not alter it. */
+export function checkBlocklistForTest(prompt: string): { reason: string; phrase: string } | null {
+  return checkBlocklist(prompt);
 }
