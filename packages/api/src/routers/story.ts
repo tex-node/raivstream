@@ -78,7 +78,7 @@ import {
   type StoryLengthTier,
   StoryIntelligenceError,
 } from '../lib/storyIntelligence';
-import { mergeBlueprintBeatsToMax, durationFromNarrationWords } from '../lib/storyIntelligence/storyPaceHelpers';
+import { mergeBlueprintBeatsToMax, durationFromNarrationWords, compressToBudget } from '../lib/storyIntelligence/storyPaceHelpers';
 import {
   composeV2,
   isVisualPromptComposerV2Enabled,
@@ -3875,7 +3875,16 @@ function validateAndFillEducationalNarration(
   });
 }
 
-const KIDS_SCENE_BUDGET = 6;
+/**
+ * R16 scene budget, DERIVED not fixed (2026-11-08). The previous value was `6`, chosen by the
+ * session that wrote it and justified by nothing in the code - a vestige of the removed cap wearing
+ * a new name. The operator's decision: derive it from the story's length tier. An unstated length
+ * falls back to MEDIUM's ceiling, so a kids story is never silently compressed to a number nobody
+ * chose.
+ */
+function kidsSceneBudget(storyLength?: StoryLengthTier | null): number {
+  return STORY_PACE_CONFIG[storyLength ?? 'MEDIUM'].beatMax;
+}
 
 function buildSimpleScenes(project: {
   title: string;
@@ -3883,7 +3892,7 @@ function buildSimpleScenes(project: {
   audienceMode?: string;
   chapters: Array<{ title: string; summary: string; body: string }>;
   characterMemory?: CharacterMemoryRecord[];
-}, _count?: number) {
+}, projectStoryLengthForScenes?: StoryLengthTier | null) {
   // STORY-DERIVED, not templated (2026-11-08). This used to return a fixed six-card array - a
   // school variant (Home, Road to School, ...) and a general variant - sliced to a count that
   // defaulted to 6, with only one description touched by story text. A template and a derivation
@@ -3893,7 +3902,7 @@ function buildSimpleScenes(project: {
   // R16 COMPRESSES BEFORE SPLITTING: a kids story whose beats exceed the budget keeps its first and
   // last beat and condenses the middle, so no scene is a fragment and the ending survives.
   const isKids = project.audienceMode === 'KIDS';
-  return deriveScenesFromStory(project, isKids ? { maxScenes: KIDS_SCENE_BUDGET } : {}).map((scene) => ({
+  return deriveScenesFromStory(project, isKids ? { maxScenes: kidsSceneBudget(projectStoryLengthForScenes) } : {}).map((scene) => ({
     title: scene.title,
     description: scene.description,
     locationType: scene.locationType,
@@ -4802,6 +4811,12 @@ export const storyRouter = router({
       }
 
       // Scene Director — Phase A: use intelligence when enabled, fall back to simple scenes
+      // The creator's stated length tier, read once: it drives pacing, the R16 scene budget, and
+      // the fallback derivation's budget.
+      const projectStoryLength = isStoryPaceEnabled(ctx.user.id)
+        ? ((project as unknown as { storyLength?: StoryLengthTier | null }).storyLength ?? null)
+        : null;
+
       type SceneRecord = {
         title: string;
         description: string;
@@ -4852,14 +4867,20 @@ export const storyRouter = router({
             mood: s.mood ?? undefined,
           }));
           const storyBody = chapter?.enhancedBody ?? chapter?.body ?? '';
-          const projectStoryLength = isStoryPaceEnabled(ctx.user.id)
-            ? ((project as unknown as { storyLength?: StoryLengthTier | null }).storyLength ?? null)
-            : null;
-          // Fix 2: clamp beat count to tier [min, max]; merge overflow beats so the ending is preserved.
+          // Paced path uses COMPRESSION, not the old merge (2026-11-08). The merge kept max-1 beats
+          // and joined ALL overflow into one - a batch of five beats wearing a beat's clothes. Shared
+          // with the scene derivation so both paths agree on what compression means: first and last
+          // beat kept whole, middle bucketed evenly.
           const clampedBlueprint = (() => {
             if (!projectStoryLength) return effectiveBlueprint;
             const cfg = STORY_PACE_CONFIG[projectStoryLength];
-            return mergeBlueprintBeatsToMax(effectiveBlueprint, cfg.beatMax);
+            return {
+              ...effectiveBlueprint,
+              beats: compressToBudget(effectiveBlueprint.beats, cfg.beatMax, (group) => ({
+                label: group[0]!.label,
+                description: group.map((b) => b.description).join(' '),
+              })),
+            };
           })();
           const sceneCount = educationalContractForScenes
             ? educationalContractForScenes.sceneProgression.length
@@ -4892,13 +4913,13 @@ export const storyRouter = router({
             directorProvider = storyIntelligenceProvider.name;
           } catch (error) {
             console.warn('[story.generateScenes] scene director failed — falling back to simple scenes:', error instanceof StoryIntelligenceError ? error.code : error);
-            sceneRecords = buildSimpleScenes(project, simpleSceneCount);
+            sceneRecords = buildSimpleScenes(project, projectStoryLength);
           }
         } else {
-          sceneRecords = buildSimpleScenes(project, simpleSceneCount);
+          sceneRecords = buildSimpleScenes(project, projectStoryLength);
         }
       } else {
-        sceneRecords = buildSimpleScenes(project, simpleSceneCount);
+        sceneRecords = buildSimpleScenes(project, projectStoryLength);
       }
 
       try {

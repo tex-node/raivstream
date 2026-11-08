@@ -128,3 +128,33 @@ describe('fragment detection is the gap test', () => {
     expect(isFragment('The keeper climbed the spiral stairs before dawn.')).toBe(false);
   });
 });
+
+describe('titles are labels, not slices', () => {
+  // The label defect (2026-11-08): a six-word slice stopped mid-phrase - "On the third winter he
+  // found" - which reads as truncation even though the scene body is whole. A title must now end at
+  // a natural break or be marked with an ellipsis.
+  const scenes = deriveScenesFromStory(UNUSUAL);
+
+  it('every title is a prefix of its own beat, or marked as shortened', () => {
+    for (const scene of scenes) {
+      const bare = scene.title.replace(/\u2026$/, '');
+      expect(scene.description.startsWith(bare)).toBe(true);
+      if (bare.length < scene.description.length && !scene.title.endsWith('\u2026')) {
+        // an unmarked short title must have ended at a natural break
+        const nextChar = scene.description.charAt(bare.length);
+        expect([' ', ',', ';', ':', '.', '!', '?']).toContain(nextChar);
+      }
+    }
+  });
+
+  it('a shortened title is marked', () => {
+    const shortened = scenes.filter((scene) => scene.title.endsWith('\u2026'));
+    for (const scene of shortened) expect(scene.title.length).toBeGreaterThan(5);
+  });
+
+  it('no title ends with a dangling conjunction', () => {
+    for (const scene of scenes) {
+      expect(scene.title).not.toMatch(/\b(and|or|the|of|to|a|an)\u2026?$/i);
+    }
+  });
+});
