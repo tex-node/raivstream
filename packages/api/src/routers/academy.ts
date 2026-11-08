@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { router, protectedProcedure, type Context } from '../trpc';
 import { FILMMAKING_COURSE_TEMPLATE, FINAL_PROJECT_RUBRIC } from '../lib/academyTemplates';
+import { RUSH_CONTROLS_COURSE_TEMPLATE } from '../lib/creative/academy/rushAcademyTemplate';
 
 const membershipRoleSchema = z.enum(['INSTRUCTOR', 'TEACHING_ASSISTANT', 'STUDENT']);
 const classStatusSchema = z.enum(['UPCOMING', 'ACTIVE', 'COMPLETED', 'ARCHIVED']);
@@ -227,6 +228,8 @@ async function createTemplateCourse(ctx: Context, titleSuffix = '') {
 export const academyRouter = router({
   templates: protectedProcedure.query(() => ({
     filmmaking: FILMMAKING_COURSE_TEMPLATE,
+    /** Phase 9: twelve lessons tied to controls that exist and were proven on real input. */
+    rush: RUSH_CONTROLS_COURSE_TEMPLATE,
     finalProjectRubric: FINAL_PROJECT_RUBRIC,
   })),
 
