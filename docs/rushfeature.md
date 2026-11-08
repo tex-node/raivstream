@@ -10,7 +10,7 @@ something no engineering can move:
 **The roadmap resumes** when a provider capability arrives, when creator input arrives, or when an operator deliberately chooses an
 unscheduled remainder. **One such remainder is recorded and deliberately not scheduled:** the **conversational director interface** -
 Phase 4's take capability is complete and proven, but the natural-language layer over it was never built. It is a choice, not an
-oversight, and it needs no provider.
+oversight, and it needs no provider. **Phase 4's director interface is the only resume path that requires nothing external** - the other two wait on inputs that are not ours to move.
 
 ## What this document is not
 
@@ -322,6 +322,12 @@ semantics (one story = nine feed items). That is a different product, not a miss
 **Status.** See [history — Phase 4 — Scoped director](roadmap-history.md#phase-4--scoped-director--status-notes).
 
 **State.** Complete — the exit criterion is met on real bytes: a shot-level still produced through the runner, conditioned (`resolvedRefs=4`), accepted by the critic at 80/85/85, 80/85/85, 90/85/85 against a composite control of 80/85/85, for 240 credits. The conversational director interface this phase describes remains unbuilt and is out of scope for the current arc.
+
+**Not built: the conversational director interface.** The exit criterion - "direct shot 12C regenerates only that shot's take" - is met at the **capability** level: `createNewTake` addresses a `shotId`, the two partial unique indexes carry the scope, and the multi-shot case is proven against a fixture. What was never built is the **natural-language layer over it**. It needs no provider capability and no Phase 8: it is a **parser and a router over a proven capability**. It is the only unblocked, unbuilt engineering left in the plan, and it is **unscheduled by decision, not by dependency** - a reader here should see that distinction, not only in the closing note.
+
+**Scope of the director remainder, recorded and not built.** The parser already exists in shape: `interpretDirective` (`director/interpreter.ts`) turns a directive into `{ mode, scope, changes }` with scopes **STORY, CHARACTER and VISUAL** - there is **no SHOT scope**, and `DirectiveScope` is the enum to extend. The capability already exists too: `createNewTake` takes an optional `shotId` and scopes the predecessor lookup and demotion to that slot. So the interface is **a parser over an existing enum plus one router call**, not a model call and not a new pipeline: extend `DirectiveScope` with `SHOT`, parse a shot reference (`shot 12C` -> scene + shot id) against the plan's shot list, and route to `createNewTake({ shotId })`. **Size: small** - the same shape as Phase 4's take work, with no provider involvement. **Acceptance criterion:** a sentence naming a shot regenerates **only that shot's take**, proven against the multi-shot fixture, with the untouched shot asserted - the same two-arm proof that closed Phase 4.
+
+
 
 **Per-shot conditioning — the drop was in the experiment, not the code.** An earlier note here claimed the per-shot spec "never carries character references". That was wrong twice over: the router does attach them, and the live `references=0` came from calling `generateStill` directly with a router spec. The adapter reads `spec.referenceImageUrls` (resolved URLs); only the runner turns `characterRefs` (names) into those URLs, so a direct call renders text-to-image and logs `references=0` — identical prompt hash to an un-conditioned run, which is exactly what was observed. **`[creative.spec]` now logs `semanticRefs=<n> resolvedRefs=<m>` at the call site** and appends `MISMATCH=char_refs_unresolved` when both disagree, so "conditioned" and "looks conditioned" are one line apart. Per-shot production is conditioned whenever it runs through the runner; the remaining gap is that no experiment has yet exercised that path end to end.
 
@@ -645,5 +651,7 @@ What was missing was **evidence**, not code. It now exists: `exportTakeCompositi
 Dependencies: met (Phase 1's reference store exists; takes exist on both tables with project-scoped constraints).
 
 ### Debt-to-phase mapping
+
+**Row-level guard in the admin users table (named, not urgent).** `684f380` made each `<tr>` navigate to the user detail page. Two interactive elements inside that row - the **Credits button** and **`RoleSelect`** - carry their own `stopPropagation` since #379: **each element guards itself.** A third interactive element added to that row reintroduces the bug, because the action fires and then the row's `router.push` unmounts it. The durable shape is a **row-level guard** that checks whether the event target sits inside an interactive element before navigating. The two known cases are closed; this is named so the next element added there does not rediscover it.
 
 **One consequence worth stating:** Phase 2 is the next phase, and **no debt blocks it**. The two debts that are prerequisites (planner persistence, the eight failure lines) gate Phase 3 re-entry and Phase 0's closure respectively — so they can be worked in parallel without delaying the sequence.

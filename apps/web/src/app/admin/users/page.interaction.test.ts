@@ -25,7 +25,11 @@ describe('the users list row and the controls inside it', () => {
   const source = readFileSync(PAGE, 'utf8');
 
   it('the row still navigates to the user detail page', () => {
-    expect(source).toContain('onClick={() => router.push(`/admin/users/${u.id}`)}');
+    // CONTRACT CHANGED (2026-11-08): the handler is guarded now, so the exact one-liner is gone.
+    // The navigation itself is still the row's job - the guard returns early only for clicks that
+    // landed inside an interactive element.
+    expect(source).toContain('router.push(`/admin/users/${u.id}`)');
+    expect(source).toContain('<tr');
   });
 
   it('the credits button stops propagation before it opens the modal', () => {
@@ -50,5 +54,38 @@ describe('the users list row and the controls inside it', () => {
     const block = source.slice(selectStart);
     expect(block).toContain('onClick={(e) => e.stopPropagation()}');
     expect(block).toContain('onChange={(e) => setRole.mutate(');
+  });
+});
+
+describe('the row-level guard catches elements that forget their own', () => {
+  const source = readFileSync(PAGE, 'utf8');
+
+  // #379 fixed the two known cases at the element level. This is the durable half: a third element
+  // added to the row must not have to remember a guard, and an element that wants the row's
+  // navigation can opt out with [data-no-row-nav].
+
+  it('the row handler checks isInteractive before navigating', () => {
+    const guard = source.indexOf('if (isInteractive(e.target)) return;');
+    const push = source.indexOf('router.push(`/admin/users/${u.id}`)');
+    expect(guard).toBeGreaterThan(-1);
+    expect(push).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(push);
+  });
+
+  it('the selector list covers every interactive element the row can hold', () => {
+    for (const selector of ['button', 'a', 'select', 'input', 'textarea', '[role="button"]', '[data-no-row-nav]']) {
+      expect(source).toContain(selector);
+    }
+    expect(source).toContain("target.closest('button, a, select, input, textarea, [role=\"button\"], [data-no-row-nav]')");
+  });
+
+  it('the guard reads the event target, not a prop or a ref', () => {
+    expect(source).toContain('const isInteractive = (target: EventTarget | null) =>');
+    expect(source).toContain('target instanceof HTMLElement');
+  });
+
+  it('both element-level guards are still present', () => {
+    expect(source).toContain('e.stopPropagation();');
+    expect(source).toContain('onClick={(e) => e.stopPropagation()}');
   });
 });

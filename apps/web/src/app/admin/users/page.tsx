@@ -148,6 +148,21 @@ function RoleSelect({ userId, currentRole }: { userId: string; currentRole: stri
   );
 }
 
+/**
+ * Row-level guard (2026-11-08).
+ *
+ * `684f380` made each row navigate to the user detail page. The Credits button and RoleSelect carry
+ * their own `stopPropagation`, so each element guards itself - but a THIRD interactive element added
+ * to this row would reintroduce the bug: the action fires, then the row's `router.push` unmounts it.
+ *
+ * This check is the durable half of the fix. It reads the event target rather than trusting every
+ * future element to remember a guard, and [data-no-row-nav] gives an element an escape hatch that
+ * does not require touching this function.
+ */
+const isInteractive = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  target.closest('button, a, select, input, textarea, [role="button"], [data-no-row-nav]') !== null;
+
 export default function AdminUsersPage() {
   const router = useRouter();
   const [search,          setSearch]          = useState('');
@@ -233,7 +248,11 @@ export default function AdminUsersPage() {
               {data?.users.map((u, i) => (
                 <tr
                   key={u.id}
-                  onClick={() => router.push(`/admin/users/${u.id}`)}
+                  onClick={(e) => {
+                    // A click that landed inside an interactive element is that element's, not the row's.
+                    if (isInteractive(e.target)) return;
+                    router.push(`/admin/users/${u.id}`);
+                  }}
                   className={`cursor-pointer border-t border-[var(--noc-hairline)] hover:bg-[rgba(217,70,168,0.06)] ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}
                 >
                   <td className="px-5 py-3">
