@@ -133,6 +133,9 @@ function RoleSelect({ userId, currentRole }: { userId: string; currentRole: stri
     <select
       value={currentRole}
       disabled={setRole.isPending}
+      // The row itself navigates to the user detail page. Without this the change fires the
+      // mutation AND navigates away, so the admin never sees whether it took.
+      onClick={(e) => e.stopPropagation()}
       onChange={(e) => setRole.mutate({ userId, role: e.target.value as Role })}
       className="cursor-pointer rounded-full px-2 py-1 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
       style={{ background: `${roleColor}22`, color: roleColor, border: 'none' }}
@@ -255,7 +258,12 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button
-                      onClick={() => setCreditModal({ userId: u.id, username: u.username, balance: u.creditBalance })}
+                      // The row navigates on click; without this the modal opens and is unmounted
+                      // by the row's navigation, which reads as "Credits opens the user page".
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCreditModal({ userId: u.id, username: u.username, balance: u.creditBalance });
+                      }}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noc-blue)]/60"
                       style={{ background: 'rgba(178,90,217,0.12)', color: 'var(--noc-purple)' }}
                     >
