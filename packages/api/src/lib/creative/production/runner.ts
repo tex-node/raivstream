@@ -24,6 +24,7 @@ import { nextChargeAttempt } from '../../credits/attempts';
 import { CreditCapExceededError, assertWithinCeiling, capStopReason, finalRunStatus, loadRunBudget } from '../../credits/cap';
 import { applySoftenedPrompt, decideAfterRejection, dropReason, netSpendAfterRefund } from './moderationFallback';
 import { preflightDecision, preflightRecord } from './preflight';
+import { readyPatch } from './assetPatch';
 import { moderatePrompt, suggestSafeRewrite as suggestRewriteForPreflight } from '../../promptModeration';
 import { suggestSafeRewrite } from '../../promptModeration';
 import { creditKeys } from '../../credits/idempotencyKeys';
@@ -404,7 +405,7 @@ export async function runCreativeProduction(
           }
           await prisma.creativeProducedAsset.update({
             where: { id: asset.id },
-            data: { status: 'READY', assetUrl: media.assetUrl, thumbnailUrl: media.thumbnailUrl ?? null, provider: 'internal' },
+            data: readyPatch({ assetUrl: media.assetUrl, thumbnailUrl: media.thumbnailUrl ?? null, provider: 'internal' }),
           });
           byKey.set(key, { id: asset.id, sceneId: spec.sceneId, kind: spec.kind, status: 'READY', assetUrl: media.assetUrl });
           if (spec.kind === 'VIDEO') lastClipUrl = media.assetUrl;
