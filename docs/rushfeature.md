@@ -1,8 +1,24 @@
+**State.** No unblocked engineering remains. Phases 0-7 and 9 are complete; the three open items are all blocked by
+something no engineering can move:
+
+- **Phase 8 - Motion/object operator** - optional, and blocked on a **provider capability that does not exist** (no motion-transfer or
+  inpainting argument in the generator).
+- **LoRAs** - blocked on a **provider parameter** (no adapter argument in `FluxInput`), with the three-part checklist recorded in Phase 6.
+- **Phase 1's remaining coverage** - blocked on **creator input**: 3 of 7 measured beats clear the identity floor, and closing it needs
+  seven thin-intent projects to become real briefs.
+
+**The roadmap resumes** when a provider capability arrives, when creator input arrives, or when an operator deliberately chooses an
+unscheduled remainder. **One such remainder is recorded and deliberately not scheduled:** the **conversational director interface** -
+Phase 4's take capability is complete and proven, but the natural-language layer over it was never built. It is a choice, not an
+oversight, and it needs no provider.
+
 ## What this document is not
 
 Not an implementation spec, not a commitment, and not a schedule. The phases are **ordered, not
 dated**. Two prerequisite reads have not happened yet, which is exactly why nothing here carries
 a date: the size of Phases 1 and 2 is unknown until they are done.
+
+**Correction, preserved rather than deleted:** both prerequisite reads have since happened and both phases are complete - the sentence above is kept so the document still shows what was unknown when it was written. The plan carries no dates by enforcement, not by uncertainty.
 
 ---
 
