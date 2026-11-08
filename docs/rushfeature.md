@@ -445,6 +445,8 @@ generation and shareable between creators.
 
 **Phase 7 complete: all eight assets READY, on a resumed run that cost 280 credits instead of 560.** Funded provider account, gate re-run first (`SCENE_04` IMAGE and VIDEO both `pass pass pass`, 0 refused / 0 flips), then **only SCENE_04** was targeted on the existing project - the six READY assets were not re-spent. Run `COMPLETED`, **8 of 8 READY**, net **280** (balance 880 -> 600), ceiling 1680, `droppedAssets=null`, `moderationRetries=0` because SCENE_04's prompts passed moderation clean. **Cumulative measured spend across six runs: 4,320 credits** (920 + 840 + 720 + 720 + 840 + 280). The film is in **REVIEW**, which is the state from which a creator approves and exports. **One data-hygiene defect found at the end:** the two SCENE_04 rows are `READY` with URLs but still carry the previous run's `errorMessage` (`Forbidden`, `fal video disabled`), because a successful regeneration overwrites status and url but not the old error text - a future reader would see half a story.
 
+**Stale error text fixed.** The read found the success update wrote status, url, provider and thumbnail while leaving `errorMessage` untouched, so a regenerated row could be `READY` and still name the failure it replaced (`Forbidden`, `fal video disabled`). The three states are now explicit builders: `readyPatch` (with `errorMessage: null`), `failurePatch` (writes its own reason), `generatingPatch` (keeps the prior error until the attempt resolves - clearing at start would lose information a reader needs mid-run). **Priority, stated:** 97 places read `errorMessage` (diagnostics and output services among them), so this is a reporting defect, not a cosmetic one. **The run row does not share it:** `lastError` is written on every finalisation with the current stop reason, so a clean resume sets null - checked, not assumed.
+
 **Goal.** The on-ramp: one sentence → the existing pipeline, no questions, defaults, capped
 credits.
 
@@ -476,7 +478,13 @@ deliberately optional.
 
 ---
 
+**Read for the next session.** Optional, and the plan still says so. Its dependency is **Phase 1** (references feed the operator), and its capability - motion transfer and masked object replacement - is a **provider capability this layer does not expose**: the generator has no motion-transfer or inpainting argument, so it carries the same three-part shape as the LoRA blocker (provider parameter, model or mask storage, strength/region threading). **Worth doing when** the studio promise is otherwise complete and a provider exposes the operator; **not worth doing** as a workaround built on prompts.
+
 ## Phase 9 — Academy content tied to the surface
+
+**Read for the next session.** No new capability; **twelve lessons in four modules**, each tied to a control a creator can reach, depending on Phases 1-5 having shipped. **This is content work gated by surface existence, not engineering** - the code it teaches already exists, and the risk is writing lessons for controls that are only partly proven (Phase 1 is still externally blocked on thin-intent input, with 3 of 7 measured beats clearing the floor).
+
+**Recommendation, from the plan's own ordering and dependencies:** **Phase 9 next.** Its dependency (Phases 1-5) is met where it matters and is content-shaped, while Phase 8 is explicitly optional and blocked on a provider capability that does not exist yet. The caveat is Phase 1: lessons should be written against controls proven on real input (Phase 4, 5 and 7 are), not the identity store's unproven half. **Not started this session** - the choice belongs to the next one, made with this read in hand.
 
 **Goal.** Curriculum that teaches the controls that exist.
 
