@@ -87,6 +87,7 @@ import {
 import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntelligence/types';
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
+import { deriveScenesFromStory } from '../lib/story/sceneDerivation';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -3874,125 +3875,33 @@ function validateAndFillEducationalNarration(
   });
 }
 
+const KIDS_SCENE_BUDGET = 6;
+
 function buildSimpleScenes(project: {
   title: string;
   originalIdea?: string | null;
   audienceMode?: string;
   chapters: Array<{ title: string; summary: string; body: string }>;
   characterMemory?: CharacterMemoryRecord[];
-}, count = 6) {
-  const idea = (project.originalIdea ?? project.title).toLowerCase();
-  const isSchoolStory = /\bschool|classroom|teacher|student|bus\b/i.test(idea);
-  const characters = inferSceneCharacters(project);
-  const primaryName = characters[0]?.name ?? 'Main character';
-  const firstChapter = project.chapters[0];
-  const storyText = [firstChapter?.summary, firstChapter?.body].filter(Boolean).join(' ');
-
-  if (isSchoolStory) {
-    return [
-      {
-        title: 'Home',
-        description: `${primaryName} gets ready for a big school day.`,
-        locationType: 'home',
-        indoorOutdoor: 'indoor',
-        mood: 'warm',
-        characters,
-      },
-      {
-        title: 'Road to School',
-        description: `${primaryName} travels toward school and notices the world waking up.`,
-        locationType: 'road',
-        indoorOutdoor: 'outdoor',
-        mood: 'curious',
-        characters,
-      },
-      {
-        title: 'School Gate',
-        description: `${primaryName} arrives at the school gate and meets friendly faces.`,
-        locationType: 'school gate',
-        indoorOutdoor: 'outdoor',
-        mood: 'hopeful',
-        characters,
-      },
-      {
-        title: 'Classroom',
-        description: `${primaryName} enters class and tries something new with courage.`,
-        locationType: 'classroom',
-        indoorOutdoor: 'indoor',
-        mood: 'bright',
-        characters,
-      },
-      {
-        title: 'Problem',
-        description: `${primaryName} faces a small challenge and chooses a kind way to solve it.`,
-        locationType: 'school',
-        indoorOutdoor: 'indoor or outdoor',
-        mood: 'brave',
-        characters,
-      },
-      {
-        title: 'Happy Ending',
-        description: `${primaryName} ends the day proud, happy, and surrounded by friends.`,
-        locationType: 'school',
-        indoorOutdoor: 'indoor or outdoor',
-        mood: 'happy',
-        characters,
-      },
-    ].slice(0, count);
-  }
-
-  return [
-    {
-      title: 'Beginning',
-      description: `${primaryName} starts the adventure in a familiar place.`,
-      locationType: 'home or neighborhood',
-      indoorOutdoor: 'indoor or outdoor',
-      mood: 'warm',
-      characters,
-    },
-    {
-      title: 'First Step',
-      description: `${primaryName} follows a new idea and moves into the story world.`,
-      locationType: 'pathway',
-      indoorOutdoor: 'outdoor',
-      mood: 'curious',
-      characters,
-    },
-    {
-      title: 'New Friend',
-      description: `${primaryName} meets someone helpful or discovers a friendly clue.`,
-      locationType: 'meeting place',
-      indoorOutdoor: 'indoor or outdoor',
-      mood: 'friendly',
-      characters,
-    },
-    {
-      title: 'Discovery',
-      description: storyText ? limitText(storyText, 220) : `${characters[0]} discovers what the adventure is really about.`,
-      locationType: 'story setting',
-      indoorOutdoor: 'indoor or outdoor',
-      mood: 'wonder',
-      characters,
-    },
-    {
-      title: 'Problem',
-      description: `${primaryName} faces a small challenge and stays kind while solving it.`,
-      locationType: 'story setting',
-      indoorOutdoor: 'indoor or outdoor',
-      mood: 'brave',
-      characters,
-    },
-    {
-      title: 'Happy Ending',
-      description: `${primaryName} learns something good and finishes the story with hope.`,
-      locationType: 'safe place',
-      indoorOutdoor: 'indoor or outdoor',
-      mood: 'happy',
-      characters,
-    },
-  ].slice(0, count);
+}, _count?: number) {
+  // STORY-DERIVED, not templated (2026-11-08). This used to return a fixed six-card array - a
+  // school variant (Home, Road to School, ...) and a general variant - sliced to a count that
+  // defaulted to 6, with only one description touched by story text. A template and a derivation
+  // produce the same shape of output; the labels are what tell them apart, and the labels said
+  // "template". Scenes now come from the chapter's own beats, so their titles are the story's words.
+  //
+  // R16 COMPRESSES BEFORE SPLITTING: a kids story whose beats exceed the budget keeps its first and
+  // last beat and condenses the middle, so no scene is a fragment and the ending survives.
+  const isKids = project.audienceMode === 'KIDS';
+  return deriveScenesFromStory(project, isKids ? { maxScenes: KIDS_SCENE_BUDGET } : {}).map((scene) => ({
+    title: scene.title,
+    description: scene.description,
+    locationType: scene.locationType,
+    indoorOutdoor: scene.indoorOutdoor,
+    mood: scene.mood,
+    characters: inferSceneCharacters(project),
+  }));
 }
-
 
 function textSegmentsFromChapters(chapters: Array<{ title: string; summary: string; body: string }>, pageCount: number) {
   const sentences = chapters
@@ -4907,7 +4816,7 @@ export const storyRouter = router({
       const simpleSceneCount = isStoryPaceEnabled(ctx.user.id)
         ? (() => {
             const len = (project as unknown as { storyLength?: StoryLengthTier | null }).storyLength;
-            return len ? (STORY_PACE_CONFIG[len]?.beatMin ?? 6) : 6;
+            return len ? (STORY_PACE_CONFIG[len]?.beatMin ?? 3) : 3;
           })()
         : 6;
 
@@ -4956,7 +4865,7 @@ export const storyRouter = router({
             ? educationalContractForScenes.sceneProgression.length
             : projectStoryLength
               ? Math.max(STORY_PACE_CONFIG[projectStoryLength].beatMin, clampedBlueprint.beats.length)
-              : Math.max(effectiveBlueprint.beats.length, 6);
+              : Math.max(effectiveBlueprint.beats.length, 1);
           try {
             let directedScenes = await storyIntelligenceProvider.directScenes({
               blueprint: clampedBlueprint,
