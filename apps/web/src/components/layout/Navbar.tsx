@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth, useUser } from '@/lib/auth';
+import { CreditBalancePill } from '@/components/credits/CreditBalancePill';
 import { useR16 } from '@/lib/r16';
 import { trpc } from '@/lib/trpc';
 
@@ -113,6 +114,7 @@ export function Navbar() {
         {isSignedIn ? (
           <>
             {/* Notifications bell */}
+            <CreditBalancePill />
             <Link
               href="/notifications"
               className="relative p-1.5 transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
