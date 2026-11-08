@@ -137,21 +137,54 @@ export function composeWithLook(prompt: string, fragment: string): string {
 }
 
 /**
- * Sharing a look between creators (Phase 6, first slice).
+ * A permission failure reads like a decision, not a crash - the same reasoning as
+ * LookNameConflictError. `side` names which end failed: the read (`source`) or the write (`target`).
+ */
+export class LookShareForbiddenError extends Error {
+  readonly code = 'LOOK_SHARE_FORBIDDEN';
+  constructor(
+    readonly side: 'source' | 'target',
+    readonly projectId: string,
+  ) {
+    super(`Sharing a look requires owning the ${side} project (${projectId}).`);
+    this.name = 'LookShareForbiddenError';
+  }
+}
+
+/**
+ * Share a look between two projects (Phase 6).
  *
- * The plan asks for looks that can be "applied, shared, and reused". Applied and reused already
- * work inside a project (Phase 5). Sharing is the genuinely new capability, and it does NOT need a
- * new table: a shared look is the same object copied into another project under the same name,
- * with the existing conflict rule deciding what happens on a collision.
+ * THE BOUNDARY LIVES HERE, not at a router: a guard that lives at the caller is a guard every
+ * future caller can skip, and no caller exists today - which is exactly when the boundary is cheap
+ * to place. Both directions are checked (reading a look out of a project is exfiltration; writing
+ * one into a project is injection, and `overwrite` makes it destruction).
  *
- * Deliberately not built here: "variant" and "strength". Strength is a LoRA parameter, and the
- * provider layer accepts no LoRA argument at all (FluxInput has prompt/steps/guidance/seed), so a
- * strength control would be an object nothing can apply.
+ * POLICY, decided rather than assumed: **no cross-owner sharing, and no admin bypass at this
+ * layer.** A look is a creative asset, and a boolean override in a service is a bypass any caller
+ * can pass. If the platform ever needs a moderator to share across owners, that belongs in a router
+ * with a role check and an audit record, and this function should then receive the resolved
+ * decision rather than a flag it cannot verify.
+ *
+ * The refusal precedes the source read: a boundary that refuses after reading has already leaked.
  */
 export async function shareLook(
   prisma: PrismaClient,
-  input: { fromProjectId: string; name: string; toProjectId: string; overwrite?: boolean },
+  input: { callerId: string; fromProjectId: string; name: string; toProjectId: string; overwrite?: boolean },
 ): Promise<StoredLook> {
+  const projects = (await prisma.creativeProject.findMany({
+    where: { id: { in: [input.fromProjectId, input.toProjectId] } },
+    select: { id: true, userId: true },
+  })) as Array<{ id: string; userId: string }>;
+
+  const sourceProject = projects.find((project) => project.id === input.fromProjectId);
+  if (!sourceProject || sourceProject.userId !== input.callerId) {
+    throw new LookShareForbiddenError('source', input.fromProjectId);
+  }
+  const targetProject = projects.find((project) => project.id === input.toProjectId);
+  if (!targetProject || targetProject.userId !== input.callerId) {
+    throw new LookShareForbiddenError('target', input.toProjectId);
+  }
+
   const source = await lookPromptForProduction(prisma, { projectId: input.fromProjectId, name: input.name });
   if (!source) {
     throw new Error(`No look named "${input.name}" in project ${input.fromProjectId}.`);
