@@ -1,3 +1,5 @@
+import { compressToBudget } from '../storyIntelligence/storyPaceHelpers';
+
 /**
  * Story-derived scenes (2026-11-08).
  *
@@ -50,14 +52,26 @@ export function isFragment(beat: string): boolean {
   return !/[.!?"']$/.test(text);
 }
 
-function titleFrom(beat: string, index: number): string {
-  const words = beat
-    .replace(/^["']|["']$/g, '')
-    .split(/\s+/)
-    .slice(0, 6)
-    .join(' ')
-    .replace(/[,;:.!?]+$/, '');
-  return words.length > 0 ? words : `Scene ${index + 1}`;
+/**
+ * A label, not a slice. The old version took six words and could stop mid-phrase
+ * ("On the third winter he found"), which reads as truncation even though the scene body is whole.
+ * This cuts at the first natural break when there is one, otherwise at a word boundary, and marks a
+ * shortened title with an ellipsis so a reader can tell a short title from a broken one.
+ */
+export function titleFrom(beat: string, index: number): string {
+  const clean = beat.replace(/^["']+|["']+$/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return `Scene ${index + 1}`;
+
+  const clause = clean.split(/(?<=[,;:])\s/)[0] ?? clean;
+  const words = clause.split(' ');
+  const shortened = words.length > 8;
+  const kept = words.slice(0, 8);
+  // Never end a label on a word that dangles: stripping the trailing function words is what stops
+  // "He carried it down in his cap and..." from reading as a cut rather than a title.
+  const DANGLING = /^(and|or|but|the|a|an|of|to|in|on|at|with|that|which|who|his|her|their|it|he|she|they)$/i;
+  while (kept.length > 1 && DANGLING.test(kept[kept.length - 1]!)) kept.pop();
+  const candidate = kept.join(' ').replace(/[,;:.!?]+$/, '');
+  return shortened ? `${candidate}\u2026` : candidate;
 }
 
 /**
@@ -66,25 +80,9 @@ function titleFrom(beat: string, index: number): string {
  * merged beats stay whole sentences - never a slice off the end.
  */
 export function compressBeatsForBudget(beats: string[], max: number): string[] {
-  if (max <= 0) return [];
-  if (beats.length <= max) return beats;
-  if (max === 1) return [beats[0]];
-
-  const first = beats[0];
-  const last = beats[beats.length - 1];
-  const middleCount = Math.max(0, max - 2);
-  const middle = beats.slice(1, -1);
-
-  if (middleCount === 0) return [first, last];
-
-  // Condense by merging consecutive beats, so each survivor is a complete (multi-sentence) beat.
-  const merged: string[] = [];
-  const bucketSize = Math.ceil(middle.length / middleCount);
-  for (let i = 0; i < middle.length; i += bucketSize) {
-    merged.push(middle.slice(i, i + bucketSize).join(' '));
-  }
-
-  return [first, ...merged.slice(0, middleCount), last];
+  // Shared with the paced blueprint path: one implementation, so scene text and blueprint beats
+  // cannot drift into two different ideas of "compression".
+  return compressToBudget(beats, max, (group) => group.join(' '));
 }
 
 export interface SceneSource {
