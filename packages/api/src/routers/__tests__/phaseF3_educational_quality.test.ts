@@ -635,14 +635,28 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
       if (!visualText.match(/luxury yacht|yacht advertisement/)) visualTeaching++;
       if (scenes.some((s) => s.visualTeachingRequirement)) visualTeaching++;
 
-      // 5. Scene progression: HOOK first, RECAP last, sequential coverage
-      let sceneProgression = 0;
-      if (scenes[0]?.teachingRole === 'HOOK') sceneProgression++;
-      if (scenes[scenes.length - 1]?.teachingRole === 'RECAP') sceneProgression++;
-      if (scenes.length === 6) sceneProgression++;
-      const roles = new Set(scenes.map((s) => s.teachingRole));
-      if (roles.size >= 4) sceneProgression++;
-      if (contract.sceneProgression[0]?.toLowerCase().includes('hook')) sceneProgression++;
+      // 5. Scene progression - REWRITTEN (2026-11-10) to reward derivation, not conformance.
+      // It used to award a point for `scenes.length === 6` and another for the template string
+      // starting with "hook", so ANY lesson scored 5/5 for matching the template whatever it taught -
+      // the constant-90 critic's exact failure, a number that looks like quality and measures shape.
+      // The 6 was also the fourth instance of this arc's template-number class.
+      //
+      // Now it scores the lesson against its own content, scaled to 5:
+      //   coverage   - how many of the contract's key concepts appear in a scene
+      //   examples   - whether examplesToUse was actually used
+      //   recap      - present exactly when recapIncluded says it should be
+      //   hook       - the first scene opens with a question when one derives
+      //   wholeness  - every scene has narration
+      const allTeachingText = scenes.map((s) => `${s.teachingConcept ?? ''} ${s.narrationText ?? ''} ${s.action ?? ''}`).join(' ').toLowerCase();
+      const conceptsCovered = contract.keyConcepts.filter((concept: string) => allTeachingText.includes(concept.toLowerCase().slice(0, 24))).length;
+      const coverage = contract.keyConcepts.length === 0 ? 1 : conceptsCovered / contract.keyConcepts.length;
+      const examplesUsed = contract.examplesToUse.length === 0
+        || contract.examplesToUse.some((example: string) => allTeachingText.includes(example.toLowerCase().slice(0, 18)));
+      const recapPresent = scenes.some((s) => s.teachingRole === 'RECAP');
+      const recapCorrect = recapPresent === contract.recapIncluded;
+      const hookDerived = /\?/.test(scenes[0]?.narrationText ?? '');
+      const allNarrated = scenes.every((s) => (s.narrationText ?? '').length > 10);
+      const sceneProgression = Math.max(0, Math.min(5, Math.round(coverage * 5 * (examplesUsed ? 1 : 0.8) * (recapCorrect ? 1 : 0.8) * (hookDerived ? 1 : 0.8) * (allNarrated ? 1 : 0.6))));
 
       // 6. Engagement: questions, exclamations, child address
       let engagement = 0;
@@ -717,6 +731,17 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
     it('scene progression scores ≥4/5', async () => {
       const scores = await scoreShipsQuality();
       expect(scores.sceneProgression).toBeGreaterThanOrEqual(4);
+    });
+
+    it('the progression score varies with the lesson, not with its shape', async () => {
+      // The old scorer gave every lesson 5/5. A score that cannot differ between two lessons is a
+      // constant, and a constant is not a measurement.
+      const { LocalStoryIntelligenceProvider } = await import('../../lib/storyIntelligence/localStoryIntelligenceProvider');
+      const provider = new LocalStoryIntelligenceProvider();
+      const a = await provider.planEducation({ idea: SHIPS_IDEA, answers: [{ questionText: 'Age', selectedAnswer: '8 years old' }], audienceMode: KIDS_AUDIENCE, sceneCount: 6 });
+      const b = await provider.planEducation({ idea: 'Volcanoes and lava for kids', answers: [{ questionText: 'Age', selectedAnswer: '8 years old' }], audienceMode: KIDS_AUDIENCE, sceneCount: 6 });
+      const fingerprint = (c: typeof a) => `${c.topic}:${c.keyConcepts.length}:${c.examplesToUse.length}:${c.recapIncluded}`;
+      expect(fingerprint(a)).not.toBe(fingerprint(b));
     });
 
     it('engagement scores ≥4/5', async () => {
