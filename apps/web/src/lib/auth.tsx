@@ -79,6 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method:      'POST',
         credentials: 'same-origin', // sends raiv_rt httpOnly cookie automatically
       });
+      // 409 = a parallel refresh (another tab) already rotated the cookie on
+      // this browser. The session is still valid; keep current state and let
+      // the next scheduled tick carry on.
+      if (res.status === 409) return true;
       if (!res.ok) {
         setState({ user: null, isLoaded: true, isSignedIn: false });
         return false;
