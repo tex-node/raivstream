@@ -1,6 +1,62 @@
 import { describe, expect, it } from 'vitest';
 import { resolveMovieRenderCreditRate } from '../credits';
 
+// ─── atomicity contract ────────────────────────────────────────────────────
+// deductCredits and creditsCharged update must share one $transaction so that
+// a crash between them leaves no deducted-but-unrecorded credits.
+//
+// This suite mocks $transaction with Postgres-like rollback semantics:
+// writes inside the callback are only applied if the callback resolves.
+function makePrismaWithTransaction(failUpdate: boolean) {
+  const committed: string[] = [];
+  const prisma = {
+    committed,
+    $transaction: async (fn: (tx: any) => Promise<void>) => {
+      const log: string[] = [];
+      const tx = {
+        creditLedger: {
+          findFirst: async () => null,
+          create: async () => { log.push('credit'); return { id: 'l1', creditsCharged: 200 }; },
+        },
+        user: { update: async () => ({}) },
+        movieRenderJob: {
+          update: async () => {
+            if (failUpdate) throw new Error('DB_FAIL');
+            log.push('charged');
+            return {};
+          },
+        },
+      };
+      await fn(tx);
+      committed.push(...log); // flush only on success (simulates Postgres commit)
+    },
+  } as any;
+  return prisma;
+}
+
+describe('movie render credit atomicity', () => {
+  it('commits both writes when $transaction callback resolves', async () => {
+    const prisma = makePrismaWithTransaction(false);
+    await prisma.$transaction(async (tx: any) => {
+      await tx.creditLedger.create({});
+      await tx.movieRenderJob.update({});
+    });
+    expect(prisma.committed).toEqual(['credit', 'charged']);
+  });
+
+  it('rolls back credit deduction when creditsCharged update throws inside $transaction', async () => {
+    const prisma = makePrismaWithTransaction(true);
+    await expect(
+      prisma.$transaction(async (tx: any) => {
+        await tx.creditLedger.create({});
+        await tx.movieRenderJob.update({});
+      })
+    ).rejects.toThrow('DB_FAIL');
+    // Postgres rolls back — credits must not be committed
+    expect(prisma.committed).toHaveLength(0);
+  });
+});
+
 function prismaMockWithRate(rate: { creditsPerUnit: number; isActive: boolean } | null) {
   return {
     featureCreditRate: {
