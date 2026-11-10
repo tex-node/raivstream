@@ -100,7 +100,10 @@ describe('Phase F §2 — Narration: child-directed language', () => {
   it('scene 0 narration is child-directed (contains direct address or child-friendly opener)', () => {
     const text = scenes[0].narrationText?.toLowerCase() ?? '';
     // Accepts "Did you know", "Let's", "Have you", "You will/are", "Amazing/Fantastic" etc.
-    const childDirected = /did you know|let'?s|have you|you will|you are|amazing|fantastic|fascinating|discover/i.test(text);
+    // MOVED (2026-11-10), mechanism not requirement: the requirement is that the learner is
+    // addressed; the old pattern accepted only phrases the template opener used. The derived opening
+    // puts the address in as a vocative inside the hook sentence ("Hey explorers - why does ...?").
+    const childDirected = /did you know|let'?s|have you|you will|you are|amazing|fantastic|fascinating|discover|hey |explorers|friends/.test(text);
     expect(childDirected).toBe(true);
   });
 

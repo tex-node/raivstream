@@ -1,3 +1,5 @@
+import { compressToBudget } from './storyPaceHelpers';
+import { composeLessonOpening, deriveEducationalScenes, deriveHookLine } from '../story/educationalSceneDerivation';
 import type {
   StoryIntelligenceProvider,
   PlanStoryInput,
@@ -361,41 +363,76 @@ export class LocalStoryIntelligenceProvider implements StoryIntelligenceProvider
       const teachingRoles: Array<import('./types').TeachingRole> = [
         'HOOK', 'INTRODUCTION', 'EXPLANATION', 'EXAMPLE', 'DEMONSTRATION', 'COMPARISON', 'REINFORCEMENT', 'RECAP',
       ];
-      return contract.sceneProgression.slice(0, count).map((purpose, i) => {
-        const concept = contract.keyConcepts[i] ?? contract.keyConcepts[contract.keyConcepts.length - 1] ?? topic;
-        const isFirst = i === 0;
-        const isLast = i === count - 1;
-        const role = isLast ? 'RECAP' : teachingRoles[Math.min(i, teachingRoles.length - 1)];
-        let narrationText: string;
-        if (isFirst) {
-          narrationText = hookNarrationFor(topic, vocabLevel);
-        } else if (isLast && contract.recapIncluded) {
-          const recapConcepts = contract.keyConcepts.slice(0, 3).join('; ');
-          narrationText = vocabLevel === 'very_simple'
-            ? `Great job! We learned about ${topic}! We saw ${contract.keyConcepts.slice(0, 2).join(' and ')}. You are amazing!`
-            : `Amazing work! Today we learned about ${topic}: ${recapConcepts}. You are now a ${topic} expert!`;
-        } else {
-          narrationText = childDirectedNarrationFor(topic, concept, vocabLevel);
-        }
-        return {
-          version: 'scene_director_v1' as const,
-          ordinal: i + 1,
-          title: purpose,
-          storyBeat: concept,
-          dramaticPurpose: `Teach: ${concept}`,
-          characters: [],
-          action: `Show ${concept} visually — ${contract.visualTeachingStrategy}`,
-          mood: isFirst ? 'excited' : isLast ? 'satisfied' : 'curious',
-          learningObjective: contract.learningObjective,
-          teachingConcept: concept,
-          teachingRole: role,
-          visualTeachingRequirement: `${contract.visualTeachingStrategy} — specifically demonstrate ${concept}`,
-          narrationText,
-          antiCommercialNote: contract.antiCommercialTopics.length > 0
-            ? `Avoid: ${contract.antiCommercialTopics.slice(0, 3).join(', ')}`
-            : undefined,
+      // Lesson-derived scenes (2026-11-10), with the two defects from the fifth stop fixed:
+      //   1. fields are clamped to `directedSceneSchema`'s maxima at a NATURAL BREAK, never mid-clause
+      //      (the title-truncation rule applied to every derived field);
+      //   2. `isLast` indexes the SELECTED length, not the caller's `count` - a compressed lesson was
+      //      never labelling its final scene, so its recap existed but was not marked as the ending.
+      // `count` remains a legitimate caller budget and is honoured by COMPRESSION, which keeps the
+      // first and last scene whole instead of slicing the lesson's ending off.
+      const derivedScenes = deriveEducationalScenes(contract);
+      const selectedScenes = derivedScenes.length === 0
+        ? null
+        : derivedScenes.length > count
+          ? compressToBudget(derivedScenes, count, (group) => ({
+              title: group[0]!.title,
+              description: group.map((scene) => scene.description).join(' '),
+              source: group.map((scene) => scene.source).join('; '),
+              hookLine: group[0]!.hookLine ?? null,
+            }))
+          : derivedScenes;
+      const hookLine = deriveHookLine(contract);
+
+      if (selectedScenes) {
+        // Clamp at a natural break, then mark the cut with an ellipsis: the same rule as titles.
+        const clamp = (text: string, max: number): string => {
+          if (text.length <= max) return text;
+          const slice = text.slice(0, max - 1);
+          const breakAt = Math.max(slice.lastIndexOf('; '), slice.lastIndexOf(', '), slice.lastIndexOf('. '), slice.lastIndexOf(' '));
+          const cut = breakAt > max * 0.6 ? slice.slice(0, breakAt).replace(/[,;.]+$/, '') : slice;
+          return `${cut}\u2026`;
         };
-      });
+
+        return selectedScenes.map((scene, i) => {
+          const isFirst = i === 0;
+          const isLast = i === selectedScenes.length - 1;
+          const role = isLast ? 'RECAP' : teachingRoles[Math.min(i, teachingRoles.length - 1)];
+          const concept = clamp(scene.source, 200);
+          let narrationText: string;
+          if (isFirst) {
+            // Question first, address as a vocative inside the same sentence (operator ruling).
+            const opening = composeLessonOpening({ hookLine, address: 'Hey explorers' });
+            narrationText = opening
+              ? `${opening} ${childDirectedNarrationFor(topic, concept, vocabLevel)}`
+              : hookNarrationFor(topic, vocabLevel);
+          } else if (isLast && contract.recapIncluded) {
+            const recapConcepts = contract.keyConcepts.slice(0, 3).join('; ');
+            narrationText = vocabLevel === 'very_simple'
+              ? `Great job! We learned about ${topic}! We saw ${contract.keyConcepts.slice(0, 2).join(' and ')}. You are a ${topic} expert!`
+              : `Amazing work! Today we learned about ${topic}: ${recapConcepts}. You are now a ${topic} expert!`;
+          } else {
+            narrationText = childDirectedNarrationFor(topic, concept, vocabLevel);
+          }
+          return {
+            version: 'scene_director_v1' as const,
+            ordinal: i + 1,
+            title: clamp(scene.title, 120),
+            storyBeat: clamp(scene.source, 120),
+            dramaticPurpose: clamp(`Teach: ${scene.source}`, 200),
+            characters: [],
+            action: clamp(`Show ${scene.source} visually — ${contract.visualTeachingStrategy}`, 400),
+            mood: isFirst ? 'excited' : isLast ? 'satisfied' : 'curious',
+            learningObjective: clamp(contract.learningObjective, 300),
+            teachingConcept: concept,
+            teachingRole: role,
+            visualTeachingRequirement: clamp(`${contract.visualTeachingStrategy} — specifically demonstrate ${scene.source}`, 300),
+            narrationText,
+            antiCommercialNote: contract.antiCommercialTopics.length > 0
+              ? `Avoid: ${contract.antiCommercialTopics.slice(0, 3).join(', ')}`
+              : undefined,
+          };
+        });
+      }
     }
 
     const hints = input.existingSceneHints ?? [];
