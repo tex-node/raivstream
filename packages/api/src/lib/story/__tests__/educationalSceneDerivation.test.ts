@@ -113,3 +113,44 @@ describe('the story derivation is unaffected', () => {
     expect(scenes[0]!.title.toLowerCase()).toContain('the keeper climbed');
   });
 });
+
+describe('the hook is a property of the first scene, derived', () => {
+  const short = contract({ keyConcepts: ['Lava is melted rock that reaches the surface', 'Lava cools into new stone'] });
+  const scenes = deriveEducationalScenes(short);
+
+  it('the first scene carries a hook line and no extra scene appears', () => {
+    expect(scenes[0]!.hookLine).toBeTruthy();
+    expect(scenes).toHaveLength(short.keyConcepts.length + 1);
+  });
+
+  it('the hook is traceable to the first concept', () => {
+    const hook = scenes[0]!.hookLine!.toLowerCase();
+    expect(hook).toContain('lava');
+    expect(hook.endsWith('?')).toBe(true);
+  });
+
+  it('the hook is not a restatement of the concept', () => {
+    expect(scenes[0]!.hookLine).not.toBe(scenes[0]!.description);
+    expect(scenes[0]!.hookLine!.toLowerCase()).not.toBe(short.keyConcepts[0]!.toLowerCase());
+  });
+
+  it('it is a question the concept answers, not a generic tease', () => {
+    const hook = scenes[0]!.hookLine!.toLowerCase();
+    expect(hook).not.toMatch(/you won.t believe|amazing|incredible|next/);
+    expect(hook).toContain('reach');
+  });
+
+  it('no derivable hook means no hook line, not a substitute', () => {
+    const noHook = deriveEducationalScenes(contract({ keyConcepts: ['Volcanoes erupt', 'Lava cools'], examplesToUse: [], recapIncluded: false }));
+    expect(noHook[0]!.hookLine ?? null).toBeNull();
+  });
+
+  it('a concept that is already a question is used verbatim', () => {
+    const question = deriveEducationalScenes(contract({ keyConcepts: ['Why does lava glow?', 'Lava cools'], examplesToUse: [], recapIncluded: false }));
+    expect(question[0]!.hookLine).toBe('Why does lava glow?');
+  });
+
+  it('the recap is still last', () => {
+    expect(scenes[scenes.length - 1]!.description.toLowerCase()).toContain('recap');
+  });
+});

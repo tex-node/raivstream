@@ -24,8 +24,58 @@ import { isFragment, titleFrom } from './sceneDerivation';
 export interface EducationalScene {
   title: string;
   description: string;
+  /** A property of the first scene, not a scene of its own (2026-11-10). */
+  hookLine?: string | null;
   /** The contract field this scene came from - the traceability the tests assert on. */
   source: string;
+}
+
+
+/**
+ * A hook derived from the lesson's first concept (2026-11-10).
+ *
+ * A hook is a PROPERTY of the first scene, not a scene of its own: in thirty seconds you cannot
+ * afford a scene that only teases. So the first scene opens with a hook line and then teaches its
+ * concept.
+ *
+ * It is derived from `keyConcepts[0]`, because the contract has no field naming an opening question
+ * or a stake - the twelve fields carry topic, concepts, examples, strategy and recap, and nothing
+ * that means "hook". Turning the first concept into the question it answers is derivation; writing
+ * "you won't believe what happens next" would be a hook slot wearing a hook's clothes.
+ *
+ * Returns null when no question can be derived rather than emitting a generic tease: a lesson that
+ * opens on its concept is honest, and a manufactured hook is not.
+ */
+export function deriveHookLine(contract: EducationalContract): string | null {
+  const first = (contract.keyConcepts ?? [])[0]?.trim();
+  if (!first) return null;
+
+  // Already a question: the lesson supplied its own hook.
+  if (first.endsWith('?')) return first;
+
+  const match = first.match(/^(.+?)\s+(?:is|are|was|were)\s+(.+)$/i);
+  if (!match) return null;
+  const subject = match[1]!.trim();
+  const rest = match[2]!.trim().replace(/[.!?]+$/, '');
+  const lowerSubject = /^[A-Z][a-z]/.test(subject) && !/^[A-Z]{2,}/.test(subject)
+    ? subject.charAt(0).toLowerCase() + subject.slice(1)
+    : subject;
+
+  // "X is melted rock that reaches the surface" -> "Why does X reach the surface?"
+  const thatClause = rest.match(/\bthat\s+(.+)$/i);
+  if (thatClause) {
+    const [, predicate] = thatClause;
+    const words = predicate!.split(' ');
+    const verb = words[0]!;
+    const base = verb.endsWith('es') ? verb.slice(0, -2) : verb.endsWith('s') ? verb.slice(0, -1) : verb;
+    return `Why does ${lowerSubject} ${[base, ...words.slice(1)].join(' ')}?`;
+  }
+
+  // "X is hot enough to flow" -> "What makes X hot enough to flow?"
+  if (/\sto\s/.test(rest)) return `What makes ${lowerSubject} ${rest}?`;
+
+  // No question can be derived from this concept without inventing content.
+  return null;
 }
 
 export function deriveEducationalScenes(contract: EducationalContract): EducationalScene[] {
@@ -46,6 +96,12 @@ export function deriveEducationalScenes(contract: EducationalContract): Educatio
       source: concept,
     };
   });
+
+  const hookLine = deriveHookLine(contract);
+  if (hookLine && scenes[0]) {
+    // The hook rides on the first scene; it does not add one.
+    scenes[0] = { ...scenes[0], hookLine };
+  }
 
   if (contract.recapIncluded && scenes.length > 0) {
     // A recap is a beat of the lesson, not a template slot: it names what the lesson taught.
