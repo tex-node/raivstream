@@ -180,3 +180,28 @@ describe('the opening sentence: question first, address as a vocative', () => {
     expect(composeLessonOpening({ hookLine: null, address: null })).toBeNull();
   });
 });
+
+describe('the seven-slot cap cut the lesson ending', () => {
+  // THE DEFECT (2026-11-10). The educational path computed `Math.min(input.sceneCount, 7)` - a hard
+  // seven, inherited from the seven-entry template - and sliced the derived purposes by it. A lesson
+  // with ten concepts therefore lost its recap: the lesson's own ending, removed by a number that
+  // belonged to the template. Same harm R16 compression exists to prevent.
+  const tenConcepts = contract({
+    keyConcepts: Array.from({ length: 10 }, (_, i) => `Concept number ${i + 1} explained`),
+    recapIncluded: true,
+    examplesToUse: [],
+  });
+  const derived = deriveEducationalScenes(tenConcepts);
+
+  it('the derivation keeps all ten concepts and the recap', () => {
+    expect(derived).toHaveLength(11);
+    expect(derived[derived.length - 1]!.description.toLowerCase()).toContain('recap');
+  });
+
+  it('the old cap of 7 removed the ending', () => {
+    const capped = derived.slice(0, 7);
+    expect(capped).toHaveLength(7);
+    expect(capped[capped.length - 1]!.description.toLowerCase()).not.toContain('recap');
+    expect(capped.some((scene) => scene.description.toLowerCase().includes('recap'))).toBe(false);
+  });
+});
