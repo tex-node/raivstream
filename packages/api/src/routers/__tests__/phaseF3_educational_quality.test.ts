@@ -500,9 +500,13 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
       expect(contract.vocabularyLevel).toBe('simple');
     });
 
-    it('produces exactly 6 scenes', async () => {
-      const { scenes } = await buildShipsScenes();
-      expect(scenes).toHaveLength(6);
+    // MOVED (2026-11-10): scenes are derived from the contract's key concepts and compressed to the
+    // caller's budget, so the count is the lesson's, capped by a legitimate caller limit rather than
+    // a seven-slot template. The recap is kept whole by compression, not by luck of the slice.
+    it('produces one scene per concept, compressed to the caller budget', async () => {
+      const { contract, scenes } = await buildShipsScenes();
+      const expected = Math.min(contract.keyConcepts.length + (contract.recapIncluded ? 1 : 0), 6);
+      expect(scenes).toHaveLength(expected);
     });
 
     it('Scene 1 (HOOK): grabs attention, starts with question or exclamation', async () => {
@@ -536,16 +540,21 @@ describe('Phase F3 — Educational Quality Regression Tests', () => {
       expect(text).toMatch(/ship|vessel|cargo|ferry|research|fishing|container|kind|ocean/);
     });
 
-    it('Scene 5 (SECOND CONCEPT): is educational, covers a ships concept', async () => {
+    // MOVED (2026-11-10): the scene before the recap, whatever its index - the intent (a teaching
+    // scene that covers ships) survives; the fixed position does not.
+    it('the scene before the recap is educational and covers a ships concept', async () => {
       const { scenes } = await buildShipsScenes();
-      const second = scenes[4]!;
+      const second = scenes[scenes.length - 2]!;
       const text = `${second.narrationText ?? ''} ${second.teachingConcept ?? ''}`.toLowerCase();
       expect(text).toMatch(/ship|vessel|cargo|ferry|work|types|ocean|sea/);
     });
 
-    it('Scene 6 (RECAP): recaps key ships concepts', async () => {
+    // MOVED (2026-11-10): the recap is still last, but it is no longer index 5 - and this is the
+    // assertion that used to be silently wrong: `isLast` indexed `count`, so a compressed lesson's
+    // recap existed but was never labelled. It indexes the selected length now.
+    it('the last scene is labelled RECAP and recaps the lesson', async () => {
       const { scenes } = await buildShipsScenes();
-      const recap = scenes[5]!;
+      const recap = scenes[scenes.length - 1]!;
       expect(recap.teachingRole).toBe('RECAP');
       expect(recap.narrationText?.toLowerCase()).toContain('ships');
     });
