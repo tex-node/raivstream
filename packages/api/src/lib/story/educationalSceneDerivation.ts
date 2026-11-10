@@ -125,3 +125,27 @@ export function deriveEducationalSceneProgression(contract: EducationalContract)
 export function educationalSceneIsFragment(scene: EducationalScene): boolean {
   return isFragment(scene.description);
 }
+
+/**
+ * The opening sentence (2026-11-10).
+ *
+ * The operator's ruling: the QUESTION is the opener, and the child address is a **vocative inside
+ * the same sentence** - "Hey explorers - why does lava reach the surface?" Neither requirement is
+ * dropped and it costs no time, which was the objection to two opening sentences.
+ *
+ * When no hook derives, the opening is the address alone: the address is honest, a manufactured
+ * question is not.
+ */
+export function composeLessonOpening(input: { hookLine?: string | null; address?: string | null }): string | null {
+  const hook = input.hookLine?.trim() ?? '';
+  const address = input.address?.trim() ?? '';
+  if (hook && address) {
+    // One sentence, so the question continues in lower case after the vocative:
+    // "Hey explorers - why does lava reach the surface?" not "... - Why does ...".
+    const continued = /^[A-Z][a-z]/.test(hook) ? hook.charAt(0).toLowerCase() + hook.slice(1) : hook;
+    return `${address.replace(/[.!?]+$/, '')} \u2014 ${continued}`;
+  }
+  if (hook) return hook;
+  if (address) return address;
+  return null;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveEducationalSceneProgression, deriveEducationalScenes, educationalSceneIsFragment } from '../educationalSceneDerivation';
+import {composeLessonOpening, deriveEducationalSceneProgression, deriveEducationalScenes, educationalSceneIsFragment } from '../educationalSceneDerivation';
 import { deriveScenesFromStory } from '../sceneDerivation';
 import type { EducationalContract } from '../../storyIntelligence/types';
 
@@ -152,5 +152,31 @@ describe('the hook is a property of the first scene, derived', () => {
 
   it('the recap is still last', () => {
     expect(scenes[scenes.length - 1]!.description.toLowerCase()).toContain('recap');
+  });
+});
+
+describe('the opening sentence: question first, address as a vocative', () => {
+  // The operator's ruling (2026-11-10): the QUESTION is the opener and the child address is a
+  // vocative inside the same sentence. Neither requirement is dropped and it costs no extra time -
+  // which was the objection to two opening sentences.
+  it('joins the address and the hook into one sentence', () => {
+    const opening = composeLessonOpening({ hookLine: 'Why does lava reach the surface?', address: 'Hey explorers' });
+    expect(opening).toBe('Hey explorers \u2014 why does lava reach the surface?');
+    expect((opening!.match(/\?/g) ?? []).length).toBe(1);
+    expect(opening!.split('.').length).toBe(1);
+  });
+
+  it('keeps the question first in substance and the address as a marker', () => {
+    const opening = composeLessonOpening({ hookLine: 'Why does lava reach the surface?', address: 'Hey explorers' })!;
+    expect(opening.indexOf('?')).toBe(opening.length - 1);
+    expect(opening.toLowerCase().startsWith('hey explorers')).toBe(true);
+  });
+
+  it('with no hook, the opening is the address alone - no manufactured question', () => {
+    expect(composeLessonOpening({ hookLine: null, address: 'Hey explorers' })).toBe('Hey explorers');
+  });
+
+  it('with neither, there is no opening', () => {
+    expect(composeLessonOpening({ hookLine: null, address: null })).toBeNull();
   });
 });
