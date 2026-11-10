@@ -352,7 +352,7 @@ export class LocalStoryIntelligenceProvider implements StoryIntelligenceProvider
 
   async directScenes(input: DirectScenesInput): Promise<DirectedScene[]> {
     const name = input.blueprint.protagonist.name;
-    const count = Math.min(input.sceneCount, 7);
+    const count = input.sceneCount; // the hard `7` was the template's slot count, not a product limit
     const contract = input.educationalContract;
 
     if (contract) {
