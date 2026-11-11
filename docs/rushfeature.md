@@ -1,3 +1,7 @@
+**State.** Two phases were scheduled after this note was first written, and one debt was closed, so the paragraph below is kept and corrected beside itself.
+
+**Correction, preserved rather than deleted:** the paragraph that follows said no unblocked engineering remained. Phase 10 (longer-form) and Phase 11 (Homer) are now scheduled, with a memo and a read as their first deliverables; and the balance-invalidation gap is closed — invalidation sits on the MutationCache keyed by mutation path, so a caller cannot skip it, while the pill keeps its 30 s interval as the safety net for charges a server starts without a client mutation. The original note follows.
+
 **State.** No unblocked engineering remains. Phases 0-7 and 9 are complete; the three open items are all blocked by
 something no engineering can move:
 
@@ -528,6 +532,68 @@ actually reach.
 **Dependencies.** Phases 1–5 shipped. Curriculum follows surface, never precedes it.
 
 **Does not do.** No new product capability.
+
+---
+
+## Phase 10 — Longer-form video
+
+**Goal.** Decide, then build, longer-form generation using a provider that offers realtime sessions rather than one-shot clips.
+
+**Verified before scheduling (three facts, each measured):** a **15-minute realtime session** is available; it costs **~$0.05 per
+second**; and the provider accepts **live prompts and mid-generation keyframes**, which is what makes directing during generation
+possible rather than only before it.
+
+**Decisions the phase needs before any build.** *Does the take model survive?* A continuous session has no natural shot boundary, so
+either takes become time-ranges in one session or the model is bypassed for this path — and the second answer invalidates the per-shot
+machinery Phase 4 proved. *What is the credit rate per second?* Existing rates are per asset; a per-second rate changes the cap
+arithmetic, and the cap is the only thing that has ever prevented an unbounded spend. *Does the product want a live directing surface?*
+That is a product decision, not a capability question: realtime supervision is a different product from "render my film".
+
+**First deliverable: a memo, not a build.** **Prerequisite:** the memo cannot be written well until the take-model question is
+answered, because every cost and cap figure depends on whether a session is one unit or many.
+
+---
+
+## Phase 11 — Homer: the storytelling engine
+
+**Naming caveat, preserved.** "Homer" is **not in this record** — the name is the operator's, and the entry maps it to the components
+below. **Alias recorded: `homer.20` is a phase version marker** (the operator's answer, not an inference). The first session confirms
+or corrects the mapping.
+
+**What it is.** The story-intelligence cluster that takes a creator from an idea to a plan: intent interpretation, guided questions,
+story text, beat planning, cast derivation, and the director's instruction parsing.
+
+**What exists and works, each with a session behind it.**
+
+| component | state |
+|---|---|
+| intent interpretation | `canAutoDecide` + `autoResolveIntent`, which refuses rather than inventing an answer |
+| story text | chain: Claude → OpenAI-compatible → deterministic fallback |
+| guided questions | generated and answerable, with a deterministic fallback |
+| beat planning | `planStory` → blueprint; `sceneDerivation` → one scene per beat |
+| cast derivation | `deriveCast` / `extractSubject` — a parser |
+| story DNA | `StoryProject.storyDna`: theme, tone, hero, goal, conflict, resolution, arc, palettes, camera language |
+| classification | keyword counter + narrative-form rule; the 12-field `EducationalContract` on the education path |
+| director | `interpretDirective` over STORY / CHARACTER / VISUAL / SHOT |
+| moderation | `suggestSafeRewrite` with a flagged-phrase locator |
+
+**Named gaps — each from a measured failure, not an impression.** *The chain is invisible:* which model answered is not recorded per
+project and not visible to the creator, and the canary rollout (Claude at 10%, allowlist) means two creators get different engines and
+neither knows. *The cast extractor is a parser:* it split on "and"/commas and produced **Confrontin**; the LLM path works at 38/38, the
+parser is only the fallback, and nothing in the story path requires the model to name characters. *The story path has no contract:*
+education has twelve fields with per-field scoring while story has `storyDna` and no contract the generator must satisfy — no stated
+requirement that a story contain a conflict, a turn, and a resolution. *The question flow is one-shot:* generated, answered, discarded,
+so a refinement cannot refer to "the lighthouse idea you mentioned". *Refinement is paragraph-level:* `rewriteParagraph` rewrites one
+paragraph; there is no "this draft lost its middle" operation and no critic for story text the way there is for images. *Moderation
+interrupts rather than guides:* a flagged idea gets a replacement map, and the guide does not help reshape an idea that is structurally
+problematic. *The classifier counts keywords:* fixed for the teach case, still a counter.
+
+**Decisions the phase needs before any build.** Which model answers, and is it visible (a per-project record surfaced to the creator)?
+Does the story path get a contract, and with which fields — with the arc's warning attached: **a contract that names shape without
+naming content is the template defect wearing a schema**. Is memory per-project or per-creator? Does Homer critique — and if so, the
+constant-90 critic is the cautionary tale for how a badly built one behaves.
+
+**First deliverable: a read.** Locate the components, inventory the chain, confirm the mapping. No build until the inventory exists.
 
 ---
 
