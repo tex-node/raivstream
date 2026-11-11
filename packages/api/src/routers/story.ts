@@ -1718,7 +1718,7 @@ function storyDnaPromptText(value: unknown) {
   ].filter(Boolean).join('; ');
 }
 
-function buildStoryDna(project: {
+export function buildStoryDna(project: {
   title: string;
   originalIdea?: string | null;
   synopsis?: string | null;
