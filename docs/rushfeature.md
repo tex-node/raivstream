@@ -595,6 +595,30 @@ constant-90 critic is the cautionary tale for how a badly built one behaves.
 
 **First deliverable: a read.** Locate the components, inventory the chain, confirm the mapping. No build until the inventory exists.
 
+**Read complete — the inventory exists, and it corrected one gap.** Every component located, with the file and line a later session can
+start from.
+
+| component | where it lives | state confirmed |
+|---|---|---|
+| intent interpretation | `creative/auto/resolve.ts:56` (`autoResolveIntent`), reading `canAutoDecide` on questions minted in `creative/intent/interpreter.ts:260,268` | refuses rather than inventing an answer — the flag is on the question, and the resolver honours it |
+| guided questions | `creative/intent/interpreter.ts:250` (`buildQuestions`), deterministic fallback `storyTextService.ts:298`, route `story.generateQuestions` (`routers/story.ts:4107`) | generated, answerable, with a fallback |
+| story text | `storyTextService.ts:611-615` — `ClaudeNarrativeEngineProvider(OpenAICompatibleStoryTextProvider)`, behind `STORY_NARRATIVE_ENGINE_ENABLED` + `CLAUDE_API` | the chain is exactly Claude → OpenAI-compatible → deterministic |
+| beat planning | `creative/intelligence/storyAdapter.ts:28` (`planStory`), then `lib/story/sceneDerivation.ts` | blueprint, then one scene per beat |
+| cast derivation | `creative/intelligence/service.ts:89` (`deriveCast`), splitting on `\s+and\s+|,\s*` at `service.ts:70` | a parser, as recorded — the split is the mechanism that produced Confrontin |
+| story DNA | `StoryProject.storyDna`, consumed by the critic and the prompt composer | present, not enforced |
+| classification | `creative/intent/interpreter.ts` keyword counter + narrative-form rule; `EducationalContract` (12 fields) on the education path | as recorded |
+| director | `creative/director/interpreter.ts:22` (`interpretDirective`) over STORY / CHARACTER / VISUAL / SHOT | as recorded |
+| moderation | `promptModeration.ts:200` (`suggestSafeRewrite`) with the flagged-phrase locator | as recorded |
+
+**Correction, preserved rather than deleted:** the gap list said *"which model answered is not recorded per project"*. **It is recorded.**
+`StoryChapter.providerMetadata Json?` exists in the schema, and both chapter-creation paths write it — `routers/story.ts:4309` (chapter one)
+and `:4736` (continuations) — carrying `provider: 'claude-narrative' | 'openai-compatible' | 'local-fallback'` and the model. **The real gap
+is narrower and worse:** the record exists and is read **only by `/admin/prompt-quality`**, so an admin can see which engine wrote a story
+and its creator cannot. The defect is not a missing record; it is a record with one reader who is not the person it is about.
+
+**Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
+and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
+
 ---
 
 ## Future plans (not scheduled)
