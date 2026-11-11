@@ -630,6 +630,27 @@ presence and coverage, never `sections.length === 4` — and it must **fail clos
 lesson with no ending. **The shape-only trap is named with its three precedents:** the six-card template, the seven-slot progression, and
 `scenes.length === 6` were each shape contracts that looked like requirements and measured conformance. **Nothing is built this session.**
 
+**The read that gates the contract, done — and it changes the build.** The earlier note said the five contract fields "need fields the
+schema doesn't have". **That is true of columns and false of data**, and the difference decides the build. `StoryProject.storyDna Json?`
+already carries `hero`, `primaryGoal`, `conflict`, `resolution`, `characterArc`, plus theme, tone, palettes and camera language. So the read
+went to the writer, `buildStoryDna`:
+
+- **it takes no chapter body** — the function cannot read the story it summarises;
+- `hero`, `primaryGoal`, `theme`, `tone`, `visualStyle` come from the idea, character memory, or **constants**;
+- `conflict` and `resolution` are the first **scene-seed title** matching `/problem|challenge|trouble/` and `/ending|happy|finish|home/`,
+  and when nothing matches they fall back to **constants** — `"a gentle obstacle to overcome"` and `"a positive ending with learning"`.
+
+**So `resolution` can never be empty.** A contract that scores its presence would pass every story that exists, including one that stops
+mid-sentence: it would be measuring a plan written before the story. That is `scenes.length === 6` in a schema, which is exactly the trap
+the decision was meant to avoid. **The test that settles it** (`storyDnaProvenance.test.ts`, 7 assertions): with no scenes at all the field
+still reports the constant; with an "Ending" scene it reports that scene's description; and no input produces emptiness. The function's
+signature is the structural proof — no body, no extraction.
+
+**Consequence for the build, stated before it starts:** the content contract must read the **chapter body**, not `storyDna`. It is a
+contract **plus a re-plumbing of where the fields come from** — a body-reading extractor for `protagonist`/`want`/`obstacle`/`turn`/
+`resolution`, with the fail-closed check on resolution, and `storyDna` left as the plan summary it actually is. The earlier phrasing is kept
+above and corrected here rather than deleted.
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 
