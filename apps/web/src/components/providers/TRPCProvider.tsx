@@ -17,7 +17,7 @@
  * forward except a manual reload.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { QueryClient, QueryCache, MutationCache, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import superjson from 'superjson';
@@ -49,18 +49,77 @@ function handleUnauthorized(error: unknown): void {
   if (code === 'UNAUTHORIZED') redirectToSignIn();
 }
 
+
+/**
+ * Balance invalidation for every spending mutation (2026-11-11).
+ *
+ * THE READ. No mutation invalidated `user.creditBalance` anywhere: /generate refetched by hand and
+ * `CreditBalancePill` compensated with focus-refetch and a 30 s interval. Fifteen spending sites
+ * exist on the server (chargeOrThrow in the take and production paths, deductCredits across
+ * generation, story, audio and director, plus admin adjustments) and nineteen client call sites -
+ * so a per-call-site fix is a fix with nineteen places to forget, and every future caller adds a
+ * twentieth.
+ *
+ * THE SHAPE. One `MutationCache.onSuccess`, keyed by the mutation path. It cannot be bypassed by a
+ * future caller because it is not at a caller. This is deliberately NOT a per-site one-liner: the
+ * arc's half-boundary defect is a guard that covers the paths someone remembered.
+ *
+ * BACKGROUND CHARGES are not covered and cannot be: a server-side run (production, movie render)
+ * charges without a client mutation, so the client learns by poll or focus. The pill's interval stays
+ * for exactly that reason.
+ */
+const SPENDING_MUTATIONS = [
+  'generation.create',
+  'generation.publish',
+  'story.generateStory',
+  'story.continueStory',
+  'story.generateScenes',
+  'story.generateSceneImage',
+  'story.regenerateSceneImage',
+  'story.generateSceneShotClips',
+  'story.generateStoryNarration',
+  'director.compose',
+  'creative.project.auto',
+  'creative.production.run',
+  'creative.director.regenerateShot',
+  'admin.adjustCredits',
+] as const;
+
+function mutationPath(mutation: { options: { mutationKey?: readonly unknown[] } }): string {
+  const key = mutation.options.mutationKey ?? [];
+  return key.map((part) => String(part)).join('.');
+}
+
+export function spendsCredits(mutation: { options: { mutationKey?: readonly unknown[] } }): boolean {
+  const path = mutationPath(mutation);
+  if (!path) return false;
+  return SPENDING_MUTATIONS.some((spend) => path === spend || path.startsWith(`${spend}.`));
+}
+
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
+  const queryClientRef = useRef<QueryClient | null>(null);
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
         queryCache: new QueryCache({ onError: handleUnauthorized }),
-        mutationCache: new MutationCache({ onError: handleUnauthorized }),
+        mutationCache: new MutationCache({
+          onError: handleUnauthorized,
+          // A charge resolved: refresh the balance so the header cannot show a stale number.
+          onSuccess: (_data, _vars, _ctx, mutation) => {
+            if (spendsCredits(mutation as never)) {
+              void queryClientRef.current?.invalidateQueries({ queryKey: [['user', 'creditBalance']] });
+            }
+          },
+        }),
         defaultOptions: {
           queries:   { staleTime: 60_000, retry: 1 },
           mutations: { retry: 0 },
         },
       })
   );
+
+  queryClientRef.current = queryClient;
 
   const [trpcClient] = useState(() =>
     trpc.createClient({
