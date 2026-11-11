@@ -616,7 +616,21 @@ and `:4736` (continuations) — carrying `provider: 'claude-narrative' | 'openai
 is narrower and worse:** the record exists and is read **only by `/admin/prompt-quality`**, so an admin can see which engine wrote a story
 and its creator cannot. The defect is not a missing record; it is a record with one reader who is not the person it is about.
 
-**Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
+****Shipped: the engine record reaches its creator, and the contract decision is taken (content, not shape).** *The engine record:* the read
+found it existed and had one reader who was not the person it is about. `chapterSelect()` in the story router now selects
+`providerMetadata`, and `apps/web/src/lib/storyEngine.ts` maps it to plain language per chapter — **Claude**, **an external language
+model**, or the **built-in story writer with no language model used** — rendered on the story screen and **hidden on R16** (model metadata
+is not shown to kids, consistent with the R16 rule). Two rules hold it: all three providers render **distinctly** (the deterministic
+fallback is never dressed as Claude or as a generic "AI"), and a chapter with **no metadata renders nothing**, because absence is not
+evidence of a particular engine. **9 tests.** *The contract decision, recorded and not built:* the operator chose the **content contract**
+over shape-only and over the status quo. **Its fields, named:** `protagonist` and `want` (who wants what) · `obstacle` (what blocks it) ·
+`turn` (what changes) · `resolution` (answered, denied, or transformed) · optional `sensoryAnchor` per beat, which the Claude narrative
+prompt already asks for. **Two constraints bind the build:** it must be scorable the way the rewritten progression scorer scores — content
+presence and coverage, never `sections.length === 4` — and it must **fail closed on a story with no resolution**, the same defect as a
+lesson with no ending. **The shape-only trap is named with its three precedents:** the six-card template, the seven-slot progression, and
+`scenes.length === 6` were each shape contracts that looked like requirements and measured conformance. **Nothing is built this session.**
+
+Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 
 ---
