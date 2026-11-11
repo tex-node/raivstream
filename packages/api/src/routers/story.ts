@@ -1269,6 +1269,9 @@ function chapterSelect() {
     body: true,
     createdAt: true,
     educationalContract: true,
+    // The engine record existed but the creator-facing query never fetched it (2026-11-11):
+    // /admin/prompt-quality could see which engine wrote a story, its creator could not.
+    providerMetadata: true,
   } as const;
 }
 

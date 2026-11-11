@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { engineLabel } from '@/lib/storyEngine';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
 import { splitParagraphs } from '@/lib/mobileFormat';
@@ -117,6 +118,13 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 <span className="noc-label">
                   Chapter {latestChapter.chapterNumber} · {latestChapter.title}
                 </span>
+                {!isR16 && engineLabel(latestChapter.providerMetadata) && (
+                  <span
+                    style={{ display: 'block', fontSize: 11.5, color: 'var(--noc-t6)', marginTop: 6 }}
+                  >
+                    {engineLabel(latestChapter.providerMetadata)}
+                  </span>
+                )}
                 {!isR16 && (
                   <p style={{ fontSize: 12.5, color: 'var(--noc-t6)', marginTop: 6 }}>Tap any paragraph to direct it.</p>
                 )}
