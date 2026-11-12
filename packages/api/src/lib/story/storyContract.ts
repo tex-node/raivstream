@@ -353,4 +353,33 @@ export function verifyStoryContract(contract: StoryContract, body: string): Stor
   return { contract: verified, unverified, outdated: false };
 }
 
+/**
+ * The publish gate (2026-11-12).
+ *
+ * Enforcement lives where a story stops changing. `publishExport` is the only story-to-feed path, and
+ * a draft that is still being continued cannot be judged complete - so the gate sits at publication,
+ * not at storage. The write-time framing was ruled out for a reason worth keeping: an earlier chapter
+ * legitimately has `resolution: null`, so "required before a chapter is stored" is *any null fails*,
+ * the option the last-chapter rule was chosen to replace.
+ *
+ * A non-passing story returns a message whose **first clause is the scorer's first reason**, so
+ * RESOLUTION_MISSING leads when that is the defect. An **unscored** story is blocked as well: an
+ * unread story is not a passing story, and publication is the last place that distinction can be lost.
+ */
+export interface StoryPublishBlock {
+  code: 'BAD_REQUEST';
+  message: string;
+}
 
+export function storyPublishBlock(evaluation: StoryContractEvaluation): StoryPublishBlock | null {
+  if (evaluation.verdict === 'pass') return null;
+  const reason = evaluation.reasons[0] ?? 'the story contract did not pass.';
+
+  if (evaluation.verdict === 'unscored') {
+    return {
+      code: 'BAD_REQUEST',
+      message: `Cannot publish: this story has not been read for completeness. ${reason}`,
+    };
+  }
+  return { code: 'BAD_REQUEST', message: `Cannot publish: ${reason}` };
+}

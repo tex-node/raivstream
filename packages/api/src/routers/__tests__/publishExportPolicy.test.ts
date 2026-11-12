@@ -24,6 +24,23 @@ function makePrisma(audienceMode: string | null) {
           title: 'Princess Goalina',
           audienceMode,
           coverAsset: { assetUrl: null, thumbnailUrl: null },
+          // The publish gate (2026-11-12) judges the story's contracts, so this fixture is a story
+          // that has been read and resolves. These tests are about feed policy, not completeness;
+          // the gate has its own tests in storyContract.test.ts.
+          chapters: [
+            {
+              chapterNumber: 1,
+              storyContract: {
+                protagonist: 'Goalina',
+                want: 'to win the cup',
+                obstacle: 'the rival team',
+                turn: 'the storm stops the match',
+                resolution: { outcome: 'ANSWERED', text: 'She lifts the cup.' },
+                extractedBy: 'model',
+                extractorVersion: 2,
+              },
+            },
+          ],
         },
       })),
     },

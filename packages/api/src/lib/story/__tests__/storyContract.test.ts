@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { buildStoryDna } from '../../../routers/story';
 import { join } from 'node:path';
 import {
   EMPTY_STORY_CONTRACT,
   STORY_CONTRACT_EXTRACTOR_VERSION,
   describeStoredContract,
   evaluateStoryContract,
+  storyPublishBlock,
   verifyStoryContract,
   extractStoryContract,
   parseStoryContract,
@@ -174,8 +176,10 @@ describe('the scorer measures content, never shape', () => {
 });
 
 describe('storyDna is untouched by this work', () => {
-  it('still falls back to its constants - it is the plan summary, not the contract', async () => {
-    const { buildStoryDna } = await import('../../../routers/story');
+  // Static import, not `await import(...)`: the dynamic form re-loaded the whole router inside the
+  // test and timed out at 5.0s under parallel load - reproducibly, in full-suite runs, while passing
+  // in isolation. A 5s import is a test-harness defect, not a story defect.
+  it('still falls back to its constants - it is the plan summary, not the contract', () => {
     const dna = buildStoryDna({ title: 'x', originalIdea: 'a keeper and a bird' }, [], []);
     expect(dna.resolution).toBe('a positive ending with learning');
     expect(dna.conflict).toBe('a gentle obstacle to overcome');
@@ -398,5 +402,49 @@ describe('a refusal is not a reading - the fourth state', () => {
     const read = await extractStoryContract({ body, callModel: async () => '{"protagonist":null}' });
     const refused = await extractStoryContract({ body, callModel: async () => 'nope' });
     expect(describeStoredContract(read)).not.toBe(describeStoredContract(refused));
+  });
+});
+
+describe('the publish gate', () => {
+  const resolved = { protagonist: 'Mira', want: 'light', obstacle: 'oil', turn: 'door', resolution: RESOLVED, extractedBy: 'model', extractorVersion: 2 };
+
+  it('blocks a story whose last chapter has no resolution, with that reason first', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: resolved },
+      { chapterNumber: 2, storyContract: { ...resolved, resolution: null } },
+    ]);
+    const block = storyPublishBlock(evaluation);
+    expect(block).not.toBeNull();
+    expect(block!.message.indexOf('RESOLUTION_MISSING')).toBeGreaterThan(-1);
+    expect(block!.message.indexOf('RESOLUTION_MISSING')).toBeLessThan(block!.message.length);
+  });
+
+  it('allows a resolved story', () => {
+    const evaluation = evaluateStoryContract([{ chapterNumber: 1, storyContract: resolved }]);
+    expect(storyPublishBlock(evaluation)).toBeNull();
+  });
+
+  it('blocks an unread story - absent is not a pass', () => {
+    const block = storyPublishBlock(evaluateStoryContract([{ chapterNumber: 1, storyContract: null }]));
+    expect(block).not.toBeNull();
+    expect(block!.message).toContain('has not been read for completeness');
+  });
+
+  it('blocks a story whose last chapter is unparsed, as unscored rather than failed', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: resolved },
+      { chapterNumber: 2, storyContract: { extractedBy: 'unparsed' } },
+    ]);
+    // An extraction defect is not a story defect: unscored, not fail.
+    expect(evaluation.verdict).toBe('unscored');
+    expect(evaluation.reasons[0]).toContain('EXTRACTION_FAILED');
+    const block = storyPublishBlock(evaluation);
+    expect(block!.message).toContain('has not been read for completeness');
+  });
+
+  it('does not conflate a failed extractor with an unresolved story', () => {
+    const failed = storyPublishBlock(evaluateStoryContract([{ chapterNumber: 1, storyContract: { extractedBy: 'unparsed' } }]));
+    const unresolved = storyPublishBlock(evaluateStoryContract([{ chapterNumber: 1, storyContract: { ...resolved, resolution: null } }]));
+    expect(failed!.message).not.toBe(unresolved!.message);
   });
 });
