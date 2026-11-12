@@ -21,6 +21,13 @@
  * extracted twice; storage = a **new `StoryChapter.storyContract` column**, separate from storyDna.
  */
 
+/**
+ * Bumped whenever the extractor's rules tighten. Stored beside the contract so an older, looser
+ * reading is distinguishable from a newer one - the errorMessage staleness class, anticipated
+ * rather than discovered. The evidence-quoting change bumps this to 2.
+ */
+export const STORY_CONTRACT_EXTRACTOR_VERSION = 1;
+
 export const STORY_CONTRACT_FIELDS = ['protagonist', 'want', 'obstacle', 'turn', 'resolution'] as const;
 
 export type ResolutionOutcome = 'ANSWERED' | 'DENIED' | 'TRANSFORMED';
@@ -43,6 +50,8 @@ export interface StoryContract {
   sensoryAnchors: string[];
   /** Which engine produced this contract, or 'none' when the deterministic tier abstained. */
   extractedBy: string;
+  /** The extractor's rule version, so a tightened rule can find the rows it has not read. */
+  extractorVersion?: number;
 }
 
 export const EMPTY_STORY_CONTRACT: StoryContract = {
@@ -141,6 +150,20 @@ export async function extractStoryContract(input: ExtractStoryContractInput): Pr
     return { ...EMPTY_STORY_CONTRACT, extractedBy: 'error' };
   }
   return parseStoryContract(raw, 'model');
+}
+
+/**
+ * Distinguish the three states a stored contract can be in. The distinction is the difference
+ * between a gate and a blank wall: a story that failed and an extractor that failed must not read
+ * the same, and neither reads the same as a chapter that was never extracted.
+ */
+export type StoredContractState = 'absent' | 'failed' | 'extracted';
+
+export function describeStoredContract(stored: unknown): StoredContractState {
+  if (stored === null || stored === undefined) return 'absent';
+  const record = stored as { extractedBy?: unknown };
+  if (record.extractedBy === 'error') return 'failed';
+  return 'extracted';
 }
 
 export interface StoryContractScore {

@@ -201,6 +201,15 @@ export class ClaudeNarrativeEngineProvider implements StoryTextProvider {
   }
 
   /** Strip markdown fences then parse the story manifest. */
+  async completeText(input: { system: string; body: string }): Promise<string | null> {
+    if (!this.enabled) return this.fallback.completeText(input);
+    try {
+      return await this.complete(input.system, input.body, true);
+    } catch {
+      return this.fallback.completeText(input);
+    }
+  }
+
   private parseStory(content: string, sourceIdea: string): GeneratedStory {
     const fenced = content
       .replace(/^```[a-zA-Z]*\s*\n?/i, '')
