@@ -722,6 +722,15 @@ is not a component defect: it is that *"what calls this?"* gets asked later than
 *The flake:* dropped, not carried. One sighting last session (an educational test at 5.1s under parallel load); **three consecutive green suite
 runs this session**, so it did not recur and is recorded as a single, unreproduced timeout rather than a debt.
 
+**The live call ran — and it answered a different question than the one asked.** Cost: **one model call, one stored chapter** (2.3 s, chapter 1 of
+461 characters, deployed head `37ae437`). Result: **every field came back null, with no quotes at all** — the extractor abstained wholesale,
+`extractedBy: 'model'`, `UNVERIFIED=[]`, `outdated=false`. So the verbatim-versus-paraphrase question is **unanswered**: no quote was produced to
+test. What the call did establish is the abstain path working end to end through the real chain, and a second failure mode worth naming: **an
+extractor that abstains on everything is indistinguishable, from the scorer's side, from a story that contains nothing** — and it makes the
+contract fail-closed on every story, the same net result as the missing column, reached by a different route. Whether this chapter genuinely
+lacks the fields (it may be an opening chapter with no resolution), or the prompt's abstain instruction is now so strict that the model declines
+to extract, is not decidable from one call — that is the next session's first question, and it needs a chapter known to contain a resolution.
+
 **The select/consumer guard exists and has been proven to fail, and evidence quoting is built.** *The exposure, enumerated before any guard:*
 the evaluator reads `chapter.chapterNumber` and `chapter.storyContract`; `chapterSelect()` returns `id`, `chapterNumber`, `title`, `summary`,
 `body`, `createdAt`, `educationalContract`, `providerMetadata`, `storyContract` — the diff is empty **now**, which is exactly why a guard is
