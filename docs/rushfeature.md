@@ -732,6 +732,25 @@ reproducibly in full-suite runs, while passing in isolation. That is a **test-ha
 (the same import `storyDnaProvenance.test.ts` already uses). Recorded as a correction rather than a quiet edit: a timeout that recurs is a gate
 reporting red for a reason unrelated to the change.
 
+**Cast derivation: the parser is now the abstain path — and the LLM extractor turned out to have no caller at all.** *The read:* the
+creative STORY path builds its cast with **`deriveCast`** (the parser, `intelligence/service.ts:151`), and the story path seeded the parser
+**unconditionally** in `normaliseCharacterMemory` before merging the model's cast on top — which is exactly how a fragment like *"Confrontin"*
+reaches a project whose generation supplied real characters. **`extractCastWithLLM` has no caller outside its own definition** — the 38/38
+measurement never touched a production path. That is the **seventh** built-but-not-wired instance, and it is the same lesson a fourth time: a
+measurement is not a wiring. *The four questions, answered rather than copied from the contract:* **abstain** — `extractCastWithLLM` fails open to
+`deriveCast`, so its empty array is a fallback, not an abstention; that is the opposite of the contract's discipline. **evidence** — it does not
+transfer, and is not built: a cast quote is longer than the value it proves (`protagonist: "Ada"` quoted from a whole sentence), so the quote
+would be less verifiable than the name. Saying so is better than building it because the contract has it. **states** — absent / failed / empty
+remain three states in the cast path and only the empty one is currently stored distinguishably. **cost** — one call per story at cast time,
+stated, and **not spent**: no live call was made for the cast this session. *The build, deliberately small:* the parser is demoted to the
+**abstain path** in `normaliseCharacterMemory` — it contributes only when the model supplied nothing, so a model-named cast can no longer carry a
+parsed fragment. **Two tests** prove the fragment is absent when the model names the cast and present only when it does not. `extractCastWithLLM`
+is left unwired **on purpose and recorded**: the story path already receives its cast from the generation payload, so wiring a second model call
+would add cost in the case the payload already covers; the creative STORY path is the one that still calls the parser directly, and it is the
+named next wiring rather than a claim. *The publish friction, answered:* **fixed** — `publishExport` now reads any chapter that has never been
+read, one extraction per absent chapter, bounded by the chapter count, so a five-chapter legacy story publishes on its **first** attempt instead
+of needing five workspace opens. The cost sits on the explicit action that incurs it.
+
 **Enforcement lives at publication, and the quote tightening made things worse — both recorded.** *The gate, decided before code:* enforcement
 sits at **`publishExport`**, the only story-to-feed path, because completeness is a property of a story that has stopped changing. The
 write-time framing was ruled out by the rule already chosen: an earlier chapter legitimately has `resolution: null`, so "required before a

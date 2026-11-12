@@ -1550,11 +1550,17 @@ function inferCharacterFromIdea(idea: string): CharacterMemoryInput {
   };
 }
 
-function normaliseCharacterMemory(idea: string, generated: CharacterMemoryInput[]): CharacterMemoryInput[] {
-  const inferred = inferCharacterFromIdea(idea);
+export function normaliseCharacterMemory(idea: string, generated: CharacterMemoryInput[]): CharacterMemoryInput[] {
+  // The parser is the ABSTAIN path, not a seed (2026-11-12). It used to be seeded first and merged
+  // under the model's cast, which is how a fragment like "Confrontin" could appear in a project whose
+  // generation had supplied real characters. When the model names the cast, the parser contributes
+  // nothing; when it does not, the parser's inference is the only cast there is.
   const byName = new Map<string, CharacterMemoryInput>();
 
-  byName.set(inferred.name.toLowerCase(), inferred);
+  if (generated.length === 0) {
+    const inferred = inferCharacterFromIdea(idea);
+    byName.set(inferred.name.toLowerCase(), inferred);
+  }
   for (const character of generated) {
     const key = character.name.toLowerCase();
     const existing = byName.get(key);
@@ -9317,7 +9323,7 @@ export const storyRouter = router({
       const exported = await ctx.prisma.storyVideoExport.findUnique({
         where: { id: input.exportId },
         select: {
-          id: true, userId: true, status: true, assetUrl: true, durationSeconds: true,
+          id: true, projectId: true, userId: true, status: true, assetUrl: true, durationSeconds: true,
           project: {
             select: {
               title: true,
@@ -9341,7 +9347,31 @@ export const storyRouter = router({
 
       // The story contract gates publication: completeness is a property of a finished story, and this
       // is the only path where a story becomes public. A draft stays a draft (2026-11-12).
-      const publishBlock = storyPublishBlock(evaluateStoryContract(exported.project?.chapters ?? []));
+      //
+      // Publish READS what has never been read (2026-11-12). `ensureStoryContract` is bounded to one
+      // chapter per call, so a five-chapter legacy story would otherwise need five workspace opens
+      // before it could publish - friction a creator would meet at the worst moment. Publish is an
+      // explicit action, so the cost belongs here: one extraction per absent chapter, bounded by the
+      // chapter count itself.
+      const chapters: Array<{ id: string; chapterNumber: number; body: string; storyContract: unknown }> =
+        await (ctx.prisma as any).storyChapter.findMany({
+          where: { projectId: exported.projectId },
+          orderBy: { chapterNumber: 'asc' },
+          select: { id: true, chapterNumber: true, body: true, storyContract: true },
+        });
+      for (const chapter of chapters) {
+        if (chapter.storyContract !== null && chapter.storyContract !== undefined) continue;
+        const contract = await extractStoryContract({
+          body: chapter.body,
+          callModel: (input2) => storyTextService.completeText(input2, { userId: ctx.user.email ?? ctx.user.id }),
+        });
+        await (ctx.prisma as any).storyChapter.update({
+          where: { id: chapter.id },
+          data: { storyContract: { ...contract, extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION } as object },
+        });
+        chapter.storyContract = { ...contract, extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION };
+      }
+      const publishBlock = storyPublishBlock(evaluateStoryContract(chapters));
       if (publishBlock) {
         throw new TRPCError({ code: publishBlock.code, message: publishBlock.message });
       }

@@ -44,6 +44,28 @@ function makePrisma(audienceMode: string | null) {
         },
       })),
     },
+    // Publish reads the story's chapters and extracts any that were never read (2026-11-12). This
+    // fixture's chapters already carry a resolved contract, so no extraction runs and no model is
+    // called; the policy question is what these tests are about.
+    storyChapter: {
+      findMany: vi.fn(async () => [
+        {
+          id: 'chapter-1',
+          chapterNumber: 1,
+          body: 'Goalina wins the cup.',
+          storyContract: {
+            protagonist: 'Goalina',
+            want: 'to win the cup',
+            obstacle: 'the rival team',
+            turn: 'the storm stops the match',
+            resolution: { outcome: 'ANSWERED', text: 'She lifts the cup.' },
+            extractedBy: 'model',
+            extractorVersion: 2,
+          },
+        },
+      ]),
+      update: vi.fn(async () => ({})),
+    },
     video: {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
