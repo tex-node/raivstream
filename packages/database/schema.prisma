@@ -1268,6 +1268,10 @@ model StoryChapter {
   enhancedBody     String?
   generationPrompt String?
   providerMetadata Json?
+  /// What the chapter CONTAINS, extracted from its body (2026-11-12): protagonist, want, obstacle,
+  /// turn, resolution. Nullable and per-field-abstaining - null means the body does not contain it.
+  /// Separate from `StoryProject.storyDna`, which is the plan summary and can never be empty.
+  storyContract    Json?
   blueprint            Json?
   educationalContract  Json?
 

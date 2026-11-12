@@ -651,6 +651,24 @@ contract **plus a re-plumbing of where the fields come from** — a body-reading
 `resolution`, with the fail-closed check on resolution, and `storyDna` left as the plan summary it actually is. The earlier phrasing is kept
 above and corrected here rather than deleted.
 
+**The content contract is built as a module, with its three decisions recorded and one seam named.** *Mechanism:* a **model call with a
+required abstain** on the narrative chain — a regex over the body was rejected for the same reason a regex over scene titles was: it produces
+a resolution for a story that has none. The deterministic tier **returns null for every field** rather than fabricating a contract. *Timing:*
+**generation time**, one extraction per chapter, stored, so scoring is a read and the same story is never extracted twice. *Storage:* a new
+**`StoryChapter.storyContract Json?`** column (migration `20261112120000_story_contract`), separate from `storyDna`, which stays the plan
+summary it is. *The extractor* (`lib/story/storyContract.ts`) takes **the body and only the body** — no scenes, no idea, no interpretation —
+and its output has five independently nullable fields plus optional sensory anchors. The abstain is the foundation and it is **tested, not
+requested**: no model → all null; malformed response → all null; a resolution without a valid `outcome` → treated as absent. *The scorer*
+reads content presence and coverage only: it measures `protagonist`, `want`, `obstacle`, `turn`, `resolution`, and it **does not read the
+body, paragraphs, sections, beats or word counts** — the three shape precedents (six-card template, seven-slot progression,
+`scenes.length === 6`) are named in the test that forbids them. *Fail-closed:* a **null resolution fails**, and its reason is reported
+first, before the other four. **14 tests.** *Free proof, two stored bodies, no live model calls:* complete → all five fields, `pass=true`;
+truncated → `turn=null`, `resolution=null`, `pass=false` with `RESOLUTION_MISSING`; no model → all null, fail. **The honest limit:** our layer
+guarantees that absence of a model or an unparseable answer never yields a contract, but it **cannot verify that a live model abstained
+rather than fabricating valid JSON** — that needs a dual-extraction or human spot-check later, and it is named rather than assumed. **Seam
+named:** the extractor is not yet called at chapter creation, and the migration is written but applied nowhere, so generation-time storage is
+the next wiring step.
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 
