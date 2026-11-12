@@ -669,6 +669,25 @@ rather than fabricating valid JSON** — that needs a dual-extraction or human s
 named:** the extractor is not yet called at chapter creation, and the migration is written but applied nowhere, so generation-time storage is
 the next wiring step.
 
+**The contract is wired at generation, and the fabrication question is decided (evidence quoting).** *Wiring:* both chapter-creation
+paths — chapter one and continuations — call the extractor **before the write**, on the body that is about to be stored, so what is read is
+exactly what is stored. The extractor reuses **the same narrative chain** through a new `completeText` on `StoryTextProvider`: Claude first,
+OpenAI-compatible behind it, and the **deterministic tier returns null** — the abstain, not a fabrication. *Versioning:* the stored contract
+carries **`extractorVersion: 1`**, so the tightening below can find the rows written under the looser rule; this is the `errorMessage`
+staleness class anticipated rather than discovered. *Distinguishability:* `describeStoredContract` reads a stored value as **`absent`**
+(column null — never extracted), **`failed`** (`extractedBy: 'error'`, fields null), or **`extracted`**. A failed extraction is **stored**
+rather than dropped, so `null` in the column can only mean "never read" — the difference between a gate and a blank wall. **20 tests.**
+*Migration applied and verified:* `story_chapters.storyContract` exists as nullable `jsonb` per **`information_schema`** (not the tool's
+exit code); 203 existing chapters are therefore `absent`, which is the correct reading rather than a failure. **Fabrication decision, not
+built:** **evidence quoting** — the extractor must return the sentence it read each field from, and the scorer checks
+`body.includes(quote)`. Chosen over dual extraction (2× cost, and two models can both invent) and same-model-twice (~2× and consistent
+fabrics survive). Its failure mode is named honestly: a **real sentence that is not a resolution** passes the substring check — rarer and
+harder than inventing a field, but real. A field whose quote is missing from the body is treated as **absent**, and the scorer's reason must
+distinguish extraction failure from story failure, which is what `describeStoredContract` now makes possible. **The build is deferred** until a
+live chapter exists to test the tightening against. *Consolidation, not a new rule:* "built but not wired" has now appeared four times — the
+director, the educational derivation, the balance pill, and this contract — and it is one pattern: a component proven in isolation reads as
+finished until someone asks what calls it.
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 

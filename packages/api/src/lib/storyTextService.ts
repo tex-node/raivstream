@@ -58,6 +58,12 @@ export interface StoryTextProvider {
     directive: string;
     audienceMode: StoryAudienceMode;
   }, opts?: { userId?: string | null }): Promise<string>;
+  /**
+   * A single completion on the SAME chain, for callers that need to read something the story
+   * already says (the story contract, 2026-11-12). Returns null when the deterministic tier is
+   * reached, which is the abstain the contract depends on rather than a fabricated answer.
+   */
+  completeText(input: { system: string; body: string }, opts?: { userId?: string | null }): Promise<string | null>;
 }
 
 const guidedQuestionSchema = z.object({
@@ -414,6 +420,11 @@ export function parseJsonObject(raw: string): unknown {
 }
 
 class LocalStoryTextProvider implements StoryTextProvider {
+  /** The deterministic tier cannot read a story for evidence; it abstains. */
+  async completeText(_input: { system: string; body: string }): Promise<string | null> {
+    return null;
+  }
+
   async generateGuidedQuestions(input: string, audienceMode: StoryAudienceMode) {
     return fallbackQuestions(input, audienceMode);
   }
@@ -452,6 +463,15 @@ class OpenAICompatibleStoryTextProvider implements StoryTextProvider {
 
   private get enabled() {
     return !!this.apiKey;
+  }
+
+  async completeText(input: { system: string; body: string }): Promise<string | null> {
+    if (!this.enabled) return this.fallback.completeText(input);
+    try {
+      return await this.complete(input.system, input.body);
+    } catch {
+      return null;
+    }
   }
 
   private async complete(system: string, user: string) {

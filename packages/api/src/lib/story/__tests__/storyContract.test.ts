@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   EMPTY_STORY_CONTRACT,
+  STORY_CONTRACT_EXTRACTOR_VERSION,
+  describeStoredContract,
   extractStoryContract,
   parseStoryContract,
   scoreStoryContract,
@@ -169,5 +173,59 @@ describe('storyDna is untouched by this work', () => {
     const dna = buildStoryDna({ title: 'x', originalIdea: 'a keeper and a bird' }, [], []);
     expect(dna.resolution).toBe('a positive ending with learning');
     expect(dna.conflict).toBe('a gentle obstacle to overcome');
+  });
+});
+
+describe('a stored contract can be read as three distinct states', () => {
+  it('distinguishes never-extracted, failed, and extracted', () => {
+    expect(describeStoredContract(null)).toBe('absent');
+    expect(describeStoredContract(undefined)).toBe('absent');
+    expect(describeStoredContract({ extractedBy: 'error', protagonist: null, resolution: null })).toBe('failed');
+    expect(describeStoredContract({ extractedBy: 'model', protagonist: 'Mira' })).toBe('extracted');
+  });
+
+  it('an absent column and a failed extraction do not read the same', () => {
+    // The difference between a gate and a blank wall: one says the story was never read, the other
+    // says the reading failed, and neither may be reported as "the story has no resolution".
+    expect(describeStoredContract(null)).not.toBe(describeStoredContract({ extractedBy: 'error' }));
+  });
+});
+
+describe('extractorVersion is stored so a tightened rule can find older rows', () => {
+  it('is a positive integer, versioned from 1', () => {
+    expect(STORY_CONTRACT_EXTRACTOR_VERSION).toBe(1);
+  });
+
+  it('both chapter-creation paths call the extractor and store the version', () => {
+    const router = readFileSync(
+      join(__dirname, '..', '..', '..', 'routers', 'story.ts'),
+      'utf8',
+    );
+    const calls = router.match(/extractStoryContract\(\{/g) ?? [];
+    expect(calls.length).toBe(2);
+    const versionWrites = router.match(/extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION/g) ?? [];
+    expect(versionWrites.length).toBe(2);
+  });
+
+  it('extraction happens before the write, so the body it reads is the body stored', () => {
+    const router = readFileSync(
+      join(__dirname, '..', '..', '..', 'routers', 'story.ts'),
+      'utf8',
+    );
+    // Both call sites pass `story.body`, which is what the create() call writes as `body`.
+    const bodyArgs = router.match(/body: story\.body,/g) ?? [];
+    expect(bodyArgs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a failed extraction is stored rather than dropped - the object, with fields null', async () => {
+    const contract = await extractStoryContract({
+      body: 'A story that never gets read.',
+      callModel: async () => {
+        throw new Error('provider down');
+      },
+    });
+    expect(contract.extractedBy).toBe('error');
+    // The object is stored; its fields are null. So the column is not null when the extractor ran.
+    expect(describeStoredContract({ ...contract, extractorVersion: 1 })).toBe('failed');
   });
 });

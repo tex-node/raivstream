@@ -88,6 +88,7 @@ import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntellige
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
 import { deriveScenesFromStory } from '../lib/story/sceneDerivation';
+import { extractStoryContract, STORY_CONTRACT_EXTRACTOR_VERSION } from '../lib/story/storyContract';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -4296,6 +4297,13 @@ export const storyRouter = router({
         ? buildEducationalLessonBody(idea, educationalContract)
         : await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id, storyLength });
       const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
+      // Read the story we just wrote (2026-11-12). Extraction happens BEFORE the write because the
+      // body exists in memory; the stored value carries a failed extraction too (`extractedBy:
+      // 'error'`), so `null` in the column can only mean "never extracted".
+      const chapterOneContract = await extractStoryContract({
+        body: story.body,
+        callModel: (input) => storyTextService.completeText(input, { userId: ctx.user.email ?? ctx.user.id }),
+      });
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         await tx.storyChapter.deleteMany({ where: { projectId: project.id } });
         await tx.storySceneSeed.deleteMany({ where: { projectId: project.id } });
@@ -4310,6 +4318,7 @@ export const storyRouter = router({
             body: story.body,
             generationPrompt: idea,
             providerMetadata: story.providerMetadata ?? {},
+            storyContract: { ...chapterOneContract, extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION } as object,
             ...(blueprint ? { blueprint: blueprint as object } : {}),
             ...(educationalContract ? { educationalContract: educationalContract as object } : {}),
           },
@@ -4726,6 +4735,10 @@ export const storyRouter = router({
         audienceMode,
       }, { userId: ctx.user.email ?? ctx.user.id });
       const nextNumber = project.chapters.length + 1;
+      const continuationContract = await extractStoryContract({
+        body: story.body,
+        callModel: (input) => storyTextService.completeText(input, { userId: ctx.user.email ?? ctx.user.id }),
+      });
 
       const chapter = await ctx.prisma.$transaction(async (tx: any) => {
         const chapter = await tx.storyChapter.create({
@@ -4737,6 +4750,7 @@ export const storyRouter = router({
             body: story.body,
             generationPrompt: `Continue ${project.title}`,
             providerMetadata: story.providerMetadata ?? {},
+            storyContract: { ...continuationContract, extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION } as object,
           },
         });
 
