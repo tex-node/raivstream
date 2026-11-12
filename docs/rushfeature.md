@@ -722,6 +722,24 @@ is not a component defect: it is that *"what calls this?"* gets asked later than
 *The flake:* dropped, not carried. One sighting last session (an educational test at 5.1s under parallel load); **three consecutive green suite
 runs this session**, so it did not recur and is recorded as a single, unreproduced timeout rather than a debt.
 
+**The select/consumer guard exists and has been proven to fail, and evidence quoting is built.** *The exposure, enumerated before any guard:*
+the evaluator reads `chapter.chapterNumber` and `chapter.storyContract`; `chapterSelect()` returns `id`, `chapterNumber`, `title`, `summary`,
+`body`, `createdAt`, `educationalContract`, `providerMetadata`, `storyContract` — the diff is empty **now**, which is exactly why a guard is
+needed rather than another review. *The second pair checked:* `providerMetadata` (missed once, #394) and `storyContract` (missed again, #399) are
+both selected; the only other chapter-level consumer is the story screen, which reads `title`, `body`, `chapterNumber`, `providerMetadata`,
+`storyContract` — all selected. No third pair exists today. *The guard, and its honesty:* the **narrow form** — a test that greps the
+evaluator's `chapter.<field>` reads against the select's returned keys. **Proven to fail**: injecting a read of `chapter.blueprint`, which the
+select does not return, turns it red with `['blueprint']`, and restoring turns it green. It is a **stopgap, not the fix** — it will not survive a
+rename and knows nothing about consumers it was not taught — and the general form (one shared field list read by both the select and its
+consumers) is the deferred refactor. *The test-fidelity lesson:* #398's tests passed because they constructed chapters directly, **bypassing
+`chapterSelect` entirely** — a test that proves the logic, not the wiring. *Evidence quoting, built (extractor v2):* each field carries the
+sentence it was read from in `quotes`; `verifyStoryContract` requires `body.includes(quote)`; a field whose quote is missing is treated as
+**absent** and reported as **`EXTRACTION_UNVERIFIED`**, which is **reported first and separately** from `RESOLUTION_MISSING` — the two never
+collapse, which is the three-state lesson applied to the scorer's own output. **`extractorVersion: 2`**, and a v1 contract is recognized as
+**outdated** rather than silently accepted. **34 tests.** *The live call — cost, stated first:* **one model call, on one stored chapter**, asking
+only whether the model returns verbatim quotes. It has not run yet: the code must be deployed to the environment that holds the provider keys, so
+it is the first action after this lands, and its result decides whether the design stands or needs a different evidence shape.
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 

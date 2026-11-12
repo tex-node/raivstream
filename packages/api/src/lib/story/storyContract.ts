@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The story contract: extracted from the chapter body, scored on content (2026-11-12).
  *
  * WHY THIS IS NOT `storyDna`. The provenance probe settled it: `buildStoryDna` has no chapter-body
@@ -11,7 +11,7 @@
  * asked to find a turn will usually find one. So:
  *   - the prompt requires **null** when the body does not contain the thing,
  *   - a parse failure yields **all null** rather than a partial guess,
- *   - the deterministic tier (local-fallback) yields **all null** — it never fabricates a contract,
+ *   - the deterministic tier (local-fallback) yields **all null** â€” it never fabricates a contract,
  *   - a regex over the body is rejected for the same reason a regex over scene titles was rejected:
  *     it produces a resolution for a story that has none.
  *
@@ -26,7 +26,7 @@
  * reading is distinguishable from a newer one - the errorMessage staleness class, anticipated
  * rather than discovered. The evidence-quoting change bumps this to 2.
  */
-export const STORY_CONTRACT_EXTRACTOR_VERSION = 1;
+export const STORY_CONTRACT_EXTRACTOR_VERSION = 2;
 
 export const STORY_CONTRACT_FIELDS = ['protagonist', 'want', 'obstacle', 'turn', 'resolution'] as const;
 
@@ -52,6 +52,12 @@ export interface StoryContract {
   extractedBy: string;
   /** The extractor's rule version, so a tightened rule can find the rows it has not read. */
   extractorVersion?: number;
+  /**
+   * The sentence each field was read from, verbatim (2026-11-12, extractor v2). The scorer checks
+   * `body.includes(quote)`; a field whose quote is not in the body is treated as absent and reported
+   * as EXTRACTION_UNVERIFIED - an extraction failure, not a story failure.
+   */
+  quotes?: Record<string, string | null>;
 }
 
 export const EMPTY_STORY_CONTRACT: StoryContract = {
@@ -82,6 +88,9 @@ export function storyContractPrompt(): string {
     '  "resolution": {"outcome": "ANSWERED"|"DENIED"|"TRANSFORMED", "text": string}|null,',
     '  "sensoryAnchors": string[]    // short sensory details actually present, may be empty',
     '}',
+    'For EVERY non-null field, also return the sentence you read it from, verbatim, under a "quotes" object:',
+    '  "quotes": { "protagonist": string|null, "want": string|null, "obstacle": string|null, "turn": string|null, "resolution": string|null }',
+    'The quote must appear character-for-character in the story text. Do not paraphrase or summarise it.',
     'CRITICAL: if the story does not contain a field, return null for it. Do not infer a want, a turn,',
     'or a resolution that is not written down. A story that stops mid-sentence has resolution null.',
     'Return the JSON object only, with no commentary.',
@@ -122,6 +131,11 @@ export function parseStoryContract(raw: string | null | undefined, extractedBy: 
     obstacle: asText(record.obstacle),
     turn: asText(record.turn),
     resolution: asResolution(record.resolution),
+    quotes: record.quotes && typeof record.quotes === 'object'
+      ? Object.fromEntries(
+          Object.entries(record.quotes as Record<string, unknown>).map(([key, value]) => [key, asText(value)]),
+        )
+      : undefined,
     sensoryAnchors: Array.isArray(record.sensoryAnchors)
       ? record.sensoryAnchors.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 8)
       : [],
@@ -179,19 +193,26 @@ export interface StoryContractScore {
  * count, beat count, word count. Those are the shape signals that produced the six-card template,
  * the seven-slot progression, and `scenes.length === 6`; none of them is read here.
  */
-export function scoreStoryContract(contract: StoryContract): StoryContractScore {
+export function scoreStoryContract(contract: StoryContract, options: { body?: string } = {}): StoryContractScore {
+  const verification = options.body !== undefined ? verifyStoryContract(contract, options.body) : null;
+  const judged = verification ? verification.contract : contract;
   const present = {
-    protagonist: Boolean(contract.protagonist),
-    want: Boolean(contract.want),
-    obstacle: Boolean(contract.obstacle),
-    turn: Boolean(contract.turn),
-    resolution: Boolean(contract.resolution),
+    protagonist: Boolean(judged.protagonist),
+    want: Boolean(judged.want),
+    obstacle: Boolean(judged.obstacle),
+    turn: Boolean(judged.turn),
+    resolution: Boolean(judged.resolution),
   };
 
   const reasons: string[] = [];
+  // An extraction that could not be verified is reported FIRST and separately from a story that
+  // lacks the thing: collapsing them would report 203 extraction failures as story failures.
+  if (verification?.unverified.length) {
+    reasons.push(`EXTRACTION_UNVERIFIED: the quote for ${verification.unverified.join(', ')} does not appear in the story, so those fields were treated as absent.`);
+  }
 
   // Fail closed, first and separately: no resolution is a failure, not a warning and not partial.
-  if (!contract.resolution) {
+  if (!judged.resolution) {
     reasons.push('RESOLUTION_MISSING: the story does not deliver a resolution, so its want is never answered, denied, or transformed.');
   }
   if (!present.protagonist) reasons.push('PROTAGONIST_MISSING: no named character to follow.');
@@ -283,3 +304,51 @@ export function evaluateStoryContract(chapters: ChapterLike[]): StoryContractEva
   const score = scoreStoryContract(merged);
   return { verdict: score.pass ? 'pass' : 'fail', reasons: score.reasons, chapters: states, needsExtraction: false };
 }
+
+/**
+ * Verify that each field's quote actually appears in the body (2026-11-12, extractor v2).
+ *
+ * A model that invents a well-formed resolution is indistinguishable from one that read it â€” unless
+ * it must also produce the sentence it read. `body.includes(quote)` is a substring test, not a
+ * judgement: it cannot tell whether the sentence is *a* resolution, only that it exists. That is the
+ * named failure mode, and it is much harder than inventing a field.
+ *
+ * A field whose quote is missing from the body is treated as **absent**, and the reason it is absent
+ * is recorded as `unverified` â€” distinct from a story that never contained the thing.
+ */
+export interface StoryContractVerification {
+  contract: StoryContract;
+  /** Fields whose quote was missing, empty, or not found verbatim in the body. */
+  unverified: string[];
+  /** True when the contract predates extractor v2, so it carries no quotes at all. */
+  outdated: boolean;
+}
+
+export function verifyStoryContract(contract: StoryContract, body: string): StoryContractVerification {
+  if ((contract.extractorVersion ?? 1) < 2) {
+    // v1 contracts are not silently accepted: they are flagged, and the caller decides.
+    return { contract, unverified: [], outdated: true };
+  }
+  const quotes = contract.quotes ?? {};
+  const unverified: string[] = [];
+  const verified: StoryContract = { ...contract, sensoryAnchors: contract.sensoryAnchors };
+
+  const check = <T>(field: string, value: T | null, clear: () => void): void => {
+    if (value === null || value === undefined) return;
+    const quote = quotes[field];
+    if (!quote || !body.includes(quote)) {
+      unverified.push(field);
+      clear();
+    }
+  };
+
+  check('protagonist', verified.protagonist, () => { verified.protagonist = null; });
+  check('want', verified.want, () => { verified.want = null; });
+  check('obstacle', verified.obstacle, () => { verified.obstacle = null; });
+  check('turn', verified.turn, () => { verified.turn = null; });
+  check('resolution', verified.resolution, () => { verified.resolution = null; });
+
+  return { contract: verified, unverified, outdated: false };
+}
+
+
