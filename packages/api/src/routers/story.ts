@@ -88,7 +88,7 @@ import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntellige
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
 import { deriveScenesFromStory } from '../lib/story/sceneDerivation';
-import { evaluateStoryContract, extractStoryContract, STORY_CONTRACT_EXTRACTOR_VERSION } from '../lib/story/storyContract';
+import { evaluateStoryContract, extractStoryContract, storyPublishBlock, STORY_CONTRACT_EXTRACTOR_VERSION } from '../lib/story/storyContract';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -9323,6 +9323,8 @@ export const storyRouter = router({
               title: true,
               audienceMode: true,
               coverAsset: { select: { assetUrl: true, thumbnailUrl: true } },
+              // The publish gate reads the story's contracts (2026-11-12).
+              chapters: { select: { chapterNumber: true, storyContract: true } },
             },
           },
         },
@@ -9335,6 +9337,13 @@ export const storyRouter = router({
       }
       if (exported.status !== 'READY' || !exported.assetUrl) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'This export is still being assembled.' });
+      }
+
+      // The story contract gates publication: completeness is a property of a finished story, and this
+      // is the only path where a story becomes public. A draft stays a draft (2026-11-12).
+      const publishBlock = storyPublishBlock(evaluateStoryContract(exported.project?.chapters ?? []));
+      if (publishBlock) {
+        throw new TRPCError({ code: publishBlock.code, message: publishBlock.message });
       }
 
       // Same-surface only: a general story must not land in the kids feed, and a

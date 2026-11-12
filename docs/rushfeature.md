@@ -722,6 +722,31 @@ is not a component defect: it is that *"what calls this?"* gets asked later than
 *The flake:* dropped, not carried. One sighting last session (an educational test at 5.1s under parallel load); **three consecutive green suite
 runs this session**, so it did not recur and is recorded as a single, unreproduced timeout rather than a debt.
 
+**Two consequences of the gate, recorded rather than absorbed.** *The publish-policy tests:* two tests that exercise **feed policy** (general
+vs kids-safe) began failing because their fixture had no chapters, so the new gate blocked publication before policy was reached. They are not
+about completeness — the fix is a fixture carrying a **resolved contract**, with a comment saying so, and the gate keeps its own tests. Moving a
+test because a new precondition is real is different from moving it because it is inconvenient. *The timeout, corrected:* the earlier note
+"dropped after three green runs" was **wrong**, and this session reproduced it. The `storyDna is untouched` regression test does
+`await import('../../../routers/story')` **inside the test**, which re-loads the whole router under parallel load and hits vitest's 5 s default —
+reproducibly in full-suite runs, while passing in isolation. That is a **test-harness defect, not a flake**, and the fix is a static import
+(the same import `storyDnaProvenance.test.ts` already uses). Recorded as a correction rather than a quiet edit: a timeout that recurs is a gate
+reporting red for a reason unrelated to the change.
+
+**Enforcement lives at publication, and the quote tightening made things worse — both recorded.** *The gate, decided before code:* enforcement
+sits at **`publishExport`**, the only story-to-feed path, because completeness is a property of a story that has stopped changing. The
+write-time framing was ruled out by the rule already chosen: an earlier chapter legitimately has `resolution: null`, so "required before a
+chapter is stored" is *any null fails* — the option the last-chapter rule replaced — and a chapter written now may not be last tomorrow. *What
+the gate does:* a non-passing story is blocked with a `BAD_REQUEST` whose **first clause is the scorer's first reason**, so `RESOLUTION_MISSING`
+leads when that is the defect; an **unscored** story is blocked too, with its own message — *"this story has not been read for completeness"* —
+because an unread story is not a passing story and publication is the last place that distinction can be lost. A story whose **last chapter is
+`unparsed`** is **unscored**, not failed: an extraction defect is not a story defect, and a test pins that the two block messages differ.
+**42 tests.** *The `want` paraphrase:* the quote instruction was tightened by one clause ("copy EXACTLY … a quote that is not identical will be
+rejected") and one call was spent re-running the same chapter. **It made the extractor more conservative, not more exact:** the reply shrank from
+1,316 to 402 characters and returned **one** field (`protagonist`, verbatim) with the other four null — `UNVERIFIED=[]` only because almost
+nothing was extracted. The tightening was therefore **reverted**, and the earlier finding stands: four of five quotes verbatim, `want` honestly
+unverified, and **the checker is not loosened** — weakening `body.includes` to accept a paraphrase would trade fabrication protection for
+coverage. *Cost:* one extraction call.
+
 **The call on a known-good chapter: the prompt does not over-abstain, and quotes come back verbatim four times in five.** *Selection, by the
 criterion fixed beforehand:* a marker match — chapter **10**, 2,257 characters, written by `openai-compatible` / `gpt-4o-mini`. *One model call,
 4.8 s, 1,316-character reply, valid JSON.* *Against the three hypotheses:* **H2 is refuted** — a chapter with an explicit ending returns
