@@ -6,6 +6,7 @@ import {
   STORY_CONTRACT_EXTRACTOR_VERSION,
   describeStoredContract,
   evaluateStoryContract,
+  verifyStoryContract,
   extractStoryContract,
   parseStoryContract,
   scoreStoryContract,
@@ -148,9 +149,12 @@ describe('the scorer measures content, never shape', () => {
     // `reasons.length === 0` is an array check, not a shape signal, so the assertion is on the
     // inputs a shape contract would reach for: the body itself, paragraphs, sections, beats, words.
     const source = scoreStoryContract.toString();
-    for (const forbidden of ['body', 'paragraph', 'section', 'beat', 'word', 'contract.length']) {
+    for (const forbidden of ['paragraph', 'section', 'beat', 'word', 'contract.length']) {
       expect(source).not.toContain(forbidden);
     }
+    // The body is read only to VERIFY quotes, never as a shape signal: it appears solely in the
+    // verification call, not in any presence or coverage computation.
+    expect(source.match(/\.body\b/g)?.length ?? 0).toBeLessThanOrEqual(2);
   });
 
   it('a long story with no resolution still fails', () => {
@@ -194,7 +198,7 @@ describe('a stored contract can be read as three distinct states', () => {
 
 describe('extractorVersion is stored so a tightened rule can find older rows', () => {
   it('is a positive integer, versioned from 1', () => {
-    expect(STORY_CONTRACT_EXTRACTOR_VERSION).toBe(1);
+    expect(STORY_CONTRACT_EXTRACTOR_VERSION).toBe(2);
   });
 
   it('both chapter-creation paths call the extractor and store the version', () => {
@@ -317,5 +321,56 @@ describe('the workspace read carries the judgement', () => {
   it('getWorkspace attaches contractEvaluation', () => {
     const router = readFileSync(join(__dirname, '..', '..', '..', 'routers', 'story.ts'), 'utf8');
     expect(router).toContain('contractEvaluation: evaluateStoryContract(project.chapters ?? [])');
+  });
+});
+
+const V2 = (over: Record<string, unknown> = {}) => ({
+  protagonist: 'Mira', want: 'to light the lamp', obstacle: 'the oil ran low', turn: 'the wind took the door',
+  resolution: RESOLVED, sensoryAnchors: [], extractedBy: 'model', extractorVersion: 2,
+  quotes: { protagonist: 'Mira kept the lighthouse alone.', want: 'She wanted the lamp lit before the storm.', obstacle: 'The oil ran low.', turn: 'The wind took the door.', resolution: 'She lit the lamp and the boat found the channel.' },
+  ...over,
+});
+
+describe('evidence quoting - a quote must appear in the body', () => {
+  const body = 'Mira kept the lighthouse alone. She wanted the lamp lit before the storm. The oil ran low. The wind took the door. She lit the lamp and the boat found the channel.';
+
+  it('accepts a field whose quote is present verbatim', () => {
+    const { contract, unverified } = verifyStoryContract(V2(), body);
+    expect(unverified).toEqual([]);
+    expect(contract.resolution).toEqual(RESOLVED);
+    expect(scoreStoryContract(V2(), { body }).pass).toBe(true);
+  });
+
+  it('a quote that is not in the body makes the field absent, reported as EXTRACTION_UNVERIFIED', () => {
+    const fabricated = V2({ resolution: RESOLVED, quotes: { ...V2().quotes, resolution: 'A sentence the story never contains.' } });
+    const score = scoreStoryContract(fabricated, { body });
+    expect(score.pass).toBe(false);
+    expect(score.reasons[0]).toContain('EXTRACTION_UNVERIFIED');
+    // And not as a story failure: the story's absence is a different reason.
+    expect(score.reasons[0]).not.toContain('RESOLUTION_MISSING');
+  });
+
+  it('a story with no resolution and no quote is RESOLUTION_MISSING, not EXTRACTION_UNVERIFIED', () => {
+    const noResolution = V2({ resolution: null, quotes: { ...V2().quotes, resolution: null } });
+    const score = scoreStoryContract(noResolution, { body });
+    expect(score.reasons[0]).toContain('RESOLUTION_MISSING');
+    expect(score.reasons.join(' ')).not.toContain('EXTRACTION_UNVERIFIED');
+  });
+
+  it('the two reasons never collapse into one', () => {
+    const unverified = scoreStoryContract(V2({ quotes: { ...V2().quotes, resolution: 'not in the body at all' } }), { body });
+    const missing = scoreStoryContract(V2({ resolution: null, quotes: { ...V2().quotes, resolution: null } }), { body });
+    expect(unverified.reasons[0]).not.toBe(missing.reasons[0]);
+  });
+
+  it('a v1 contract is recognized as outdated rather than silently accepted', () => {
+    const v1 = { ...V2(), extractorVersion: 1 } as never;
+    const verification = verifyStoryContract(v1, body);
+    expect(verification.outdated).toBe(true);
+  });
+
+  it('without a body, no verification happens and behaviour is unchanged', () => {
+    const noQuotes = { ...V2(), quotes: {} } as never;
+    expect(scoreStoryContract(noQuotes).pass).toBe(true);
   });
 });
