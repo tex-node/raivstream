@@ -202,10 +202,11 @@ describe('extractorVersion is stored so a tightened rule can find older rows', (
       join(__dirname, '..', '..', '..', 'routers', 'story.ts'),
       'utf8',
     );
+    // Two creation paths plus the client-triggered ensureStoryContract mutation (2026-11-12).
     const calls = router.match(/extractStoryContract\(\{/g) ?? [];
-    expect(calls.length).toBe(2);
+    expect(calls.length).toBe(3);
     const versionWrites = router.match(/extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION/g) ?? [];
-    expect(versionWrites.length).toBe(2);
+    expect(versionWrites.length).toBe(3);
   });
 
   it('extraction happens before the write, so the body it reads is the body stored', () => {
