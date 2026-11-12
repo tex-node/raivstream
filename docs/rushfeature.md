@@ -722,6 +722,33 @@ is not a component defect: it is that *"what calls this?"* gets asked later than
 *The flake:* dropped, not carried. One sighting last session (an educational test at 5.1s under parallel load); **three consecutive green suite
 runs this session**, so it did not recur and is recorded as a single, unreproduced timeout rather than a debt.
 
+**The call on a known-good chapter: the prompt does not over-abstain, and quotes come back verbatim four times in five.** *Selection, by the
+criterion fixed beforehand:* a marker match — chapter **10**, 2,257 characters, written by `openai-compatible` / `gpt-4o-mini`. *One model call,
+4.8 s, 1,316-character reply, valid JSON.* *Against the three hypotheses:* **H2 is refuted** — a chapter with an explicit ending returns
+`resolution: ANSWERED, "At the end of the day, the ocean sparkled brighter…"`, so the prompt is not abstaining wholesale and the earlier all-null
+was **H1**: that short opening chapter genuinely did not contain the fields. **H3 is answered** — the model **did** return quotes, and **four of
+five were verbatim** (`protagonist`, `obstacle`, `turn`, `resolution` all `verbatim=true`); **`want` was paraphrased**, and the substring check
+caught **exactly that field** and nothing else: `UNVERIFIED=["want"]`, the other four surviving. So the verbatim-versus-paraphrase answer is
+**mostly verbatim, occasionally paraphrased**, and the strict check is **field-local and correct** — no fuzzy matcher is warranted, and loosening
+the check to accommodate one paraphrase would have weakened it against fabrication for no gain. *The fourth state, implemented:* a reply that is
+**not JSON** is a **refusal**, recorded as `extractedBy: 'unparsed'`, and it is now distinguishable from valid JSON with every field null
+(`'model'`), which is "read it, found nothing". `describeStoredContract` maps both failure kinds to `failed` and the all-null reading to
+`extracted`, and a test proves the two all-null contracts no longer collapse. **37 tests.**
+
+**Pre-registered before the call (so the chapter is not chosen after seeing the answer).** *Selection criterion, fixed in advance:* a stored
+`storyContract` whose `resolution` is non-null wins; failing that, the **highest-numbered chapter whose body contains one of a fixed list of
+resolution markers** — `teaches it to fly again`, `in the end`, `finally`, `at last`, `happily`, `smiled`, `safe` (case-insensitive). If no
+chapter matches any marker, the criterion fails and the call is not made: extracting an ambiguous ending proves nothing about the prompt.
+*Three hypotheses, named before the result:* **(H1) the chapter genuinely lacks the fields** — all null here and on the opening chapter, which
+means the extractor works and a first chapter will always be unscored until a later one is read; **(H2) the prompt over-abstains** — a chapter
+with an explicit resolution returns `resolution: null`, which makes the contract meaningless and is the hypothesis to test first; **(H3) the
+model is not returning quotes** — fields populated but `UNVERIFIED` non-empty, which is the verbatim-versus-paraphrase answer that the earlier
+call could not reach. *Cost, stated before running:* **one model call, one chapter.** *The fourth state, decided before the call:* a stored
+contract of `extractedBy: 'model'` with every field null is **not** the same object as one whose response could not be parsed, and today they
+collapse — a JSON refusal or a malformed reply is recorded as `'model'`, indistinguishable from a genuine "read it, found nothing". That
+collapse is a defect regardless of what the call returns, and it is the `isLast` / `chapterSelect` class again: two states that the record must
+separate.
+
 **The live call ran — and it answered a different question than the one asked.** Cost: **one model call, one stored chapter** (2.3 s, chapter 1 of
 461 characters, deployed head `37ae437`). Result: **every field came back null, with no quotes at all** — the extractor abstained wholesale,
 `extractedBy: 'model'`, `UNVERIFIED=[]`, `outdated=false`. So the verbatim-versus-paraphrase question is **unanswered**: no quote was produced to
