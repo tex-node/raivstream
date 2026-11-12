@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import {useState, useEffect, useRef} from 'react';
 import { engineLabel } from '@/lib/storyEngine';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
@@ -41,6 +41,26 @@ export function StoryScreen({ projectId }: { projectId: string }) {
     { enabled: Boolean(isLoaded && isSignedIn && projectId), staleTime: 0, refetchOnWindowFocus: true },
   );
   const utils = trpc.useUtils();
+  // The read stays pure and says whether anything is missing; the client asks for the write. Bounded
+  // to one chapter per open by the mutation itself, so a five-chapter legacy story costs one
+  // extraction, not five, and the rest arrive as the creator navigates.
+  const ensureContract = trpc.story.ensureStoryContract.useMutation({
+    onSuccess: (result) => {
+      if (result.extracted > 0) void utils.story.getWorkspace.invalidate({ projectId });
+    },
+  });
+  const contractTriggered = useRef(false);
+  const contractEvaluation = (workspaceQuery.data as {
+    contractEvaluation?: { needsExtraction?: boolean; verdict?: string; reasons?: string[] };
+  } | undefined)?.contractEvaluation;
+  useEffect(() => {
+    if (contractTriggered.current) return;
+    if (!isLoaded || !isSignedIn || !projectId) return;
+    if (!contractEvaluation?.needsExtraction) return;
+    contractTriggered.current = true;
+    ensureContract.mutate({ projectId });
+  }, [contractEvaluation?.needsExtraction, isLoaded, isSignedIn, projectId, ensureContract]);
+
   const updateChapter = trpc.story.updateChapter.useMutation({
     onSuccess: () => {
       utils.story.getWorkspace.invalidate({ projectId });
@@ -118,6 +138,15 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                 <span className="noc-label">
                   Chapter {latestChapter.chapterNumber} · {latestChapter.title}
                 </span>
+                {!isR16 && contractEvaluation && (
+                  <span style={{ display: 'block', fontSize: 11.5, marginTop: 6, color: 'var(--noc-t6)' }}>
+                    {contractEvaluation.verdict === 'unscored'
+                      ? 'Completeness not checked yet — the story has not been read.'
+                      : contractEvaluation.verdict === 'fail'
+                        ? `Completeness: ${contractEvaluation.reasons?.[0] ?? 'failed'}`
+                        : null}
+                  </span>
+                )}
                 {!isR16 && engineLabel(latestChapter.providerMetadata) && (
                   <span
                     style={{ display: 'block', fontSize: 11.5, color: 'var(--noc-t6)', marginTop: 6 }}

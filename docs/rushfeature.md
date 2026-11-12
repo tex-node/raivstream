@@ -703,6 +703,25 @@ implied. *Wiring:* `story.getWorkspace` now returns `contractEvaluation`, the pl
 order is unchanged — `RESOLUTION_MISSING` first. *Free proof, three stories, no live calls:* complete 3-chapter → `pass`; truncated final
 chapter → `fail` with `RESOLUTION_MISSING`; absent → **`unscored`, not a pass**, with `CONTRACT_ABSENT`. **28 tests.**
 
+**`needsExtraction` has a consumer, and the write is a mutation the client asks for.** *The decision:* the read stays **side-effect
+free** and returns the flag; the write is **`story.ensureStoryContract({ projectId })`**, called by the client when it sees the flag. Rejected:
+extraction inside the read (a GET that writes is a cache-poisoning hazard, a surprise under concurrent reads, and work the caller did not ask
+for) and a background job enqueued by the read (a write triggered by a read, one step removed, with no queue in the product today). *The
+mutation's three guards:* **ownership** (`where: { id, userId: ctx.user.id }`), **idempotency** (only chapters whose contract is `null` are
+considered, so a model call never runs twice for the same body), and **bound** (`missing[0]` — exactly one chapter per call, so a five-chapter
+legacy story costs one extraction per open and a 203-chapter backfill cannot be triggered by accident). *The read's purity is asserted at source
+level*: no `.update(`, no `.create(`, no `extractStoryContract(` inside `getWorkspace`. *Client:* automatic **but bounded** — the screen fires
+the mutation once per open (mutation-bounded to one chapter), and the rest arrive as the creator navigates. **`unscored` is visible**: an
+unread story says *"Completeness not checked yet — the story has not been read"* rather than rendering as an absence, and a failing story shows
+its first reason. *A defect found while wiring:* `chapterSelect()` did not select `storyContract`, so the evaluator added in the previous
+session saw `undefined` for every chapter and would have called **every** story unscored — the wiring was right and the data path was not. Fixed
+in the same pass, which is the lesson: a field added to a schema is not a field added to a query. *The sixth instance, and its provenance:*
+`needsExtraction` was returned by a read and consumed by nothing — created by the session that consolidated five. It is now consumed, and the
+consolidation reads **six**: director, educational derivation, balance pill, contract extractor, contract scorer, extraction signal. The pattern
+is not a component defect: it is that *"what calls this?"* gets asked later than *"does it work?"*, including for the consumer of a signal.
+*The flake:* dropped, not carried. One sighting last session (an educational test at 5.1s under parallel load); **three consecutive green suite
+runs this session**, so it did not recur and is recorded as a single, unreproduced timeout rather than a debt.
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 

@@ -1273,6 +1273,9 @@ function chapterSelect() {
     // The engine record existed but the creator-facing query never fetched it (2026-11-11):
     // /admin/prompt-quality could see which engine wrote a story, its creator could not.
     providerMetadata: true,
+    // The contract the evaluator judges. Without this the workspace read saw `undefined` for every
+    // chapter and called every story unscored - the wiring was right, the data path was not.
+    storyContract: true,
   } as const;
 }
 
@@ -5080,6 +5083,49 @@ export const storyRouter = router({
 
   /** Edit a story chapter's title/summary/body (Edit Story). Body edits clear
    * the AI-enhanced narrative so stale enhanced text is never shown. */
+  /**
+   * Extract ONE missing chapter contract (2026-11-12).
+   *
+   * The read (getWorkspace) stays side-effect free and returns `needsExtraction`; the client calls
+   * this mutation when it sees that flag. Three guards, each a decision:
+   *   - **ownership**: the project is fetched with `userId: ctx.user.id`, like every other procedure;
+   *   - **idempotent**: a chapter that already has a contract is skipped, so a model call never runs
+   *     twice for the same body;
+   *   - **bounded**: one chapter per call. A legacy five-chapter story costs one extraction per open,
+   *     never five, and a 203-chapter backfill cannot be triggered by accident.
+   */
+  ensureStoryContract: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await (ctx.prisma as any).storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        select: {
+          id: true,
+          chapters: {
+            orderBy: { chapterNumber: 'asc' },
+            select: { id: true, chapterNumber: true, body: true, storyContract: true },
+          },
+        },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story project not found' });
+
+      const missing = (project.chapters as Array<{ id: string; chapterNumber: number; body: string; storyContract: unknown }>)
+        .filter((chapter) => chapter.storyContract === null || chapter.storyContract === undefined);
+      const target = missing[0];
+      if (!target) return { extracted: 0, remaining: 0, chapterNumber: null as number | null };
+
+      const contract = await extractStoryContract({
+        body: target.body,
+        callModel: (input2) => storyTextService.completeText(input2, { userId: ctx.user.email ?? ctx.user.id }),
+      });
+      await (ctx.prisma as any).storyChapter.update({
+        where: { id: target.id },
+        data: { storyContract: { ...contract, extractorVersion: STORY_CONTRACT_EXTRACTOR_VERSION } as object },
+      });
+
+      return { extracted: 1, remaining: missing.length - 1, chapterNumber: target.chapterNumber };
+    }),
+
   updateChapter: protectedProcedure
     .input(z.object({
       projectId: z.string(),
