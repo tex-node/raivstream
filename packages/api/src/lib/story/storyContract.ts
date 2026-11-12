@@ -201,3 +201,85 @@ export function scoreStoryContract(contract: StoryContract): StoryContractScore 
 
   return { pass: reasons.length === 0, reasons, present };
 }
+
+/**
+ * Story-level judgement over per-chapter contracts (2026-11-12).
+ *
+ * A five-chapter story has five contracts, and a mid-story chapter legitimately has no resolution -
+ * so "any null fails" would fail every real multi-chapter story. The rule, and why it is not a
+ * compromise: **the last chapter decides resolution; earlier chapters contribute the stakes.**
+ * A story establishes its want, obstacle and turn in the earlier chapters and resolves them at the
+ * end, which is the shape stories actually have.
+ *
+ * Three outcomes, not two. An **absent** contract is neither a pass nor a failure - it means nobody
+ * read that chapter - and a **failed** extraction means the reader broke, not the story. Reporting
+ * either as "the story has no resolution" would invent 203 story failures out of 203 missing reads.
+ */
+export type StoryContractVerdict = 'pass' | 'fail' | 'unscored';
+
+export interface StoryContractEvaluation {
+  verdict: StoryContractVerdict;
+  /** Reasons in the order that matters: a missing resolution first. */
+  reasons: string[];
+  /** Which chapters carry an extracted contract, and in what state. */
+  chapters: Array<{ chapterNumber: number | null; state: StoredContractState }>;
+  /** True when the verdict is unscored because no extraction exists yet. */
+  needsExtraction: boolean;
+}
+
+interface ChapterLike {
+  chapterNumber?: number | null;
+  storyContract?: unknown;
+}
+
+function contractOf(stored: unknown): StoryContract | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const record = stored as Record<string, unknown>;
+  return {
+    protagonist: asText(record.protagonist),
+    want: asText(record.want),
+    obstacle: asText(record.obstacle),
+    turn: asText(record.turn),
+    resolution: asResolution(record.resolution),
+    sensoryAnchors: [],
+    extractedBy: typeof record.extractedBy === 'string' ? record.extractedBy : 'unknown',
+    extractorVersion: typeof record.extractorVersion === 'number' ? record.extractorVersion : undefined,
+  };
+}
+
+export function evaluateStoryContract(chapters: ChapterLike[]): StoryContractEvaluation {
+  const ordered = [...chapters].sort((a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0));
+  const states = ordered.map((chapter) => ({
+    chapterNumber: chapter.chapterNumber ?? null,
+    state: describeStoredContract(chapter.storyContract),
+  }));
+
+  const last = ordered[ordered.length - 1];
+  const lastState = last ? describeStoredContract(last.storyContract) : 'absent';
+
+  // Nothing has been read: not a pass, not a failure. The honest answer is that no judgement exists.
+  if (states.every((entry) => entry.state === 'absent')) {
+    return { verdict: 'unscored', reasons: ['CONTRACT_ABSENT: this story has not been read yet, so nothing is being judged.'], chapters: states, needsExtraction: true };
+  }
+  if (lastState === 'absent') {
+    return { verdict: 'unscored', reasons: ['CONTRACT_ABSENT_LAST_CHAPTER: the final chapter has no contract, so the story cannot be judged complete or incomplete.'], chapters: states, needsExtraction: true };
+  }
+  if (lastState === 'failed') {
+    return { verdict: 'unscored', reasons: ['EXTRACTION_FAILED: the final chapter was read and the reader failed; this is not a story with no resolution.'], chapters: states, needsExtraction: true };
+  }
+
+  // Earlier chapters contribute the stakes; the last chapter must deliver the resolution.
+  const extracted = ordered.map((chapter) => contractOf(chapter.storyContract)).filter((c): c is StoryContract => c !== null);
+  const merged: StoryContract = {
+    protagonist: extracted.map((c) => c.protagonist).find(Boolean) ?? null,
+    want: extracted.map((c) => c.want).find(Boolean) ?? null,
+    obstacle: extracted.map((c) => c.obstacle).find(Boolean) ?? null,
+    turn: extracted.map((c) => c.turn).find(Boolean) ?? null,
+    resolution: contractOf(last?.storyContract)?.resolution ?? null,
+    sensoryAnchors: [],
+    extractedBy: 'merged',
+  };
+
+  const score = scoreStoryContract(merged);
+  return { verdict: score.pass ? 'pass' : 'fail', reasons: score.reasons, chapters: states, needsExtraction: false };
+}
