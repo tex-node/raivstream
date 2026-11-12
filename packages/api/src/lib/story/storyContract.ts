@@ -121,9 +121,11 @@ export function parseStoryContract(raw: string | null | undefined, extractedBy: 
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { ...EMPTY_STORY_CONTRACT, extractedBy };
+    // A reply that is not JSON is a REFUSAL, not a reading: record it as an extraction failure so a
+    // model that declines cannot be stored as "read it, found nothing" (2026-11-12).
+    return { ...EMPTY_STORY_CONTRACT, extractedBy: 'unparsed' };
   }
-  if (!parsed || typeof parsed !== 'object') return { ...EMPTY_STORY_CONTRACT, extractedBy };
+  if (!parsed || typeof parsed !== 'object') return { ...EMPTY_STORY_CONTRACT, extractedBy: 'unparsed' };
   const record = parsed as Record<string, unknown>;
   return {
     protagonist: asText(record.protagonist),
@@ -176,7 +178,7 @@ export type StoredContractState = 'absent' | 'failed' | 'extracted';
 export function describeStoredContract(stored: unknown): StoredContractState {
   if (stored === null || stored === undefined) return 'absent';
   const record = stored as { extractedBy?: unknown };
-  if (record.extractedBy === 'error') return 'failed';
+  if (record.extractedBy === 'error' || record.extractedBy === 'unparsed') return 'failed';
   return 'extracted';
 }
 

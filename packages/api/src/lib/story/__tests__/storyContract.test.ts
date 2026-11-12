@@ -105,7 +105,8 @@ describe('the deterministic tier abstains instead of fabricating', () => {
     const contract = await extractStoryContract({ body: COMPLETE_BODY, callModel: async () => 'I could not find a turn, but here is a summary: ...' });
     expect(contract.protagonist).toBeNull();
     expect(contract.resolution).toBeNull();
-    expect(contract.extractedBy).toBe('model');
+    // A refusal is not a reading: it must not be stored as "the model read this and found nothing".
+    expect(contract.extractedBy).toBe('unparsed');
   });
 
   it('a throwing model yields all null and is marked as an error', async () => {
@@ -372,5 +373,30 @@ describe('evidence quoting - a quote must appear in the body', () => {
   it('without a body, no verification happens and behaviour is unchanged', () => {
     const noQuotes = { ...V2(), quotes: {} } as never;
     expect(scoreStoryContract(noQuotes).pass).toBe(true);
+  });
+});
+
+describe('a refusal is not a reading - the fourth state', () => {
+  const body = 'Mira kept the lighthouse alone. She lit the lamp.';
+
+  it('valid JSON with every field null is "read it, found nothing"', async () => {
+    const contract = await extractStoryContract({
+      body,
+      callModel: async () => JSON.stringify({ protagonist: null, want: null, obstacle: null, turn: null, resolution: null, sensoryAnchors: [] }),
+    });
+    expect(contract.extractedBy).toBe('model');
+    expect(describeStoredContract({ ...contract, extractorVersion: 2 })).toBe('extracted');
+  });
+
+  it('a reply that is not JSON is an extraction failure, not an empty reading', async () => {
+    const contract = await extractStoryContract({ body, callModel: async () => 'Sorry, I cannot help with that.' });
+    expect(contract.extractedBy).toBe('unparsed');
+    expect(describeStoredContract({ ...contract, extractorVersion: 2 })).toBe('failed');
+  });
+
+  it('the two all-null contracts are distinguishable in the stored record', async () => {
+    const read = await extractStoryContract({ body, callModel: async () => '{"protagonist":null}' });
+    const refused = await extractStoryContract({ body, callModel: async () => 'nope' });
+    expect(describeStoredContract(read)).not.toBe(describeStoredContract(refused));
   });
 });
