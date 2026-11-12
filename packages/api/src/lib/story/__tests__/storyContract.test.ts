@@ -5,6 +5,7 @@ import {
   EMPTY_STORY_CONTRACT,
   STORY_CONTRACT_EXTRACTOR_VERSION,
   describeStoredContract,
+  evaluateStoryContract,
   extractStoryContract,
   parseStoryContract,
   scoreStoryContract,
@@ -227,5 +228,93 @@ describe('extractorVersion is stored so a tightened rule can find older rows', (
     expect(contract.extractedBy).toBe('error');
     // The object is stored; its fields are null. So the column is not null when the extractor ran.
     expect(describeStoredContract({ ...contract, extractorVersion: 1 })).toBe('failed');
+  });
+});
+
+const RESOLVED = { outcome: 'ANSWERED' as const, text: 'She lit the lamp.' };
+const extractedContract = (over: Record<string, unknown> = {}) => ({
+  protagonist: 'Mira',
+  want: 'to light the lamp',
+  obstacle: 'the oil ran low',
+  turn: 'the wind took the door',
+  resolution: RESOLVED,
+  extractedBy: 'model',
+  extractorVersion: 1,
+  ...over,
+});
+
+describe('the last chapter decides resolution; earlier chapters carry the stakes', () => {
+  it('a three-chapter story with null resolutions in 1-2 and a resolved last chapter passes', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: extractedContract({ protagonist: 'Mira', want: 'to light the lamp', resolution: null }) },
+      { chapterNumber: 2, storyContract: extractedContract({ obstacle: 'the oil ran low', resolution: null }) },
+      { chapterNumber: 3, storyContract: extractedContract({ turn: 'the wind took the door' }) },
+    ]);
+    expect(evaluation.verdict).toBe('pass');
+    expect(evaluation.reasons).toEqual([]);
+  });
+
+  it('a story whose final chapter has no resolution fails, and that reason is first', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: extractedContract() },
+      { chapterNumber: 2, storyContract: extractedContract({ resolution: null }) },
+    ]);
+    expect(evaluation.verdict).toBe('fail');
+    expect(evaluation.reasons[0]).toContain('RESOLUTION_MISSING');
+  });
+
+  it('chapter order does not depend on array order', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 2, storyContract: extractedContract({ resolution: null }) },
+      { chapterNumber: 1, storyContract: extractedContract() },
+    ]);
+    expect(evaluation.verdict).toBe('fail');
+  });
+});
+
+describe('absent is neither a pass nor a failure', () => {
+  it('every chapter absent reads as unscored, with needsExtraction', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: null },
+      { chapterNumber: 2, storyContract: null },
+    ]);
+    expect(evaluation.verdict).toBe('unscored');
+    expect(evaluation.verdict).not.toBe('pass');
+    expect(evaluation.verdict).not.toBe('fail');
+    expect(evaluation.needsExtraction).toBe(true);
+    expect(evaluation.reasons[0]).toContain('CONTRACT_ABSENT');
+  });
+
+  it('a missing final contract is unscored, not a story failure', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: extractedContract() },
+      { chapterNumber: 2, storyContract: null },
+    ]);
+    expect(evaluation.verdict).toBe('unscored');
+    expect(evaluation.reasons[0]).toContain('CONTRACT_ABSENT_LAST_CHAPTER');
+  });
+
+  it('a failed extraction is unscored, and says the reader failed rather than the story', () => {
+    const evaluation = evaluateStoryContract([
+      { chapterNumber: 1, storyContract: { ...extractedContract(), extractedBy: 'error', resolution: null, protagonist: null } },
+    ]);
+    expect(evaluation.verdict).toBe('unscored');
+    expect(evaluation.reasons[0]).toContain('EXTRACTION_FAILED');
+  });
+
+  it('an unscored story never reads as a pass', () => {
+    for (const chapters of [
+      [{ chapterNumber: 1, storyContract: null }],
+      [{ chapterNumber: 1, storyContract: { extractedBy: 'error' } }],
+    ]) {
+      expect(evaluateStoryContract(chapters).verdict).not.toBe('pass');
+    }
+  });
+});
+
+describe('the workspace read carries the judgement', () => {
+  it('getWorkspace attaches contractEvaluation', () => {
+    const router = readFileSync(join(__dirname, '..', '..', '..', 'routers', 'story.ts'), 'utf8');
+    expect(router).toContain('contractEvaluation: evaluateStoryContract(project.chapters ?? [])');
   });
 });

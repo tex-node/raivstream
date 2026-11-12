@@ -688,6 +688,21 @@ live chapter exists to test the tightening against. *Consolidation, not a new ru
 director, the educational derivation, the balance pill, and this contract — and it is one pattern: a component proven in isolation reads as
 finished until someone asks what calls it.
 
+**The scorer has a caller, and the per-chapter rule is settled.** *First, the honest record:* before this session `scoreStoryContract`
+had **no caller** — the fifth instance of "built but not wired", occurring in the very session that consolidated the pattern. That is now the
+cleanest evidence the pattern is about asking *what calls this* rather than about any component: the scorer was written, tested against a
+complete and a truncated story, and never invoked. *The rule:* **the last chapter decides resolution; earlier chapters contribute the
+stakes.** A five-chapter story legitimately has no resolution in chapter 2, so "any null fails" would fail every real multi-chapter story;
+"any chapter resolves" would pass a story that resolved in chapter 3 and kept going. The evaluator reads chapters in `chapterNumber` order,
+merges `protagonist`/`want`/`obstacle`/`turn` from any extracted chapter, and takes `resolution` **only from the last**. *Three states, not
+two:* `pass`, `fail`, and **`unscored`** — an absent contract means nobody read the chapter, and a failed extraction means the reader broke,
+so neither is reported as "the story has no resolution". `needsExtraction: true` is the signal a future trigger can act on. *The 203 absent
+chapters, decided:* **lazy extraction** — judged when next looked at, never in a batch nobody asked for; exempt/unscored until then, and
+backfill (203 model calls) rejected on cost. The trigger is deferred because the workspace read must not write, and that is named rather than
+implied. *Wiring:* `story.getWorkspace` now returns `contractEvaluation`, the place a creator asks whether the story is complete; the reason
+order is unchanged — `RESOLUTION_MISSING` first. *Free proof, three stories, no live calls:* complete 3-chapter → `pass`; truncated final
+chapter → `fail` with `RESOLUTION_MISSING`; absent → **`unscored`, not a pass**, with `CONTRACT_ABSENT`. **28 tests.**
+
 Two gaps re-checked and standing:** the cast extractor is a parser (the `and`/comma split at `service.ts:70` is the Confrontin mechanism),
 and the story path has no contract — `storyDna` is stored but nothing requires a conflict, a turn or a resolution.
 

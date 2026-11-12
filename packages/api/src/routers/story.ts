@@ -88,7 +88,7 @@ import { storyBlueprintSchema, directedSceneSchema } from '../lib/storyIntellige
 import { storyVideoExportService } from '../lib/story/storyVideoExportService';
 import { resolveNarrationScript, NarrationModerationError } from '../lib/story/narrationScript';
 import { deriveScenesFromStory } from '../lib/story/sceneDerivation';
-import { extractStoryContract, STORY_CONTRACT_EXTRACTOR_VERSION } from '../lib/story/storyContract';
+import { evaluateStoryContract, extractStoryContract, STORY_CONTRACT_EXTRACTOR_VERSION } from '../lib/story/storyContract';
 
 const shotTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 const audienceModeSchema = z.enum(['KIDS', 'GENERAL']);
@@ -8073,7 +8073,7 @@ export const storyRouter = router({
           },
         },
       });
-      return project ? hydrateProjectCriticRuns(ctx, project) : project;
+      return project ? { ...project, contractEvaluation: evaluateStoryContract(project.chapters ?? []) } : project;
     }),
 
   getStoryBook: protectedProcedure
