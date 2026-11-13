@@ -732,6 +732,22 @@ reproducibly in full-suite runs, while passing in isolation. That is a **test-ha
 (the same import `storyDnaProvenance.test.ts` already uses). Recorded as a correction rather than a quiet edit: a timeout that recurs is a gate
 reporting red for a reason unrelated to the change.
 
+**The silent creative cast is gated, and the creative path now runs the extractor.** *Decision (operator's, recorded):* a silent creative cast is
+**empty for non-narrative project types and parser-filled for narrative ones**, with the fill labelled `fallback` so it is recorded rather than
+disguised; an **absent** project type stays in scope per #312 — failing toward having a cast is safer than failing toward not having one. *The
+plumb, sized by the count:* `domainKnowledgeFor` is now a **consumer** — it takes `{ cast, source }` and no longer calls `deriveCast` — and
+`seedBibleFromInterpretation`, which is **already async and runs once per project creation**, awaits `extractCastWithLLM` behind the #312 gate
+and passes the result down. **No test had to become async**; one test moved because its premise changed (it asserted the old producer behaviour),
+and it carries a comment saying what it asserted, what it asserts now, and why. *What the gate does:* a **non-narrative** project — commercial,
+lesson, promo — **skips both paths**, so there is neither cost nor a fallback fragment; narrative runs the extractor and the parser fills only on
+fallback; a **falsy** project type takes the extractor path. *The mismatch found and recorded rather than papered over:* the predicate is a
+**whitelist** (`NARRATIVE_PROJECT_TYPES`), so its fail-open applies to a **missing** type, not to an unrecognised **string** — an unknown string is
+out of scope by the gate's actual behaviour, and inventing a second list of non-narrative types to make that case pass would be exactly the
+two-lists-that-disagree shape. *Cost:* **one extractor call per narrative creative project at creation; zero for non-narrative**; the parser is
+free and runs only on fallback; no caching is needed because the seeder runs once per creation. *The honest caveat, recorded:* a parser-filled
+cast is a **floor above zero**, not a fix for identity quality — a clause-shaped name makes a weak reference, and a weak reference scores lower.
+`extractCastWithLLM` on a configured model is what improves it; the `fallback` label is what makes the difference visible instead of silent.
+
 **Which silence the parser may fill — answered by the read, then made true in code.** *The read:* `extractCastWithLLM` **already** returns
 `{ cast, via: 'llm' | 'fallback' }` and **already honours a model that answers `[]`** — the discrimination the policy needs exists; what was
 missing was a caller and a stored state. Its fallback triggers are exactly four: **no `complete` dep, a falsy reply, an unparseable reply, a
