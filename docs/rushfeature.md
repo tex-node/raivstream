@@ -963,50 +963,60 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled, partially verified)*
+## Phase 12 — Transformation operations *(scheduled, contract verification incomplete)*
 
-**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new
-asset from a prompt. That difference is small for the take model — `createNewTake({ shotId })` already means "a new attempt at the same slot with a
-parent", so a transformed take is a child like any other — and it is **large for the ledger**, because the existing shape is per-asset while these
-operations are priced flat or per-second. **Moderation** also differs: the input was already moderated, so the derived asset needs the same image
-scan as any published output, but the *prompt* that produced it is a transformation directive, not a creator prompt.
+**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new asset
+from a prompt. The take model absorbs this already — `createNewTake({ shotId })` means "a new attempt at the same slot with a parent" — while the
+**ledger** does not: it is per-asset, and these operations are priced flat or per-second. **Moderation** differs too: the input was already
+moderated, so the derived asset needs the same output scan, but the directive is a transformation instruction rather than a creator prompt.
 
-**What was verified, and how.** Endpoint reads were attempted on fal directly — model pages and their machine-readable queue schemas. A failed
-fetch is recorded as a failure, not as absence.
+**The route that worked, named.** The verified contract for `fal-ai/pika/v2/pikaswaps` came from
+**`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>`** — the queue OpenAPI route, not the model page. Retried against
+`fal-ai/id-v2v` this session: that route returned **404** both plain and percent-encoded; the page-shaped variant
+(`/models/fal-ai/id-v2v/api/openapi.json`) returned **a 200 HTML shell, not a contract**; `/api/models/fal-ai/id-v2v` returned **404**. The
+`id-v2v` contracts remain **unread**, and the next session should start from the named route rather than rediscovering it.
 
-| operation | endpoint | input | output | limits | pricing | verdict |
+**What the endpoints actually do — read from their descriptions, not from our operation names.** `fal-ai/id-v2v` restyles **a video's scene,
+lighting and visual style from edited keyframes while preserving the subjects' identity and expression**. `fal-ai/id-v2v/relight` changes **a
+video's lighting using a relit reference frame while preserving the scene, subjects and original performance**. So *relighting is a mode of the
+same family as restyling*, and both are **keyframe-driven** — they consume an edited reference frame, not a look object. The earlier justification
+("restyling and relighting extend `CinematicLook`") was **wrong**, and is corrected here: `CinematicLook` holds lens, movement, lighting, grade and
+resolution for *generation*; these endpoints need an **edited keyframe**, which the look object cannot supply.
+
+**Operation overlap, named.** Restyling and relighting are **two endpoints of one capability** — a five-operation phase is really four. Person
+swap is **not** the same capability: `id-v2v` *preserves* the subject and changes the world, while Mira *replaces* the person. They share a
+"identity" theme and nothing else.
+
+| operation | endpoint | input | output | limits | price | state |
 |---|---|---|---|---|---|---|
-| restyling | `fal-ai/id-v2v` | video + edited keyframe(s) | video | not read (schema fetch 404) | unverified | **endpoint exists; schema unread** |
-| relighting | `fal-ai/id-v2v/relight` | video + relit reference frame | video | not read (schema fetch 404) | unverified | **endpoint exists; schema unread** |
-| environment replacement | `fal-ai/pika/v2/pikaswaps` | `video_url` + `image_url` + `modify_region` + `prompt` | `{ video: { url } }` | none declared | unverified | **verified from the queue schema** |
-| object insertion / removal | `fal-ai/pika/v2/pikaswaps` | same shape: region description + replacement image | `{ video: { url } }` | none declared | unverified | **verified from the queue schema** |
-| person swap | Naive/Mira | video + photo | video | any length | **$1.48 flat** | **verified (vendor)** |
+| environment replacement | `fal-ai/pika/v2/pikaswaps` | `video_url` + `image_url` + `modify_region` + prompt | `{ video: { url } }` | none declared | **unread** | **schema verified** |
+| object insertion / removal ("AI VFX") | `fal-ai/pika/v2/pikaswaps` | same | same | none declared | **unread** | **schema verified** |
+| person swap | Naive/Mira | video + photo | video | any length | **$1.48 flat** | **vendor-verified** |
+| restyling | `fal-ai/id-v2v` | video + edited keyframe(s) | video | unread | unread | **contract unread** |
+| relighting | `fal-ai/id-v2v/relight` | video + relit reference frame | video | unread | unread | **contract unread** |
 
-The two `id-v2v` pages returned **200 with a schema link**, and the schema URL itself returned **404** — that is a fetch failure, recorded as
-unread rather than as an absent endpoint. `pikaswaps` returned its full OpenAPI: **`video_url` is the only required field**, `modify_region` is
-plaintext ("the cookie jars"), `image_url` is the replacement, and the output is a single video file. No duration or resolution limit is declared in
-that schema, and **no price appears in any fetched schema** — so pricing is unverified for every operation except Mira.
+**AI VFX: defined, not dropped** — object insertion/removal, concrete and testable, sharing the region machinery environment replacement needs.
 
-**AI VFX: defined, not dropped.** It is a category, not an operation, so it is scheduled as **object insertion / removal** — concrete, testable
-(does the object appear or not), and it reuses the mask-region machinery environment replacement needs. Both now have a verified schema:
-`pikaswaps`.
+**Pricing decision: flat per operation**, via `FeatureCreditRate.creditsPerUnit` keyed `transform:<operation>`, mirroring `generate:<model>`.
+`assertWithinCeiling` counts credits, so a flat charge needs **no ledger change**. **No rate is seeded from an unverified price**: schemas are
+verified for **2 of 5** (pikaswaps, Mira) and prices for **1 of 5** (Mira). A rate for an operation whose cost is unmeasured is a number describing
+a call nobody has made.
 
-**Pricing decision: flat per operation.** The ledger was read before deciding: `FeatureCreditRate.creditsPerUnit` is keyed by a **feature key** and
-holds a **flat credit amount**, and `assertWithinCeiling` counts credits spent, so a flat charge sits inside the ceiling with no per-asset
-assumption anywhere. The shape is therefore `transform:<operation>` rates, mirroring `generate:<model>`. Per-second was rejected as a
-predictability tax that Phase 10 must invent anyway; per-asset was rejected because the unit is a lie when length varies.
+**Sequencing decision — resequenced, on contract readiness rather than architectural fit.** Environment replacement and object insertion/removal go
+**first**, because they are the operations whose contract is actually readable and they establish the region machinery. Restyling and relighting are
+**blocked on unreadable contracts** — *unverified*, never *absent* — and `CinematicLook` does not extend them. Person swap is sequenced after the
+region work despite being the most contract-complete, because it is a different mechanism (whole-subject replacement, not region editing) and its
+identity behaviour is unproven here.
 
-**Sequencing, on architectural fit:** restyling → relighting (both extend the existing `CinematicLook`, whose `lighting` field and retrieval
-already exist) → environment replacement (extends the bible's locations, which exist but have no reference-asset representation; `pikaswaps`
-supplies the missing mechanism) → person swap (highest value, worst fit: flat pricing, single job, a different mechanism from the scene pipeline)
-→ object insertion/removal (needs the mask machinery the earlier steps establish).
+**Buildable now: person swap only.** It is the single operation with both a verified contract shape and a verified price ($1.48 flat, video + photo
+in, video out, any length). Environment replacement is the *sequencing* priority but is **not buildable** until a pikaswaps price is read; if that
+price stays unreadable, nothing else in Phase 12 is buildable, and that is the honest answer.
 
-**Identity caveat, in this entry rather than only in the session record:** person swap does **not** inherit the identity floor. The 70/75 numbers
-were measured on `flux-2/edit`; a person swap is a different mechanism, so its first test must include a **critic score**, not just a visual
-check.
+**Identity caveat.** Person swap does **not** inherit the 70/75 identity floor — those numbers came from `flux-2/edit` — so its first test must
+carry a **critic score**, not just a visual check.
 
-**Status.** Scheduled and partially verified — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is built: the
-two `id-v2v` schemas, every price, and the pricing implementation remain open, and the verification pass above is what the build waits on.
+**Status.** Scheduled; contract verification incomplete — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is
+built: two contracts and four prices remain unread, and no `transform:` rate exists.
 
 ## Phase template (proven on Phase 1)
 
