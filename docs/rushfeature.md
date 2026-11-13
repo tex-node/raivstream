@@ -963,18 +963,50 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled)*
+## Phase 12 — Transformation operations *(scheduled, partially verified)*
 
-Five operations were proposed to act on existing scene assets rather than generate new ones: video restyling, scene relighting, environment
-replacement, person swap, and AI VFX. Only **person swap** is verified (Naive/Mira, $1.48 flat, video + photo in, video out, any length, routing
-to fal); the other endpoints, their inputs, limits and pricing are **unverified**, and a failed fetch is recorded as unverified rather than as
-absence. **AI VFX is a category, not an operation** — it needs defining (object insertion/removal is the concrete candidate) or dropping. The
-pricing question is open: the ledger is per-asset, and these operations are flat-fee or per-second.
+**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new
+asset from a prompt. That difference is small for the take model — `createNewTake({ shotId })` already means "a new attempt at the same slot with a
+parent", so a transformed take is a child like any other — and it is **large for the ledger**, because the existing shape is per-asset while these
+operations are priced flat or per-second. **Moderation** also differs: the input was already moderated, so the derived asset needs the same image
+scan as any published output, but the *prompt* that produced it is a transformation directive, not a creator prompt.
 
-**Status.** Scheduled, not verified — see [history — Other status notes](roadmap-history.md#other-status-notes), which carries this phase's scheduling, the style-system
-decision and the verification pass that still stands as written. The verification pass stands as its own session: **the five endpoints, the VFX definition and the pricing shape come before
-any build.** Homer's style system — the per-creator profile, its stated defaults, its decay rule and its gates — is specified in **Phase 11**, and
-this phase's scheduling note reads that entry rather than restating a bare "per-creator, learned" line.
+**What was verified, and how.** Endpoint reads were attempted on fal directly — model pages and their machine-readable queue schemas. A failed
+fetch is recorded as a failure, not as absence.
+
+| operation | endpoint | input | output | limits | pricing | verdict |
+|---|---|---|---|---|---|---|
+| restyling | `fal-ai/id-v2v` | video + edited keyframe(s) | video | not read (schema fetch 404) | unverified | **endpoint exists; schema unread** |
+| relighting | `fal-ai/id-v2v/relight` | video + relit reference frame | video | not read (schema fetch 404) | unverified | **endpoint exists; schema unread** |
+| environment replacement | `fal-ai/pika/v2/pikaswaps` | `video_url` + `image_url` + `modify_region` + `prompt` | `{ video: { url } }` | none declared | unverified | **verified from the queue schema** |
+| object insertion / removal | `fal-ai/pika/v2/pikaswaps` | same shape: region description + replacement image | `{ video: { url } }` | none declared | unverified | **verified from the queue schema** |
+| person swap | Naive/Mira | video + photo | video | any length | **$1.48 flat** | **verified (vendor)** |
+
+The two `id-v2v` pages returned **200 with a schema link**, and the schema URL itself returned **404** — that is a fetch failure, recorded as
+unread rather than as an absent endpoint. `pikaswaps` returned its full OpenAPI: **`video_url` is the only required field**, `modify_region` is
+plaintext ("the cookie jars"), `image_url` is the replacement, and the output is a single video file. No duration or resolution limit is declared in
+that schema, and **no price appears in any fetched schema** — so pricing is unverified for every operation except Mira.
+
+**AI VFX: defined, not dropped.** It is a category, not an operation, so it is scheduled as **object insertion / removal** — concrete, testable
+(does the object appear or not), and it reuses the mask-region machinery environment replacement needs. Both now have a verified schema:
+`pikaswaps`.
+
+**Pricing decision: flat per operation.** The ledger was read before deciding: `FeatureCreditRate.creditsPerUnit` is keyed by a **feature key** and
+holds a **flat credit amount**, and `assertWithinCeiling` counts credits spent, so a flat charge sits inside the ceiling with no per-asset
+assumption anywhere. The shape is therefore `transform:<operation>` rates, mirroring `generate:<model>`. Per-second was rejected as a
+predictability tax that Phase 10 must invent anyway; per-asset was rejected because the unit is a lie when length varies.
+
+**Sequencing, on architectural fit:** restyling → relighting (both extend the existing `CinematicLook`, whose `lighting` field and retrieval
+already exist) → environment replacement (extends the bible's locations, which exist but have no reference-asset representation; `pikaswaps`
+supplies the missing mechanism) → person swap (highest value, worst fit: flat pricing, single job, a different mechanism from the scene pipeline)
+→ object insertion/removal (needs the mask machinery the earlier steps establish).
+
+**Identity caveat, in this entry rather than only in the session record:** person swap does **not** inherit the identity floor. The 70/75 numbers
+were measured on `flux-2/edit`; a person swap is a different mechanism, so its first test must include a **critic score**, not just a visual
+check.
+
+**Status.** Scheduled and partially verified — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is built: the
+two `id-v2v` schemas, every price, and the pricing implementation remain open, and the verification pass above is what the build waits on.
 
 ## Phase template (proven on Phase 1)
 
