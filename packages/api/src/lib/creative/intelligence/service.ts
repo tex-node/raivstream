@@ -119,7 +119,23 @@ export function deriveCast(interpretation: CreativeInterpretation, limit = MAX_C
   return cast;
 }
 
-export function domainKnowledgeFor(interpretation: CreativeInterpretation): DomainKnowledge {
+/**
+ * A cast handed to the domain knowledge, with the state that produced it (2026-11-13).
+ *
+ * This function used to call `deriveCast` itself, which meant a synchronous pure function was the
+ * only thing standing between an idea and a splitter fragment. It is now a CONSUMER: the caller that
+ * can await a model does the extraction, and this reads the result.
+ */
+export interface CastInput {
+  cast: DerivedCharacter[];
+  /** 'none' means the type is non-narrative: both the model and the parser were skipped. */
+  source: 'llm' | 'fallback' | 'none';
+}
+
+export function domainKnowledgeFor(
+  interpretation: CreativeInterpretation,
+  castInput: CastInput = { cast: [], source: 'none' },
+): DomainKnowledge {
   const text = [interpretation.summary, interpretation.explicit.subject ?? ''].filter(Boolean).join(' ');
   switch (interpretation.projectType) {
     case 'COMMERCIAL':
@@ -148,7 +164,7 @@ export function domainKnowledgeFor(interpretation: CreativeInterpretation): Doma
         story: { premise: text.slice(0, 240) },
         // Derived, not hardcoded: an empty array here meant no creative project could
         // ever have a cast, and therefore no still could be reference-conditioned.
-        characters: deriveCast(interpretation) as unknown as Record<string, unknown>[],
+        characters: castInput.cast as unknown as Record<string, unknown>[],
         worlds: [],
         visualLanguage: { style: interpretation.inferred.style ?? 'cinematic' },
       };

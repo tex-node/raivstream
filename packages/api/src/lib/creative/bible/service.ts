@@ -11,10 +11,14 @@
 import type { PrismaClient } from '@raivstream/database';
 import { isCreativeBibleEnabled } from '../featureFlags';
 import type { CreativeBibleState, CreativeInterpretation } from '../shared/types';
-import { domainKnowledgeFor } from '../intelligence/service';
+import { domainKnowledgeFor, type CastInput } from '../intelligence/service';
+import { extractCastWithLLM, gateIncludesCharacterIdentity, type CastExtractionDeps } from '../intelligence/castExtractor';
 
-export function buildSeedBible(interpretation: CreativeInterpretation): CreativeBibleState {
-  const knowledge = domainKnowledgeFor(interpretation);
+export function buildSeedBible(
+  interpretation: CreativeInterpretation,
+  castInput?: CastInput,
+): CreativeBibleState {
+  const knowledge = domainKnowledgeFor(interpretation, castInput);
   return {
     version: 1,
     story: knowledge.story,
@@ -38,9 +42,22 @@ export async function seedBibleFromInterpretation(
   prisma: PrismaClient,
   projectId: string,
   interpretation: CreativeInterpretation,
+  deps: CastExtractionDeps = {},
 ): Promise<CreativeBibleState> {
-  if (!isCreativeBibleEnabled()) return buildSeedBible(interpretation);
-  const bible = buildSeedBible(interpretation);
+  // The gate decides whether there is a cast at all (2026-11-13). A non-narrative project - a
+  // perfume commercial, a lesson, a promo - has no cast, so both the model AND the parser are
+  // skipped: no cost, and no chance of a splitter fragment arriving as a "fallback". An UNKNOWN
+  // project type stays in scope, per #312: failing toward having a cast is safer than failing toward
+  // not having one.
+  const castInput: CastInput = gateIncludesCharacterIdentity(interpretation.projectType)
+    ? await extractCastWithLLM(interpretation.explicit?.subject ?? '', deps).then((result) => ({
+        cast: result.cast,
+        source: result.via,
+      }))
+    : { cast: [], source: 'none' };
+
+  if (!isCreativeBibleEnabled()) return buildSeedBible(interpretation, castInput);
+  const bible = buildSeedBible(interpretation, castInput);
   await prisma.creativeBible.create({
     data: {
       projectId,

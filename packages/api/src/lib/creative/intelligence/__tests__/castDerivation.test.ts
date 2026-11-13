@@ -83,7 +83,11 @@ describe('deriveCast produces the lighthouse cast', () => {
 describe('domainKnowledgeFor gives STORY a cast at all', () => {
   it('no longer hardcodes an empty array', async () => {
     const { domainKnowledgeFor } = await import('../service');
-    const knowledge = domainKnowledgeFor(interpretation(LIGHTHOUSE) as never) as { characters?: unknown[] };
+      // MOVED (2026-11-13): domainKnowledgeFor is a CONSUMER now - it no longer derives a cast. The
+  // caller that can await the extractor supplies it (seedBibleFromInterpretation). The extraction
+  // path is proven in castGate.test.ts; this asserts the consumer passes the cast through.
+  const supplied = [{ name: 'Elias', visualDescription: 'weathered keeper, wool coat', source: 'explicit-subject' as const }];
+  const knowledge = domainKnowledgeFor(interpretation(LIGHTHOUSE) as never, { cast: supplied, source: 'llm' }) as { characters?: unknown[] };
     expect(Array.isArray(knowledge.characters)).toBe(true);
     expect(knowledge.characters!.length).toBeGreaterThan(0);
   });
