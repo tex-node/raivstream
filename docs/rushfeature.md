@@ -732,6 +732,29 @@ reproducibly in full-suite runs, while passing in isolation. That is a **test-ha
 (the same import `storyDnaProvenance.test.ts` already uses). Recorded as a correction rather than a quiet edit: a timeout that recurs is a gate
 reporting red for a reason unrelated to the change.
 
+**Homer's style system: stated defaults that yield to learned signal — and the two gaps that decide its size.** *The axis is the platform's
+own taxonomy, not an invented one:* there is **no `ContentType` enum** (the brief assumed six values; there are none) — the genre axis is
+**`StoryType`** (`SHORT_STORY`, `PICTURE_BOOK`, `COMIC`, `VIDEO_STORY`, `EDUCATIONAL`), **`CreativeProjectType`** (`STORY`, `EDUCATION`,
+`COMMERCIAL`, `TRANSFORMATION`, `UNKNOWN`), **`StoryAudienceMode`** (`KIDS`, `GENERAL`), and the ten **visual style labels**. *The map, with
+coverage and gaps:* **suspense / thriller → slow reveal, hard shadows, tight framing** (Hitchcockian — covered); **drama / prestige → deep
+focus, long takes, low angles** (Wellesian — covered); **physical comedy → wide framing, held shots, visual gags** (Chaplin/Keaton — covered);
+**educational, commercial/promo, transformation/before-after → no film-craft source covers them** (gaps). *The gap rule:* a **neutral default
+with no stylistic bias**, recorded as neutral rather than borrowed from the nearest director — a product demo is not a genre of film, and no
+fifth name is invented to fill it. *Naming rule:* defaults are named for the **technique** ("Suspense — slow reveal, hard shadows"), never for a
+person as the product label; provenance may appear in the description, because a director's name on a preset invites a rights conversation the
+product does not need. *Decay:* **per-dimension weighted decay** across the axes — pacing, framing, lighting, tone — where each axis's default
+weight decays with every observation on that axis and never reaches zero. A single global threshold means a creator who edits pacing loses the
+framing default, which is the coarse version of the shape-versus-content mistake. *Signals, enumerated rather than assumed:* **chosen look
+presets** exist (`CinematicLook` rows, per project) and **`AnalyticsEvent`** exists with generic tracking; **accepted/rejected suggestions,
+edits-as-signal, and regenerations are not recorded** — so the decay rule cannot be built before that instrumentation, and the phase includes it.
+*Storage:* **no creator-level style record exists** — `storyDna` is per project, `CinematicLook` is per project, and there is no
+`StyleProfile`/`TasteProfile`/`UserPreference` anywhere in the schema, so the profile is a **new table** and the phase is larger than the map
+suggests. *Visibility:* the active style is shown with its basis ("a suspense default; it will adapt as you work") and can be overridden, pinned
+or reset — the engine-record lesson applied to taste. *R16:* kids content receives the **neutral default only**, never an adult genre default,
+and that is a decision recorded here rather than inherited from the adult path. *Retention:* the profile stores **derived weights and counts, not
+text**, with per-story attribution so removing a story removes its observations and recomputes the weights — a style profile must not outlive the
+content that taught it.
+
 **The silent creative cast is gated, and the creative path now runs the extractor.** *Decision (operator's, recorded):* a silent creative cast is
 **empty for non-narrative project types and parser-filled for narrative ones**, with the fill labelled `fallback` so it is recorded rather than
 disguised; an **absent** project type stays in scope per #312 — failing toward having a cast is safer than failing toward not having one. *The
@@ -939,6 +962,19 @@ feature.
 
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
+
+## Phase 12 — Transformation operations *(scheduled)*
+
+Five operations were proposed to act on existing scene assets rather than generate new ones: video restyling, scene relighting, environment
+replacement, person swap, and AI VFX. Only **person swap** is verified (Naive/Mira, $1.48 flat, video + photo in, video out, any length, routing
+to fal); the other endpoints, their inputs, limits and pricing are **unverified**, and a failed fetch is recorded as unverified rather than as
+absence. **AI VFX is a category, not an operation** — it needs defining (object insertion/removal is the concrete candidate) or dropping. The
+pricing question is open: the ledger is per-asset, and these operations are flat-fee or per-second.
+
+**Status.** Scheduled, not verified — see [history — Other status notes](roadmap-history.md#other-status-notes), which carries this phase's scheduling, the style-system
+decision and the verification pass that still stands as written. The verification pass stands as its own session: **the five endpoints, the VFX definition and the pricing shape come before
+any build.** Homer's style system — the per-creator profile, its stated defaults, its decay rule and its gates — is specified in **Phase 11**, and
+this phase's scheduling note reads that entry rather than restating a bare "per-creator, learned" line.
 
 ## Phase template (proven on Phase 1)
 
