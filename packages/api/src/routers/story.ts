@@ -1550,13 +1550,27 @@ function inferCharacterFromIdea(idea: string): CharacterMemoryInput {
   };
 }
 
-export function normaliseCharacterMemory(idea: string, generated: CharacterMemoryInput[]): CharacterMemoryInput[] {
+export type CastSource = 'model' | 'fallback' | 'absent';
+
+export function normaliseCharacterMemory(
+  idea: string,
+  generated: CharacterMemoryInput[],
+  options: { source?: CastSource } = {},
+): CharacterMemoryInput[] {
   // The parser is the ABSTAIN path, not a seed (2026-11-12). It used to be seeded first and merged
   // under the model's cast, which is how a fragment like "Confrontin" could appear in a project whose
   // generation had supplied real characters. When the model names the cast, the parser contributes
   // nothing; when it does not, the parser's inference is the only cast there is.
   const byName = new Map<string, CharacterMemoryInput>();
 
+  // The state, not just the array (2026-11-12). An empty array means two different things:
+  //  * `source: 'model'`  - the model read the idea and answered "no characters". That is an
+  //    answer (a perfume commercial has no cast), and the parser must NOT overrule it.
+  //  * `source: 'fallback'` / `'absent'` - no model ran, so the parser is the only cast there is.
+  // Before this, the two collapsed: the function saw only `[]` and filled it either way, which is
+  // how a splitter fragment could stand in for an honest empty answer.
+  const source: CastSource = options.source ?? (generated.length > 0 ? 'model' : 'absent');
+  if (source === 'model') return generated;
   if (generated.length === 0) {
     const inferred = inferCharacterFromIdea(idea);
     byName.set(inferred.name.toLowerCase(), inferred);
@@ -4305,7 +4319,15 @@ export const storyRouter = router({
       const story = (detectedContentType === 'EDUCATIONAL' && educationalContract)
         ? buildEducationalLessonBody(idea, educationalContract)
         : await storyTextService.generateStory(idea, answers, audienceMode, { userId: ctx.user.email ?? ctx.user.id, storyLength });
-      const characterMemory = normaliseCharacterMemory(idea, story.characterMemory);
+      // local-fallback is the deterministic writer, not a model reading: its empty cast falls back.
+      const castSource: CastSource = story.providerMetadata?.provider === 'local-fallback'
+        ? 'fallback'
+        : story.characterMemory.length > 0
+          ? 'model'
+          : story.providerMetadata?.provider
+            ? 'model'
+            : 'absent';
+      const characterMemory = normaliseCharacterMemory(idea, story.characterMemory, { source: castSource });
       // Read the story we just wrote (2026-11-12). Extraction happens BEFORE the write because the
       // body exists in memory; the stored value carries a failed extraction too (`extractedBy:
       // 'error'`), so `null` in the column can only mean "never extracted".

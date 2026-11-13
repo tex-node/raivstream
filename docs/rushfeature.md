@@ -732,6 +732,24 @@ reproducibly in full-suite runs, while passing in isolation. That is a **test-ha
 (the same import `storyDnaProvenance.test.ts` already uses). Recorded as a correction rather than a quiet edit: a timeout that recurs is a gate
 reporting red for a reason unrelated to the change.
 
+**Which silence the parser may fill — answered by the read, then made true in code.** *The read:* `extractCastWithLLM` **already** returns
+`{ cast, via: 'llm' | 'fallback' }` and **already honours a model that answers `[]`** — the discrimination the policy needs exists; what was
+missing was a caller and a stored state. Its fallback triggers are exactly four: **no `complete` dep, a falsy reply, an unparseable reply, a
+throw**. *What the two earlier tests proved, and did not:* they simulated "the model is silent" as `normaliseCharacterMemory(idea, [])` — a
+model that was **never called** — so they could not distinguish `[]`-from-a-model from `[]`-because-nobody-asked. At that layer the two states
+**collapsed**, which is why the parser could overrule an honest empty answer. *The fix, three lines of state:* `normaliseCharacterMemory` now
+takes `{ source: 'model' | 'fallback' | 'absent' }` and returns the model's `[]` untouched when the source is `model`; the parser fills only
+`fallback`/`absent`. The story path derives the source from the engine that wrote the payload — `provider === 'local-fallback'` is **`fallback`**,
+because the deterministic writer is not a model reading. *Policy, as decided:* a model that ran and returned `[]` is **honoured** (a perfume
+commercial has no cast; Confrontin is worse than nothing); the parser fills only when **no model ran**, and the path taken is recorded as
+`via: 'fallback'` rather than as an extraction. *Free proof, two ideas, injectable model, **no live calls** (cost 0):* narrative → `via=llm`,
+`["Elias"]`, **Confrontin absent**; characterless with a model `[]` → `via=llm`, **`[]` honoured**; characterless with **no model** → `via=fallback`
+and the parser invents one — which is precisely why the source had to be recorded, and is now visible rather than silent. *The creative STORY
+path is **not** wired this session, with the reason:* `deriveCast` is called from **`domainKnowledgeFor(interpretation)`**, which is **sync**,
+while `extractCastWithLLM` is async — wiring it needs an async plumb through that builder and its callers, which is a larger change than the
+session's remaining scope. It is named as the next wiring, not claimed as done, and its cost when wired is **one call per creative story at
+cast time**.
+
 **Cast derivation: the parser is now the abstain path — and the LLM extractor turned out to have no caller at all.** *The read:* the
 creative STORY path builds its cast with **`deriveCast`** (the parser, `intelligence/service.ts:151`), and the story path seeded the parser
 **unconditionally** in `normaliseCharacterMemory` before merging the model's cast on top — which is exactly how a fragment like *"Confrontin"*
