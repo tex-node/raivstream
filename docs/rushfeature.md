@@ -963,60 +963,57 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled, contract verification incomplete)*
+## Phase 12 — Transformation operations *(scheduled; contracts partial, prices unread)*
 
 **The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new asset
-from a prompt. The take model absorbs this already — `createNewTake({ shotId })` means "a new attempt at the same slot with a parent" — while the
-**ledger** does not: it is per-asset, and these operations are priced flat or per-second. **Moderation** differs too: the input was already
-moderated, so the derived asset needs the same output scan, but the directive is a transformation instruction rather than a creator prompt.
+from a prompt. The take model absorbs it — `createNewTake({ shotId })` already means "a new attempt at the same slot with a parent" — while the
+**ledger** does not: it is per-asset, and these operations are flat or per-second. Moderation differs too: the input was already scanned, so the
+derived asset needs the same output scan, but the directive is a transformation instruction, not a creator prompt.
 
-**The route that worked, named.** The verified contract for `fal-ai/pika/v2/pikaswaps` came from
-**`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>`** — the queue OpenAPI route, not the model page. Retried against
-`fal-ai/id-v2v` this session: that route returned **404** both plain and percent-encoded; the page-shaped variant
-(`/models/fal-ai/id-v2v/api/openapi.json`) returned **a 200 HTML shell, not a contract**; `/api/models/fal-ai/id-v2v` returned **404**. The
-`id-v2v` contracts remain **unread**, and the next session should start from the named route rather than rediscovering it.
+**Four operations, not five.** Restyling and relighting are **two endpoints of one capability** (`fal-ai/id-v2v`, `fal-ai/id-v2v/relight`), so the
+five-operation framing overstates the phase by one.
 
-**What the endpoints actually do — read from their descriptions, not from our operation names.** `fal-ai/id-v2v` restyles **a video's scene,
-lighting and visual style from edited keyframes while preserving the subjects' identity and expression**. `fal-ai/id-v2v/relight` changes **a
-video's lighting using a relit reference frame while preserving the scene, subjects and original performance**. So *relighting is a mode of the
-same family as restyling*, and both are **keyframe-driven** — they consume an edited reference frame, not a look object. The earlier justification
-("restyling and relighting extend `CinematicLook`") was **wrong**, and is corrected here: `CinematicLook` holds lens, movement, lighting, grade and
-resolution for *generation*; these endpoints need an **edited keyframe**, which the look object cannot supply.
+**The route, named.** Contracts are read from
+**`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>`**. It produced verified contracts for `fal-ai/pika/v2/pikaswaps` and
+`fal-ai/pixverse/swap`; against `fal-ai/id-v2v` it returns **404** — plain and percent-encoded — the page-shaped variant returns **an HTML shell**,
+and `/api/models/…` returns **404**. Those two contracts remain **unverified, never absent**.
 
-**Operation overlap, named.** Restyling and relighting are **two endpoints of one capability** — a five-operation phase is really four. Person
-swap is **not** the same capability: `id-v2v` *preserves* the subject and changes the world, while Mira *replaces* the person. They share a
-"identity" theme and nothing else.
+| operation | endpoint | contract | price | needs keyframe editor? | buildable now |
+|---|---|---|---|---|---|
+| environment replacement | `fal-ai/pixverse/swap` (`mode: background`) | **verified** | **unread** | no | **no — price** |
+| object insertion / removal ("AI VFX") | `fal-ai/pixverse/swap` (`mode: object`) | **verified** | **unread** | no | **no — price** |
+| person swap | `fal-ai/pixverse/swap` (`mode: person`), or Naive/Mira | **verified** (fal) · vendor (Mira) | **unread** on fal · **$1.48 flat** via Naive | no | **no — fal price unread**; only via Naive |
+| restyling / relighting | `fal-ai/id-v2v`, `fal-ai/id-v2v/relight` | **unread (404)** | **unread** | **yes** | **no — two blockers** |
 
-| operation | endpoint | input | output | limits | price | state |
-|---|---|---|---|---|---|---|
-| environment replacement | `fal-ai/pika/v2/pikaswaps` | `video_url` + `image_url` + `modify_region` + prompt | `{ video: { url } }` | none declared | **unread** | **schema verified** |
-| object insertion / removal ("AI VFX") | `fal-ai/pika/v2/pikaswaps` | same | same | none declared | **unread** | **schema verified** |
-| person swap | Naive/Mira | video + photo | video | any length | **$1.48 flat** | **vendor-verified** |
-| restyling | `fal-ai/id-v2v` | video + edited keyframe(s) | video | unread | unread | **contract unread** |
-| relighting | `fal-ai/id-v2v/relight` | video + relit reference frame | video | unread | unread | **contract unread** |
+**One endpoint covers three of the four.** `fal-ai/pixverse/swap` takes `video_url` + `image_url` and a **`mode` of `person`, `object` or
+`background`**, plus `keyframe_id` (the input is normalised to 24 fps, so keyframe 1 is the first frame), `resolution` up to 720p, and an
+original-sound switch. Output is one video file. That is person swap, object insertion/removal and environment replacement behind a single contract —
+which is why the three share a row-shape above and why the region machinery is not three builds.
 
-**AI VFX: defined, not dropped** — object insertion/removal, concrete and testable, sharing the region machinery environment replacement needs.
+**The keyframe workflow is a build, not a preset.** `id-v2v` restyles or relights **from an edited reference frame** while preserving the subject.
+Supplying that frame is a **scene-editing surface** — a creator must produce it — so even with a contract these are not a dropdown, and the earlier
+justification ("extends `CinematicLook`") was wrong: the look object holds lens, movement, lighting, grade and resolution for generation and cannot
+supply an edited keyframe.
 
-**Pricing decision: flat per operation**, via `FeatureCreditRate.creditsPerUnit` keyed `transform:<operation>`, mirroring `generate:<model>`.
-`assertWithinCeiling` counts credits, so a flat charge needs **no ledger change**. **No rate is seeded from an unverified price**: schemas are
-verified for **2 of 5** (pikaswaps, Mira) and prices for **1 of 5** (Mira). A rate for an operation whose cost is unmeasured is a number describing
-a call nobody has made.
+**Pricing: read attempted, nothing verified on fal.** Three attempts are recorded: the already-fetched `pikaswaps` document was **re-read for a
+price, cost or billing field — it carries none**; `fal-ai/pixverse/swap`'s verified document **carries none either**; `fal.ai/pricing` returned a
+marketing page with **no per-endpoint numbers**. A third-party page quotes Pika per-second rates, which is **not** an authorised price for an
+endpoint we would call, so it is recorded as a lead, not a price. **Prices verified: 1 of 5** (Mira, $1.48 flat, and that is Naive's price, not
+fal's). **No `transform:` rate is seeded** — a rate for an unmeasured call is the R16-budget defect.
 
-**Sequencing decision — resequenced, on contract readiness rather than architectural fit.** Environment replacement and object insertion/removal go
-**first**, because they are the operations whose contract is actually readable and they establish the region machinery. Restyling and relighting are
-**blocked on unreadable contracts** — *unverified*, never *absent* — and `CinematicLook` does not extend them. Person swap is sequenced after the
-region work despite being the most contract-complete, because it is a different mechanism (whole-subject replacement, not region editing) and its
-identity behaviour is unproven here.
+**The Naive question, resolved as far as it can be.** A **direct fal person-swap route exists** (`pixverse/swap`, `mode: person`), so person swap is
+not Naive-only by capability — but **no direct-fal price is verified for any operation**, which means "person swap is buildable" currently means
+**building on Naive's gateway at $1.48 flat**, not on fal. Adopting that layer is a product decision, not an integration detail, and it stays open.
 
-**Buildable now: person swap only.** It is the single operation with both a verified contract shape and a verified price ($1.48 flat, video + photo
-in, video out, any length). Environment replacement is the *sequencing* priority but is **not buildable** until a pikaswaps price is read; if that
-price stays unreadable, nothing else in Phase 12 is buildable, and that is the honest answer.
+**Buildable set today: empty.** Three operations have verified contracts and none has a verified fal price; restyling and relighting have neither a
+contract nor a workflow. The honest first line of this phase is **blocked on pricing**, and the next session's job is a price read — fal's dashboard
+endpoint metadata or a direct account quote — not a build.
 
 **Identity caveat.** Person swap does **not** inherit the 70/75 identity floor — those numbers came from `flux-2/edit` — so its first test must
 carry a **critic score**, not just a visual check.
 
-**Status.** Scheduled; contract verification incomplete — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is
-built: two contracts and four prices remain unread, and no `transform:` rate exists.
+**Status.** Scheduled; blocked on pricing — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is built and no
+`transform:` rate exists.
 
 ## Phase template (proven on Phase 1)
 
