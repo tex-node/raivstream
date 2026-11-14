@@ -963,57 +963,57 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled; contracts partial, prices unread)*
+## Phase 12 — Transformation operations *(scheduled; priced, not built)*
 
 **The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new asset
-from a prompt. The take model absorbs it — `createNewTake({ shotId })` already means "a new attempt at the same slot with a parent" — while the
-**ledger** does not: it is per-asset, and these operations are flat or per-second. Moderation differs too: the input was already scanned, so the
-derived asset needs the same output scan, but the directive is a transformation instruction, not a creator prompt.
+from a prompt. The take model absorbs it — `createNewTake({ shotId })` — while the ledger needs one new thing only: a **per-second, per-resolution
+rate**, because the provider prices by second and tier.
 
-**Four operations, not five.** Restyling and relighting are **two endpoints of one capability** (`fal-ai/id-v2v`, `fal-ai/id-v2v/relight`), so the
-five-operation framing overstates the phase by one.
+**The credit conversion, read from the code rather than assumed.** `database/seed.ts` records the owner's rates with their dollar basis:
+H3 turbo `$0.025/s → 80 cr/s`, `$0.04/s → 128`, `$0.08/s → 256` (**3,200 credits per dollar**); Recast `$0.30/s → 850`, `$0.45/s → 1,250`; RTV
+`$0.05/s → 140`, `$0.08/s → 225`, `$0.16/s → 450`; VEED Fabric `$0.08/s → 225`, `$0.15/s → 420`; VEED lipsync `$0.07/s → 200` (all **≈2,800 per
+dollar**). The record states the conversion as **2,800 credits per dollar, with the three H3 rows implying 3,200 — a 14% spread recorded rather than
+averaged away**, so every rate below is derived at 2,800 and rounded up.
 
-**The route, named.** Contracts are read from
-**`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>`**. It produced verified contracts for `fal-ai/pika/v2/pikaswaps` and
-`fal-ai/pixverse/swap`; against `fal-ai/id-v2v` it returns **404** — plain and percent-encoded — the page-shaped variant returns **an HTML shell**,
-and `/api/models/…` returns **404**. Those two contracts remain **unverified, never absent**.
+**Five operations, four endpoints — and three share one contract.**
 
-| operation | endpoint | contract | price | needs keyframe editor? | buildable now |
-|---|---|---|---|---|---|
-| environment replacement | `fal-ai/pixverse/swap` (`mode: background`) | **verified** | **unread** | no | **no — price** |
-| object insertion / removal ("AI VFX") | `fal-ai/pixverse/swap` (`mode: object`) | **verified** | **unread** | no | **no — price** |
-| person swap | `fal-ai/pixverse/swap` (`mode: person`), or Naive/Mira | **verified** (fal) · vendor (Mira) | **unread** on fal · **$1.48 flat** via Naive | no | **no — fal price unread**; only via Naive |
-| restyling / relighting | `fal-ai/id-v2v`, `fal-ai/id-v2v/relight` | **unread (404)** | **unread** | **yes** | **no — two blockers** |
+| operation | endpoint | verified price | credits/s @2,800 | 10 s cost |
+|---|---|---|---|---|
+| relighting | `minimax/h3-max/relight` | $0.05 / $0.08 / $0.16 / $0.32 per s by tier | 140 / 224 / 448 / 896 | 1,400 – 8,960 |
+| person swap | `minimax/h3-max/recast` | $0.085/s @768p, $0.17/s @1080p, 5 s min, + $0.022/1k input tokens after 4,096 | 238 / 476 (+tokens) | ~6,286 incl. tokens |
+| restyling | `fal-ai/kling-video/v4/video-to-video/edit` | $0.094/s @720p, $0.141/s @1080p, **billed input + output, min 2× output** | 263 / 395 | 5,260 / 7,900 (billed 20 s) |
+| environment replacement | `fal-ai/kling-video/v4/flash/reference-to-video` | $0.094/s, **$0.063/s with video references** | 263 / 176 | 2,630 / 1,760 |
+| object insertion / removal ("AI VFX") | same reference-to-video (and `pixverse/swap` `mode: object`) | same | same | same |
 
-**One endpoint covers three of the four.** `fal-ai/pixverse/swap` takes `video_url` + `image_url` and a **`mode` of `person`, `object` or
-`background`**, plus `keyframe_id` (the input is normalised to 24 fps, so keyframe 1 is the first frame), `resolution` up to 720p, and an
-original-sound switch. Output is one video file. That is person swap, object insertion/removal and environment replacement behind a single contract —
-which is why the three share a row-shape above and why the region machinery is not three builds.
+**The pricing shape is reversed, and the reason is measurable.** #408 chose **flat per operation**; a 6.4× spread across resolutions makes one
+number impossible — relight alone runs $0.05/s to $0.32/s. The shape is now **one `FeatureCreditRate` row per operation × resolution tier**
+(`transform:relight:768p`, `transform:recast:1080p`, …), mirroring the provider's own structure. `assertWithinCeiling` counts credits, so a computed
+amount needs **no ledger change**.
 
-**The keyframe workflow is a build, not a preset.** `id-v2v` restyles or relights **from an edited reference frame** while preserving the subject.
-Supplying that frame is a **scene-editing surface** — a creator must produce it — so even with a contract these are not a dropdown, and the earlier
-justification ("extends `CinematicLook`") was wrong: the look object holds lens, movement, lighting, grade and resolution for generation and cannot
-supply an edited keyframe.
+**Restyling is unblocked.** The keyframe blocker belonged to `id-v2v`, not to restyling. `fal-ai/kling-video/v4/video-to-video/edit` was read from
+the named route and takes **required `prompt` + `video_url`**, optional `image_urls` (up to 10), `video_urls` (up to 4), `elements`, start/middle/end
+frames, `duration` 3–30 s defaulting to the source length, and `resolution` 720p/1080p. **Text instructions with optional image references** — no
+edited keyframe — so it fits `CinematicLook`'s lighting/grade/movement fields more closely than the keyframe path did. **The billing caution is
+recorded:** minimum 2× output means a 10 s clip bills 20 s, and the rate must use the **billed** duration or every restyle undercharges by half.
 
-**Pricing: read attempted, nothing verified on fal.** Three attempts are recorded: the already-fetched `pikaswaps` document was **re-read for a
-price, cost or billing field — it carries none**; `fal-ai/pixverse/swap`'s verified document **carries none either**; `fal.ai/pricing` returned a
-marketing page with **no per-endpoint numbers**. A third-party page quotes Pika per-second rates, which is **not** an authorised price for an
-endpoint we would call, so it is recorded as a lead, not a price. **Prices verified: 1 of 5** (Mira, $1.48 flat, and that is Naive's price, not
-fal's). **No `transform:` rate is seeded** — a rate for an unmeasured call is the R16-budget defect.
+**Recast's token cost is folded in, at a stated assumption.** Output is per-second, input is per-token: 10 s ≈ 67,500 tokens → ~$1.39 after the
+4,096-token allowance; 15 s ≈ 101,250 → ~$2.14. Folded at **input ≈ output duration**, recast scores ~629 cr/s @768p over 10 s and ~637 cr/s over
+15 s — within 1% of each other. The approximation is recorded; a token-accurate charge needs the input duration threaded through the charge call,
+which is a larger change for that 1%.
 
-**The Naive question, resolved as far as it can be.** A **direct fal person-swap route exists** (`pixverse/swap`, `mode: person`), so person swap is
-not Naive-only by capability — but **no direct-fal price is verified for any operation**, which means "person swap is buildable" currently means
-**building on Naive's gateway at $1.48 flat**, not on fal. Adopting that layer is a product decision, not an integration detail, and it stays open.
+**The ceiling: most of these exceed it.** `AUTO_DEFAULT_CEILING = 1,680` credits. At 10 s, relight 768p is **2,240**, recast **~6,286**, restyle
+720p **5,260**, environment with references **1,760** — only relight 480p (1,400) sits under it. The ceiling governs **auto production runs**, not
+per-operation charges, so it does not block these directly; the finding is that **any transformation at 768p or above outruns the auto-run ceiling**,
+so premium operations need their own cap rather than being dropped into the auto budget.
 
-**Buildable set today: empty.** Three operations have verified contracts and none has a verified fal price; restyling and relighting have neither a
-contract nor a workflow. The honest first line of this phase is **blocked on pricing**, and the next session's job is a price read — fal's dashboard
-endpoint metadata or a direct account quote — not a build.
+**Buildable set now: four operations priced, none built.** Restyling, relighting, person swap, environment and object all have a verified contract
+shape and a verified price. What is missing is not information — it is the **`transform:` rate rows, the per-operation cap, and the derived-asset
+plumbing** through `createNewTake`.
 
 **Identity caveat.** Person swap does **not** inherit the 70/75 identity floor — those numbers came from `flux-2/edit` — so its first test must
 carry a **critic score**, not just a visual check.
 
-**Status.** Scheduled; blocked on pricing — see [history — Other status notes](roadmap-history.md#other-status-notes). Nothing is built and no
-`transform:` rate exists.
+**Status.** Scheduled; verified, priced, unbuilt — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
 
