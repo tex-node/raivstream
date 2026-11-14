@@ -23,25 +23,33 @@ export interface FalRelightInput {
   videoUrl: string;
   prompt: string;
   resolution: string;
+  /** Output duration; the kling contract accepts 3-30 s. */
+  outputSeconds: number;
 }
 
 interface VideoEditSubmitter {
   video: {
-    submitVideo: (input: Record<string, unknown>, opts: { idempotencyKey: string }) => Promise<{ requestId: string }>;
+    submitVideoEdit?: (input: { endpoint: string; body: Record<string, unknown> }, opts: { idempotencyKey: string }) => Promise<{ requestId: string }>;
     getStatus: (ref: MediaJobRef) => Promise<{ status: string; outputUrls?: string[]; error?: string }>;
   };
 }
 
 export async function submitFalRelight(input: FalRelightInput): Promise<string> {
-  const provider = createFalMediaProvider() as unknown as VideoEditSubmitter;
-  const ref = await provider.video.submitVideo(
-    {
-      endpointId: input.endpointId,
-      videoUrl: input.videoUrl,
-      videoUrls: [input.videoUrl],
-      prompt: input.prompt,
-      resolution: input.resolution,
-    },
+  // The body is validated by klingEditBody BEFORE it reaches the provider, so an invalid one never reaches
+  // guardedSubmit. Real capability, real body, no speculative shape (2026-11-14).
+  const { toKlingEditBody } = await import('../creative/transform/klingEditBody');
+  const body = toKlingEditBody({
+    videoUrl: input.videoUrl,
+    prompt: input.prompt,
+    resolution: input.resolution,
+    durationSeconds: input.outputSeconds,
+  });
+  const provider = createFalMediaProvider();
+  if (!provider.video?.submitVideoEdit) {
+    throw new Error('FAL_VIDEO_EDIT_UNAVAILABLE: the fal provider exposes no videoEdit capability');
+  }
+  const ref = await provider.video.submitVideoEdit(
+    { endpoint: input.endpointId, body },
     { idempotencyKey: `relight:${randomUUID()}` },
   );
   return `${PROVIDER_PREFIX}${ref.requestId}`;

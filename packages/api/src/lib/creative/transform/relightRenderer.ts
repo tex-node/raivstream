@@ -59,6 +59,6 @@ export function createRelightRenderer(config: RelightRendererConfig = {}): Relig
     // thin adapter beside falFlux2Edit/falH3Max and shares persistFalOutput, the queue poll and the
     // contract set; it is the only new code the wiring needs.
     const { submitFalRelight } = await import('../../generators/falRelight');
-    return submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution });
+    return submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution, outputSeconds: input.outputSeconds });
   };
 }

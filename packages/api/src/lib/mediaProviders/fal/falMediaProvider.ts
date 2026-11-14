@@ -259,6 +259,20 @@ export function createFalMediaProvider(deps: FalProviderDeps = {}): MediaProvide
       if (ref.kind !== 'video') throw new MediaProviderError('INVALID_REQUEST', 'ref is not a video job');
       return statusFor(ref, ref.model ?? config.endpoints.video);
     },
+    /**
+     * Video-to-video edit (2026-11-14). A sibling of submitVideo INSIDE the provider, so it shares the
+     * private `transport`, `guardedSubmit`, `assertEndpoint` and `refOf` by construction rather than by a
+     * copy - a copy would reproduce the boundary it exists to cross. The body arrives already validated
+     * (klingEditBody.ts), so this method never sees an invalid one; an endpoint outside the contract set is
+     * still refused through the same UNSUPPORTED error a missing model uses.
+     */
+    async submitVideoEdit(input: { endpoint: string; body: Record<string, unknown> }, options: SubmitMediaOptions): Promise<MediaJobRef> {
+      assertLive('video');
+      assertEndpoint(input.endpoint);
+      const requestId = await guardedSubmit('video', input.endpoint, input.body, options);
+      requestCount += 1;
+      return refOf('video', input.endpoint, requestId, options);
+    },
     async cancel(ref: MediaJobRef): Promise<void> {
       await transport.cancel(ref.model ?? config.endpoints.video, ref.requestId);
     },

@@ -161,10 +161,27 @@ export interface ImageGenerationProvider {
   cancel(ref: MediaJobRef): Promise<void>;
 }
 
+/**
+ * A video-to-video edit (2026-11-14).
+ *
+ * Not a value of VideoGenerationInput: that type requires an opening frame and has no source video, and
+ * submitVideo dispatches to a constant endpoint. A video edit therefore carries its own endpoint and its
+ * own already-validated body.
+ */
+export interface VideoEditInput {
+  endpoint: string;
+  body: Record<string, unknown>;
+}
+
 export interface VideoGenerationProvider {
   readonly name: string;
   readonly kind: 'video';
   submitVideo(input: VideoGenerationInput, options: SubmitMediaOptions): Promise<MediaJobRef>;
+  /**
+   * Optional so the interface stays honest for providers that have no edit capability. Implemented by fal
+   * INSIDE the provider, where the private transport and guardedSubmit live.
+   */
+  submitVideoEdit?(input: VideoEditInput, options: SubmitMediaOptions): Promise<MediaJobRef>;
   getStatus(ref: MediaJobRef): Promise<MediaJobStatusResult>;
   cancel(ref: MediaJobRef): Promise<void>;
 }
