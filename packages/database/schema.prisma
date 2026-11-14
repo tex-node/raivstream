@@ -2632,6 +2632,14 @@ model CreativeProducedAsset {
   parentTakeId  String?
   isLatest      Boolean                       @default(true)
 
+  /// How this asset came to exist (2026-11-14): null = generated, otherwise 'transform:<operation>'.
+  /// A restyled asset and a generated one were indistinguishable without consulting the operation log,
+  /// which is the engine-record defect applied to pixels.
+  producedBy    String?
+  /// The asset a transformation was derived FROM. `parentTakeId` is the previous take in the same
+  /// slot; a transformation's source may be several takes back or a different slot, so it is separate.
+  sourceAssetId String?
+
   // Scene-level take uniqueness. The DATABASE carries TWO PARTIAL unique indexes since
   // 20261104090000_creative_take_shot_scope - this one for shotId IS NULL and a
   // five-column one for shotId IS NOT NULL. Prisma cannot express partial indexes, so this

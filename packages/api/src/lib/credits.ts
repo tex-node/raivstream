@@ -191,6 +191,12 @@ export async function deductCredits(
   referenceId: string,
   description: string,
   idempotencyKey: string,
+  /**
+   * Explicit credit amount (2026-11-14). Transformation charges are per SECOND, so the amount is
+   * rate x billed duration rather than the rate itself. The rate row is still required - a missing
+   * rate fails closed - but the amount may exceed one unit.
+   */
+  options?: { amountCredits?: number },
 ): Promise<number> {
   // 0. Idempotent pre-check runs BEFORE the rate lookup: a replay must return
   //    the original charge even if the rate was since changed/deactivated.
@@ -216,7 +222,13 @@ export async function deductCredits(
     });
   }
 
-  const cost = rate.creditsPerUnit;
+  const cost = options?.amountCredits ?? rate.creditsPerUnit;
+  if (!Number.isFinite(cost) || cost <= 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Computed charge for ${featureKey} is not a positive credit amount: ${String(cost)}`,
+    });
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -694,6 +706,8 @@ export async function chargeOrThrow(
   referenceId: string,
   description: string,
   idempotencyKey: string,
+  /** Explicit amount for per-second charges (rate x billed duration); see deductCredits. */
+  options?: { amountCredits?: number },
 ): Promise<number> {
-  return deductCredits(prisma, userId, featureKey, referenceId, description, idempotencyKey);
+  return deductCredits(prisma, userId, featureKey, referenceId, description, idempotencyKey, options);
 }
