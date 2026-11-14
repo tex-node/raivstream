@@ -1,4 +1,5 @@
 import { PrismaClient, BadgeType } from '@prisma/client';
+import { TRANSFORM_RATES } from './transformRates';
 
 const prisma = new PrismaClient();
 
@@ -184,6 +185,8 @@ async function main() {
     },
     // ── Per-second video pricing (VIDEO_PER_SECOND_PRICING flag) ────────────
     // Rate = credits per second of generated video. ≥ 40% margin on Pro pack (₦0.80/cr).
+    // Transformation rates come from ./transformRates so the seed and its test read one table (2026-11-14).
+    ...TRANSFORM_RATES.map((r) => ({ featureKey: r.featureKey, creditsPerUnit: r.creditsPerSecond, isActive: true })),
     // Rates set 2026-10-16 (owner decision). fal prices:
     // H3 turbo:  480P $0.025/s → 80 cr/s; 768P $0.04/s → 128 cr/s; 1080P $0.08/s → 256 cr/s
     // Recast:    768P $0.30/s → 850 cr/s; 1080P $0.45/s → 1,250 cr/s
@@ -210,13 +213,16 @@ async function main() {
     },
     {
       featureKey:     'generate:minimax_recast_768p',
-      creditsPerUnit: 850,
+      // Was 850 - that encodes $0.30/s, and the verified recast price is $0.085/s. 238 = ceil(0.085 x 2,800).
+      // The old value is kept here rather than silently replaced (2026-11-14).
+      creditsPerUnit: 238,
       unitLabel:      'second',
       description:    'MiniMax video-recast 768P — per-second billing (850 cr/s)',
     },
     {
       featureKey:     'generate:minimax_recast_1080p',
-      creditsPerUnit: 1250,
+      // Was 1,250 - that encodes $0.45/s, and the verified price is $0.17/s. 476 = ceil(0.17 x 2,800).
+      creditsPerUnit: 476,
       unitLabel:      'second',
       description:    'MiniMax video-recast 1080P — per-second billing (1,250 cr/s)',
     },
