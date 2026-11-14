@@ -973,6 +973,29 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**`videoEdit` now exists inside the fal provider, and the speculative body is deleted.** The capability is a **sibling of `submitVideo` on the provider
+object**, which is what makes it share `transport`, `guardedSubmit`, `assertEndpoint` and `refOf` **by construction** rather than by a copy — a copy would
+reproduce the boundary it exists to cross. `types.ts` gains an optional `submitVideoEdit` on `VideoGenerationProvider` (optional so a provider without
+an edit capability stays honest). The body arrives from `klingEditBody.ts`, so an **invalid body never reaches `guardedSubmit`**; an endpoint outside
+the contract set is still refused through the same `UNSUPPORTED` error a missing model uses. `falRelight.ts` no longer constructs a body — it calls
+`toKlingEditBody` and then `provider.video.submitVideoEdit`, and the renderer threads the output duration through. **Tests: 102 media-provider, 3
+renderer, 6 shape.**
+
+**The spend decision, and why it has not run.** The operator authorized a **3-second minimum** proof rather than the 10 s clip: billed **6 s × 263 =
+1,578 credits ≈ 20 stills**, not 5,260. It has **not been executed**, and the reason is the one that outranks configuration or budget: **there is no
+production call site for a transformation.** `deriveTransformTake` has **zero non-test callers** — the only two references are its definition and a doc
+comment in the renderer. Nothing in the app can ask for a relight, so spending credits would require writing the procedure first. That is the **eighth
+"built but not wired" instance**, and it is named here rather than discovered after the charge: the plumbing, the charge arithmetic, the shape check
+and the capability are all real; the entry point is not.
+
+**The next wiring is one procedure**, not a design: a transform mutation that resolves a source asset and its duration, calls `planTransformCharge`,
+then `deriveTransformTake` with `createRelightRenderer()`. At that point the 3 s proof costs 1,578 credits and can run in one call.
+
+**The product question, with the real numbers.** At 10 s a relight or restyle is **65 FLUX2 stills** and a recast is **78**; at the 3 s minimum a
+relight is **≈20**. The earlier conclusion that relight was defensible at 17.5 stills **does not survive** the move to the verified contract — at 10 s
+all three are premium operations and the decision is the operator's; at 3 s relight is the cheapest of the three and is the only one whose floor is
+close to the earlier number.
+
 **The input type was read, and relight does not map onto it.** `VideoGenerationInput` is `{ prompt, imageUrl (required), endImageUrl?,
 durationSeconds?, resolution?, seed?, promptExpansion?, model? }` — it **requires an opening frame** and has **no `videoUrl`** — and
 `submitVideo` does not select an endpoint from the input at all: it uses `config.endpoints.video` and builds the body with `toH3MaxInput`. So a
