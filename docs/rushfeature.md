@@ -973,6 +973,30 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**Correction, with file evidence: the fal client was never missing.** The previous entry said "the repo has no fal client at all". That is
+**wrong**, and it is corrected here rather than replaced. fal is fully present: **`mediaProviders/fal/falMediaProvider.ts`** (queue transport over
+`@fal-ai/client`), **`falStorage.ts`** (`persistFalOutput`), `falWebhook.ts`, `contracts.ts`, and per-model adapters **`generators/falFlux2.ts`**,
+**`falFlux2Edit.ts`**, **`falH3Max.ts`**. The confusion was the generator *registry* list — fal is dispatched as a **contract set with capability
+switches**, not as a registry entry beside xAI/RunPod/Gemini. Two properties of that adapter shape the wiring: it is **disabled by default**
+(`readFalMediaConfig` + `isFalCapabilityLive`, `FAL_MAX_REQUESTS`), so an unswitched environment fails without touching the network — which is
+exactly what an operation with no live proof should do — and an endpoint outside its allowed set is refused by **the same dispatch**, not by a new
+error path.
+
+**What was actually missing was an adapter and a call site, and both are now written.** `generators/falRelight.ts` is the thin adapter beside
+`falFlux2Edit`/`falH3Max`: it adds **no transport**, shares the queue client and `persistFalOutput`, and is gated by the same switches.
+`createRelightRenderer` supplies the `render` dependency `deriveTransformTake` expects, and it **refuses to guess a slug**: the relight endpoint has
+a verified **price** and an **unread contract** (its queue schema 404s again this session), so the endpoint id must be stated in
+`FAL_RELIGHT_ENDPOINT`; without it the renderer fails closed with `TRANSFORM_ENDPOINT_CONTRACT_UNVERIFIED` rather than posting an invented body to a
+guessed endpoint. **Three tests** pin that: no configured endpoint → closed; a configured one → the source url and an edit instruction reach the
+submit; the id comes from configuration, not a constant.
+
+**The live relight still has not run, and the reason is now precise rather than vague:** it needs `FAL_KEY`, the fal switches enabled,
+`FAL_MAX_REQUESTS > 0`, an explicitly configured relight endpoint whose contract has been read, and **1,400 credits** for 10 s at 480p. Three of
+those five are operator configuration, one is an unread contract, and one is spend — none of them is a missing client.
+
+**The pixels remain unproven.** A row, a charge and a demotion prove plumbing; only a critic score on the derived asset would prove the operation,
+and that cannot run before a live render exists. Recorded as the proof's limit.
+
 **The money path was audited before any spend, and the audit found a real defect.** Callers of `deductCredits` / `chargeOrThrow`: **31 sites** —
 `createNewTake`, `runner`'s per-asset charge, the audio service (×2), the director, generation (×2), story (×12), and test helpers. **Exactly one**
 passes `amountCredits` (the transform path); the other thirty use the original six-argument shape, where the amount **defaults to the rate** — a
