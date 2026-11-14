@@ -973,6 +973,29 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The input type was read, and relight does not map onto it.** `VideoGenerationInput` is `{ prompt, imageUrl (required), endImageUrl?,
+durationSeconds?, resolution?, seed?, promptExpansion?, model? }` — it **requires an opening frame** and has **no `videoUrl`** — and
+`submitVideo` does not select an endpoint from the input at all: it uses `config.endpoints.video` and builds the body with `toH3MaxInput`. So a
+video-to-video edit is a **different operation, not a different value of the same one**. Extending the shared input with a `videoUrl` and an endpoint
+selector would make one type serve two dispatch shapes; the adapter needs the relight body and its own dispatch, reusing the queue and
+`persistFalOutput`.
+
+**The shape check exists, and a malformed spec costs nothing.** `klingEditBody.ts` validates against the **verified** contract before any charge:
+absolute `video_url`, non-empty `prompt`, resolution in `{720p, 1080p}`, duration in **3–30 s**, at most 10 reference images. Failures are a typed
+`TRANSFORM_BODY_INVALID`, thrown locally — the moderation pattern (reject before spending) applied to shape instead of content. **Six tests.**
+`toKlingEditBody` builds `{ prompt, video_url, resolution, duration, image_urls? }` from a spec.
+
+**Why the spend did not happen, stated precisely.** `falRelight.ts` still calls a speculative body, and the fix is not a field: the fal provider's
+`transport` and `guardedSubmit` are **module-private**, so a relight dispatch cannot reach them from an adapter. The correct next change is a
+**`videoEdit` capability on the fal provider** — one method beside `imageEdit`, permitted by the contract set, sharing `persistFalOutput` — and then
+the renderer calls that. Spending 5,260 credits before that exists would test a speculative body, which is exactly what the previous session said it
+would not do.
+
+**The product question got worse, and this is the session's most important consequence.** With the verified contract, a 10 s relight bills **20 s at
+263 cr/s = 5,260 credits — 65 FLUX2 stills**, not the 17.5 the minimax rate implied. **Choosing the verified contract did not merely cost 3.75×: it
+moved relight from "buildable and cheap enough" to "premium and undecided."** All three priced operations — relight 65, restyle 65, recast 78 — now
+need the operator's decision, and the earlier conclusion that relight was defensible at 17.5 stills **no longer holds**.
+
 **The three operator settings were already live — the blocker list was inflated.** Checked, not assumed: `FAL_MEDIA_PROVIDER_ENABLED=true`,
 `FAL_REAL_PROVIDER_CALLS_ENABLED=true` (the real-calls switch, which the earlier list did not even name), `FAL_IMAGE_ENABLED=true`,
 `FAL_IMAGE_EDIT_ENABLED=true`, `FAL_VIDEO_ENABLED=true`, `FAL_KEY` set, and `FAL_MAX_REQUESTS` reads **200** in `apps/web/.env.local` against **10**
