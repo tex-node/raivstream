@@ -963,52 +963,60 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled; priced and seeded, not built)*
+## Phase 12 — Transformation operations *(first operation plumbed; no live call yet)*
 
-**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new asset
-from a prompt. The take model absorbs it — `createNewTake({ shotId })` — while the ledger needs one new thing only: a **per-second, per-resolution
-rate**, because the provider prices that way.
+**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**. The **take model already fits**:
+`createNewTake` was read end to end and it is the shape a transformation needs — a **new row**, `takeNumber = max + 1`, `parentTakeId` = the take it
+supersedes, a **fresh idempotency key** that charges normally, and the previous take **demoted to `isLatest = false`** and kept as history. Restyle,
+relight and person swap each take one asset and produce one asset in the same slot, so the unit is **a take, not a new asset category**; the slot is
+`(projectId, sceneId, shotId, kind)` and the two partial unique indexes already enforce it.
 
-**The credit conversion, read from the code.** `seed.ts` records the owner's rates with their dollar basis: Recast `$0.30 → 850`, `$0.45 → 1,250`;
-RTV `$0.05 → 140`, `$0.08 → 225`, `$0.16 → 450`; VEED `$0.08 → 225`, `$0.15 → 420`, `$0.07 → 200` — all **≈2,800 credits per dollar**. The three H3
-turbo rows sit at **3,200**, and that 14% spread is recorded rather than averaged away. Transformation rates derive at **2,800**.
+**The provenance gap is closed.** `CreativeProducedAsset` had `provider` and `versionId` but nothing saying **how** an asset came to exist — a
+restyled asset and a generated one were indistinguishable without consulting an operation log. Two columns now exist (migration
+`20261114120000_transform_provenance`, nullable and additive):
+- **`producedBy`** — `null` for generation, `transform:<operation>:<tier>` for a transformation;
+- **`sourceAssetId`** — the asset it was derived from. `parentTakeId` could **not** serve: it is the previous take in the same slot, while a
+  transformation's source may be several takes back or a different slot.
 
-**The stale rows were resolvable, and are corrected.** `credits.ts` resolves recast feature keys, so the 850/1,250 rows were **reachable by the
-resolver** while encoding `$0.30/$0.45` against a verified `$0.085/$0.17` — dormant (no procedure charges them yet) but live as keys. They are now
-**238/476**, with the old values kept in comments beside them. **The audit of every row with a recorded basis** found one other mismatch:
-`veed_avatar` at 20 cr/s implies ~3,430/$ (its basis is `$0.35/min`, a round-number choice), which is **deliberate and now recorded**, not stale.
-Every other row matches its basis.
+`provider` is the model that ran; `producedBy` is **what the row is**. That is the engine-record rule applied to pixels: an asset's origin is
+readable, not inferred.
 
-**The rates, one row per operation × resolution tier** (source: `database/transformRates.ts`, seeded into `FeatureCreditRate`):
+**Duration is threaded, not guessed.** The asset model carries **no duration column**, so the duration is established **before** the charge and the
+caller supplies it. The billing rules are code, not prose:
 
-| key | cr/s | basis | billing note |
-|---|---|---|---|
-| `transform:relight:480p` · `768p` · `1080p` · `2k` | 140 · 224 · 448 · 896 | $0.05 · $0.08 · $0.16 · $0.32 /s | output duration |
-| `transform:recast:768p` · `1080p` | 238 · 476 | $0.085 · $0.17 /s | **input tokens folded in at input ≈ output (~1%)** |
-| `transform:restyle:720p` · `1080p` | 263 · 395 | $0.094 · $0.141 /s | **per BILLED second; minimum 2× output** |
-| `transform:environment:720p` (+`:videoref`) | 263 · 176 | $0.094 · $0.063 /s | output duration |
-| `transform:object:720p` (+`:videoref`) | 263 · 176 | $0.094 · $0.063 /s | output duration |
+| operation | billed seconds |
+|---|---|
+| relight · recast · environment · object | the output duration |
+| **restyle** | **`max(2 × output, input + output)`** — the provider bills input + output with a minimum of 2× output, so a 10 s clip bills **20 s** |
 
-**Restyle's unit is billed seconds, and the key says so.** Multiplying 263 by the *output* duration undercharges by half; the note and the
-`billedOn: 'output-x2-min'` field exist so a caller cannot read it the wrong way.
+A charge computed from a guessed duration is the R16-budget defect, so a missing duration **throws** (`TRANSFORM_DURATION_REQUIRED`).
 
-**The cap decision: no cap on explicit transformations — and the cost must be shown first.** `AUTO_DEFAULT_CEILING = 1,680` guards **unattended**
-runs; it fits only relight 480p (1,400) and would silently refuse everything at 768p or above, which is a prohibition, not a cap. A creator choosing
-"swap this person at 1080p" has already decided, so the honest requirement is **cost preview**, not a refusal. **Cost preview exists**: 
-`getFeatureCreditCost`, `estimatePerSecondCosts`, `generation.estimate`'s `creditCostByResolution` and the director's `nextTakeCost` all return a
-number before a charge — so the no-cap decision is implementable with what is already there.
+**The charge path learned one thing: an amount.** Every rate is per **second**, while the ledger charged one `creditsPerUnit` per call.
+`deductCredits` and `chargeOrThrow` now take an optional `{ amountCredits }`, so a charge is `rate × billed seconds` — and the **rate row is still
+required**, so a missing rate **fails closed** (`TRANSFORM_RATE_MISSING`) rather than charging zero or borrowing a generation rate. The amount is
+planned **before** the row is created, so a missing rate leaves no orphan `QUEUED` row.
 
-**Buildable set: priced and seeded, still unbuilt.** Every operation has a verified contract shape and a derived rate. What remains is the
-**derived-asset plumbing through `createNewTake`** and the per-operation cost preview on the surface that offers a transformation.
+**One operation is wired: relight.** `deriveTransformTake` takes a source asset, an operation spec and the durations; it creates the new take with
+provenance, charges `rate × billed`, renders through an injected `render`, demotes the prior take in one transaction, and marks the row `FAILED` if
+the render throws. **Ten tests** pin the slot semantics, the provenance columns at creation, relight's arithmetic (224 cr/s × 10 s = 2,240), and
+**restyle's 2× rule (20 s → 5,260 credits)** even though restyle is not the operation wired. `assertNotResetAfterCharge` still refuses a reset: a
+transformation is a **new row**, never a replay of the old one's charge key.
 
-**The product question, recorded and not answered.** A 10 s person swap is **~6,286 credits — 78 FLUX2 stills**. Restyle of the same clip is
-**~5,260**, relight 768p **~2,240**. Whether a transformation priced at 78× a still is a premium operation Raivstream's creators will use, or whether
-the credit-to-dollar ratio is wrong for this class, is a **product decision**; the phase cannot build until someone makes it.
+**What is not done: the live call.** One real relight was **not** run. **Cost, stated before it is run:** relight 480p for 10 s is
+**1,400 credits**, 768p is **2,240** — the cheapest proof of the whole path, above the auto ceiling but not an auto run. What exists now is the code
+path with an injected renderer and a real charge computation; the live proof needs an account, an asset and one provider call, and it is the next
+step rather than a claim.
 
-**Identity caveat.** Person swap does **not** inherit the 70/75 identity floor — those numbers came from `flux-2/edit` — so its first test must
-carry a **critic score**, not just a visual check.
+**The cap decision stands: none on explicit transformations**, with cost preview required — and preview already exists (`getFeatureCreditCost`,
+`estimatePerSecondCosts`, `generation.estimate`, director `nextTakeCost`). `AUTO_DEFAULT_CEILING = 1,680` still fits only relight 480p.
 
-**Status.** Scheduled; verified, priced, seeded, unbuilt — see [history — Other status notes](roadmap-history.md#other-status-notes).
+**The product question is still open.** A 10 s person swap is **~6,286 credits — 78 FLUX2 stills**; restyle is **5,260**, relight 768p **2,240**.
+Whether a transformation at 78× a still is a premium operation Raivstream's creators will use, or the credit-to-dollar ratio is wrong for this class,
+is the operator's call, and the phase cannot ship to creators until it is made.
+
+**Identity caveat unchanged.** Person swap does not inherit the 70/75 `flux-2/edit` floor; its first test must carry a **critic score**.
+
+**Status.** First operation plumbed, live call pending — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
 
