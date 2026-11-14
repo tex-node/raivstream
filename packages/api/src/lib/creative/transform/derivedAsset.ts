@@ -16,6 +16,7 @@
  */
 import type { PrismaClient } from '@raivstream/database';
 import { chargeOrThrow, getFeatureCreditCost } from '../../credits';
+import { creditKeys } from '../../credits/idempotencyKeys';
 
 export type TransformOperation = 'relight' | 'recast' | 'restyle' | 'environment' | 'object';
 
@@ -167,7 +168,8 @@ export async function deriveTransformTake(
     select: { id: true },
   });
 
-  const idempotencyKey = `transform-${row.id}-a1`;
+  // The documented key shape, not a hand-rolled one: nextChargeAttempt finds prior charges by prefix.
+  const idempotencyKey = creditKeys.transform.charge(row.id, 0);
   const creditsCharged = await chargeOrThrow(
     prisma,
     owner.userId,

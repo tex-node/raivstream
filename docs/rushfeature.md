@@ -963,60 +963,51 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(first operation plumbed; no live call yet)*
+## Phase 12 — Transformation operations *(plumbing audited; live proof blocked on a renderer)*
 
-**The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**. The **take model already fits**:
-`createNewTake` was read end to end and it is the shape a transformation needs — a **new row**, `takeNumber = max + 1`, `parentTakeId` = the take it
-supersedes, a **fresh idempotency key** that charges normally, and the previous take **demoted to `isLatest = false`** and kept as history. Restyle,
-relight and person swap each take one asset and produce one asset in the same slot, so the unit is **a take, not a new asset category**; the slot is
-`(projectId, sceneId, shotId, kind)` and the two partial unique indexes already enforce it.
+**The shape.** A transformation takes an **existing asset** and produces a **derived one** in the same slot, which is exactly what the take model
+encodes: a **new row**, `takeNumber = max + 1`, `parentTakeId`, a **fresh idempotency key**, and the prior take **demoted to `isLatest = false`** and
+kept. The slot is `(projectId, sceneId, shotId, kind)`.
 
-**The provenance gap is closed.** `CreativeProducedAsset` had `provider` and `versionId` but nothing saying **how** an asset came to exist — a
-restyled asset and a generated one were indistinguishable without consulting an operation log. Two columns now exist (migration
-`20261114120000_transform_provenance`, nullable and additive):
-- **`producedBy`** — `null` for generation, `transform:<operation>:<tier>` for a transformation;
-- **`sourceAssetId`** — the asset it was derived from. `parentTakeId` could **not** serve: it is the previous take in the same slot, while a
-  transformation's source may be several takes back or a different slot.
+**Provenance is a column, not an inference.** `producedBy` (`null` = generated, `transform:<op>:<tier>` = transformed) and `sourceAssetId` (migration
+`20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
+slot, while a source may be several takes back or in a different slot.
 
-`provider` is the model that ran; `producedBy` is **what the row is**. That is the engine-record rule applied to pixels: an asset's origin is
-readable, not inferred.
+**The money path was audited before any spend, and the audit found a real defect.** Callers of `deductCredits` / `chargeOrThrow`: **31 sites** —
+`createNewTake`, `runner`'s per-asset charge, the audio service (×2), the director, generation (×2), story (×12), and test helpers. **Exactly one**
+passes `amountCredits` (the transform path); the other thirty use the original six-argument shape, where the amount **defaults to the rate** — a
+documented default, not a silent zero, and now pinned by a test. **The defect:** the transform key was hand-rolled as `transform-<id>-a1`, which is
+**invisible to `nextChargeAttempt`** — it finds a row's prior charges by the `<domain>:<op>:<id>:` prefix and returns `max(attempt)+1`. A hand-rolled
+key would have made a retried transform **replay attempt 0 and re-bill the provider while the ledger wrote nothing**, which is the precise defect
+`nextChargeAttempt` exists to prevent. Fixed with a `creditKeys.transform.charge(assetId, attempt)` in the documented format
+(`transform:charge:<id>:<n>`), and a test asserts a transform charge and a generation charge for the same asset id produce **different keys** so
+neither can replay the other.
 
-**Duration is threaded, not guessed.** The asset model carries **no duration column**, so the duration is established **before** the charge and the
-caller supplies it. The billing rules are code, not prose:
+**Duration is threaded, not guessed.** The asset model has no duration column, so the caller supplies it and a missing value throws
+`TRANSFORM_DURATION_REQUIRED`. Relight/recast/environment/object bill the output duration; **restyle bills `max(2 × output, input + output)`** — 10 s
+bills 20 s — pinned by a test even though restyle is not wired.
 
-| operation | billed seconds |
-|---|---|
-| relight · recast · environment · object | the output duration |
-| **restyle** | **`max(2 × output, input + output)`** — the provider bills input + output with a minimum of 2× output, so a 10 s clip bills **20 s** |
+**The charge is `rate × billed seconds`.** `deductCredits` and `chargeOrThrow` take an optional `{ amountCredits }`; the **rate row is still
+required**, so a missing rate fails closed (`TRANSFORM_RATE_MISSING`) rather than charging zero, and the amount is planned **before** the row is
+created so a failed plan leaves no orphan `QUEUED` row.
 
-A charge computed from a guessed duration is the R16-budget defect, so a missing duration **throws** (`TRANSFORM_DURATION_REQUIRED`).
+**One operation is wired — plumbing only, and the live proof is blocked on a renderer that does not exist.** `deriveTransformTake` takes a source
+asset, an operation and the durations; it creates the take with provenance, charges `rate × billed` (224 × 10 = 2,240), calls an **injected**
+`render`, demotes the prior take in one transaction and marks the row `FAILED` on a render throw. **But nothing supplies that renderer in
+production**: `deriveTransformTake` is called only from its tests, and the repo has **no fal client** at all — the transformation providers
+(pixverse, kling, minimax) are not among the wired generators (xAI, RunPod, Gemini, Kling's own API). So the live relight **was not run**, and the
+reason is not credits: **the renderer adapter is the missing build**, and naming it is the honest result.
 
-**The charge path learned one thing: an amount.** Every rate is per **second**, while the ledger charged one `creditsPerUnit` per call.
-`deductCredits` and `chargeOrThrow` now take an optional `{ amountCredits }`, so a charge is `rate × billed seconds` — and the **rate row is still
-required**, so a missing rate **fails closed** (`TRANSFORM_RATE_MISSING`) rather than charging zero or borrowing a generation rate. The amount is
-planned **before** the row is created, so a missing rate leaves no orphan `QUEUED` row.
+**The pixel question is therefore unproven, and recorded as a limit.** A row, a charge and a demotion prove the plumbing; they do not prove the
+pixels changed. The critic would have to score character identity and overall on the derived asset against the source — and that cannot happen before
+a renderer exists.
 
-**One operation is wired: relight.** `deriveTransformTake` takes a source asset, an operation spec and the durations; it creates the new take with
-provenance, charges `rate × billed`, renders through an injected `render`, demotes the prior take in one transaction, and marks the row `FAILED` if
-the render throws. **Ten tests** pin the slot semantics, the provenance columns at creation, relight's arithmetic (224 cr/s × 10 s = 2,240), and
-**restyle's 2× rule (20 s → 5,260 credits)** even though restyle is not the operation wired. `assertNotResetAfterCharge` still refuses a reset: a
-transformation is a **new row**, never a replay of the old one's charge key.
+**The narrowed product question.** A 10 s relight at 480p is **1,400 credits (17.5 FLUX2 stills)**, 768p **2,240 (28)**; a 10 s restyle is
+**5,260 (65)**; a person swap **~6,286 (78)**. **Relight is defensible at these prices** — the decision needed is about **recast and restyle**, not
+the phase. Relight can ship once a renderer exists; the other three wait on the operator saying whether a 78-still operation is one creators will use
+or whether the credit-to-dollar ratio is wrong for this class.
 
-**What is not done: the live call.** One real relight was **not** run. **Cost, stated before it is run:** relight 480p for 10 s is
-**1,400 credits**, 768p is **2,240** — the cheapest proof of the whole path, above the auto ceiling but not an auto run. What exists now is the code
-path with an injected renderer and a real charge computation; the live proof needs an account, an asset and one provider call, and it is the next
-step rather than a claim.
-
-**The cap decision stands: none on explicit transformations**, with cost preview required — and preview already exists (`getFeatureCreditCost`,
-`estimatePerSecondCosts`, `generation.estimate`, director `nextTakeCost`). `AUTO_DEFAULT_CEILING = 1,680` still fits only relight 480p.
-
-**The product question is still open.** A 10 s person swap is **~6,286 credits — 78 FLUX2 stills**; restyle is **5,260**, relight 768p **2,240**.
-Whether a transformation at 78× a still is a premium operation Raivstream's creators will use, or the credit-to-dollar ratio is wrong for this class,
-is the operator's call, and the phase cannot ship to creators until it is made.
-
-**Identity caveat unchanged.** Person swap does not inherit the 70/75 `flux-2/edit` floor; its first test must carry a **critic score**.
-
-**Status.** First operation plumbed, live call pending — see [history — Other status notes](roadmap-history.md#other-status-notes).
+**Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
 

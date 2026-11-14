@@ -23,6 +23,16 @@ export const creditKeys = {
     charge: (jobId: string, attempt = 0) => build('gen', 'charge', [jobId, attempt]),
     refund: (jobId: string, attempt = 0) => build('gen', 'refund', [jobId, attempt]),
   },
+  /**
+   * One transformation per derived take (2026-11-14). Same `<domain>:<op>:<ids>` shape as every other
+   * domain, because `nextChargeAttempt` finds a row's prior charges by PREFIX - a hand-rolled key like
+   * `transform-<id>-a1` would be invisible to it, so a retried transform would replay attempt 0 and be
+   * re-billed while the ledger wrote nothing. That is the exact defect nextChargeAttempt exists for.
+   */
+  transform: {
+    charge: (assetId: string, attempt = 0) => build('transform', 'charge', [assetId, attempt]),
+    refund: (assetId: string, attempt = 0) => build('transform', 'refund', [assetId, attempt]),
+  },
   /** One still per StorySceneAsset; the asset id is the logical request. */
   sceneImage: {
     charge: (assetId: string) => build('scene_img', 'charge', [assetId]),
