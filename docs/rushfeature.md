@@ -963,57 +963,52 @@ feature.
 Phase 0 stands as the honest starting point: the audit is done, the R16 acceptance render is
 not.
 
-## Phase 12 — Transformation operations *(scheduled; priced, not built)*
+## Phase 12 — Transformation operations *(scheduled; priced and seeded, not built)*
 
 **The architectural distinction.** A transformation takes **an existing asset** and produces **a derived one**; a generation produces a new asset
 from a prompt. The take model absorbs it — `createNewTake({ shotId })` — while the ledger needs one new thing only: a **per-second, per-resolution
-rate**, because the provider prices by second and tier.
+rate**, because the provider prices that way.
 
-**The credit conversion, read from the code rather than assumed.** `database/seed.ts` records the owner's rates with their dollar basis:
-H3 turbo `$0.025/s → 80 cr/s`, `$0.04/s → 128`, `$0.08/s → 256` (**3,200 credits per dollar**); Recast `$0.30/s → 850`, `$0.45/s → 1,250`; RTV
-`$0.05/s → 140`, `$0.08/s → 225`, `$0.16/s → 450`; VEED Fabric `$0.08/s → 225`, `$0.15/s → 420`; VEED lipsync `$0.07/s → 200` (all **≈2,800 per
-dollar**). The record states the conversion as **2,800 credits per dollar, with the three H3 rows implying 3,200 — a 14% spread recorded rather than
-averaged away**, so every rate below is derived at 2,800 and rounded up.
+**The credit conversion, read from the code.** `seed.ts` records the owner's rates with their dollar basis: Recast `$0.30 → 850`, `$0.45 → 1,250`;
+RTV `$0.05 → 140`, `$0.08 → 225`, `$0.16 → 450`; VEED `$0.08 → 225`, `$0.15 → 420`, `$0.07 → 200` — all **≈2,800 credits per dollar**. The three H3
+turbo rows sit at **3,200**, and that 14% spread is recorded rather than averaged away. Transformation rates derive at **2,800**.
 
-**Five operations, four endpoints — and three share one contract.**
+**The stale rows were resolvable, and are corrected.** `credits.ts` resolves recast feature keys, so the 850/1,250 rows were **reachable by the
+resolver** while encoding `$0.30/$0.45` against a verified `$0.085/$0.17` — dormant (no procedure charges them yet) but live as keys. They are now
+**238/476**, with the old values kept in comments beside them. **The audit of every row with a recorded basis** found one other mismatch:
+`veed_avatar` at 20 cr/s implies ~3,430/$ (its basis is `$0.35/min`, a round-number choice), which is **deliberate and now recorded**, not stale.
+Every other row matches its basis.
 
-| operation | endpoint | verified price | credits/s @2,800 | 10 s cost |
-|---|---|---|---|---|
-| relighting | `minimax/h3-max/relight` | $0.05 / $0.08 / $0.16 / $0.32 per s by tier | 140 / 224 / 448 / 896 | 1,400 – 8,960 |
-| person swap | `minimax/h3-max/recast` | $0.085/s @768p, $0.17/s @1080p, 5 s min, + $0.022/1k input tokens after 4,096 | 238 / 476 (+tokens) | ~6,286 incl. tokens |
-| restyling | `fal-ai/kling-video/v4/video-to-video/edit` | $0.094/s @720p, $0.141/s @1080p, **billed input + output, min 2× output** | 263 / 395 | 5,260 / 7,900 (billed 20 s) |
-| environment replacement | `fal-ai/kling-video/v4/flash/reference-to-video` | $0.094/s, **$0.063/s with video references** | 263 / 176 | 2,630 / 1,760 |
-| object insertion / removal ("AI VFX") | same reference-to-video (and `pixverse/swap` `mode: object`) | same | same | same |
+**The rates, one row per operation × resolution tier** (source: `database/transformRates.ts`, seeded into `FeatureCreditRate`):
 
-**The pricing shape is reversed, and the reason is measurable.** #408 chose **flat per operation**; a 6.4× spread across resolutions makes one
-number impossible — relight alone runs $0.05/s to $0.32/s. The shape is now **one `FeatureCreditRate` row per operation × resolution tier**
-(`transform:relight:768p`, `transform:recast:1080p`, …), mirroring the provider's own structure. `assertWithinCeiling` counts credits, so a computed
-amount needs **no ledger change**.
+| key | cr/s | basis | billing note |
+|---|---|---|---|
+| `transform:relight:480p` · `768p` · `1080p` · `2k` | 140 · 224 · 448 · 896 | $0.05 · $0.08 · $0.16 · $0.32 /s | output duration |
+| `transform:recast:768p` · `1080p` | 238 · 476 | $0.085 · $0.17 /s | **input tokens folded in at input ≈ output (~1%)** |
+| `transform:restyle:720p` · `1080p` | 263 · 395 | $0.094 · $0.141 /s | **per BILLED second; minimum 2× output** |
+| `transform:environment:720p` (+`:videoref`) | 263 · 176 | $0.094 · $0.063 /s | output duration |
+| `transform:object:720p` (+`:videoref`) | 263 · 176 | $0.094 · $0.063 /s | output duration |
 
-**Restyling is unblocked.** The keyframe blocker belonged to `id-v2v`, not to restyling. `fal-ai/kling-video/v4/video-to-video/edit` was read from
-the named route and takes **required `prompt` + `video_url`**, optional `image_urls` (up to 10), `video_urls` (up to 4), `elements`, start/middle/end
-frames, `duration` 3–30 s defaulting to the source length, and `resolution` 720p/1080p. **Text instructions with optional image references** — no
-edited keyframe — so it fits `CinematicLook`'s lighting/grade/movement fields more closely than the keyframe path did. **The billing caution is
-recorded:** minimum 2× output means a 10 s clip bills 20 s, and the rate must use the **billed** duration or every restyle undercharges by half.
+**Restyle's unit is billed seconds, and the key says so.** Multiplying 263 by the *output* duration undercharges by half; the note and the
+`billedOn: 'output-x2-min'` field exist so a caller cannot read it the wrong way.
 
-**Recast's token cost is folded in, at a stated assumption.** Output is per-second, input is per-token: 10 s ≈ 67,500 tokens → ~$1.39 after the
-4,096-token allowance; 15 s ≈ 101,250 → ~$2.14. Folded at **input ≈ output duration**, recast scores ~629 cr/s @768p over 10 s and ~637 cr/s over
-15 s — within 1% of each other. The approximation is recorded; a token-accurate charge needs the input duration threaded through the charge call,
-which is a larger change for that 1%.
+**The cap decision: no cap on explicit transformations — and the cost must be shown first.** `AUTO_DEFAULT_CEILING = 1,680` guards **unattended**
+runs; it fits only relight 480p (1,400) and would silently refuse everything at 768p or above, which is a prohibition, not a cap. A creator choosing
+"swap this person at 1080p" has already decided, so the honest requirement is **cost preview**, not a refusal. **Cost preview exists**: 
+`getFeatureCreditCost`, `estimatePerSecondCosts`, `generation.estimate`'s `creditCostByResolution` and the director's `nextTakeCost` all return a
+number before a charge — so the no-cap decision is implementable with what is already there.
 
-**The ceiling: most of these exceed it.** `AUTO_DEFAULT_CEILING = 1,680` credits. At 10 s, relight 768p is **2,240**, recast **~6,286**, restyle
-720p **5,260**, environment with references **1,760** — only relight 480p (1,400) sits under it. The ceiling governs **auto production runs**, not
-per-operation charges, so it does not block these directly; the finding is that **any transformation at 768p or above outruns the auto-run ceiling**,
-so premium operations need their own cap rather than being dropped into the auto budget.
+**Buildable set: priced and seeded, still unbuilt.** Every operation has a verified contract shape and a derived rate. What remains is the
+**derived-asset plumbing through `createNewTake`** and the per-operation cost preview on the surface that offers a transformation.
 
-**Buildable set now: four operations priced, none built.** Restyling, relighting, person swap, environment and object all have a verified contract
-shape and a verified price. What is missing is not information — it is the **`transform:` rate rows, the per-operation cap, and the derived-asset
-plumbing** through `createNewTake`.
+**The product question, recorded and not answered.** A 10 s person swap is **~6,286 credits — 78 FLUX2 stills**. Restyle of the same clip is
+**~5,260**, relight 768p **~2,240**. Whether a transformation priced at 78× a still is a premium operation Raivstream's creators will use, or whether
+the credit-to-dollar ratio is wrong for this class, is a **product decision**; the phase cannot build until someone makes it.
 
 **Identity caveat.** Person swap does **not** inherit the 70/75 identity floor — those numbers came from `flux-2/edit` — so its first test must
 carry a **critic score**, not just a visual check.
 
-**Status.** Scheduled; verified, priced, unbuilt — see [history — Other status notes](roadmap-history.md#other-status-notes).
+**Status.** Scheduled; verified, priced, seeded, unbuilt — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
 
