@@ -14,6 +14,13 @@ export const FAL_ENDPOINTS = {
   imageEdit: 'fal-ai/flux-2/edit',
   video: 'minimax/h3-max-turbo/image-to-video',
   ugc: 'veed/fabric-1.0',
+  /**
+   * Relight uses the KLING video-to-video edit contract (2026-11-14), because it is the one that is READ:
+   * `fal-ai/kling-video/v4/video-to-video/edit` takes prompt + video_url, 3-30 s, 720p/1080p. The minimax
+   * relight endpoint has a verified price and an unread contract, and a schema you cannot read is a schema
+   * you cannot build against. Relight and restyle therefore share one endpoint - two prompts, one contract.
+   */
+  relight: 'fal-ai/kling-video/v4/video-to-video/edit',
 } as const;
 
 export const FAL_ALLOWED_ENDPOINTS: readonly string[] = Object.freeze([
@@ -22,6 +29,7 @@ export const FAL_ALLOWED_ENDPOINTS: readonly string[] = Object.freeze([
   FAL_ENDPOINTS.imageEdit,
   FAL_ENDPOINTS.video,
   FAL_ENDPOINTS.ugc,
+  FAL_ENDPOINTS.relight,
 ]);
 
 export interface FalMediaConfig {
