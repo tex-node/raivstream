@@ -973,6 +973,32 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The three operator settings were already live — the blocker list was inflated.** Checked, not assumed: `FAL_MEDIA_PROVIDER_ENABLED=true`,
+`FAL_REAL_PROVIDER_CALLS_ENABLED=true` (the real-calls switch, which the earlier list did not even name), `FAL_IMAGE_ENABLED=true`,
+`FAL_IMAGE_EDIT_ENABLED=true`, `FAL_VIDEO_ENABLED=true`, `FAL_KEY` set, and `FAL_MAX_REQUESTS` reads **200** in `apps/web/.env.local` against **10**
+in `.env` — `.env.local` is what the process and our scripts source, so 200 applies. Credit balances exist (1.7M across creators). **So three of the
+five "blockers" were settings that were already on and one was spend that is available**: a blocker list that includes work already done is a
+blocker list nobody trusts, and that is corrected here.
+
+**The endpoint decision: relight moves to the kling contract, and the reason is that the other one cannot be built against.** `minimax/h3-max/relight`
+has a verified **price** and an **unread contract** (its queue schema 404s — again this session). `fal-ai/kling-video/v4/video-to-video/edit` has a
+**verified** contract: required `prompt` + `video_url`, optional refs, 3–30 s, 720p/1080p. A verified contract at ~3.75× the price beats an unread one
+at the base price, because the unread one is not buildable. Consequences, both recorded:
+- **Relight and restyle now share one endpoint** — two prompts on one contract, exactly like environment and object. **Phase 12 is five operations
+  across three endpoints**, not five integrations: `pixverse/swap` (`person`/`object`/`background`), the kling edit contract (relight/restyle), and
+  recast.
+- **The seeded `transform:relight:*` rows described minimax and are retired, kept in the table with their old prices** rather than deleted, and
+  replaced by kling rows at **263 cr/s @720p and 395 cr/s @1080p, per BILLED second with a minimum 2× output** — the same rule as restyle, because
+  it is the same contract. A 10 s relight therefore bills **20 s: 5,260 credits at 720p**, not 2,240.
+- `FAL_ENDPOINTS.relight` is added to the **contract set** (`config.ts`), so an unknown endpoint still fails through `isFalEndpointAllowed` rather
+  than a new error path.
+
+**The pixel still has not run, and the reason changed again — it is the adapter's submit shape, not configuration.** The fal provider exposes
+`submitVideo(input: VideoGenerationInput, options)` and **dispatches by that input**, not by an `endpointId` field. `generators/falRelight.ts` was
+written against a speculative `{ endpointId, videoUrl }` body, so calling it live would test the adapter rather than the operation — and the honest
+move is to fix the call to the real input type before spending 5,260 credits on a request that might be rejected for shape. That is the next
+step, and it is a code task, not a settings or budget one.
+
 **Correction, with file evidence: the fal client was never missing.** The previous entry said "the repo has no fal client at all". That is
 **wrong**, and it is corrected here rather than replaced. fal is fully present: **`mediaProviders/fal/falMediaProvider.ts`** (queue transport over
 `@fal-ai/client`), **`falStorage.ts`** (`persistFalOutput`), `falWebhook.ts`, `contracts.ts`, and per-model adapters **`generators/falFlux2.ts`**,

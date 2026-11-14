@@ -27,10 +27,12 @@ function rate(featureKey: string, usdPerSecond: number, billedOn: TransformRate[
 }
 
 export const TRANSFORM_RATES: TransformRate[] = [
-  rate('transform:relight:480p', 0.05, 'output'),
-  rate('transform:relight:768p', 0.08, 'output'),
-  rate('transform:relight:1080p', 0.16, 'output'),
-  rate('transform:relight:2k', 0.32, 'output'),
+  // RETIRED 2026-11-14: these described minimax/h3-max/relight, whose contract is unread (schema 404).
+  // Kept, not deleted, so the change is visible:  480p $0.05, 768p $0.08, 1080p $0.16, 2k $0.32 per OUTPUT second.
+  // Relight now runs on the kling video-to-video edit contract, which bills input + output with a minimum
+  // of 2x output - the same rule as restyle, because it is the same endpoint.
+  rate('transform:relight:720p', 0.094, 'output-x2-min', 'per BILLED second on the kling edit contract; minimum 2x output duration'),
+  rate('transform:relight:1080p', 0.141, 'output-x2-min', 'per BILLED second on the kling edit contract; minimum 2x output duration'),
 
   // Input tokens are folded into the per-second rate at input duration ~ output duration:
   // 10 s ~ 67,500 tokens -> ~$1.39 after the 4,096-token allowance; 15 s ~ 101,250 -> ~$2.14.
