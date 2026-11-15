@@ -29,13 +29,21 @@ export function falKindForModel(model: string): MediaKind | undefined {
   return MODEL_KIND[model];
 }
 
-export function falOutputStorageKey(kind: MediaKind, requestId: string): string {
+/** Model -> storage directory, where the model is not the kind's default (2026-11-15). */
+export const FAL_MODEL_DIRS: Record<string, string> = {
+  relight: 'relight',
+};
+
+export function falOutputStorageKey(kind: MediaKind, requestId: string, opts: { model?: string } = {}): string {
   const { dir, ext } = KIND_DIR[kind];
-  return `generated/fal/${dir}/${requestId}.${ext}`;
+  // A relight persisted under `h3max` is the wrong model in a path a creator may read. The model wins when it
+  // maps; the kind's default stays for every existing caller (h3max for video).
+  const modelDir = opts.model ? FAL_MODEL_DIRS[opts.model] : undefined;
+  return `generated/fal/${modelDir ?? dir}/${requestId}.${ext}`;
 }
 
 /** Mirror a fal output URL to R2 and return the permanent public URL. */
-export async function persistFalOutput(kind: MediaKind, requestId: string, sourceUrl: string): Promise<string> {
+export async function persistFalOutput(kind: MediaKind, requestId: string, sourceUrl: string, opts: { model?: string } = {}): Promise<string> {
   const { contentType } = KIND_DIR[kind];
-  return mirrorUrlToR2(sourceUrl, falOutputStorageKey(kind, requestId), contentType);
+  return mirrorUrlToR2(sourceUrl, falOutputStorageKey(kind, requestId, opts), contentType);
 }
