@@ -69,6 +69,7 @@ export async function getFalRelightStatus(jobId: string): Promise<{ status: stri
   if (res.status !== 'completed') return { status: res.status, ...(res.error ? { error: res.error } : {}) };
   const url = res.outputUrls?.[0];
   if (!url) return { status: 'failed', error: 'relight returned no output url' };
-  const permanent = await persistFalOutput('video', requestId, url);
+  // Name the model so the asset path says relight, not h3max (2026-11-15).
+  const permanent = await persistFalOutput('video', requestId, url, { model: 'relight' });
   return { status: 'completed', outputUrl: permanent };
 }

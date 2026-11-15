@@ -973,6 +973,38 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**Verdict: relight works. The subject survived and the lighting moved.** The derived frame was compared against the source frame by **one vision
+call** (gpt-4o-mini, two frames scaled to 512 px, JSON scores; **28,436 tokens ≈ $0.005 — a fraction of a cent, not credits**) rather than by the
+project's creative-critic engine, which is a provider-backed multi-dimension runner; that distinction is stated because it is a **direct vision
+comparison, not a critic run**, and it measures the pair directly instead of scoring each asset alone.
+
+| score | value | reading |
+|---|---|---|
+| identityPreservation | **95** | the subject is preserved — the operation's defining promise |
+| lightingChange | **70** | the lighting genuinely moved |
+| overall | **85** | above the ~80 threshold the critic uses |
+
+The model's own note: *"Relit version enhances the background while maintaining the main subject."* That is exactly the signature relight is supposed
+to produce, and it is the first time in six sessions that the claim rests on pixels rather than on a row.
+
+*What this implies for the endpoint choice:* the kling video-to-video edit contract **does preserve the subject**, so the decision to prefer a verified
+contract at ~3.75× the minimax price is vindicated on quality, not only on buildability. **Restyle and recast share that endpoint**, so the identity
+finding transfers; their own prompts still need their own verdicts, but the "does this endpoint destroy identity" question is answered.
+
+**Storage prefix fixed, without renaming anything.** `falOutputStorageKey` took its directory from a per-KIND constant, so a relight persisted under
+`generated/fal/h3max/…`. It now takes an optional model and maps it (`relight → relight`), falling back to the kind's default — **three tests**, one of
+which pins that H3-Max still persists under `h3max`. **Existing objects keep their paths**: a rewrite is a storage migration, not this session's job.
+
+**The refund is the arc's first automatic recovery of a failed provider call**, and the ordering is why it was possible: the charge runs *before* the
+render so a take that cannot charge fails first, which means a render failure can be refunded deterministically against the same row. The failed attempt
+was refunded; had the charge come after the render, the failure would have cost nothing and taught nothing.
+
+**Poll duration is a UX fact: 72.8 s for a 3 s output.** A creator waiting on a relight needs a progress state from the first second, and the 10-minute
+cap should be surfaced as a timeout, not a hang.
+
+**Spend, cumulative: 3,156 credits** — 1,578 for the unrecoverable #421 job, 1,578 for the rendered and now-proven pixel, with the failed retry refunded.
+**Product numbers stand:** 65 stills at 10 s, ~20 at 3 s.
+
 **The pixel exists: one fresh relight rendered, persisted, and marked READY with a real R2 URL.** *Free checks first:* the deployed head carried the
 lifecycle fix, and `FAL_RELIGHT_ENDPOINT` was **unset** — now set to the verified `fal-ai/kling-video/v4/video-to-video/edit` in
 `apps/web/.env.local`. The trimmed 3 s asset from the earlier proof was reused (READY, duration 3, R2 URL), so no second trim was needed.
