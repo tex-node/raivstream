@@ -973,6 +973,31 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The duration column is applied, and the backfill cannot run yet — the deployed Prisma client predates the column.** Applied and verified in
+`information_schema`: `durationSeconds|double precision|YES`. Population, read rather than estimated: **233 VIDEO assets, all 233 with a null
+duration, 132 of them carrying an `assetUrl`** (plus 246 IMAGE rows, where a duration is not meaningful). A backfill script was written — ffprobe over
+each URL, idempotent on `durationSeconds IS NULL`, failures logged and skipped, summary `[backfill] scanned=N probed=M written=M skipped=K` — and it
+**wrote 0 rows**: the first run failed because the VPS client predates the column, and the second still failed after a `prisma generate` attempt on the
+host. Verified count afterwards: **0 with a non-null duration**. So the blocker is now **deployment**: the column exists in the database and in
+`schema.prisma`, but the running client must be regenerated and the deploy pipeline is the place that does it.
+
+**The real billing arithmetic is worse than the authorization assumed, and this must be stated before any spend.** The rule is
+`billed = max(2 × output, input + output)`, so for a **10 s source**:
+- **3 s output → 13 billed seconds → 3,419 credits**, not the 1,578 the earlier estimate assumed from `input ≈ output`;
+- 5 s output → 15 billed seconds → **3,945 credits**;
+- 10 s output → 20 billed seconds → 5,260 credits.
+
+So shrinking the output does **not** shrink the bill proportionally: on a source longer than the output, the `input + output` leg dominates and a 3 s
+output still bills 13 s. **The 1,578-credit authorization no longer covers the proof** — the honest next step is either an authorization for 3,419, or a
+**source asset of ≈3 s**, where 3 s output bills 6 s and 1,578 holds.
+
+**A correction to the brief's own example:** it suggested a 5 s output bills 15 s and is therefore *cheaper* than a 3 s output at 13 s. The arithmetic
+is the other way round — 13 s × 263 = 3,419 is **less** than 15 s × 263 = 3,945. The finding is the flat `input + output` leg, not an inversion.
+
+**The undercharge catch is the second instance of a value keyed to a moved endpoint.** The 2× billing rule was written when relight was on minimax and
+was applied to `restyle` only; moving relight to the same kling contract left it billing half price (789 instead of 1,578 at 3 s), and only the new
+arithmetic test caught it. First instance: the retired `transform:relight:*` rows that still described minimax prices.
+
 **A second harness limit surfaced and was fixed, not waved through.** Two `output.test.ts` cases sat at ~5.1–5.3 s under parallel load against
 vitest's 5 s default while the whole file runs ~4.9 s in isolation — the same class as the earlier deleted dynamic-import flake, and fixed the same
 way: a **per-test 20 s deadline** on the two cases that sit closest to the limit, with a comment saying why. That is a harness fix, not a behaviour
