@@ -238,7 +238,7 @@ describe('auto-assembly after production', () => {
     expect(deps.ffmpeg).toHaveBeenCalledTimes(6);
   });
 
-  it('creates a version but no creativeApproval when none exist', async () => {
+  it('creates a version but no creativeApproval when none exist', { timeout: 20000 }, async () => {
     const prisma = assemblyMock();
     const service = new OutputService();
     const deps = renderDeps();
@@ -315,7 +315,7 @@ describe('auto-assembly after production', () => {
     expect(prisma.__outputs.length).toBe(0);
   });
 
-  it('ordered composition — assembles scenes in plan order even when DB returns them reversed', async () => {
+  it('ordered composition — assembles scenes in plan order even when DB returns them reversed', { timeout: 20000 }, async () => {
     const prisma = assemblyMock();
     // Simulate DB returning VIDEO assets in reverse scene order.
     const allAssets: any[] = SCENE_IDS.flatMap((sceneId) => [

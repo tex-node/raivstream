@@ -973,6 +973,37 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**A second harness limit surfaced and was fixed, not waved through.** Two `output.test.ts` cases sat at ~5.1–5.3 s under parallel load against
+vitest's 5 s default while the whole file runs ~4.9 s in isolation — the same class as the earlier deleted dynamic-import flake, and fixed the same
+way: a **per-test 20 s deadline** on the two cases that sit closest to the limit, with a comment saying why. That is a harness fix, not a behaviour
+change, and it is recorded because a timeout that recurs is a real defect in the measuring apparatus.
+
+**Where duration comes from was decided before the procedure, and the answer is a column.** `CreativeProducedAsset` gains **`durationSeconds Float?`**
+(migration `20261115120000_asset_duration`); the procedure reads the **source row's** duration and **never accepts a caller's number** — a charge computed
+from a caller's estimate is the template-number defect with money on it. The new row records the duration it billed, so the next transformation in the
+chain can read it instead of guessing. With no recorded duration the call throws **`TRANSFORM_DURATION_REQUIRED` before the charge and before the row
+exists**, so there is no orphan `QUEUED` row and nothing is spent on an unpriced call.
+
+**The procedure exists: `creative.relight({ projectId, assetId, resolution })`.** It follows the `regenerateShot` shape — ownership-scoped
+(`userId: ctx.user.id`), plan the charge from the row duration, **assert the ceiling before charging**, then `deriveTransformTake` with
+`createRelightRenderer()`. Every transform failure maps to a **typed tRPC error** with its own code (`TRANSFORM_DURATION_REQUIRED` and
+`TRANSFORM_RATE_MISSING` → `PRECONDITION_FAILED`, `TRANSFORM_BODY_INVALID` → `BAD_REQUEST`, a foreign asset → `NOT_FOUND`) rather than a 500.
+**13 tests** cover the arithmetic (3 s → 6 billed → **1,578 credits**), the no-duration refusal with **no row created**, the non-owner refusal, and each
+error code.
+
+**The new test caught a real undercharge.** The 2× billing rule was applied to **restyle only**, so a relight at 3 s would have billed 263 × 3 = **789**
+instead of 1,578 — half price, on the same kling contract, because the rule was written when relight was still on minimax. `billedSeconds` now applies
+`max(2 × output, input + output)` to **both kling operations**, and the arithmetic test pins it.
+
+**The live proof is still blocked, and the reason is now the column's emptiness rather than the wiring.** The procedure can be called, but **existing
+assets have `durationSeconds = NULL`** — the column is new and nothing backfills it, and only the transform path writes it (for the asset it
+produces). So the 1,578-credit proof needs **one asset produced after this column exists**, or a duration backfill, before it can be priced. That is
+the next step: either run a fresh take through the (now duration-recording) path, or add the backfill probe.
+
+**The finding worth carrying forward: clip length mattered more than endpoint choice.** Four sessions went to selecting an endpoint; one decision to
+shorten the proof from 10 s to 3 s took relight from **65 stills to ≈20** — back to the price band the minimax rate implied. The next premium
+operation should start from the cheapest viable clip length rather than from the endpoint table.
+
 **`videoEdit` now exists inside the fal provider, and the speculative body is deleted.** The capability is a **sibling of `submitVideo` on the provider
 object**, which is what makes it share `transport`, `guardedSubmit`, `assertEndpoint` and `refOf` **by construction** rather than by a copy — a copy would
 reproduce the boundary it exists to cross. `types.ts` gains an optional `submitVideoEdit` on `VideoGenerationProvider` (optional so a provider without
