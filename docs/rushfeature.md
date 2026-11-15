@@ -973,6 +973,36 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The backfill ran, and the proof ran — and it recorded a job id where a video should be.** After regenerating the client through the correct path
+(`packages/database/node_modules/.bin/prisma` with `DATABASE_URL`/`DIRECT_URL` read from `.env`), the ffprobe backfill wrote **132 of 132 probed**
+(`scanned=132 probed=132 written=132 skipped=0`; 101 remain null because they have no reachable URL). **Distribution: min 4.48 s, median 15.104 s,
+max 15.104 s, n=132** — bimodal, and **no source at or below 4 s**, so the 1,578 authorization did not hold for any real asset.
+
+**The trim path was taken, as authorized.** A 15.1 s source was trimmed to 3 s with ffmpeg (`-c copy`, no re-encode), uploaded via
+`uploadBufferToR2`, and registered as a `VIDEO` asset with `producedBy: 'trim'` and `durationSeconds: 3`. Then the procedure ran:
+
+| captured | value |
+|---|---|
+| charge | **1,578 credits** (`263 × 6` billed, `max(2×3, 3+3)`) |
+| ledger row | `transform:relight:720p` · −1,578 · key `transform:charge:<assetId>:0` — the corrected key shape, findable by `nextChargeAttempt` |
+| new row | `takeNumber 2`, `producedBy transform:relight:720p`, `sourceAssetId` = the trimmed asset, `durationSeconds 3`, `status READY` |
+| prior take | demoted, not deleted |
+
+**The defect this exposed, and it matters more than the proof: `assetUrl` is `fal:relight:<requestId>` — a queue job reference, not a video.**
+`submitFalRelight` returns the prefix + request id, `deriveTransformTake` stores it and marks the row **`READY`**, and nothing ever calls
+`getFalRelightStatus` to poll and `persistFalOutput` the result. So the row claims READY before a byte of derived video exists, and **the pixel is
+unverified**. The submission reaching fal is real (a request id came back), but "READY" is currently a lie for transformation rows — the same class as a
+scorer that cannot fail.
+
+**Consequences recorded rather than buried:** the critic could not run because there is no derived media to score, so the pixel question stands
+unproven; the fix is a poll step in the renderer (submit → poll → persist → READY) and a status that is honest until then. **Cost 1,578 credits, on the
+authorized number.**
+
+**Billing rule, corrected form:** `billed = max(2 × output, input + output)`. For a source longer than the output the `input + output` leg dominates, so
+shortening the output saves less than proportionally (a 10 s source bills 13 s at 3 s output, 15 s at 5 s output — 3 s is cheaper, and 5 s costs 15%
+more for 67% more footage). Below the source length, the floor that binds is `input + output`, not `2 × output`. **The cheapest proof uses a short
+source, not a short output** — which is exactly why the trim path worked.
+
 **The duration column is applied, and the backfill cannot run yet — the deployed Prisma client predates the column.** Applied and verified in
 `information_schema`: `durationSeconds|double precision|YES`. Population, read rather than estimated: **233 VIDEO assets, all 233 with a null
 duration, 132 of them carrying an `assetUrl`** (plus 246 IMAGE rows, where a duration is not meaningful). A backfill script was written — ffprobe over
