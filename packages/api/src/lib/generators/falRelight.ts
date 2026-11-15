@@ -20,6 +20,8 @@ const PROVIDER_PREFIX = 'fal:relight:';
 
 export interface FalRelightInput {
   endpointId: string;
+  /** Operation name, used as the storage model so the path names what produced the asset. */
+  operation?: string;
   videoUrl: string;
   prompt: string;
   resolution: string;
@@ -55,13 +57,16 @@ export async function submitFalRelight(input: FalRelightInput): Promise<string> 
   // The endpoint travels WITH the job id (2026-11-15). Polling used `model: 'relight'` and fal answered
   // `Invalid app id: relight` - the status call needs the real endpoint, and encoding it here is cheaper than
   // threading a second parameter through the renderer.
-  return `${PROVIDER_PREFIX}${input.endpointId}::${ref.requestId}`;
+  return `${PROVIDER_PREFIX}${input.endpointId}::${ref.requestId}::${input.operation ?? 'relight'}`;
 }
 
 /** Poll a submitted relight to a permanent URL; mirrors getFalFlux2EditStatus. */
 export async function getFalRelightStatus(jobId: string): Promise<{ status: string; outputUrl?: string; error?: string }> {
   const rest = jobId.replace(/^fal:relight:/, '');
-  const [endpointId, requestId] = rest.includes('::') ? rest.split('::', 2) : ['', rest];
+  const parts = rest.split('::');
+  const endpointId = parts[0] ?? '';
+  const requestId = parts[1] ?? '';
+  const operation = parts[2] ?? 'relight';
   if (!endpointId || !requestId) return { status: 'failed', error: `malformed relight job id: ${jobId}` };
   const provider = createFalMediaProvider() as unknown as VideoEditSubmitter;
   const ref: MediaJobRef = { provider: 'fal', kind: 'video', requestId, idempotencyKey: '', model: endpointId } as MediaJobRef;
@@ -70,6 +75,6 @@ export async function getFalRelightStatus(jobId: string): Promise<{ status: stri
   const url = res.outputUrls?.[0];
   if (!url) return { status: 'failed', error: 'relight returned no output url' };
   // Name the model so the asset path says relight, not h3max (2026-11-15).
-  const permanent = await persistFalOutput('video', requestId, url, { model: 'relight' });
+  const permanent = await persistFalOutput('video', requestId, url, { model: operation });
   return { status: 'completed', outputUrl: permanent };
 }
