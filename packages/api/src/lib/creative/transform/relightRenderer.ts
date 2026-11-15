@@ -26,6 +26,9 @@ export interface RelightRendererConfig {
   endpointId?: string;
   /** Injected for tests: the actual submit-and-persist call. */
   submit?: (input: { endpointId: string; videoUrl: string; prompt: string }) => Promise<string>;
+  /** Injected in tests; the defaults are 5 s and 10 minutes. */
+  pollIntervalMs?: number;
+  pollTimeoutMs?: number;
 }
 
 export interface RelightRenderer {
@@ -58,7 +61,25 @@ export function createRelightRenderer(config: RelightRendererConfig = {}): Relig
     // Reuse the existing fal dispatch rather than opening a second transport. `submitFalRelight` is the
     // thin adapter beside falFlux2Edit/falH3Max and shares persistFalOutput, the queue poll and the
     // contract set; it is the only new code the wiring needs.
-    const { submitFalRelight } = await import('../../generators/falRelight');
-    return submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution, outputSeconds: input.outputSeconds });
+    const { submitFalRelight, getFalRelightStatus } = await import('../../generators/falRelight');
+    const jobRef = await submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution, outputSeconds: input.outputSeconds });
+
+    // COMPLETE THE LIFECYCLE (2026-11-15). The other fal adapters submit, poll and persist before returning a
+    // URL; this one used to return the queue reference and the caller stored it as `assetUrl`, marking the row
+    // READY with no media. A job handle is not an asset.
+    const deadline = Date.now() + (config.pollTimeoutMs ?? 10 * 60_000);
+    let status = await getFalRelightStatus(jobRef);
+    while (status.status !== 'completed' && status.status !== 'failed' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, config.pollIntervalMs ?? 5_000));
+      status = await getFalRelightStatus(jobRef);
+    }
+    if (status.status !== 'completed' || !status.outputUrl) {
+      throw new Error(`TRANSFORM_RENDER_FAILED: relight job ${jobRef} ended as ${status.status}${status.error ? ` (${status.error})` : ''}`);
+    }
+    if (status.outputUrl.startsWith('fal:')) {
+      // The class this fix exists for: a queue reference is never a result.
+      throw new Error('TRANSFORM_RENDER_INCOMPLETE: the renderer returned a queue reference, not a persisted asset');
+    }
+    return status.outputUrl;
   };
 }
