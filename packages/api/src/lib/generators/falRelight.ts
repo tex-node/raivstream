@@ -52,14 +52,19 @@ export async function submitFalRelight(input: FalRelightInput): Promise<string> 
     { endpoint: input.endpointId, body },
     { idempotencyKey: `relight:${randomUUID()}` },
   );
-  return `${PROVIDER_PREFIX}${ref.requestId}`;
+  // The endpoint travels WITH the job id (2026-11-15). Polling used `model: 'relight'` and fal answered
+  // `Invalid app id: relight` - the status call needs the real endpoint, and encoding it here is cheaper than
+  // threading a second parameter through the renderer.
+  return `${PROVIDER_PREFIX}${input.endpointId}::${ref.requestId}`;
 }
 
 /** Poll a submitted relight to a permanent URL; mirrors getFalFlux2EditStatus. */
 export async function getFalRelightStatus(jobId: string): Promise<{ status: string; outputUrl?: string; error?: string }> {
-  const requestId = jobId.replace(/^fal:relight:/, '');
+  const rest = jobId.replace(/^fal:relight:/, '');
+  const [endpointId, requestId] = rest.includes('::') ? rest.split('::', 2) : ['', rest];
+  if (!endpointId || !requestId) return { status: 'failed', error: `malformed relight job id: ${jobId}` };
   const provider = createFalMediaProvider() as unknown as VideoEditSubmitter;
-  const ref: MediaJobRef = { provider: 'fal', kind: 'video', requestId, idempotencyKey: '', model: 'relight' } as MediaJobRef;
+  const ref: MediaJobRef = { provider: 'fal', kind: 'video', requestId, idempotencyKey: '', model: endpointId } as MediaJobRef;
   const res = await provider.video.getStatus(ref);
   if (res.status !== 'completed') return { status: res.status, ...(res.error ? { error: res.error } : {}) };
   const url = res.outputUrls?.[0];

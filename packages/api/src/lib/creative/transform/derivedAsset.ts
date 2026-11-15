@@ -15,7 +15,7 @@
  *   3. **The billing rules**, one per operation, pinned by tests.
  */
 import type { PrismaClient } from '@raivstream/database';
-import { chargeOrThrow, getFeatureCreditCost } from '../../credits';
+import { chargeOrThrow, getFeatureCreditCost, refundCredits } from '../../credits';
 import { creditKeys } from '../../credits/idempotencyKeys';
 
 export type TransformOperation = 'relight' | 'recast' | 'restyle' | 'environment' | 'object';
@@ -240,6 +240,21 @@ export async function deriveTransformTake(
       where: { id: row.id },
       data: { status: 'FAILED', errorMessage: String((error as Error)?.message ?? error).slice(0, 500) },
     });
+    // The charge runs BEFORE the render (a take that cannot charge must fail), so a render failure must
+    // refund: otherwise every failed transformation is a silent charge for nothing (2026-11-15).
+    try {
+      await refundCredits(
+        prisma,
+        owner.userId,
+        plan.credits,
+        plan.featureKey,
+        row.id,
+        `Transform ${input.operation} failed: refund`,
+        `transform:refund:${row.id}:0`,
+      );
+    } catch {
+      // A refund failure must not mask the render failure; the FAILED row carries the reason.
+    }
     throw error;
   }
 }
