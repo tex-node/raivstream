@@ -205,6 +205,12 @@ export async function deriveTransformTake(
       outputSeconds,
     });
 
+    // A row must never reach READY with a queue reference (2026-11-15): that is how a transformation came to
+    // say READY with no media. A `fal:` URL is a job handle, not an asset.
+    if (assetUrl.startsWith('fal:')) {
+      throw new Error(`TRANSFORM_RENDER_INCOMPLETE: ${assetUrl} is a queue reference, not a persisted asset`);
+    }
+
     // The previous take is DEMOTED, never deleted: history is the point of a take chain. A reset would
     // replay the charge key and re-bill the provider while recording nothing - assertNotResetAfterCharge
     // refuses that, and a transformation is a new row rather than a reset.

@@ -973,6 +973,21 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The lifecycle is completed, and the spent job could not be recovered.** *The read:* `falH3Max` and `falVeed` share one shape — the adapter
+submits, **polls `provider.video.getStatus`**, calls `persistFalOutput`, and returns the **permanent URL**; the caller stores it. `videoEdit` stopped
+after submit and returned the queue reference, so nothing ever completed. *Recovery attempt, before any fix or re-spend:* the spent job's request id was
+probed directly against the queue (`/requests/<id>/status` and `/requests/<id>`) and both returned **405 Method Not Allowed**, so the job is **not
+recoverable through that route** — the 1,578 stays spent and the **pixel remains unverified**. *The fix:* `createRelightRenderer` now **completes the
+lifecycle** — poll every 5 s to a 10-minute cap, require `completed` with an output URL, reject any `fal:` reference, and return the persisted URL; and
+`deriveTransformTake` refuses a `fal:` URL **before** READY and marks the row `FAILED` on a render throw. **Two tests** pin the class directly: a queue
+reference never becomes an asset, and the renderer fails closed without an endpoint. *The dead row is marked, not left lying:* the row from the proof is
+now `FAILED` with reason **`queue reference never persisted`** — a transformation row that says READY with no media is the defect this session exists to
+remove.
+
+**Billing rule, corrected form:** `billed = max(2 × output, input + output)`. For a source longer than the output the `input + output` leg dominates, so
+shortening the output saves less than proportionally (10 s source: 13 s at 3 s output, 15 s at 5 s output). **The cheapest proof uses a short source,
+not a short output** — the trim path is why 1,578 was the right number.
+
 **The backfill ran, and the proof ran — and it recorded a job id where a video should be.** After regenerating the client through the correct path
 (`packages/database/node_modules/.bin/prisma` with `DATABASE_URL`/`DIRECT_URL` read from `.env`), the ffprobe backfill wrote **132 of 132 probed**
 (`scanned=132 probed=132 written=132 skipped=0`; 101 remain null because they have no reachable URL). **Distribution: min 4.48 s, median 15.104 s,
