@@ -43,7 +43,10 @@ export function billedSeconds(
   if (!Number.isFinite(outputSeconds) || outputSeconds <= 0) {
     throw new Error(`TRANSFORM_DURATION_REQUIRED: ${operation} needs a positive output duration before it can be charged`);
   }
-  if (operation === 'restyle') {
+  // Relight runs on the SAME kling contract as restyle (2026-11-14), so it bills the same way: input + output
+  // with a minimum of 2x output. Leaving the 2x rule on restyle alone would have undercharged every relight by
+  // half - the "restyle defect showing up in relight" this arc predicted (2026-11-15 test caught it).
+  if (operation === 'restyle' || operation === 'relight') {
     const input = Number.isFinite(inputSeconds) && (inputSeconds as number) > 0 ? (inputSeconds as number) : outputSeconds;
     return Math.max(2 * outputSeconds, input + outputSeconds);
   }
@@ -99,8 +102,12 @@ export interface TransformTakeInput {
   sourceAssetId: string;
   operation: TransformOperation;
   resolution: string;
-  /** Established BEFORE the call: the asset row carries no duration, so the caller supplies it. */
-  outputSeconds: number;
+  /**
+   * Resolved BEFORE the charge, from the SOURCE ROW - never defaulted from a caller's guess. When omitted
+   * the row's own `durationSeconds` is used; when neither exists the call throws TRANSFORM_DURATION_REQUIRED
+   * before any charge and before any row is created.
+   */
+  outputSeconds?: number;
   inputSeconds?: number;
 }
 
@@ -122,7 +129,7 @@ export async function deriveTransformTake(
 ): Promise<TransformTakeResult> {
   const source = await prisma.creativeProducedAsset.findUnique({
     where: { id: input.sourceAssetId },
-    select: { id: true, projectId: true, sceneId: true, shotId: true, kind: true, assetUrl: true },
+    select: { id: true, projectId: true, sceneId: true, shotId: true, kind: true, assetUrl: true, durationSeconds: true },
   });
   if (!source || source.projectId !== input.projectId) {
     throw new Error(`TRANSFORM_SOURCE_NOT_FOUND: ${input.sourceAssetId}`);
@@ -137,11 +144,19 @@ export async function deriveTransformTake(
   });
   if (!owner) throw new Error(`CREATIVE_PROJECT_NOT_FOUND: ${input.projectId}`);
 
+  // The duration comes from the SOURCE ROW, not from the caller (2026-11-15). A charge computed from a
+  // caller's number is the template-number defect with money on it, so an absent duration fails here -
+  // before the charge and before the row exists.
+  const outputSeconds = input.outputSeconds ?? source.durationSeconds ?? null;
+  if (!outputSeconds) {
+    throw new Error(`TRANSFORM_DURATION_REQUIRED: ${input.sourceAssetId} has no recorded duration and none was resolved before the charge`);
+  }
+
   // The charge is planned BEFORE the row exists, so a missing rate fails without leaving a QUEUED row.
   const plan = await planTransformCharge(prisma, {
     operation: input.operation,
     resolution: input.resolution,
-    outputSeconds: input.outputSeconds,
+    outputSeconds,
     ...(input.inputSeconds !== undefined ? { inputSeconds: input.inputSeconds } : {}),
   });
 
@@ -164,6 +179,8 @@ export async function deriveTransformTake(
       isLatest: true,
       producedBy: transformProvenance(input.operation, input.resolution),
       sourceAssetId: source.id,
+      // What was billed, recorded on the row so the next transformation can read it instead of guessing.
+      durationSeconds: outputSeconds,
     },
     select: { id: true },
   });
@@ -185,7 +202,7 @@ export async function deriveTransformTake(
       sourceAssetUrl: source.assetUrl,
       operation: input.operation,
       resolution: input.resolution,
-      outputSeconds: input.outputSeconds,
+      outputSeconds,
     });
 
     // The previous take is DEMOTED, never deleted: history is the point of a take chain. A reset would

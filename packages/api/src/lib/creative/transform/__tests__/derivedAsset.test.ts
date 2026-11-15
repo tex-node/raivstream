@@ -3,7 +3,7 @@ import { creditKeys } from '../../../credits/idempotencyKeys';
 import { billedSeconds, deriveTransformTake, planTransformCharge, transformFeatureKey, transformProvenance } from '../derivedAsset';
 
 const RATES: Record<string, number> = {
-  'transform:relight:480p': 140, 'transform:relight:768p': 224, 'transform:recast:768p': 238,
+  'transform:relight:720p': 263, 'transform:recast:768p': 238,
   'transform:restyle:720p': 263, 'transform:environment:720p': 263,
 };
 
@@ -27,7 +27,12 @@ function fakePrisma() {
 }
 
 describe('billed duration per operation', () => {
-  it('relight bills the output duration', () => { expect(billedSeconds('relight', 10)).toBe(10); });
+  it('relight bills like restyle, because it is the same contract: max(2 x output, input + output)', () => {
+    // MOVED 2026-11-15: relight used to bill the output duration (minimax). It moved to the kling contract,
+    // which bills input + output with a 2x minimum - the same rule as restyle. 3 s bills 6 s.
+    expect(billedSeconds('relight', 10)).toBe(20);
+    expect(billedSeconds('relight', 3)).toBe(6);
+  });
   it('restyle bills input + output with a minimum of 2x output', () => {
     expect(billedSeconds('restyle', 10, 10)).toBe(20);
     expect(billedSeconds('restyle', 10, 30)).toBe(40);
@@ -37,10 +42,12 @@ describe('billed duration per operation', () => {
 });
 
 describe('the charge is rate x billed seconds', () => {
-  it('relight 768p for 10 s is 2,240 credits', async () => {
+  it('relight 720p for 10 s bills 20 s = 5,260 credits', async () => {
+    // MOVED 2026-11-15: the 768p minimax row is retired; relight now runs on the kling contract at 720p.
     const { prisma } = fakePrisma();
-    const plan = await planTransformCharge(prisma, { operation: 'relight', resolution: '768p', outputSeconds: 10 });
-    expect(plan.credits).toBe(2240);
+    const plan = await planTransformCharge(prisma, { operation: 'relight', resolution: '720p', outputSeconds: 10 });
+    expect(plan.billedSeconds).toBe(20);
+    expect(plan.credits).toBe(5260);
   });
   it('restyle 720p for 10 s is billed 20 s and costs 5,260 credits', async () => {
     const { prisma } = fakePrisma();
@@ -62,26 +69,27 @@ describe('the derived take', () => {
   it('is a new row with provenance and a demoted prior take', async () => {
     const { prisma, calls } = fakePrisma();
     const result = await deriveTransformTake(prisma, { render: async () => 'https://cdn/relit.png' }, {
-      projectId: 'p1', sourceAssetId: 'src-1', operation: 'relight', resolution: '768p', outputSeconds: 10,
+      projectId: 'p1', sourceAssetId: 'src-1', operation: 'relight', resolution: '720p', outputSeconds: 3,
     });
     expect(result.takeNumber).toBe(5);
     expect(result.parentTakeId).toBe('prev-1');
-    expect(result.producedBy).toBe('transform:relight:768p');
-    expect(result.creditsCharged).toBe(2240);
-    expect(calls.created[0]!.producedBy).toBe('transform:relight:768p');
+    expect(result.producedBy).toBe('transform:relight:720p');
+    // 3 s bills 6 s at 263 cr/s = 1,578.
+    expect(result.creditsCharged).toBe(1578);
+    expect(calls.created[0]!.producedBy).toBe('transform:relight:720p');
     expect(calls.created[0]!.sourceAssetId).toBe('src-1');
     expect(calls.updated.some((u) => u.data.isLatest === false)).toBe(true);
   });
   it('refuses a source from another project', async () => {
     const { prisma } = fakePrisma();
     await expect(deriveTransformTake(prisma, { render: async () => 'x' }, {
-      projectId: 'other', sourceAssetId: 'src-1', operation: 'relight', resolution: '768p', outputSeconds: 10,
+      projectId: 'other', sourceAssetId: 'src-1', operation: 'relight', resolution: '720p', outputSeconds: 3,
     })).rejects.toThrow(/TRANSFORM_SOURCE_NOT_FOUND/);
   });
   it('marks the row FAILED when the render fails', async () => {
     const { prisma, calls } = fakePrisma();
     await expect(deriveTransformTake(prisma, { render: async () => { throw new Error('provider down'); } }, {
-      projectId: 'p1', sourceAssetId: 'src-1', operation: 'relight', resolution: '768p', outputSeconds: 10,
+      projectId: 'p1', sourceAssetId: 'src-1', operation: 'relight', resolution: '720p', outputSeconds: 3,
     })).rejects.toThrow(/provider down/);
     expect(calls.updated.some((u) => u.data.status === 'FAILED')).toBe(true);
   });
@@ -105,9 +113,9 @@ describe('the money path, audited', () => {
 
   it('omitting amountCredits charges the rate - a documented default, not a silent zero', async () => {
     const { prisma } = fakePrisma();
-    const charged = await chargeOrThrowForTest(prisma, 'transform:relight:768p');
-    // The rate, not zero: the optional amount is a default, not a hole.
-    expect(charged).toBe(224);
+    const charged = await chargeOrThrowForTest(prisma, 'transform:relight:720p');
+    // The rate, not zero: the optional amount is a default, not a hole (263 cr/s on the kling contract).
+    expect(charged).toBe(263);
   });
 });
 
