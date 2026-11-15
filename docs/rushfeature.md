@@ -973,6 +973,41 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**Product decision (operator): prove the family before building any surface.** Relight is proven, but the endpoint verdict transfers while **restyle's
+own prompt quality does not**; building a creator surface for one operation before knowing whether the family is viable is the wrong order. The surface —
+progress state, surfaced timeout, cost preview — is deferred until the family's verdicts exist.
+
+**Restyle ran, and the outcome is `no-change` — the distinct outcome, not a failure and not a proof.** Charge **1,578** (`263 × 6`), poll **86.2 s**, READY,
+a real R2 URL (not a `fal:` reference), `producedBy transform:restyle:720p`, `sourceAssetId` the trimmed 3 s asset, `durationSeconds 3`, **take 5** with
+take 4 as its parent. The instruction used the look's own vocabulary — *"cool teal shadows with warm amber highlights, high-contrast cinematic grade,
+shallow depth of field, anamorphic lens character. Keep the subject and framing."*
+
+The vision comparison (**one call, 28,437 tokens ≈ $0.005 — a direct frame comparison, not a `creative_critic` run**):
+
+| score | value | reading |
+|---|---|---|
+| identityPreservation | 90 | subject kept |
+| **styleChange** | **15** | **the style barely moved** |
+| overall | 85 | composition similar |
+
+Model's note: *"Minor changes in smoke and lighting; overall composition remains similar."* **That is the worse-than-failure case this phase named in
+advance**: a restyle that produces no visible change means the instruction did not reach the model's behaviour — the hook-slot class, applied to a
+prompt. Three candidate causes, and they are separable by one cheap experiment each: the instruction may be **too subtle** for the endpoint, **3 s may be
+too short** for a grade shift to register, or the **kling edit contract may weight prompts weakly** for style as opposed to content edits. **No creator
+surface should be built for restyle until one of those is ruled out.**
+
+*Prefix finding, fixed in the same pass:* the restyle persisted under `generated/fal/relight/…` because the adapter hard-coded the model for storage.
+The operation now travels with the job id and names the storage model, so a restyle lands under `restyle` while H3-Max keeps `h3max`.
+
+**The family's state.** Relight **proven** (identity 95 / lighting 70 / overall 85). Restyle **no-change** (identity 90 / style 15 / overall 85) — the
+instructed style did not appear. Recast **untested**, and the most expensive at ~26 stills for 3 s.
+
+**Conflation caveat, carried:** `identityPreservation` measures this pair of frames; it is **not** `characterIdentity` and says nothing about the 75
+floor. The two are different instruments on different scales.
+
+**Spend cumulative: 4,734 credits** (3,156 before this session + 1,578 for the restyle). **UX fact:** polls of **72.8 s** (relight) and **86.2 s** (restyle)
+for 3 s of output — a progress state from the first second and a surfaced timeout, not a hang.
+
 **Verdict: relight works. The subject survived and the lighting moved.** The derived frame was compared against the source frame by **one vision
 call** (gpt-4o-mini, two frames scaled to 512 px, JSON scores; **28,436 tokens ≈ $0.005 — a fraction of a cent, not credits**) rather than by the
 project's creative-critic engine, which is a provider-backed multi-dimension runner; that distinction is stated because it is a **direct vision

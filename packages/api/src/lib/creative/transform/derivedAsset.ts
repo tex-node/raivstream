@@ -94,7 +94,7 @@ export async function planTransformCharge(
 
 export interface TransformDeps {
   /** Renders the derived asset. Injected so the charge and slot logic are testable without a provider. */
-  render: (input: { sourceAssetUrl: string; operation: TransformOperation; resolution: string; outputSeconds: number }) => Promise<string>;
+  render: (input: { sourceAssetUrl: string; operation: TransformOperation; resolution: string; outputSeconds: number; instruction?: string }) => Promise<string>;
 }
 
 export interface TransformTakeInput {
@@ -109,6 +109,11 @@ export interface TransformTakeInput {
    */
   outputSeconds?: number;
   inputSeconds?: number;
+  /**
+   * What to ask the model for, in the look's own vocabulary. Relight defaults to a lighting instruction;
+   * restyle needs its own, because a text-instruction edit's quality is the variable being tested (2026-11-15).
+   */
+  instruction?: string;
 }
 
 export interface TransformTakeResult {
@@ -203,6 +208,7 @@ export async function deriveTransformTake(
       operation: input.operation,
       resolution: input.resolution,
       outputSeconds,
+      ...(input.instruction ? { instruction: input.instruction } : {}),
     });
 
     // A row must never reach READY with a queue reference (2026-11-15): that is how a transformation came to

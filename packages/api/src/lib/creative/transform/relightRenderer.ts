@@ -32,7 +32,7 @@ export interface RelightRendererConfig {
 }
 
 export interface RelightRenderer {
-  (input: { sourceAssetUrl: string; operation: TransformOperation; resolution: string; outputSeconds: number }): Promise<string>;
+  (input: { sourceAssetUrl: string; operation: TransformOperation; resolution: string; outputSeconds: number; instruction?: string }): Promise<string>;
 }
 
 export class TransformEndpointUnconfigured extends Error {
@@ -53,7 +53,9 @@ export function createRelightRenderer(config: RelightRendererConfig = {}): Relig
   return async (input) => {
     if (!endpointId) throw new TransformEndpointUnconfigured(input.operation);
 
-    const prompt = `Relight this shot: ${input.resolution}, preserving the subject and composition. Match the lighting to the scene.`;
+    // The instruction is the experiment for restyle; relight keeps its default. The vocabulary is the
+    // CinematicLook fields (lighting, grade, movement, lens) rather than invented terms (2026-11-15).
+    const prompt = input.instruction ?? `Relight this shot: ${input.resolution}, preserving the subject and composition. Match the lighting to the scene.`;
     if (config.submit) {
       return config.submit({ endpointId, videoUrl: input.sourceAssetUrl, prompt });
     }
@@ -62,7 +64,7 @@ export function createRelightRenderer(config: RelightRendererConfig = {}): Relig
     // thin adapter beside falFlux2Edit/falH3Max and shares persistFalOutput, the queue poll and the
     // contract set; it is the only new code the wiring needs.
     const { submitFalRelight, getFalRelightStatus } = await import('../../generators/falRelight');
-    const jobRef = await submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution, outputSeconds: input.outputSeconds });
+    const jobRef = await submitFalRelight({ endpointId, videoUrl: input.sourceAssetUrl, prompt, resolution: input.resolution, outputSeconds: input.outputSeconds, operation: input.operation });
 
     // COMPLETE THE LIFECYCLE (2026-11-15). The other fal adapters submit, poll and persist before returning a
     // URL; this one used to return the queue reference and the caller stored it as `assetUrl`, marking the row
