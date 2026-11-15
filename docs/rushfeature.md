@@ -973,6 +973,40 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The pixel exists: one fresh relight rendered, persisted, and marked READY with a real R2 URL.** *Free checks first:* the deployed head carried the
+lifecycle fix, and `FAL_RELIGHT_ENDPOINT` was **unset** — now set to the verified `fal-ai/kling-video/v4/video-to-video/edit` in
+`apps/web/.env.local`. The trimmed 3 s asset from the earlier proof was reused (READY, duration 3, R2 URL), so no second trim was needed.
+
+*One bug stood between the fix and the pixel, and it cost a run:* the poll used `model: 'relight'` and fal answered **`Invalid app id: relight`** —
+the status call needs the real endpoint. The job id now carries it (`fal:relight:<endpointId>::<requestId>`), and **a failed render refunds**: the
+charge runs before the render by design, so `deriveTransformTake` now calls `refundCredits` on a render failure instead of charging for nothing. The
+failed attempt was refunded (`REFUND=ok`).
+
+*The successful run, captured:*
+
+| captured | value |
+|---|---|
+| charge | **1,578 credits** (`263 × 6` billed), key `transform:charge:<assetId>:0` |
+| poll | **72.8 s** — well inside the 10-minute cap |
+| status | **READY** |
+| `assetUrl` | `https://pub-…r2.dev/generated/fal/h3max/01a1e0bf-….mp4` — **a real persisted URL, not a `fal:` reference** |
+| `producedBy` | `transform:relight:720p` |
+| `sourceAssetId` | the trimmed 3 s asset |
+| `durationSeconds` | 3 (what it billed) |
+| take | 4; prior take demoted, not deleted |
+
+*Two honest notes.* The persisted key is written under `/generated/fal/h3max/` — the storage prefix names the wrong model, cosmetic but misleading, and
+worth fixing before creators see asset paths. And **the critic has not scored it**: the creative critic is a provider-backed engine with per-dimension
+scorers, so scoring the pair is its own run (and its own model calls), not a by-product. **The pixel is rendered and verified as media; it is not yet
+scored**, and that is the remaining half of this question — the row proves the operation produced a video, and only the critic says whether the subject
+survived.
+
+*Spend, counted honestly:* **3,156 net** = 1,578 for the job that never persisted (unrecoverable, #421) + 1,578 for this successful render, with the
+failed retry refunded.
+
+**Billing rule, corrected form:** `billed = max(2 × output, input + output)`. A source longer than the output is dominated by the `input + output` leg,
+so the cheapest proof uses a **short source**, not a short output — the trim path is why 1,578 was the right number twice.
+
 **The lifecycle is completed, and the spent job could not be recovered.** *The read:* `falH3Max` and `falVeed` share one shape — the adapter
 submits, **polls `provider.video.getStatus`**, calls `persistFalOutput`, and returns the **permanent URL**; the caller stores it. `videoEdit` stopped
 after submit and returned the queue reference, so nothing ever completed. *Recovery attempt, before any fix or re-spend:* the spent job's request id was
