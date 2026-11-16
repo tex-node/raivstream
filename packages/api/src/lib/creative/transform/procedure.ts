@@ -32,6 +32,31 @@ export interface RelightResult {
   billedSeconds: number;
 }
 
+/**
+ * What a transformation WOULD cost, before anything is charged (2026-11-16).
+ *
+ * Same `planTransformCharge` the charge path uses, so a preview cannot drift from the charge: one function,
+ * two callers. The duration comes from the asset row, never from the caller.
+ */
+export async function quoteTransform(
+  prisma: PrismaClient,
+  input: { projectId: string; assetId: string; operation: TransformOperation; resolution: string; userId: string },
+): Promise<{ credits: number; billedSeconds: number; creditsPerSecond: number; durationSeconds: number | null }> {
+  const project = await prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: input.userId }, select: { id: true } });
+  if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Creative project not found.' });
+  const asset = await prisma.creativeProducedAsset.findFirst({ where: { id: input.assetId, projectId: project.id }, select: { durationSeconds: true } });
+  if (!asset) throw new TRPCError({ code: 'NOT_FOUND', message: 'That asset is not part of this project.' });
+  if (!asset.durationSeconds) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This asset has no recorded duration, so it cannot be priced.' });
+  }
+  const plan = await planTransformCharge(prisma, {
+    operation: input.operation,
+    resolution: input.resolution,
+    outputSeconds: asset.durationSeconds,
+  });
+  return { credits: plan.credits, billedSeconds: plan.billedSeconds, creditsPerSecond: plan.creditsPerSecond, durationSeconds: asset.durationSeconds };
+}
+
 /** Map an internal transform failure to a typed tRPC error with its own code. */
 export function transformErrorCode(error: unknown): { code: 'BAD_REQUEST' | 'PRECONDITION_FAILED' | 'NOT_FOUND'; message: string } {
   const message = String((error as Error)?.message ?? error);
@@ -53,9 +78,9 @@ export function transformErrorCode(error: unknown): { code: 'BAD_REQUEST' | 'PRE
   return { code: 'BAD_REQUEST', message: 'The relight could not be started.' };
 }
 
-export async function runRelight(
+export async function runTransform(
   prisma: PrismaClient,
-  input: RelightInput,
+  input: RelightInput & { operation?: TransformOperation; instruction?: string },
   deps: {
     render?: ReturnType<typeof createRelightRenderer>;
     /** Injected in tests: the real guards are imported functions. */
@@ -75,7 +100,7 @@ export async function runRelight(
   });
   if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'That asset is not part of this project.' });
 
-  const operation: TransformOperation = 'relight';
+  const operation: TransformOperation = input.operation ?? 'relight';
   try {
     // Duration first: an asset with no recorded length cannot be priced, and must fail before the charge.
     if (!source.durationSeconds) {
@@ -102,6 +127,7 @@ export async function runRelight(
         resolution: input.resolution,
         outputSeconds: source.durationSeconds,
         ...(input.inputSeconds !== undefined ? { inputSeconds: input.inputSeconds } : {}),
+        ...(input.instruction ? { instruction: input.instruction } : {}),
       },
     );
 
@@ -111,3 +137,7 @@ export async function runRelight(
     throw new TRPCError({ code: mapped.code, message: mapped.message, cause: error as Error });
   }
 }
+
+/** Backwards-compatible name for the relight case. */
+export const runRelight = (prisma: PrismaClient, input: RelightInput, deps: Parameters<typeof runTransform>[2] = {}) =>
+  runTransform(prisma, { ...input, operation: 'relight' }, deps);
