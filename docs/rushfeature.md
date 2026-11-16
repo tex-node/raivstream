@@ -973,6 +973,39 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The extreme-instruction test settled it: the endpoint honours style prompts, and the first instruction was too subtle.** Same trimmed 3 s source, one
+**1,578-credit** run, instruction at the end of the scale — *"monochrome noir: fully desaturated black and white, crushed blacks, single hard key light,
+deep chiaroscuro shadows, high-contrast silver-gelatin grade. Keep the subject and framing."*
+
+| captured | value |
+|---|---|
+| charge | **1,578** (`263 × 6`), poll **95.3 s**, READY, real R2 URL |
+| `producedBy` | `transform:restyle:720p`, take **6** parented to take 5, `durationSeconds 3` |
+| identityPreservation | **90** |
+| **styleChange** | **85** |
+| overall | 88 |
+| the model named the change | **`colorsImage2: "monochrome"`** — *"converted to monochrome, enhancing the noir aesthetic"* |
+
+**So restyle is viable.** The earlier no-change result measured the **prompt**, not the capability: a balanced grade (teal shadows, amber highlights, "keep
+the subject and framing") produced `styleChange 15`, and a blunt one produced **85** on the same endpoint, same source, same length. That is a finding about
+**prompt specificity** and it transfers to recast's expectations: the contract does what it is told when the instruction is unambiguous.
+
+**The aggregate lesson, applied:** relight scored `overall 85` with style 70; the subtle restyle scored `overall 85` with style **15**; the extreme restyle
+scored 88 with style **85**. **`overall` hid the difference in both restyle runs** — the per-axis score is the signal, exactly as the identity arc's
+aggregate hid `characterIdentity: 0`.
+
+**Both restyle prompts are now recorded as a pair:** subtle → 15, blunt → 85. The practical rule for the surface is to ask for a **named, extreme look** and
+to treat a low `styleChange` as a **no-change outcome**, not a success — a restyle row that says READY while looking identical is the button-that-does-nothing
+class.
+
+**Family state, second datum banked:** relight **proven** (identity 95 / lighting 70 / overall 85) · restyle **proven with a blunt prompt** (90 / 85 / 88,
+monochrome confirmed) · recast **untested**, ~26 stills at 3 s.
+
+**Spend cumulative: 6,312 credits** (4,734 before this test + 1,578).
+
+**One deployment note:** the asset path still reads `generated/fal/h3max/…` for this run because the storage-model passthrough from the previous change is
+merged but not yet deployed to the host that ran it; new deployments will write `restyle`.
+
 **Product decision (operator): prove the family before building any surface.** Relight is proven, but the endpoint verdict transfers while **restyle's
 own prompt quality does not**; building a creator surface for one operation before knowing whether the family is viable is the wrong order. The surface —
 progress state, surfaced timeout, cost preview — is deferred until the family's verdicts exist.
