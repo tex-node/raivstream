@@ -1,7 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest';
 import {
   TRANSFORM_TIMEOUT_MS, elapsedLabel, formatTransformCost, instructionGuidance, instructionPlaceholder,
-  noChangeCaveat, provenanceLine, timedOut, timeoutCopy, transformErrorCopy,
+  noChangeCaveat, provenanceLine, selectionCopy, selectionState, timedOut, timeoutCopy, transformErrorCopy,
 } from './transformPanel';
 
 /**
@@ -61,5 +61,22 @@ describe('the surface shows what the measurements say', () => {
 
   it('provenance is named on the derived asset', () => {
     expect(provenanceLine('transform:restyle:720p', 'asset-1')).toBe('Produced by transform:restyle:720p from asset-1');
+  });
+});
+
+describe('asset selection has three states, and none of them is a silent button', () => {
+  it('no selection says so', () => {
+    expect(selectionState(null, null)).toBe('none');
+    expect(selectionCopy('none')).toMatch(/Select a video/);
+  });
+
+  it('a video is ready', () => {
+    expect(selectionState('asset-1', 'VIDEO')).toBe('ready');
+    expect(selectionCopy('ready')).toBeNull();
+  });
+
+  it('a still is refused with a reason, not an unexplained disabled state', () => {
+    expect(selectionState('asset-2', 'IMAGE')).toBe('not-video');
+    expect(selectionCopy('not-video')).toMatch(/Only video assets/);
   });
 });

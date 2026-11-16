@@ -14,7 +14,6 @@ import { PlanView } from '@/components/creative/PlanView';
 import { PreviewPanel } from '@/components/creative/PreviewPanel';
 import { ProductionPanel } from '@/components/creative/ProductionPanel';
 import { ReviewPanel } from '@/components/creative/ReviewPanel';
-import { TransformPanel } from '@/components/creative/TransformPanel';
 import { DirectorPanel } from '@/components/creative/DirectorPanel';
 import { ApprovalBar } from '@/components/creative/ApprovalBar';
 import { OutputPanel } from '@/components/creative/OutputPanel';
@@ -128,14 +127,6 @@ export default function CreativeProjectPage() {
     <CreativeShell project={project} director={plan ? <DirectorPanel projectId={projectId} /> : undefined}>
       <CreativeCanvas project={project}>
         <NextActionCard project={project} />
-
-        {/*
-          Transform an existing scene asset (2026-11-16). Two proven operations behind one pattern: a real quote,
-          a progress clock from the first second, a surfaced timeout that says nothing was charged, and the
-          no-change caveat for restyle. Asset picker wiring is the remaining step - the panel is reachable here and
-          prices whatever asset id it is given.
-        */}
-        <TransformPanel projectId={projectId} assetId={""} />
 
         {/* "Here's what I understand" — always visible, in the creator's words. */}
         {project.brief?.refinedIntent && (

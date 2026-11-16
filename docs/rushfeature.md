@@ -973,6 +973,28 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**Asset selection closed the ninth instance — and the panel moved to where selection already exists.** The read found the mechanism rather than inventing
+one: the story workspace already tracks **`selected.selectedAssetId`** from a grid of scene assets (`selectedAssets`, each with `assetType`), so the plumb is
+**one prop from that existing state**, not a new store. The panel therefore moved out of the project page (where it had no selection to receive) into the
+workspace's asset picker, taking `assetId` and `assetKind` straight from the selection.
+
+**Three selection states, none of them a silent button:** no selection renders a **disabled** panel saying *"Select a video to transform."*; a **still**
+renders a refusal — *"Only video assets can be transformed. Select a video, or generate one from this scene."* — rather than an unexplained disabled state;
+only a **video** enables the buttons and computes the quote (the query is `enabled: selection === 'ready'`, so nothing is even priced for a still). **Ten
+web tests** now cover the surface, three of them the selection states.
+
+**The ninth built-not-wired instance is closed end to end without a live spend:** the panel is reachable from the workspace, handed the creator's actual
+selection, pricing a real asset through `planTransformCharge`, and calling the procedures proven in the 1,578-credit runs. No smoke was needed because the
+plumb is a **prop**, not a change to any procedure's shape.
+
+**Recast: deferred, and the reason is the question it answers.** Every proof in this phase answered a question already suspected — restyle was the exception
+because its first prompt was wrong. Recast's question is different: not *does it work* but *will a creator pay ~26 stills to replace a person*. That needs a
+creator using the surface, not another probe. **Recorded as deferred with the prompt work already scoped:** name the person, the replacement, and what must
+not change — the endpoint does what it is told when the instruction is unambiguous.
+
+**The 10 s band, recorded without being built:** relight and restyle **~20 stills at 3 s, 65 at 10 s**; recast **~26 at 3 s, 78 at 10 s**. The procedures and
+the quote already support the longer output; what the 10 s variants need is the product decision, not code.
+
 **The surface exists: one panel, two operations, and the rules the measurements produced.** It sits beside the creative actions in the project page —
 not a new surface — and it calls the real procedures: `creative.transformQuote` (a new query) and `creative.relight` / `creative.restyle` (the latter new
 this session). The quote and the charge share **one function** (`planTransformCharge`), so a preview cannot drift from what is charged.

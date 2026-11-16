@@ -36,6 +36,25 @@ export function noChangeCaveat(operation: TransformOperation): string | null {
     : null;
 }
 
+/**
+ * Whether the panel can run for the current selection (2026-11-16).
+ *
+ * Three states, because a disabled button with no explanation is the surface's version of a silent failure: no
+ * selection says so, a still says why it cannot be transformed, and only a video is ready.
+ */
+export type TransformSelection = 'none' | 'not-video' | 'ready';
+
+export function selectionState(assetId: string | null | undefined, assetKind: string | null | undefined): TransformSelection {
+  if (!assetId) return 'none';
+  return String(assetKind ?? '').toUpperCase() === 'VIDEO' ? 'ready' : 'not-video';
+}
+
+export function selectionCopy(state: TransformSelection): string | null {
+  if (state === 'none') return 'Select a video to transform.';
+  if (state === 'not-video') return 'Only video assets can be transformed. Select a video, or generate one from this scene.';
+  return null;
+}
+
 export function formatTransformCost(quote: { credits: number; billedSeconds: number } | undefined): string {
   if (!quote) return 'Checking price…';
   return `${quote.credits.toLocaleString()} credits · ${quote.billedSeconds}s billed`;
