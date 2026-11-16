@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { useEffect, useRef } from 'react';
 import { ReadinessGate, type ReadinessResolution } from '@/components/creative/ReadinessGate';
 import { directorFieldLabel } from './labels';
 
@@ -57,7 +58,23 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
     },
   });
   const versionsQuery = trpc.creative.director.versions.useQuery({ projectId });
+  // Taste signals (2026-11-16): a suggestion is 'shown' once when it appears, and 'accepted' at the click -
+  // never from render - so an accepted event can be joined to the shown event that produced it.
+  const taste = trpc.analytics.trackTasteSignal.useMutation();
+  const shownKeys = useRef<Set<string>>(new Set());
   const suggestionsQuery = trpc.creative.director.suggestions.useQuery({ projectId });
+  useEffect(() => {
+    for (const suggestion of (suggestionsQuery.data ?? []) as Array<{ label: string; instruction: string }>) {
+      // The director's suggestions are PRODUCT copy ("Make it more cinematic"), not the creator's writing, so the
+      // stable key is kind + label. Creator-derived text (rewrites, questions) is hashed server-side instead, and
+      // never stored.
+      const key = `director:${suggestion.label}`;
+      if (shownKeys.current.has(key)) continue;
+      shownKeys.current.add(key);
+      void taste.mutate({ projectId, eventName: 'suggestion_shown', properties: { kind: 'director', suggestionKey: key } });
+    }
+  }, [suggestionsQuery.data, projectId, taste]);
+
   const suggestions = (suggestionsQuery.data as Array<{ label: string; instruction: string }> | undefined) ?? FALLBACK_EXAMPLES;
 
   const decision = propose.data?.decision as Decision | undefined;
@@ -129,6 +146,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
                 key={suggestion.label}
                 type="button"
                 onClick={() => {
+                  void taste.mutate({ projectId, eventName: 'suggestion_accepted', properties: { kind: 'director', suggestionKey: `director:${suggestion.label}` } });
                   setInstruction(suggestion.instruction);
                   propose.reset();
                   propose.mutate({ projectId, instruction: suggestion.instruction });

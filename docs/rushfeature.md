@@ -973,6 +973,36 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**Acceptance is open, and recorded as open rather than implied by "built".** The transformation surface is proven by ten tests and reachable end to end,
+but **no creator has used it**. *Two operations surfaced end to end and proven by tests. Not yet used by a creator. The open question is whether ~20 stills and
+a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
+the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
+
+**Homer's style instrumentation is live: four events, one join key, no story text.** The read answered the design question before any code: `AnalyticsEvent`
+already carries `userId`, `projectId`, `eventName`, **`properties Json?`** and four indexes including `(eventName, createdAt)`, so it can hold these signals —
+**no new table**. A table for taste would be a schema decision the profile should force later, if it forces one at all.
+
+| event | carries |
+|---|---|
+| `suggestion_shown` | `kind` (rewrite / question / director), `suggestionKey`, `textLength` |
+| `suggestion_accepted` | the **same** `suggestionKey` + `kind` — the join that makes it a signal rather than a count |
+| `suggestion_rejected` | the same key, `textLength`, and `reason` when the UI captures one |
+| `text_edited` | `surface` (paragraph_rewrite / chapter_edit / director_instruction), `beforeLength`, `afterLength` |
+
+**The join key is the design.** `suggestionKey(kind, text)` is a salted **sha256 prefix** — the same text yields the same key from shown, accepted and rejected,
+and the text itself is never stored; only the key and a length. **Dismissal is its own event**: a suggestion that disappears without an explicit dismissal was
+never rejected, it was not acted on, and this shape keeps engagement from being recorded as taste.
+
+**Wired where the handlers are.** The director's suggestion chips emit `suggestion_shown` **once per suggestion via an effect keyed on the rendered list** and
+`suggestion_accepted` **in the click handler** — never from render — so an acceptance always joins to the show that produced it. Director chips key on
+**kind + label**, because those labels are product copy ("Make it more cinematic"), not a creator's writing; creator-derived text is hashed server-side and
+never leaves the server's memory. The route is `analytics.trackTasteSignal`, validating a strict `properties` schema so no free text can ride along.
+
+**Is instrumentation enough for a profile? No — and the gap is named.** Four events say **what was accepted**, not **what the creator's style is**: a profile
+built from them can say "accepts 70% of rewrites", which is engagement, not taste. What is missing is the **dimension** — which axis (pacing, framing,
+lighting, tone) an accepted suggestion moved, and that requires the suggestion itself to be classified at generation time. **That classification is the
+profile's next prerequisite**, recorded here rather than discovered during its build.
+
 **Asset selection closed the ninth instance — and the panel moved to where selection already exists.** The read found the mechanism rather than inventing
 one: the story workspace already tracks **`selected.selectedAssetId`** from a grid of scene assets (`selectedAssets`, each with `assetType`), so the plumb is
 **one prop from that existing state**, not a new store. The panel therefore moved out of the project page (where it had no selection to receive) into the
