@@ -978,6 +978,36 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The axis is mapped, not modelled — and the read said so.** `buildDirectorSuggestions` returns `{ label, instruction }` with **no category**, and the
+rewrite chips are a fixed list in `StoryScreen` (`Develop this idea`, `Strengthen conflict`, `Explore another ending`, `Make this funnier`, `Increase tension`).
+Every surface is therefore a **small enumerable set of product labels**, so the axis is a **mapping table**, not a classifier: **no model call is added**,
+because a classifier that costs a call per chip grows with every render. The one place a category already existed is `reviewFindings[].category` from the
+critic, which maps cleanly onto the axes.
+
+**Five buckets, four of them axes.** Defined before any mapping:
+- **pacing** — how the story moves: tension, conflict, rhythm, the length of a beat;
+- **framing** — what the camera includes and how: composition, shot scale, movement, lens;
+- **lighting** — light and its colour: key/fill, contrast, time of day, grade;
+- **tone** — emotional register: funnier, hopeful, premium, warmer;
+- **unclassified** — a suggestion that moves no style axis. *"Develop this idea"* is neither pacing nor tone, and forcing it into one would teach the profile
+  noise — so the bucket is honest rather than decorative.
+
+`CinematicLook`'s fields corroborate the set: `lens` and `movement` sit under **framing**, `lighting` and `grade` under **lighting**, while **pacing** and
+**tone** are properties of the cut and the performance rather than the look object — which is why the four axes are not merely the look's field names.
+
+**The axis travels with the join.** `suggestion_shown` and `suggestion_accepted` both carry `axis`, so the join is **(suggestionKey, axis)** — the same text
+moving a different axis is a different suggestion, which is correct. The **mapping lives server-side**: the panel sends the product **label** as a `hint`,
+`trackTasteSignal` resolves it to an axis and stores **the axis only** — the hint never reaches the row, so the no-text rule holds and there is one mapping
+rather than two that can disagree. The strict schema's enum is **`z.enum(STYLE_AXES)`**, derived from the same constant, so an unknown axis is rejected by
+construction. **Nine tests** pin the axis list, the director and rewrite mappings, the unclassified cases (including *"Develop this idea"*), the critic
+category mapping, the join carrying the axis, and that no signal contains the label or the text.
+
+**Sufficiency, re-asked with the axis: closer, still not enough.** With an axis per acceptance, a profile can finally compute **per-axis acceptance rates over
+time, per creator** — that is the derivation shape, and it is real. What it still cannot see is **magnitude and direction**: accepting *"Strengthen conflict"*
+says a creator wants **more** tension, but accepting *"Explore another ending"* says they want a different ending, not a pace change — both are pacing, and
+the profile would weigh them the same. **The remaining prerequisite is a signed direction on the axis (more / less / different), captured at the mapping
+table**, not a new event. Named now rather than discovered during the profile's build.
+
 **Homer's style instrumentation is live: four events, one join key, no story text.** The read answered the design question before any code: `AnalyticsEvent`
 already carries `userId`, `projectId`, `eventName`, **`properties Json?`** and four indexes including `(eventName, createdAt)`, so it can hold these signals —
 **no new table**. A table for taste would be a schema decision the profile should force later, if it forces one at all.

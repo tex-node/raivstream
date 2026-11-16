@@ -13,6 +13,7 @@
  *    never rejected; it was not acted on. Only a real dismiss emits `suggestion_rejected`.
  */
 import { createHash } from 'node:crypto';
+import { axisForSuggestion, type StyleAxis } from './styleAxes';
 import type { PrismaClient } from '@raivstream/database';
 import { trackAnalyticsEvent } from '../analytics';
 
@@ -47,24 +48,47 @@ export interface TasteSignal {
     surface?: TasteSurface;
     /** Lengths only - never the text. */
     textLength?: number;
+    /** Which style axis this suggestion moves (2026-11-16). Part of the join: same text, different axis is a different suggestion. */
+    axis?: StyleAxis;
     beforeLength?: number;
     afterLength?: number;
   };
 }
 
-export function shownSignal(kind: TasteKind, text: string): TasteSignal {
-  return { eventName: 'suggestion_shown', properties: { suggestionKey: suggestionKey(kind, text), kind, textLength: text.trim().length } };
+export function shownSignal(kind: TasteKind, text: string, label?: string): TasteSignal {
+  return {
+    eventName: 'suggestion_shown',
+    properties: {
+      suggestionKey: suggestionKey(kind, text),
+      kind,
+      textLength: text.trim().length,
+      axis: label ? axisForSuggestion(kind, label) : 'unclassified',
+    },
+  };
 }
 
-export function acceptedSignal(kind: TasteKind, text: string): TasteSignal {
-  return { eventName: 'suggestion_accepted', properties: { suggestionKey: suggestionKey(kind, text), kind } };
+export function acceptedSignal(kind: TasteKind, text: string, label?: string): TasteSignal {
+  return {
+    eventName: 'suggestion_accepted',
+    properties: {
+      suggestionKey: suggestionKey(kind, text),
+      kind,
+      axis: label ? axisForSuggestion(kind, label) : 'unclassified',
+    },
+  };
 }
 
 /** Only an explicit dismissal emits this; a suggestion that was merely never used emits nothing. */
 export function rejectedSignal(kind: TasteKind, text: string, reason?: string): TasteSignal {
   return {
     eventName: 'suggestion_rejected',
-    properties: { suggestionKey: suggestionKey(kind, text), kind, textLength: text.trim().length, ...(reason ? { reason } : {}) } as TasteSignal['properties'] & { reason?: string },
+    properties: {
+      suggestionKey: suggestionKey(kind, text),
+      kind,
+      textLength: text.trim().length,
+      axis: 'unclassified' as StyleAxis,
+      ...(reason ? { reason } : {}),
+    } as TasteSignal['properties'] & { reason?: string },
   };
 }
 
@@ -79,12 +103,21 @@ export function editedSignal(surface: TasteSurface, beforeLength: number, afterL
  */
 export async function trackTasteSignal(
   prisma: PrismaClient,
-  input: { userId: string; projectId: string | null; eventName: TasteEventName; properties: TasteSignal['properties'] & { reason?: string } },
+  input: {
+    userId: string;
+    projectId: string | null;
+    eventName: TasteEventName;
+    properties: TasteSignal['properties'] & { reason?: string; hint?: string; axis?: StyleAxis };
+  },
 ): Promise<void> {
+  // The axis is resolved HERE from the product label, so the mapping lives in one place and the hint itself is
+  // never stored - only the axis it mapped to.
+  const { hint, ...rest } = input.properties;
+  const axis = rest.axis ?? (hint && rest.kind ? axisForSuggestion(rest.kind, hint) : 'unclassified');
   await trackAnalyticsEvent(prisma, {
     userId: input.userId,
     projectId: input.projectId ?? undefined,
     event: input.eventName,
-    properties: { ...input.properties },
+    properties: { ...rest, axis },
   });
 }
