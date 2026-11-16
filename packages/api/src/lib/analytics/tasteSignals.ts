@@ -14,6 +14,7 @@
  */
 import { createHash } from 'node:crypto';
 import { axisForSuggestion, type StyleAxis } from './styleAxes';
+import { directionForSuggestion, type SuggestionDirection } from './suggestionDirection';
 import type { PrismaClient } from '@raivstream/database';
 import { trackAnalyticsEvent } from '../analytics';
 
@@ -50,6 +51,8 @@ export interface TasteSignal {
     textLength?: number;
     /** Which style axis this suggestion moves (2026-11-16). Part of the join: same text, different axis is a different suggestion. */
     axis?: StyleAxis;
+    /** Signed direction from the mapping (2026-11-16): more / less / different, or null for no directional axis. */
+    direction?: SuggestionDirection;
     beforeLength?: number;
     afterLength?: number;
   };
@@ -63,6 +66,7 @@ export function shownSignal(kind: TasteKind, text: string, label?: string): Tast
       kind,
       textLength: text.trim().length,
       axis: label ? axisForSuggestion(kind, label) : 'unclassified',
+      direction: label ? directionForSuggestion(kind, label) : null,
     },
   };
 }
@@ -74,6 +78,7 @@ export function acceptedSignal(kind: TasteKind, text: string, label?: string): T
       suggestionKey: suggestionKey(kind, text),
       kind,
       axis: label ? axisForSuggestion(kind, label) : 'unclassified',
+      direction: label ? directionForSuggestion(kind, label) : null,
     },
   };
 }
@@ -87,6 +92,7 @@ export function rejectedSignal(kind: TasteKind, text: string, reason?: string): 
       kind,
       textLength: text.trim().length,
       axis: 'unclassified' as StyleAxis,
+      direction: null,
       ...(reason ? { reason } : {}),
     } as TasteSignal['properties'] & { reason?: string },
   };
@@ -107,17 +113,18 @@ export async function trackTasteSignal(
     userId: string;
     projectId: string | null;
     eventName: TasteEventName;
-    properties: TasteSignal['properties'] & { reason?: string; hint?: string; axis?: StyleAxis };
+    properties: TasteSignal['properties'] & { reason?: string; hint?: string; axis?: StyleAxis; direction?: SuggestionDirection };
   },
 ): Promise<void> {
   // The axis is resolved HERE from the product label, so the mapping lives in one place and the hint itself is
   // never stored - only the axis it mapped to.
   const { hint, ...rest } = input.properties;
-  const axis = rest.axis ?? (hint && rest.kind ? axisForSuggestion(rest.kind, hint) : 'unclassified');
+  const axis = rest.axis ?? (hint && rest.kind ? axisForSuggestion(rest.kind, hint) : ('unclassified' as StyleAxis));
+  const direction = rest.direction !== undefined ? rest.direction : (hint && rest.kind ? directionForSuggestion(rest.kind, hint) : null);
   await trackAnalyticsEvent(prisma, {
     userId: input.userId,
     projectId: input.projectId ?? undefined,
     event: input.eventName,
-    properties: { ...rest, axis },
+    properties: { ...rest, axis, direction },
   });
 }

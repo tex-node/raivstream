@@ -26,7 +26,8 @@ describe('taste signals join, and carry no text', () => {
   it('no event carries story text - only keys, lengths and surfaces', () => {
     const shown = shownSignal('director', 'make it cinematic please');
     expect(JSON.stringify(shown)).not.toContain('cinematic');
-    expect(Object.values(shown.properties).every((value) => typeof value !== 'object')).toBe(true);
+    // `direction` may be null, and `typeof null === 'object'` - null is a real direction, not a nested payload.
+    expect(Object.values(shown.properties).every((value) => value === null || typeof value !== 'object')).toBe(true);
     expect(editedSignal('chapter_edit', 10, 20).properties).toEqual({ surface: 'chapter_edit', beforeLength: 10, afterLength: 20 });
   });
 

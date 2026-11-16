@@ -978,6 +978,41 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Signed direction is on the mapping, and the join stays two-part.** A suggestion's direction is a property of **what it asks for**, not of the creator's
+response, so it lives beside the axis in the mapping rather than on the event — putting it on the event would let two acceptances of the same text carry
+different directions, which is the join-key defect in a new place.
+
+| label | axis | direction |
+|---|---|---|
+| Strengthen conflict | pacing | **more** |
+| Explore another ending | pacing | **different** |
+| Make this funnier | tone | more |
+| Develop this idea | unclassified | **null** |
+
+`more · less · different · null`. **`null` is a real value**: the suggestion has no directional axis (the unclassified case), and pretending otherwise would let
+the profile read a preference out of a suggestion that never expressed one. **The join stays `(suggestionKey, axis)`** — direction is derivable from the same
+text, so a third join component would add nothing to identity; it travels on the event **for aggregation**, and two acceptances of the same suggestion cannot
+disagree about it. The schema validates the direction as a union (`'more' | 'less' | 'different' | null`), so a value outside the vocabulary is rejected.
+
+**Sufficiency, third answer: yes for the rule, no for the build decision — and those are different questions.** With `(axis, direction, accepted)` over time
+per creator, a derivation rule can be written: *for each axis, take the signed acceptances; if `more` dominates (say ≥70%) the default should shift in that
+direction, if `less` dominates it should shift the other way, if the split is near even the default holds, and `different` counts as "no stable direction" rather
+than as either pole; `null` is excluded entirely.* That is a rule, not an implementation. **What it still cannot see is agreement** — whether the creator's own
+edits move the same way as the direction they accepted. A creator who accepts "more tension" and then edits the pacing back down has told the profile two
+opposite things, and only the edit carries the weight. **That is the specific remaining gap**, not "magnitude": direction without corroboration is a click, and
+clicks are what the whole arc has learned to distrust.
+
+**Build-depth decision (operator): ship the stated defaults first; the profile waits for signal history.** The profile is five builds deep and **nothing visible
+has shipped**; the remaining two — a per-creator table and per-dimension decay — are the expensive half and the half whose value is most uncertain. A creator who
+gets a good genre-matched default may never need it to change. **The instrumentation keeps recording**, so the profile's first version will be built against
+months of real acceptance data rather than a cold start. **Consequence:** Phase 11's profile is now a **data question** — it becomes buildable when the signal
+history justifies it, and the derivation rule above is its specification.
+
+**Process note, recorded rather than hidden:** this session had a red period where two direction tests failed while a direct probe of the same functions
+returned the correct values. The cause was my own test file — duplicated appends from repeated editing left stale assertions alongside new ones — not the
+mapping. The file was rewritten cleanly and the mapping verified by probe; **six tests** now cover the axes, the direction pair, the null case, the join and the
+no-text rule.
+
 **The axis is mapped, not modelled — and the read said so.** `buildDirectorSuggestions` returns `{ label, instruction }` with **no category**, and the
 rewrite chips are a fixed list in `StoryScreen` (`Develop this idea`, `Strengthen conflict`, `Explore another ending`, `Make this funnier`, `Increase tension`).
 Every surface is therefore a **small enumerable set of product labels**, so the axis is a **mapping table**, not a classifier: **no model call is added**,
