@@ -35,6 +35,8 @@ export const analyticsRouter = router({
         /** Product label (never creator text); the server maps it to an axis and does not store it. */
         hint: z.string().max(80).optional(),
         axis: z.enum(STYLE_AXES).optional(),
+        // `null` is a real direction (no directional axis), so this is a union rather than an enum of strings.
+        direction: z.union([z.literal('more'), z.literal('less'), z.literal('different'), z.null()]).optional(),
       }).strict(),
     }))
     .mutation(async ({ ctx, input }) => {

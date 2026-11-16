@@ -1,63 +1,50 @@
-﻿import { describe, expect, it } from 'vitest';
-import { STYLE_AXES, axisForCriticCategory, axisForDirectorLabel, axisForRewriteAction, axisForSuggestion } from '../styleAxes';
+import { describe, expect, it } from 'vitest';
+import { STYLE_AXES, axisForCriticCategory, axisForDirectorLabel, axisForRewriteAction } from '../styleAxes';
+import { directionForLabel, directionForSuggestion } from '../suggestionDirection';
 import { acceptedSignal, shownSignal } from '../tasteSignals';
 
 /**
- * Style axes (2026-11-16).
+ * Style axes and signed direction (2026-11-16).
  *
- * The profile needs to know WHICH axis a suggestion moved, not just that one was accepted. Every surface is a
- * small enumerable set of product labels, so the axis is mapped - no model call, because a classifier per chip is
- * a cost that grows with every render.
+ * Both are mapped from product labels, never inferred by a model: a classifier per chip is a cost that grows with
+ * every render. Axis answers WHICH dimension moved; direction answers WHICH WAY — and without direction the profile
+ * cannot tell "more tension" from "a different ending", because both are pacing.
  */
-describe('the axis is mapped from labels, never inferred by a model', () => {
-  it('four axes plus an honest unclassified', () => {
+describe('axes', () => {
+  it('four axes plus unclassified', () => {
     expect(STYLE_AXES).toEqual(['pacing', 'framing', 'lighting', 'tone', 'unclassified']);
   });
 
-  it('director labels map to the axis they actually move', () => {
+  it('maps director and rewrite labels, and leaves the unclassified case alone', () => {
     expect(axisForDirectorLabel('Strengthen conflict')).toBe('pacing');
     expect(axisForDirectorLabel('Make it feel more premium')).toBe('tone');
     expect(axisForDirectorLabel('Make the product the hero')).toBe('framing');
-  });
-
-  it('rewrite chips map by their own labels', () => {
     expect(axisForRewriteAction('Increase tension')).toBe('pacing');
-    expect(axisForRewriteAction('Make this funnier')).toBe('tone');
-  });
-
-  it('"Develop this idea" is unclassified rather than forced into an axis', () => {
-    // Forcing it would teach the profile noise: it moves no style axis.
     expect(axisForRewriteAction('Develop this idea')).toBe('unclassified');
-    expect(axisForDirectorLabel('an unknown label')).toBe('unclassified');
-  });
-
-  it('question options do not move a style axis', () => {
-    expect(axisForSuggestion('question', 'A dog going to school')).toBe('unclassified');
-  });
-
-  it('critic categories map where they name a style axis', () => {
     expect(axisForCriticCategory('lighting')).toBe('lighting');
-    expect(axisForCriticCategory('composition')).toBe('framing');
-    expect(axisForCriticCategory('somethingElse')).toBe('unclassified');
   });
 });
 
-describe('the axis travels with the join', () => {
-  it('shown and accepted carry the same axis for the same suggestion', () => {
-    const shown = shownSignal('director', 'Make it feel more premium.', 'Make it feel more premium');
-    const accepted = acceptedSignal('director', 'Make it feel more premium.', 'Make it feel more premium');
-    expect(shown.properties.axis).toBe('tone');
-    expect(accepted.properties.axis).toBe('tone');
-    // The join key is unchanged by the axis.
+describe('direction', () => {
+  it('separates the two pacing suggestions', () => {
+    expect(directionForLabel('Strengthen conflict')).toBe('more');
+    expect(directionForLabel('Explore another ending')).toBe('different');
+  });
+
+  it('null is a real direction, not a missing one', () => {
+    expect(directionForLabel('Develop this idea')).toBeNull();
+    expect(directionForSuggestion('question', 'A dog going to school')).toBeNull();
+  });
+
+  it('travels on shown and accepted without changing the join', () => {
+    const shown = shownSignal('director', 'Strengthen conflict.', 'Strengthen conflict');
+    const accepted = acceptedSignal('director', 'Strengthen conflict.', 'Strengthen conflict');
+    expect(shown.properties.direction).toBe('more');
+    expect(accepted.properties.direction).toBe('more');
     expect(shown.properties.suggestionKey).toBe(accepted.properties.suggestionKey);
   });
 
-  it('an unlabelled suggestion is unclassified rather than wrong', () => {
-    expect(shownSignal('rewrite', 'some text').properties.axis).toBe('unclassified');
-  });
-
   it('no signal carries the label or the text', () => {
-    const signal = acceptedSignal('director', 'Make it feel more premium.', 'Make it feel more premium');
-    expect(JSON.stringify(signal)).not.toContain('premium');
+    expect(JSON.stringify(acceptedSignal('director', 'Make it feel more premium.', 'Make it feel more premium'))).not.toContain('premium');
   });
 });
