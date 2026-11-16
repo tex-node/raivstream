@@ -973,6 +973,36 @@ kept. The slot is `(projectId, sceneId, shotId, kind)`.
 `20261114120000_transform_provenance`, applied and verified in `information_schema`). `parentTakeId` could not serve: it is the previous take in the
 slot, while a source may be several takes back or in a different slot.
 
+**The surface exists: one panel, two operations, and the rules the measurements produced.** It sits beside the creative actions in the project page —
+not a new surface — and it calls the real procedures: `creative.transformQuote` (a new query) and `creative.relight` / `creative.restyle` (the latter new
+this session). The quote and the charge share **one function** (`planTransformCharge`), so a preview cannot drift from what is charged.
+
+| element | what it does | traceable to |
+|---|---|---|
+| cost preview | `creative.transformQuote` → `1,578 credits · 6s billed` | the seeded rate × billed seconds |
+| progress | a clock from the first second: `Working… 12s` / `Working… 1m 35s` | measured polls of **72.8 s** and **95.3 s** |
+| timeout | at 10 minutes: *"This took too long. Nothing was charged"* | the refund behaviour makes that sentence true |
+| result | the derived take with `Produced by transform:restyle:720p from <source>` | `producedBy` + `sourceAssetId` on the row |
+| no-change caveat | restyle carries *"if the look barely moved, that is a no-change outcome"* | the **15 vs 85** pair on the same endpoint |
+| guidance | placeholder + hint naming the pattern that measured 85 | the extreme-test result |
+| refusals | every typed error becomes creator language; no code string reaches a creator | the four mapped transform errors |
+
+**The two things the API already supported and the UI now shows:** provenance is named on the derived asset (`producedBy` + `sourceAssetId`), and the
+**no-change rule is stated instead of an aggregate score** — because the per-axis rule has three data points and an aggregate would repeat the identity
+arc's defect in a new place. The surface deliberately does **not** render a score: the vision comparison was an offline probe, not a route, so showing
+"85 — good" would invent a number the product cannot compute. **What it shows instead is the caveat and the provenance**, which is honest about what the
+app knows.
+
+**The ninth built-but-not-wired instance is partly closed.** The panel is mounted on the project page and calls real procedures; the remaining wiring is
+**asset selection** — the panel is handed an empty asset id until the asset manager passes its selected video through, so a creator can see and price the
+panel but not yet pick which asset to transform. That is stated as the remainder rather than implied by "built".
+
+**Storage passthrough:** merged in `falOutputStorageKey` (model-aware directory) and confirmed in the deployed tree; the earlier `h3max` paths are left
+alone because renaming objects is a storage migration.
+
+**No live smoke ran, and none is needed for this claim:** the render path was proven in the 1,578-credit runs, and the surface is proven by **seven tests**
+covering the cost copy, the progress clock, the timeout copy, the no-change caveat, the guidance, the error translations and the provenance line.
+
 **The extreme-instruction test settled it: the endpoint honours style prompts, and the first instruction was too subtle.** Same trimmed 3 s source, one
 **1,578-credit** run, instruction at the end of the scale — *"monochrome noir: fully desaturated black and white, crushed blacks, single hard key light,
 deep chiaroscuro shadows, high-contrast silver-gelatin grade. Keep the subject and framing."*

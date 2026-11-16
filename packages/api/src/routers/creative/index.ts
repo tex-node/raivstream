@@ -1,7 +1,7 @@
 import { router } from '../../trpc';
 import { z } from 'zod';
 import { creativeProcedure } from '../../trpc';
-import { runRelight } from '../../lib/creative/transform/procedure';
+import { quoteTransform, runRelight, runTransform } from '../../lib/creative/transform/procedure';
 import { creativeProjectRouter } from './project';
 import { creativeIntentRouter } from './intent';
 import { creativeHomerRouter } from './homer';
@@ -32,6 +32,26 @@ export const creativeRouter = router({
       resolution: input.resolution,
       userId: ctx.user.id,
     })),
+  /**
+   * Restyle one existing scene asset (2026-11-16). The instruction is the measured variable: a blunt, named
+   * look scored styleChange 85 where a balanced grade scored 15, so the surface asks for the former.
+   */
+  restyle: creativeProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string(), resolution: z.enum(['720p', '1080p']), instruction: z.string().min(4).max(400) }))
+    .mutation(async ({ ctx, input }) => runTransform(ctx.prisma, {
+      projectId: input.projectId,
+      assetId: input.assetId,
+      resolution: input.resolution,
+      userId: ctx.user.id,
+      operation: 'restyle',
+      instruction: input.instruction,
+    })),
+
+  /** Cost preview from the same plan function the charge uses - a preview cannot drift from the charge. */
+  transformQuote: creativeProcedure
+    .input(z.object({ projectId: z.string(), assetId: z.string(), operation: z.enum(['relight', 'restyle']), resolution: z.enum(['720p', '1080p']) }))
+    .query(async ({ ctx, input }) => quoteTransform(ctx.prisma, { ...input, userId: ctx.user.id })),
+
   project: creativeProjectRouter,
   intent: creativeIntentRouter,
   homer: creativeHomerRouter,
