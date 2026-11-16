@@ -71,7 +71,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
       const key = `director:${suggestion.label}`;
       if (shownKeys.current.has(key)) continue;
       shownKeys.current.add(key);
-      void taste.mutate({ projectId, eventName: 'suggestion_shown', properties: { kind: 'director', suggestionKey: key } });
+      void taste.mutate({ projectId, eventName: 'suggestion_shown', properties: { kind: 'director', suggestionKey: key, hint: suggestion.label } });
     }
   }, [suggestionsQuery.data, projectId, taste]);
 
@@ -146,7 +146,7 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
                 key={suggestion.label}
                 type="button"
                 onClick={() => {
-                  void taste.mutate({ projectId, eventName: 'suggestion_accepted', properties: { kind: 'director', suggestionKey: `director:${suggestion.label}` } });
+                  void taste.mutate({ projectId, eventName: 'suggestion_accepted', properties: { kind: 'director', suggestionKey: `director:${suggestion.label}`, hint: suggestion.label } });
                   setInstruction(suggestion.instruction);
                   propose.reset();
                   propose.mutate({ projectId, instruction: suggestion.instruction });

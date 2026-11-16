@@ -1,4 +1,5 @@
 import { trackTasteSignal } from '../lib/analytics/tasteSignals';
+import { STYLE_AXES } from '../lib/analytics/styleAxes';
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -31,6 +32,9 @@ export const analyticsRouter = router({
         beforeLength: z.number().int().nonnegative().optional(),
         afterLength: z.number().int().nonnegative().optional(),
         reason: z.string().max(120).optional(),
+        /** Product label (never creator text); the server maps it to an axis and does not store it. */
+        hint: z.string().max(80).optional(),
+        axis: z.enum(STYLE_AXES).optional(),
       }).strict(),
     }))
     .mutation(async ({ ctx, input }) => {
