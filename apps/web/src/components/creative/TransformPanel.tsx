@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import {
-  elapsedLabel, formatTransformCost, instructionGuidance, instructionPlaceholder,
+  elapsedLabel, formatTransformCost, instructionGuidance, instructionPlaceholder, selectionCopy, selectionState,
   noChangeCaveat, provenanceLine, timedOut, timeoutCopy, transformErrorCopy,
   type TransformOperation,
 } from '@/lib/transformPanel';
@@ -19,10 +19,13 @@ import {
 export function TransformPanel({
   projectId,
   assetId,
+  assetKind,
   assetLabel,
 }: {
   projectId: string;
-  assetId: string;
+  assetId: string | null;
+  /** 'VIDEO' enables the panel; anything else is refused with copy rather than a silent disabled button. */
+  assetKind?: string | null;
   assetLabel?: string;
 }) {
   const [operation, setOperation] = useState<TransformOperation>('relight');
@@ -32,7 +35,12 @@ export function TransformPanel({
   const [now, setNow] = useState(() => Date.now());
 
   const utils = trpc.useUtils();
-  const quote = trpc.creative.transformQuote.useQuery({ projectId, assetId, operation, resolution }, { retry: false });
+  const selection = selectionState(assetId, assetKind);
+  const refusal = selectionCopy(selection);
+  const quote = trpc.creative.transformQuote.useQuery(
+    { projectId, assetId: assetId ?? '', operation, resolution },
+    { retry: false, enabled: selection === 'ready' },
+  );
 
   const run = trpc.creative[operation === 'relight' ? 'relight' : 'restyle'].useMutation({
     onMutate: () => { setStartedAt(Date.now()); setNow(Date.now()); },
@@ -97,12 +105,15 @@ export function TransformPanel({
         </div>
       )}
 
+      {refusal && <p className="mb-2 text-xs opacity-70">{refusal}</p>}
+
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs opacity-70">{formatTransformCost(quote.data)}</span>
+        <span className="text-xs opacity-70">{selection === 'ready' ? formatTransformCost(quote.data) : ''}</span>
         <button
           type="button"
-          disabled={run.isPending || (operation === 'restyle' && instruction.trim().length < 4)}
+          disabled={selection !== 'ready' || run.isPending || (operation === 'restyle' && instruction.trim().length < 4)}
           onClick={() => {
+            if (!assetId) return;
             if (operation === 'relight') run.mutate({ projectId, assetId, resolution } as never);
             else run.mutate({ projectId, assetId, resolution, instruction } as never);
           }}

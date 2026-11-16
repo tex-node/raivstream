@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { TransformPanel } from '@/components/creative/TransformPanel';
 import { BookOpen, Camera, CheckCircle2, Clapperboard, Copy, Download, GripVertical, Heart, ImagePlus, Loader2, Mic, Music, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, SkipBack, SkipForward, Star, Trash2, UserRound, Volume2, X } from 'lucide-react';
 import { Shell } from '@/components/layout/Shell';
 import { useR16 } from '@/lib/r16';
@@ -1216,7 +1217,11 @@ export default function StoryWorkspacePage() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  <div>
+                  <div className="mb-3">
+                {/* Transform the selected asset (2026-11-16): one prop from the existing selection. */}
+                <TransformPanel projectId={projectId} assetId={selected.selectedAssetId ?? null} assetKind={selectedAssets.find((asset) => asset.id === selected.selectedAssetId)?.assetType ?? null} />
+              </div>
+              <div>
                     <p className="text-xs font-black uppercase text-[var(--noc-t4)]">Picture — replace with any asset from this scene&apos;s library</p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <button
