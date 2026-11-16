@@ -1,3 +1,4 @@
+import { trackTasteSignal } from '../lib/analytics/tasteSignals';
 import { router, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -14,6 +15,34 @@ const PRODUCT_EVENT_PREFIXES = ['avatar_'] as const;
 const SAFE_EVENT_PROPERTY_KEYS = new Set(['jobId', 'model', 'resolution', 'durationSeconds']);
 
 export const analyticsRouter = router({
+  /**
+   * Taste signals for Homer's style profile (2026-11-16): shown / accepted / rejected / edited, joined by a
+   * stable suggestion key and carrying lengths, never story text.
+   */
+  trackTasteSignal: protectedProcedure
+    .input(z.object({
+      projectId: z.string().optional(),
+      eventName: z.enum(['suggestion_shown', 'suggestion_accepted', 'suggestion_rejected', 'text_edited']),
+      properties: z.object({
+        suggestionKey: z.string().max(64).optional(),
+        kind: z.enum(['rewrite', 'question', 'director']).optional(),
+        surface: z.enum(['paragraph_rewrite', 'chapter_edit', 'director_instruction']).optional(),
+        textLength: z.number().int().nonnegative().optional(),
+        beforeLength: z.number().int().nonnegative().optional(),
+        afterLength: z.number().int().nonnegative().optional(),
+        reason: z.string().max(120).optional(),
+      }).strict(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await trackTasteSignal(ctx.prisma, {
+        userId: ctx.user.id,
+        projectId: input.projectId ?? null,
+        eventName: input.eventName,
+        properties: input.properties,
+      });
+      return { ok: true };
+    }),
+
   trackStoryEvent: protectedProcedure
     .input(z.object({
       event: storyAnalyticsEventSchema,
