@@ -938,3 +938,49 @@ export async function renderOutputDerivative(
     }
   }
 }
+
+export interface TitleCardOptions {
+  /** The video to overlay. Nothing is re-rendered; one filter is added. */
+  inputPath: string;
+  outputPath: string;
+  /** Creator-supplied and therefore untrusted: escaped before it reaches drawtext. */
+  text: string;
+  /** Where the card appears, in seconds. */
+  atSeconds: number;
+  /** How long it stays, in seconds. */
+  durationSeconds: number;
+  width: number;
+  height: number;
+  fontFile?: string | null;
+}
+
+/**
+ * A title card, as the END CARD's machinery at a different timestamp (2026-11-17).
+ *
+ * No second render path: the same `drawtext` filter, the same font preflight, and the same `escapeDrawtext` boundary. A commercial's product name is
+ * creator-supplied and untrusted, so the escaping is the safety boundary rather than a nicety - an apostrophe or a `%` that reached the filter unescaped
+ * would break the render, and a newline would break the filter graph itself.
+ */
+export function buildTitleCardArgs(opts: TitleCardOptions): string[] {
+  const { inputPath, outputPath, text, atSeconds, durationSeconds, width, height, fontFile } = opts;
+  const font = fontFile ? `:fontfile='${fontFile.replace(/'/g, "\\'")}'` : '';
+  const fontSize = Math.max(28, Math.round(width / 16));
+  const safeText = escapeDrawtext(String(text ?? '').replace(/[\r\n]+/g, ' ').trim());
+  const safeEnd = Math.max(0, atSeconds) + Math.max(0.5, durationSeconds);
+
+  const filter = [
+    `drawtext=text='${safeText}'${font}:fontcolor=white:fontsize=${fontSize}`,
+    `:box=1:boxcolor=black@0.45:boxborderw=24`,
+    `:x=(w-text_w)/2:y=h*0.72`,
+    `:enable='between(t,${Math.max(0, atSeconds).toFixed(2)},${safeEnd.toFixed(2)})'`,
+  ].join('');
+
+  return [
+    '-y', '-i', inputPath,
+    '-vf', filter,
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    '-c:a', 'copy',
+    '-s', `${width}x${height}`,
+    outputPath,
+  ];
+}
