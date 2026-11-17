@@ -978,6 +978,20 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Diagnosis of `generated=0` + `COMPLETED` + 3 QUEUED assets: the status was honest, and the dedupe is what hid the orphans.** The three artifacts:
+
+*The loop* (`runner.ts:216-222`): each spec is keyed `` `${sceneId}:${shotId ?? '-'}:${kind}` ``, looked up in `byKey`, and skipped **only when `prior.status === 'READY'`**.
+
+*The dedupe* (`runner.ts:167-172`): `byKey` is built with `new Map(existing.map(...))` — **one entry per key, last write wins**. The project has **8 READY IMAGE + 4 READY VIDEO + 3 QUEUED IMAGE**, so for `SCENE_01:-:IMAGE` the **newer READY row overwrites the older QUEUED row of the same key**. The loop therefore saw READY for every spec, skipped all of them, and correctly reported `generated=0`.
+
+*The QUEUED rows are stale duplicates from a previous run*: `cmw0yfpaf000112s1t4k27bpn` (SCENE_01), `cmw0yfpco000412s18g6wdawk` (SCENE_02), `cmw0yfpdt000712s1p2xl287d` (SCENE_04), all `IMAGE`, all created by an earlier run, none with an error. The plan's scene ids match the asset scene ids exactly, so this is not a naming mismatch — it is **three abandoned rows shadowed by newer READY takes**.
+
+**So the run was not lying.** It did what the resume rule says: a scene with a READY asset of that kind is finished. The defect is narrower and real: **a non-READY duplicate is never reconciled** — it stays QUEUED forever, invisible to the runner (shadowed) and to the UI (the project looks complete), which is why the asset counts and the run's `generated=0` disagree at a glance.
+
+**Consequence for the quote:** this project has **no pending work**, so it cannot produce a per-episode cost. The next attempt needs a project with genuinely missing assets, or an explicit decision to reconcile the three orphans. **Do not reset data to force generation** — that would spend credits to manufacture a quote from a project whose work is already done.
+
+**The other two findings, with what changed.** The missing `batch done` line is explained by the handler's tail: after `run_finished` the runner continued into export (`export.derivation`, `export.concat` appear in the log) and then **threw**, so the `await` never resolved and the completion line was skipped — pg-boss then dropped the job (`retryLimit: 0`) with nothing logged. The handler now wraps the call and prints `batch done` on **both** exits, logging the error with its message. **`queueHealth` still has its false positive** — it is fed `heartbeatAt` as `lastProcessedAt`, so an idle-but-alive worker ages into "probably down"; the fix (a worker-owned liveness stamp, distinct from a run's heartbeat) is **not yet written**.
+
 **Step 1 ran, and the run is a no-op — which makes the quote zero and therefore not a quote.** The five captures, as measured:
 
 | captured | value |

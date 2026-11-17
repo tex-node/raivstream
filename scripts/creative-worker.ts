@@ -75,9 +75,18 @@ async function main() {
     async ([job]) => {
       const { projectId, runId } = job.data;
       console.info(`[${WORKER_NAME}] CLAIMED runId=${runId} jobId=${job.id ?? 'undefined'} process=${WORKER_NAME}`);
-      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
-      await runCreativeProduction(prisma as never, { projectId, runId });
-      console.info(`[${WORKER_NAME}] batch done: runId=${runId}`);
+      // The tail must print on EVERY exit, including a throw: the kill test reads `batch done` as the completion proof, and a handler
+      // that dies after the runner finishes leaves a COMPLETED run with no completion line - which is exactly what step 1 captured
+      // (2026-11-17). A throw is logged with its message rather than swallowed by pg-boss's retryLimit of 0.
+      try {
+        const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
+        await runCreativeProduction(prisma as never, { projectId, runId });
+        console.info(`[${WORKER_NAME}] batch done: runId=${runId}`);
+      } catch (error) {
+        console.error(`[${WORKER_NAME}] job failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`);
+        console.info(`[${WORKER_NAME}] batch done: runId=${runId} outcome=error`);
+        throw error;
+      }
     },
   );
 
