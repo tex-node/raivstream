@@ -978,6 +978,26 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Step 1 ran, and the run is a no-op — which makes the quote zero and therefore not a quote.** The five captures, as measured:
+
+| captured | value |
+|---|---|
+| `CLAIMED` | `runId=cmwla6g2z00019v708q37iam9 jobId=00218a81-b121-4592-afcf-209b596e68bc process=creative-worker` — **pg-boss v12 does populate the job id** when the handler takes the array |
+| `batch done` | **never printed** — the handler's completion line is missing even though the runner finished |
+| run row | `COMPLETED`, `stage=ready`, **`creditsSpent=0`**, `totalScenes=4`, `readyScenes=0`, `failedScenes=0` |
+| heartbeat, two samples | `22:45:40.613Z` then `22:45:55.123Z` — **the wrapper's 15 s stamp fired after the run finished** |
+| wall clock | **15.4 s** (started 22:45:31.5, finished 22:45:40.6) |
+| web request in flight | **HTTP 200** during the run |
+| runner's own log | `run_started totalScenes=4 attempt=1` → `run_finished status=COMPLETED **generated=0** failed=0` |
+
+**The batch quote is zero, and a zero quote is a finding rather than an authorisation.** Measured `creditsSpent` × 5 = **0**, against the six-run average of **44.4** and the observed max of **920**. The variance is not noise: the project has **12 READY assets and 3 QUEUED assets**, the runner generated **nothing**, and still declared **COMPLETED**. So the run proves the sender, the claim, the boundary and the heartbeat — and it also exposes the exact defect class this arc keeps finding: **a COMPLETED run that produced nothing, with three assets left QUEUED and no error**. A production that finishes "successfully" having skipped its queued work is a lying status, not a cheap episode.
+
+**What this run does establish, which outranks the quote:** the sender enqueued and the worker claimed (`CLAIMED` with a real job id), the run row carried `projectId` so **no session state crossed the boundary**, the web tier served **HTTP 200 while the run was in flight**, and the heartbeat column is written by the wrapper. **What it does not establish:** a per-episode cost. The next session needs a project with scenes still to generate — or the three QUEUED assets investigated first, since a production that ignores them will ignore them for every episode in a batch.
+
+**Two smaller findings from the same capture.** The `batch done` line never appeared although `run_finished` did, so the handler's tail needs a look before the kill test can read it as the completion proof. And the health line printed `missing-worker ... probably down` **while the worker was running and the run was LIVE**: `queueHealth` is fed `heartbeatAt` as `lastProcessedAt`, and an idle-but-alive worker therefore looks dead once the timestamp ages — a false positive in the exact check that is supposed to distinguish a dead worker from a slow batch.
+
+**The 1,000-credit ceiling was not consumed: 0 credits were spent.**
+
 **The claim is proven — `SENT` and `CLAIMED` from the same job, and two corrections to what this arc said last session.**
 
 ```
