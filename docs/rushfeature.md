@@ -978,6 +978,41 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The stated defaults ship — in look fields, technique-named, with an honest neutral.** *The read decided three things:* the defaults must be expressed as
+**`CinematicLook` fields** (`lens`, `movement`, `lighting`, `grade`, `resolution`) because the composer already consumes them — prose would need an interpreter;
+storage is **per creator**, because a default is the creator's taste and applies across their work while `CinematicLook` is per project; and the surface belongs
+beside the existing creative actions, not on a parallel path.
+
+`styleDefaults.ts` is a single source the lookup and its test both read, following the pattern `database/transformRates.ts` established:
+
+| key | default | basis |
+|---|---|---|
+| suspense | slow reveal, hard shadows, tight framing — lens 50, push-in, low-key, cool | classical suspense technique |
+| drama | deep focus, long takes, low angles — lens 35, static, natural, bleach-bypass | classical prestige-drama technique |
+| comedy | wide framing, held shots, visual gags — lens 24, static, high-key, warm | silent-comedy staging |
+| educational · commercial · transformation | **neutral — no stylistic bias** | no film-craft tradition applies |
+
+**Named for the technique, never for a person** — the test asserts no director's name appears in any label, because a name on a preset invites a rights
+conversation nobody needs. **The neutral default is `DEFAULT_LOOK` itself**, asserted by identity rather than described: a neutral that quietly implies a house
+style is the template defect wearing a plain label.
+
+**Storage is one creator-level column** — `User.styleDefaultKey` (migration `20261117120000_creator_style_default`) — not a table, because the decision is "one
+default per creator" and there is nothing to key a second dimension on yet. **The override is stored, not UI state**, so a creator who changes their default gets
+it back.
+
+**The fallback chain reports its own source:** creator override → stated default for the project type → neutral, with `source: 'creator' | 'stated' | 'neutral' |
+'r16-neutral'`. That reporting is not decoration — a chain that silently returns neutral for everything is the `canAutoDecide` defect in a new place, and **eight
+tests** pin the chain, the neutral identity, the genre lookup, the unknown-type case and the R16 gate. **R16 resolves to neutral only**, per #407: an adult genre
+default is never applied to kids content, and the mutation refuses outright there.
+
+**Visible, with its basis, and changeable:** the director panel shows *"Style — Suspense — slow reveal, hard shadows (classical suspense technique; stated)"* and a
+selector over every default. The `source` in the label is what makes the engine-record rule real for taste: a creator can see whether they are looking at their own
+choice, a stated default, or neutral — rather than inferring it from how suggestions feel.
+
+**The profile's trigger is now a condition, not a date.** Build it when a creator's **(axis, direction) distribution is distinguishable from uniform** across
+enough acceptances and rejections to be meaningful — and only once the **agreement** signal exists, since a profile that cannot see whether the creator's edits
+contradict their acceptances would be confidently wrong for exactly those creators. Until then it would learn from noise.
+
 **Signed direction is on the mapping, and the join stays two-part.** A suggestion's direction is a property of **what it asks for**, not of the creator's
 response, so it lives beside the axis in the mapping rather than on the event — putting it on the event would let two acceptances of the same text carry
 different directions, which is the join-key defect in a new place.

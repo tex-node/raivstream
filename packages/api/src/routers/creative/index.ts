@@ -1,7 +1,9 @@
 import { router } from '../../trpc';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { creativeProcedure } from '../../trpc';
 import { quoteTransform, runRelight, runTransform } from '../../lib/creative/transform/procedure';
+import { resolveStyleDefault, STYLE_DEFAULTS } from '../../lib/creative/styleDefaults';
 import { creativeProjectRouter } from './project';
 import { creativeIntentRouter } from './intent';
 import { creativeHomerRouter } from './homer';
@@ -51,6 +53,31 @@ export const creativeRouter = router({
   transformQuote: creativeProcedure
     .input(z.object({ projectId: z.string(), assetId: z.string(), operation: z.enum(['relight', 'restyle']), resolution: z.enum(['720p', '1080p']) }))
     .query(async ({ ctx, input }) => quoteTransform(ctx.prisma, { ...input, userId: ctx.user.id })),
+
+  /**
+   * Stated style defaults (2026-11-17): the creator's choice, the stated default for the project type, or neutral.
+   * Every level reports its source, so the surface can say it rather than imply it; R16 resolves to neutral only.
+   */
+  styleDefault: creativeProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { projectType: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Creative project not found.' });
+      const user = await ctx.prisma.user.findUnique({ where: { id: ctx.user.id }, select: { styleDefaultKey: true } });
+      return {
+        resolved: resolveStyleDefault({ creatorKey: user?.styleDefaultKey ?? null, projectType: project.projectType, isR16: ctx.isR16 ?? false }),
+        options: Object.values(STYLE_DEFAULTS).map((entry) => ({ key: entry.key, label: entry.label, basis: entry.basis, neutral: entry.neutral })),
+      };
+    }),
+
+  /** An override is a stored value, not UI state: a creator who changes their default expects it to persist. */
+  setStyleDefault: creativeProcedure
+    .input(z.object({ key: z.enum(['suspense', 'drama', 'comedy', 'educational', 'commercial', 'transformation']) }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.isR16) throw new TRPCError({ code: 'FORBIDDEN', message: 'Style defaults are not available here.' });
+      await ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { styleDefaultKey: input.key } });
+      return { ok: true, key: input.key };
+    }),
 
   project: creativeProjectRouter,
   intent: creativeIntentRouter,

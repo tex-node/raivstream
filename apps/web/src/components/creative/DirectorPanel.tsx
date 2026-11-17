@@ -60,6 +60,11 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
   const versionsQuery = trpc.creative.director.versions.useQuery({ projectId });
   // Taste signals (2026-11-16): a suggestion is 'shown' once when it appears, and 'accepted' at the click -
   // never from render - so an accepted event can be joined to the shown event that produced it.
+  // The active style default, with its basis - the engine-record rule applied to taste (2026-11-17).
+  const styleDefault = trpc.creative.styleDefault.useQuery({ projectId });
+  const setStyleDefault = trpc.creative.setStyleDefault.useMutation({
+    onSuccess: () => utils.creative.styleDefault.invalidate({ projectId }),
+  });
   const taste = trpc.analytics.trackTasteSignal.useMutation();
   const shownKeys = useRef<Set<string>>(new Set());
   const suggestionsQuery = trpc.creative.director.suggestions.useQuery({ projectId });
@@ -120,8 +125,27 @@ export function DirectorPanel({ projectId }: { projectId: string }) {
     }
   };
 
+  const activeStyle = styleDefault.data?.resolved;
+  const styleOptions = styleDefault.data?.options ?? [];
+
   return (
     <section id="director" className="space-y-4">
+      {activeStyle && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-medium">Style — {activeStyle.label}</span>
+          <span className="opacity-60">({activeStyle.basis}; {activeStyle.source})</span>
+          <select
+            aria-label="Style default"
+            value={activeStyle.key}
+            onChange={(event) => setStyleDefault.mutate({ key: event.target.value as never })}
+            className="rounded bg-white/10 px-2 py-1"
+          >
+            {styleOptions.map((option) => (
+              <option key={option.key} value={option.key}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="rounded-2xl border border-dashed border-[rgba(178,90,217,0.4)] bg-[rgba(178,90,217,0.06)] p-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-[var(--noc-purple)]">Director</p>
         <p className="mt-1 text-lg font-black text-[var(--noc-t1)]">What would you like to change?</p>
