@@ -351,8 +351,17 @@ export class OutputService {
     // A commercial is gated on ITS contract, never the story contract (operator decision 2026-11-17: replace and gate). Three states - a pass publishes, a missing
     // beat blocks naming the first failing field in funnel order, and no copy at all is UNSCORED rather than a bad ad.
     if (project.projectType === 'COMMERCIAL') {
-      const brief = await prisma.creativeBrief.findUnique({ where: { projectId: project.id }, select: { refinedIntent: true, originalIntent: true, objective: true } });
-      const verdict = commercialPublishBlock({ text: brief?.refinedIntent ?? brief?.originalIntent ?? null, productName: project.title });
+      const brief = await prisma.creativeBrief.findUnique({
+        where: { projectId: project.id },
+        select: { refinedIntent: true, originalIntent: true, objective: true, commercialHook: true, commercialBenefit: true, commercialCta: true },
+      });
+      // The authored beats win when they exist: the surface collects them separately, so the gate scores exactly what the creator wrote rather than a
+      // summarised intent. Falling back to the brief keeps projects authored before the form working.
+      const authoredBeats = [brief?.commercialHook, brief?.commercialBenefit, brief?.commercialCta].filter(Boolean).join(' ').trim();
+      const verdict = commercialPublishBlock({
+        text: authoredBeats || brief?.refinedIntent || brief?.originalIntent || null,
+        productName: project.title,
+      });
       if (verdict.state === 'blocked') {
         throw new CreativeError(verdict.reason, `This ad is not ready to publish: ${verdict.reasons.join(', ')}.`);
       }

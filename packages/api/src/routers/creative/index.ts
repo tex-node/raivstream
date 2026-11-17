@@ -1,4 +1,5 @@
 import { router } from '../../trpc';
+import { commercialPublishBlock } from '../../lib/commerce/commercialContract';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { creativeProcedure } from '../../trpc';
@@ -77,6 +78,43 @@ export const creativeRouter = router({
       if (ctx.isR16) throw new TRPCError({ code: 'FORBIDDEN', message: 'Style defaults are not available here.' });
       await ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { styleDefaultKey: input.key } });
       return { ok: true, key: input.key };
+    }),
+
+  /**
+   * The ad's three beats and their verdict, for the surface that collects them (2026-11-17). Returns the SAME
+   * `commercialPublishBlock` the publish gate uses, so the signal a creator sees cannot disagree with the refusal.
+   */
+  commercialCopy: creativeProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await ctx.prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true, title: true, projectType: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Creative project not found.' });
+      const brief = await ctx.prisma.creativeBrief.findUnique({
+        where: { projectId: project.id },
+        select: { commercialHook: true, commercialBenefit: true, commercialCta: true },
+      });
+      const beats = { hook: brief?.commercialHook ?? '', benefit: brief?.commercialBenefit ?? '', cta: brief?.commercialCta ?? '' };
+      const text = [beats.hook, beats.benefit, beats.cta].filter(Boolean).join(' ').trim();
+      return { beats, verdict: commercialPublishBlock({ text: text || null, productName: project.title }) };
+    }),
+
+  /** An override is stored: the creator's beats survive a reload, like the style default. */
+  setCommercialCopy: creativeProcedure
+    .input(z.object({
+      projectId: z.string(),
+      hook: z.string().max(240).default(''),
+      benefit: z.string().max(240).default(''),
+      cta: z.string().max(240).default(''),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ctx.prisma.creativeProject.findFirst({ where: { id: input.projectId, userId: ctx.user.id }, select: { id: true } });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Creative project not found.' });
+      await ctx.prisma.creativeBrief.upsert({
+        where: { projectId: project.id },
+        update: { commercialHook: input.hook, commercialBenefit: input.benefit, commercialCta: input.cta },
+        create: { projectId: project.id, originalIntent: input.hook || 'Commercial', commercialHook: input.hook, commercialBenefit: input.benefit, commercialCta: input.cta },
+      });
+      return { ok: true };
     }),
 
   project: creativeProjectRouter,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CommercialCopyPanel } from '@/components/creative/CommercialCopyPanel';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
@@ -127,6 +128,9 @@ export default function CreativeProjectPage() {
     <CreativeShell project={project} director={plan ? <DirectorPanel projectId={projectId} /> : undefined}>
       <CreativeCanvas project={project}>
         <NextActionCard project={project} />
+
+        {/* A commercial is authored here, where the brief already lives (2026-11-17). The three beats and the gate that will judge them. */}
+        {project.projectType === 'COMMERCIAL' && <CommercialCopyPanel projectId={projectId} />}
 
         {/* "Here's what I understand" — always visible, in the creator's words. */}
         {project.brief?.refinedIntent && (

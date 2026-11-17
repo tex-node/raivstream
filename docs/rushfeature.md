@@ -978,6 +978,34 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The commercial surface exists: three fields where the brief already lives, and the gate visible before publish.** *The read first:* a commercial has **no dedicated
+authoring route**. `/create` runs the intent engine, and the project workspace (`projects/[projectId]`) is where the brief, the refined intent, the plan and the review already
+live — so the surface is a **form over existing fields in the workspace**, not a new object and not a new route. That is the transform panel's lesson applied in advance: the
+mount point was chosen from the read, not from where it was convenient to put.
+
+**Three labelled fields, not one prose blob.** The contract scores hook, benefit and cta separately, and a creator who writes into three labelled fields writes three beats;
+one paragraph produces whatever comes out. The fields are real columns (`CreativeBrief.commercialHook` / `commercialBenefit` / `commercialCta`, migration
+`20261117180000_commercial_beats`) so the copy is stored and reloadable — and the **publish gate composes them** when they exist, falling back to the brief's intent for
+projects authored before the form. The **field hints are the contract's own low-score sentences**, which are the only guidance a creator needs:
+
+| field | hint |
+|---|---|
+| Hook | *what stops the scroll — a question or a problem in the first two sentences* |
+| Benefit | *what the viewer gets, in their terms — an outcome, not a feature list* |
+| CTA | *what they do next, and where — the action and the place* |
+
+**The gate is visible before publish, and it is the same computation.** `creative.commercialCopy` returns the beats **and the verdict from `commercialPublishBlock`** — the
+exact function the publish gate calls — so the line a creator reads cannot disagree with the refusal they would hit. The surface shows **the first failing beat's sentence**,
+the rest behind an expand in funnel order, and **nothing at all when the ad is complete** — the quiet-when-good rule from the critique.
+
+**`COMMERCIAL_UNSCORED` reads differently from a missing beat:** *"This ad has not been checked yet — add the three beats above and the check runs"* — because one is a
+missing check and the other is work to do. **Six web tests** pin the sentence-matches-code mapping, that the three sentences are distinct, the quiet-when-good case, the
+unchecked-vs-missing distinction, the funnel order of the expand, and that **no copy contains a verdict word** (no *poor*, *bad*, *fail*, *must fix*, *rejected*).
+
+**The title card's pixels remain unproven, and that is recorded rather than folded in.** The escaping is tested; one render through the real FFmpeg path with hostile text in
+the product name would close the last unproven claim in the chain. It is an FFmpeg render rather than a provider call, so it costs **credits only for the render step** —
+which is to say it is cheap — but it did not run this session, and the UI claim above does not depend on it.
+
 **The gate is live: a commercial now publishes or is refused, and an unscorable ad is neither.** *The read first:* the creative publish path (`creative/output/service.ts`,
 `publish`) gates on approval, READY and media — it does **not** consult a contract, and the story flow gates separately through `storyPublishBlock(evaluateStoryContract(…))`
 in `story.ts`. So the shape followed was **the existing branch, not a refactor**: a `COMMERCIAL` branch added inside publish, beside the preconditions, calling the
