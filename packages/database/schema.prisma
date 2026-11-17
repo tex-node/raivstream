@@ -2526,6 +2526,13 @@ model CreativeBrief {
   updatedAt       DateTime       @updatedAt
 
   @@map("creative_briefs")
+
+  /// The ad's three beats, entered by the creator (2026-11-17). Fields rather than one prose blob, because the
+  /// CommercialContract scores hook, benefit and cta separately and a creator who writes into three labelled fields
+  /// writes three beats.
+  commercialHook    String?
+  commercialBenefit String?
+  commercialCta     String?
 }
 
 model CreativeBible {
