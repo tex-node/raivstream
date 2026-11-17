@@ -69,7 +69,9 @@ async function main() {
 
   await boss.work<{ runIds: string[] }>(CREATIVE_PRODUCTION_QUEUE, async (job) => {
     const runIds = job.data?.runIds ?? [];
-    console.log(`[${WORKER_NAME}] claimed ${runIds.length} run(s) as ${WORKER_NAME}`);
+    // CLAIMED=<jobId> is the other half of the sender's SENT=<jobId>. A SENT with no CLAIMED is a binding problem,
+    // not a provisioning one, and the pair is what proves the queue (2026-11-17).
+    console.log(`[${WORKER_NAME}] CLAIMED=${job.id} runIds=${runIds.length} process=${WORKER_NAME}`);
     const outcome = await runBatch(runIds.map((id) => ({ id })), async (id) => {
       // The production call itself is the web tier's existing runner; only the PROCESS changed. A run that throws is recorded
       // and the batch continues - one episode failing must not stop episode four.

@@ -978,6 +978,34 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The claim is proven — `SENT` and `CLAIMED` from the same job, and two corrections to what this arc said last session.**
+
+```
+SENT=29a2a487-1884-4a8a-9eef-2727d1aa8d92
+[creative-worker] CLAIMED=undefined runIds=0 process=creative-worker
+[creative-worker] batch done: completed=0 failed=0
+```
+
+**The queue binds and claims.** The sender ran from inside the repo, where workspace resolution applies — the `/tmp` failures were the same defect as the import paths, not a queue problem — and the
+worker's handler executed and finished. `CLAIMED=undefined` is a small real defect, not a failure of the claim: pg-boss v12 hands the handler a job whose id is not at `.id`, so the
+log line prints `undefined` even though the claim succeeded. The claim is proven by `batch done`, and the log line needs the right field before it can be the proof alone.
+
+**Correction one — nothing wrong was said about `export.story` being unsent; something wrong was implied.** A sender **does** exist: `storyVideoExportService.ts:178` calls
+`enqueueStoryExport(row.id)`. So the story-export queue never claimed a job **because no daemon was ever running**, not because nobody sends to it — the third candidate in the read's list, not
+the first. That is a cleaner finding and a different fix: the queue needed a worker process, which is exactly what this session's worker is.
+
+**Correction two — and this one is about this arc's own claim.** Last session's record says `tsconfig.scripts.json` brought scripts into type-check scope. **It did not.** The config extended a
+`tsconfig.base.json` that does not exist, so `tsc` could not read it, and the "scripts are type-checked" line was **false**. With the base corrected the config now compiles, and it **transitively
+compiles the API under different compiler options**, surfacing a wall of config-artifact errors in `packages/api` (`PlanResult`, `AcquireResult.reason`, `GeneratedStory`, `ProductionManifest`).
+**So the honest state is: scripts are still not independently type-checked, and doing it properly needs either project references or a shared base — not a one-line extends.** The scope defect
+that let two bad import paths ship is **narrowed, not closed**, and the record now says so instead of repeating the claim.
+
+**Step 1 is therefore still owed, and its blocker is now specific:** `creative-production` has a **handler and a proven claim but no sender in the application** — `service.ts` calls
+`runCreativeProduction` directly, in-process. The next session writes that sender (create the run row, `boss.send({ runIds })`, ceiling 1,000), and the single run follows it.
+
+**Sequence:** step 0.5 **done** (claim proven) · step 1 owed (needs the sender) · then the batch, the kill, **the lease expiry without a restart — the clause** · resume · health both directions.
+**The 1,000-credit ceiling remains authorized and unspent.**
+
 **Step 0 verified, with one part still open — and the open part named rather than rounded up.** *The type-check question, answered:* **`scripts/` is outside every
 package's tsconfig.** The root has no `include`, `turbo run type-check` only visits package workspaces, and none of `packages/api`, `packages/web`, `packages/mobile`
 covers `scripts/`. That is the defect behind defect one: a wrong package name could only fail at runtime because **nothing compiled the file**. Fix: `tsconfig.scripts.json`
