@@ -978,6 +978,41 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Three requested features read against the code before any of them was scheduled — and two of the three reads changed the plan.**
+
+**Phase 13, commercials: more exists than the brief assumed, and the gap is narrow.** `CreativeProjectType.COMMERCIAL` is **not just a label**: `creative/director/service.ts`
+branches on it (a commercial domain with product/brand intent), `interpreter.ts` maps advert vocabulary onto it, `suggestions.ts` has its own COMMERCIAL case, and
+`castExtractor.ts` deliberately reports "no characters" for ads — because scoring a perfume commercial on character consistency would be the wrong instrument. So the
+pipeline retarget is **already done**; what is missing is the output layer. **Motion graphics are a composition problem, and it is half-built:** `render.ts` already
+carries `escapeDrawtext`, `buildEndCardArgs` (title, `@handle`, font preflight) and the font handling from Phase 3, so a title card or lower third is an extension of
+machinery that renders legible text today — not a generated animation. **The named decision stands: a commercial needs its own content contract** (hook, benefit, call to
+action), because the story contract's five fields describe an arc an ad does not have, and forcing one would be the template defect.
+
+**Phase 14, reusable characters: the sheet is a view, the reuse is a mechanism, and the ownership question is the gate.** `CharacterReferenceAsset` already carries
+`characterId` **or** `characterName`, `projectId`, `category`, `status`, `assetUrl`, `prompt` and provider model — so a character sheet is **an assembled view over rows
+that exist**, not a new object. Reuse is the mechanism that is genuinely missing, and its pattern exists: `shareLook` in `creative/look/service.ts` is the two-sided
+ownership check to copy. **But the read cannot answer whether a character is creator-owned or project-owned** — that is a product and likely a legal decision (likeness,
+performer consent), and it gates the build rather than merely shaping it.
+
+**Phase 15, adult Academy: reachable already, and the curriculum predates what shipped.** The read refutes the "unreachable" hypothesis: `/academy` is in the navbar on
+both shells and shown to signed-in users outside R16. The real gap is **content currency** — Phase 9's eight controls are `autoMode`, `creditCap`, `preflight`, `perShot`,
+`takeModel`, `looks`, `critic` and `finishing`, which are the Phase 4/5/7/8 controls. **None of them teaches Phase 12's transforms** (relight, restyle) or a commercial
+workflow, because those shipped after the curriculum. So Phase 15 is a **content update**, not a link and not a new track.
+
+**Sequence, from the reads rather than the request order:**
+
+1. **Phase 15 — the Academy content update.** Smallest, and it is the one that makes the other two *teachable*; it also carries the rule that content must not promise
+   what the code cannot deliver, so the transforms lesson can ship now and a motion-graphics lesson must wait for Phase 13.
+2. **Phase 13 — commercials.** The pipeline already branches, the text overlay is half-built, and the remaining work is a CommercialContract plus a composition
+   extension; it reuses far more than it builds.
+3. **Phase 14 — reusable characters, blocked on a decision rather than scheduled.** The sheet and the reuse are both buildable, but creator-owned versus project-owned
+   has likeness and consent implications, and a wrong answer there is a rights problem rather than a refactor. Recorded as blocked, with `shareLook` named as the
+   pattern and the identity caveat carried: the 70/75 floor was measured on stills at one framing, so the first cross-project reuse must include a critic score.
+
+**Open decisions, recorded and not answered:** commercials — own contract (recommended by the read) and composition for text (recommended, following `buildEndCardArgs`);
+characters — creator-owned or project-owned, and whether likeness requires a consent record; Academy — update the existing twelve lessons in place, or add an adult track
+beside them.
+
 **Closing the stretch: what exists, what is waiting, and how to tell the difference.**
 
 **Two acceptance items — recorded identically, because they are the same gap.** *Phase 12's transformation surface:* two operations, relight and restyle, surfaced end
