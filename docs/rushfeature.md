@@ -978,6 +978,44 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**A batch is a plan, not a submission — and the cursor is derived, so the resume is safe by construction.** A creator may break a 120-page script and export only
+five episodes, then come back when they are ready — often because they ran out of credits. That makes the batch's state **which episodes have a terminal run**, which is
+a **query over rows that already exist** (`CreativeSeries` → `CreativeEpisode` → `CreativeProductionRun`). **No stored cursor**: a cursor field is a second source of
+truth that can drift from the runs it claims to describe — the same shape as *store the measurement, derive the judgement*, applied to progress.
+
+**The plan exists before the worker is involved.** The plan is 45 `CreativeEpisode` rows with their projects, created at **chunking time**; the submission is one run
+per episode, submitted in order. The plan is durable and survives everything; a submission is an action. **That is what makes resume possible at all** — the worker
+processes runs, and the plan is already there.
+
+**Three ways a batch stops, one observable state:**
+
+| pause cause | state | resume |
+|---|---|---|
+| the creator stopped | episodes without terminal runs, nothing running | submit from the cursor |
+| insufficient credits | the same, plus a run `FAILED` with `PAYMENT_REQUIRED` | top up, then resume — the refused episode waits rather than retrying now |
+| the worker died mid-episode | that run `RUNNING` and orphaned | the sweep marks it `FAILED` with `WORKER_LOST`; resume re-submits it |
+
+**Pause-by-choice and pause-by-credits are the same shape** — the worker never needs to know why it paused. A `FAILED` credit run is still distinguishable from an
+unstarted episode, which is what stops a resume from hammering a balance that has not been topped up.
+
+**The worker's contract narrowed:** it **processes one run**. It does not process a batch, own a cursor, or know whether a plan is complete — **the submitter is the
+loop and the plan is the data**. That smaller worker is what makes the restart test meaningful, because a restarted worker loses no batch state: it never held any.
+
+**The remaining cost is quoted before the first charge.** `preflightResume` compares the remaining episodes × the measured per-episode cost against the balance and
+**refuses the whole resume** when it would not fit, with the quote attached — the `AUTO_DEFAULT_CEILING` lesson at batch scale. A partial run the creator did not ask
+for is worse than a refusal they can act on.
+
+**Eleven tests** pin the cursor (nothing started, paused after three, in-flight never re-submitted, credit-refusal distinguishable), the **idempotency property**
+(submitting twice with nothing changed submits zero the second time; a resumed run never duplicates a completed episode), and the **preflight** (quotes the remaining
+cost, refuses before charging, treats a finished plan as nothing to do).
+
+**The live proof is owed, and the two things blocking it are named rather than estimated.** `scripts/creative-worker.ts` is written and unexecuted; the five-episode
+batch, the mid-batch kill, the lease expiry without a restart, the resume and the health distinction all require **one real episode's charge** before anything can be
+quoted — and that charge needs **an operator's authorization plus a project with a plan, a cast and an approved reference**. The quote is not estimated because a
+batch smoke that guesses its cost is how a ceiling gets discovered at the till. **Until then Phase 16 can start against a tested contract but is not shippable**, and
+the restart test — *a worker that has never been killed is a worker whose recovery path is untested* — stays open with its clause: the sweep must fire when the lease
+expires, not on the next boot, or the recovery path is only a boot path.
+
 **The worker is designed and its rules are tested — but it has not been started, and that distinction is the finding.** *The read answered the transport
 question:* **pg-boss is live, not dormant.** `creative/jobs/index.ts` opens a PgBoss on the `pgboss` schema and `exportJob.ts` registers a real `boss.work` for story
 exports — so the queue is already doing work, and reusing it is the eleventh-instance defence rather than a new job table. The run row is the contract: a
