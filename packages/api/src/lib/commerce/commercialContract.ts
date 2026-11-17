@@ -18,6 +18,9 @@ export type CommercialContractField = (typeof COMMERCIAL_CONTRACT_FIELDS)[number
 
 export const COMMERCIAL_CONTRACT_VERSION = 1;
 
+/** The typed reason codes: a blocked publish is a refusal with a code, never a 500. */
+export type CommercialContractReason = 'HOOK_MISSING' | 'BENEFIT_FEATURE_LIST' | 'CTA_MISSING';
+
 export interface CommercialContractFieldScore {
   present: boolean;
   score: number;
@@ -32,7 +35,7 @@ export interface CommercialContractScore {
   /** True only when all three beats are present — the publish gate. */
   passes: boolean;
   /** Fail-closed reasons, most important first: `CTA_MISSING`, `HOOK_MISSING`, `BENEFIT_FEATURE_LIST`. */
-  reasons: string[];
+  reasons: CommercialContractReason[];
 }
 
 const CTA_VERBS = ['shop', 'buy', 'order', 'book', 'download', 'try', 'visit', 'subscribe', 'sign up', 'get', 'start', 'join', 'call', 'claim'];
@@ -117,17 +120,45 @@ export function scoreCommercialContract(text: string, productName?: string): Com
       benefit: missing('it never says what the viewer gets — name one concrete outcome, not a trait of the product.'),
       cta: missing('it ends without saying what happens next — name the action and where to take it.'),
       passes: false,
-      reasons: ['HOOK_MISSING', 'BENEFIT_MISSING', 'CTA_MISSING'],
+      reasons: ['HOOK_MISSING', 'BENEFIT_FEATURE_LIST', 'CTA_MISSING'] as CommercialContractReason[],
     };
   }
 
   const hook = scoreHook(trimmed, productName);
   const benefit = scoreBenefit(trimmed);
   const cta = scoreCta(trimmed);
-  const reasons: string[] = [];
-  // Leading with the CTA reads worst to a viewer, so it leads the refusal - the same "the defect leads" rule the story contract uses.
-  if (!cta.present) reasons.push('CTA_MISSING');
+  const reasons: CommercialContractReason[] = [];
+  // FUNNEL ORDER, and it is a claim about what matters: no hook means nobody watches, no benefit means nothing is remembered, no CTA means nothing happens.
+  // The first failing field is what a creator sees; ALL failures are on the returned `reasons` so the log carries the full picture.
   if (!hook.present) reasons.push('HOOK_MISSING');
   if (!benefit.present) reasons.push('BENEFIT_FEATURE_LIST');
+  if (!cta.present) reasons.push('CTA_MISSING');
   return { hook, benefit, cta, passes: reasons.length === 0, reasons };
+}
+
+/**
+ * The publish gate for a commercial (2026-11-17).
+ *
+ * THREE STATES, never two: a scored ad that passes, a scored ad that fails (first failing field in funnel order, all failures logged), and an **unscorable** ad -
+ * no copy, or the scorer throwing - which is an extraction defect rather than an ad defect. Collapsing the third into the second would report a loader's mistake as
+ * the creator's, exactly as `EXTRACTION_UNVERIFIED` must never collapse with `RESOLUTION_MISSING`.
+ */
+export type CommercialPublishVerdict =
+  | { state: 'publish'; reasons: [] }
+  | { state: 'blocked'; reason: CommercialContractReason; reasons: CommercialContractReason[] }
+  | { state: 'unscored'; reason: 'COMMERCIAL_UNSCORED'; reasons: CommercialContractReason[] };
+
+export function commercialPublishBlock(input: { text: string | null | undefined; productName?: string }): CommercialPublishVerdict {
+  const text = String(input.text ?? '').trim();
+  if (!text) {
+    return { state: 'unscored', reason: 'COMMERCIAL_UNSCORED', reasons: [] };
+  }
+  try {
+    const score = scoreCommercialContract(text, input.productName);
+    if (score.passes) return { state: 'publish', reasons: [] };
+    return { state: 'blocked', reason: score.reasons[0] ?? 'CTA_MISSING', reasons: score.reasons };
+  } catch {
+    // A scorer that throws is a defect in the instrument, not in the ad.
+    return { state: 'unscored', reason: 'COMMERCIAL_UNSCORED', reasons: [] };
+  }
 }
