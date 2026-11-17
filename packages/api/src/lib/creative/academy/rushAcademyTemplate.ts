@@ -1,7 +1,9 @@
 /**
  * Phase 9 - Academy content tied to controls that exist (2026-11-08).
  *
- * Twelve lessons in four modules. Every lesson names a control that shipped and was proven on real
+ * Fifteen lessons in five modules. Module 5 was added when Phase 12's transformations and the stated
+ * style defaults shipped after the original course - the fourth module keeps the 12 lessons from Phase 9
+ * untouched, because the eight controls they teach all still exist and work. Every lesson names a control that shipped and was proven on real
  * input (Phases 4, 5, 7) and carries the marker a reachability test looks for. The rule the content
  * holds: a lesson must not promise what the code cannot deliver - the same burden of proof a log
  * line carries.
@@ -97,6 +99,32 @@ const finishing: LessonControl = {
   reachableAt: 'creative.output (tRPC), auto-assembled after a completed run',
   marker: 'autoAssemble',
   markerFile: 'packages/api/src/lib/creative/output/service.ts',
+};
+
+// --- Phase 12 and Phase 11 output: taught because it shipped, not because it was planned (2026-11-17) ---
+
+const styleDefaults: LessonControl = {
+  id: 'style-defaults',
+  label: 'Your style default: a stated look, not a learned one',
+  reachableAt: 'the Director panel; creative.styleDefault / creative.setStyleDefault',
+  marker: 'resolveStyleDefault',
+  markerFile: 'packages/api/src/lib/creative/styleDefaults.ts',
+};
+
+const relight: LessonControl = {
+  id: 'transform-relight',
+  label: 'Relight: change the light, keep the subject',
+  reachableAt: 'the transform panel beside a scene asset; creative.relight',
+  marker: 'relight: creativeProcedure',
+  markerFile: 'packages/api/src/routers/creative/index.ts',
+};
+
+const restyle: LessonControl = {
+  id: 'transform-restyle',
+  label: 'Restyle: describe the look directly',
+  reachableAt: 'the transform panel beside a scene asset; creative.restyle',
+  marker: 'restyle: creativeProcedure',
+  markerFile: 'packages/api/src/routers/creative/index.ts',
 };
 
 export const RUSH_CONTROLS_COURSE_TEMPLATE = {
@@ -254,6 +282,56 @@ export const RUSH_CONTROLS_COURSE_TEMPLATE = {
           estimatedMinutes: 30,
           lessonType: 'LAB',
           control: finishing,
+        },
+      ],
+    },
+
+    {
+      title: 'Module 5 — What shipped after this course',
+      description:
+        'Three controls built after the original twelve lessons: your stated style default, and the two transformations. Each was proven on a real run before it was written about.',
+      lessons: [
+        {
+          title: 'Lesson 13: Your style default is a default, not a preference',
+          summary: 'Where to find it, what it changes, and what it honestly does not do yet.',
+          learningObjectives: [
+            'Find the active style default in the Director panel and see where it came from.',
+            'Change it, and see the change persist.',
+            'Understand that it is a stated default - the product does not learn your taste yet.',
+          ],
+          lessonContent:
+            'Open the Director panel. The line under the title reads "Style - Suspense - slow reveal, hard shadows (classical suspense technique; stated)". The word in brackets is the honest part: it says where the value came from - your own choice, a default chosen for your project type, or neutral. Choose Suspense and your projects get lens 50, a push-in, low-key light and a cool grade; choose Drama and you get 35mm, static, natural light and a bleach-bypass grade; choose Comedy and you get 24mm, high-key and warm. Educational, commercial and transformation projects default to Neutral, which is the composer default with nothing added - a neutral that quietly implied a house style would not be neutral. What this is not: it is not a learned preference. The product records which suggestions you accept, on which axis and in which direction, and it can compare that against what your edits actually did - but a profile built from a handful of events would be confidently wrong, so it is not built. Your default is what you said, and it stays what you said until you change it.',
+          estimatedMinutes: 6,
+          lessonType: 'CLASSROOM',
+          control: styleDefaults,
+        },
+        {
+          title: 'Lesson 14: Relight - change the light and keep the subject',
+          summary: 'What the operation does, what it costs, and how long it takes.',
+          learningObjectives: [
+            'Select a video asset and find the transform panel.',
+            'Understand the cost before pressing the button.',
+            'Expect a wait of about a minute for a three-second shot.',
+          ],
+          lessonContent:
+            'Select a video in the workspace asset picker - the transform panel appears beside it, and refuses stills with a sentence rather than a dead button. Choose Relight. The cost preview is not an estimate: it is computed by the same rate and the same rule the charge uses, so the number you see is the number you pay. A three-second shot bills six seconds, because the rule is the larger of twice the output or the input plus the output. Measured on a real run: 1,578 credits, and 72.8 seconds of waiting. That wait is real and you should plan for it - the panel shows a progress clock from the first second and a ten-minute cap that says nothing was charged if it is reached. What you should see when it finishes: the same subject and framing, with the lighting changed and the take numbered, its parent recorded, and the line naming what produced it.',
+          estimatedMinutes: 8,
+          lessonType: 'WORKSPACE',
+          control: relight,
+        },
+        {
+          title: 'Lesson 15: Restyle - and how to write the instruction',
+          summary: 'The measured difference between a subtle instruction and a blunt one.',
+          learningObjectives: [
+            'Write an instruction that names the look directly.',
+            'Understand why a tasteful instruction often produces no visible change.',
+            'Compare the result against the source before calling it a success.',
+          ],
+          lessonContent:
+            'The same transform panel has a second operation: Restyle, which asks for a text instruction. The instruction is the variable, and this is the most useful thing in the course. Measured on the same three-second shot, on the same endpoint: the instruction "cool teal shadows with warm amber highlights, high-contrast cinematic grade, shallow depth of field" scored a style change of 15 out of 100 - the frame barely moved. The instruction "monochrome noir: fully desaturated black and white, crushed blacks, single hard key light, deep chiaroscuro shadows" scored 85, and a vision comparison named the change: the frame was converted to monochrome. Same endpoint, same source, same length. So write the change directly - name the look, the colour, the contrast - rather than asking for a tasteful improvement. "Make it more cinematic" is a no-change outcome waiting to happen. After any restyle, compare against the source: if the look barely moved, that is a no-change result, not a success - and the fix is a blunter instruction, not a different asset.',
+          estimatedMinutes: 10,
+          lessonType: 'LAB',
+          control: restyle,
         },
       ],
     },

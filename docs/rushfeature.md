@@ -978,6 +978,36 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase 15 executed: the curriculum grew rather than being replaced — and it now teaches what shipped after it.** *The shape decision:* **update in place, adding a module.**
+
+The eight Phase 9 controls — `autoMode`, `creditCap`, `preflight`, `perShot`, `takeModel`, `looks`, `critic`, `finishing` — all still exist and all still work, so
+deleting a lesson to make room for a new one would be the wrong trade. The course therefore went from **twelve lessons in four modules to fifteen in five**: the first
+four modules are untouched, and a fifth module covers the three controls that shipped after the curriculum.
+
+| lesson | control | marker asserted |
+|---|---|---|
+| 13 — your style default is a default, not a preference | `style-defaults` | `resolveStyleDefault` in `creative/styleDefaults.ts` |
+| 14 — relight: change the light and keep the subject | `transform-relight` | `relight: creativeProcedure` in `routers/creative/index.ts` |
+| 15 — restyle, and how to write the instruction | `transform-restyle` | `restyle: creativeProcedure` in the same file |
+
+**The restyle lesson is where the curriculum earns its keep.** It teaches the measured pair, not generic advice: *"cool teal shadows with warm amber highlights…"*
+scored a **style change of 15** and the frame barely moved, while *"monochrome noir: fully desaturated, crushed blacks, single hard key light…"* scored **85** and a vision
+comparison named the change as monochrome — **same endpoint, same source, same length**. The lesson's takeaway is the finding: write the change directly, because *"make
+it more cinematic"* is a no-change outcome waiting to happen, and a restyle that barely moved is a **no-change result, not a success**.
+
+**Honesty in the new content:** lesson 13 says plainly that the style default **is not a learned preference** — the product records which suggestions are accepted and can
+compare that against what edits did, but a profile built on a handful of events would be confidently wrong, so it is not built. Lesson 14 gives the **measured** cost and
+wait (1,578 credits, 72.8 s) rather than an estimate.
+
+**The marker test was extended, not replaced:** it now asserts five modules and fifteen lessons, that the original twelve are untouched (no new control appears in the
+first four modules, and every Phase 9 control is still taught), and that each of the three new controls resolves to a file whose marker exists. It also keeps the
+**unproven-absent** rule and adds three cases to it: no lesson may promise a `CommercialContract`, a shareable character, or a profile that *learns your taste* — a lesson
+for any of those would promise what the code cannot deliver, which is the template defect in a curriculum.
+
+**Constraints recorded for the phases that follow:** Phase 13 must preserve `castExtractor`'s *"no characters for ads"* behaviour — a commercials build that starts
+extracting casts reintroduces the defect that closed it. Phase 14 remains **blocked on the ownership decision** (likeness, consent). And the plan's exit criterion moved
+with the content: **fifteen lessons / five modules**, each referencing a control a creator can reach.
+
 **Three requested features read against the code before any of them was scheduled — and two of the three reads changed the plan.**
 
 **Phase 13, commercials: more exists than the brief assumed, and the gap is narrow.** `CreativeProjectType.COMMERCIAL` is **not just a label**: `creative/director/service.ts`
