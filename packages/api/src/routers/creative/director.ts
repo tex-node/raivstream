@@ -7,6 +7,8 @@ import { getFeatureCreditCost } from '../../lib/credits';
 import { createNewTake } from '../../lib/creative/production/newTake';
 import { directorService } from '../../lib/creative/director/service';
 import { buildDirectorSuggestions } from '../../lib/creative/director/suggestions';
+import { critiqueFinding } from '../../lib/creative/director/critiqueFindings';
+import { critiqueStory } from '../../lib/story/storyCritique';
 import { CreativeError } from '../../lib/creative/shared/errors';
 import type { CreativeProductionPlanState } from '../../lib/creative/production/plan';
 
@@ -21,6 +23,28 @@ function toTrpcError(error: unknown, fallback: string): TRPCError {
     return new TRPCError({ code, message: error.message });
   }
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: fallback });
+}
+
+
+/**
+ * The latest chapter's critique for a creative project, via `legacyStoryProjectId` (2026-11-17).
+ *
+ * The link is the field that exists - there is no `creativeProjectId` on StoryProject, so guessing one would have
+ * made the query throw and the integration silently never fire. A missing link returns null, which is honest: no
+ * story, no critique, no finding.
+ */
+async function latestChapterCritique(prisma: any, projectId: string) {
+  const project = await (prisma as any).creativeProject.findUnique({
+    where: { id: projectId },
+    select: { legacyStoryProjectId: true },
+  });
+  if (!project?.legacyStoryProjectId) return null;
+  const storyProject = await (prisma as any).storyProject.findUnique({
+    where: { id: project.legacyStoryProjectId },
+    select: { chapters: { orderBy: { chapterNumber: 'desc' }, take: 1, select: { body: true } } },
+  });
+  const body = storyProject?.chapters?.[0]?.body;
+  return body ? critiqueStory(body) : null;
 }
 
 export const creativeDirectorRouter = router({
@@ -48,12 +72,17 @@ export const creativeDirectorRouter = router({
         if (!project) throw new CreativeError('PROJECT_NOT_FOUND', 'Creative project not found.');
         const runs = await ctx.prisma.creativeReviewRun.findMany({ where: { projectId: project.id }, orderBy: { createdAt: 'desc' }, take: 1 });
         const findings = (runs[0]?.findings as unknown as Array<{ suggestedFixInstruction?: string; description?: string; category?: string }>) ?? [];
+// The story critique already runs on the chapter the creator is reading; its weakest dimension joins the findings
+// the director already consumes, so the critique feeds suggestions without a second generator (2026-11-17).
+const critique = await latestChapterCritique(ctx.prisma, project.id);
+const critiqueDerived = critiqueFinding(critique);
+const merged = critiqueDerived ? [...findings, critiqueDerived] : findings;
         return buildDirectorSuggestions({
           projectType: project.projectType,
           brief: project.brief as never,
           bible: project.bible as never,
           plan: (project.productionPlan?.plan as never) ?? null,
-          reviewFindings: findings,
+          reviewFindings: merged,
           currentSceneId: input.sceneId ?? null,
         });
       } catch (error) {
