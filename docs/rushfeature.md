@@ -978,6 +978,32 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Critique is open, built on the one axis nothing else measures — and calibrated before any threshold existed.** *The read decided the scope:* the story
+contract already scores **structure** (protagonist, want, obstacle, turn, resolution), and the rewrite chips already name conflict, tension, humour and endings —
+so a critique that re-measures those is two scorers that can disagree, the defect this arc keeps finding. What nothing checks is what the narrative prompt already
+**asks for**: sensory anchors, varied pacing, consistent voice.
+
+**Three dimensions, each with a low-score sentence** (a dimension without one is not defined well enough to measure):
+
+| dimension | low score means | measured by |
+|---|---|---|
+| sensory grounding | *the story is told in summary rather than images — add light, sound, texture and physical action* | concrete sensory words per 100, minus abstraction markers |
+| pacing | *every sentence moves at the same speed — vary length and let the important beat breathe* | sentence-length coefficient of variation |
+| voice | *the narration drifts between first and third person, or past and present* | dominance margin of person and tense markers |
+
+**Deterministic, not a model call** — and that is the constant-90 lesson applied, not avoided. A model prompted for a score echoes the score back; these three
+measures cost nothing to run, so they can be calibrated against a known-bad input every time CI runs. **The calibration pair is in the test:** a lighthouse scene
+(sensory **100**, pacing **79**, voice **67**) against a summary that tells instead of shows (**0 / 0 / 0**). The separation is pinned, so any future change that
+flattens the scorer fails CI. **The dimensions of one story differ** (100/79/67) — the lockstep that made the creative critic useless is absent by construction.
+
+**The ceiling is documented rather than hidden.** A dense paragraph saturates sensory at 100, so this is a **floor detector, not a ranker**: it can say "this is
+told in summary" but cannot say which of two grounded chapters is better. Ranking would need a different measure (image specificity, type diversity) and that is
+not built — recorded so the limit is a known edge rather than a surprise.
+
+**No threshold and no gate.** No number here blocks publication or generation. The uses in scope are the two that need no calibration to be safe: **shown to the
+creator as feedback**, and **fed to Homer's suggestion generator** so it proposes fixes for the weakest dimension. **Gating is explicitly out of scope** until the
+measurement is proven against real chapters — the story contract earned its gate; this has not.
+
 **The stated defaults ship — in look fields, technique-named, with an honest neutral.** *The read decided three things:* the defaults must be expressed as
 **`CinematicLook` fields** (`lens`, `movement`, `lighting`, `grade`, `resolution`) because the composer already consumes them — prose would need an interpreter;
 storage is **per creator**, because a default is the creator's taste and applies across their work while `CinematicLook` is per project; and the surface belongs
