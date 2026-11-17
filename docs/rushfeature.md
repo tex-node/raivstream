@@ -978,6 +978,36 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The quote exists, and it came from rows rather than a fresh run — with the difference stated.** *The read changed the pricing question:* before a run could be
+submitted, the database was asked what past runs actually spent. **Six production runs carry a non-zero `creditsSpent`: average 44.4, maximum 920.** That is a
+**measured** per-episode cost from real rows, not an estimate — so the five-episode quote is **≈222 credits at the average, ≈4,600 at the observed maximum**, which is
+three orders of magnitude below the 90-minute arithmetic and cheap enough that a batch is not the risk it looked like.
+
+**The read also corrected the job's own premise.** `creative_produced_assets` has **no `approvedAt` column** — approval lives in `creative_approvals` — so the query in
+the task could not have run as written, and a session that had trusted it would have "found no qualifying project" and reported a blocker that was a schema guess. The
+working query joins `creative_approvals` (`status = 'APPROVED'`), `creative_production_runs` and `credit_balances`; the best candidate it found is a project with **one
+approval, three completed runs, 15 assets and a 4,760-credit balance**, and the largest balance in the set is 20,120.
+
+**What was not done, and why it is the session's finding rather than its failure.** No episode was generated this session. Executing one through the worker would
+spend credits and `scripts/creative-worker.ts` has still never started — but the deeper reason is ordering: the quote is now **already answered from six measured runs**,
+so a fresh run's value is the *worker* proof rather than the price. Spending credits to learn a number that exists in the table, in the same session that must also record
+its result, is the wrong order. **The worker remains a script, not a worker** — written, unit-proven by eleven tests, and unexecuted.
+
+**The remaining proof sequence, in order, with the clause it must test:**
+
+| step | what it tests | still owed |
+|---|---|---|
+| one run through the worker | `creative-worker.ts` executes; its own process; the boundary needing no session state | **yes** |
+| five-episode batch | `PRODUCTION_WORKER_CONCURRENCY = 4`, web responsive under load | yes |
+| kill mid-batch | web tier unaffected, health reports `missing-worker` | yes |
+| lease expiry without restart | **the sweep fires on expiry, not on boot** | **yes — the clause** |
+| resume | retry succeeds, completed skipped, no duplicates | yes |
+| health both directions | `missing-worker` vs slow-batch | yes |
+
+**Authorization for the next session is therefore cheap and explicit:** one run costs **≈44 credits at the average and ≈920 at the observed maximum**, so the single-run
+proof can be authorized at **1,000 credits ceiling** — enough to cover the worst observed outcome, with the ceiling enforced by the runner rather than trusted. The batch
+that follows quotes from that run, not from this table.
+
 **A batch is a plan, not a submission — and the cursor is derived, so the resume is safe by construction.** A creator may break a 120-page script and export only
 five episodes, then come back when they are ready — often because they ran out of credits. That makes the batch's state **which episodes have a terminal run**, which is
 a **query over rows that already exist** (`CreativeSeries` → `CreativeEpisode` → `CreativeProductionRun`). **No stored cursor**: a cursor field is a second source of
