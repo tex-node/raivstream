@@ -978,6 +978,39 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase 13 built: the contract and the title card, and the gate decision set to replace-and-gate on all three.** *The decision (operator):* **replace, and gate** —
+COMMERCIAL projects are scored by the CommercialContract and **never** by the story contract, because two scorers on one project is the disagreement defect, and judging an
+ad on protagonist/resolution is the template defect. An ad missing a beat blocks publication naming that beat.
+
+`packages/api/src/lib/commerce/commercialContract.ts` — **three content fields, each with its low-score sentence**, deterministic so it can be calibrated in CI:
+
+| field | low score means | leading reason |
+|---|---|---|
+| hook | *opens on the product rather than a reason to care — give the viewer a question or a problem in the first two sentences* | `HOOK_MISSING` |
+| benefit | *lists features rather than an outcome — say what the viewer gets, in their terms* | `BENEFIT_FEATURE_LIST` |
+| cta | *ends without saying what happens next — name the action and where to take it* | `CTA_MISSING` |
+
+**It scores presence, not shape:** a contract that required three sections would score every ad 5/5. The CTA must name a **destination**, not only a verb — *"Buy."* alone
+fails, *"Shop the range at our store today."* passes — and an **empty ad fails closed** with all three reasons rather than passing by default, the same fail-closed shape the
+story contract uses for an unscored story. **Seven tests** pin a complete ad passing, no-CTA failing and naming the CTA, a product-opening hook failing, a feature list
+failing the benefit with its sentence, the empty case, and the verb-without-destination case.
+
+**The title card is composition, and it reuses the existing machinery.** `buildTitleCardArgs` in `creative/output/render.ts` builds **one `drawtext` filter** over the
+existing video — same font preflight as `buildEndCardArgs`, same `escapeDrawtext` boundary — placed by `enable='between(t,…)'` at the requested time. **No second render
+path.** **Four tests**: the card renders at the specified time with the specified text, hostile creator-supplied input (`Bob's 100% Glow: "Best"` plus a newline) reaches
+the filter **escaped and newline-free**, `escapeDrawtext` covers all five metacharacters, and **the end-card path is unchanged** as a regression.
+
+**The castExtractor constraint is a test, not a note.** `gateIncludesCharacterIdentity('COMMERCIAL')` is asserted false, narrative types asserted true, and — a finding
+worth recording — **a missing or null type stays *in* scope**: the function fails closed so an unclassified project never silently loses the dimension. Only an explicit
+non-narrative type narrows it.
+
+**The voice path is reused, not rebuilt:** a commercial's VO goes through the existing narration chain (`generateSceneNarration` → the ElevenLabs path gated by
+`story:speech_generation`). The only difference is length — an ad's VO is one or two sentences against a scene's narration — and that is a prompt parameter, not a second
+integration.
+
+**Named remainder, stated rather than implied:** the contract is **built and tested but not yet wired into the creative publish path**. The decision is gate-on-all-three;
+the wiring is the next session's first task, so an ad cannot publish while the gate is inert.
+
 **Phase 15 executed: the curriculum grew rather than being replaced — and it now teaches what shipped after it.** *The shape decision:* **update in place, adding a module.**
 
 The eight Phase 9 controls — `autoMode`, `creditCap`, `preflight`, `perShot`, `takeModel`, `looks`, `critic`, `finishing` — all still exist and all still work, so
