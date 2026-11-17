@@ -136,7 +136,7 @@ async function heartbeat(prisma: PrismaClient, runId: string | null, data: Recor
   await model.update({ where: { id: runId }, data: { ...data, heartbeatAt: now() } }).catch(() => undefined);
 }
 
-export async function runCreativeProduction(
+async function runCreativeProductionInner(
   prisma: PrismaClient,
   input: { projectId: string; runId?: string; attempt?: number },
   deps: ProductionDeps = defaultDeps,
@@ -596,4 +596,38 @@ export async function recoverStuckProductions(
     recovered.push(project.id);
   }
   return { recovered, alreadyActive, stale };
+}
+
+
+/**
+ * The heartbeat (2026-11-17).
+ *
+ * Stamped on entry and every 15s, cleared on every exit. Without it a run that dies leaves no timestamp, so a QUEUED row and a
+ * RUNNING-but-dead row look identical to health - and the lease-expiry clause (the sweep must fire on expiry, not on boot) has
+ * nothing to read. The wrapper leaves the run body untouched: it only surrounds it.
+ */
+export async function runCreativeProduction(
+  prisma: PrismaClient,
+  input: { projectId: string; runId?: string; attempt?: number },
+  deps: ProductionDeps = defaultDeps,
+  options: ProductionRunOptions = {},
+): Promise<ProductionRunResult> {
+  if (!input.runId) return runCreativeProductionInner(prisma, input, deps, options);
+
+  const runId = input.runId;
+  await prisma.creativeProductionRun
+    .update({ where: { id: runId }, data: { heartbeatAt: new Date(), attempt: { increment: input.attempt ? 0 : 1 } } })
+    .catch(() => undefined);
+
+  const hb = setInterval(() => {
+    void prisma.creativeProductionRun
+      .update({ where: { id: runId }, data: { heartbeatAt: new Date() } })
+      .catch(() => undefined);
+  }, 15_000);
+
+  try {
+    return await runCreativeProductionInner(prisma, input, deps, options);
+  } finally {
+    clearInterval(hb);
+  }
 }

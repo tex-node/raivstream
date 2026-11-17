@@ -11,6 +11,8 @@ export type CreativeErrorCode =
   | 'BENEFIT_FEATURE_LIST'
   | 'CTA_MISSING'
   | 'COMMERCIAL_UNSCORED'
+  // The sender cannot enqueue a run it could not record (2026-11-17): a typed refusal, not a silent in-process fallback.
+  | 'RUN_CREATE_FAILED'
   | 'CREATIVE_DISABLED'
   | 'PROJECT_NOT_FOUND'
   | 'INTENT_EMPTY'

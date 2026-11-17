@@ -16,7 +16,6 @@ import {
   PRODUCTION_WORKER_CONCURRENCY,
   WORKER_LOST_REASON,
   queueHealth,
-  runBatch,
   sweepableRuns,
   type ProductionRunRow,
 } from '../packages/api/src/lib/creative/jobs/productionWorker';
@@ -67,19 +66,20 @@ async function main() {
     console.error(`[${WORKER_NAME}] createQueue failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
   });
 
-  await boss.work<{ runIds: string[] }>(CREATIVE_PRODUCTION_QUEUE, async (job) => {
-    const runIds = job.data?.runIds ?? [];
-    // CLAIMED=<jobId> is the other half of the sender's SENT=<jobId>. A SENT with no CLAIMED is a binding problem,
-    // not a provisioning one, and the pair is what proves the queue (2026-11-17).
-    console.log(`[${WORKER_NAME}] CLAIMED=${job.id} runIds=${runIds.length} process=${WORKER_NAME}`);
-    const outcome = await runBatch(runIds.map((id) => ({ id })), async (id) => {
-      // The production call itself is the web tier's existing runner; only the PROCESS changed. A run that throws is recorded
-      // and the batch continues - one episode failing must not stop episode four.
+  // pg-boss v12 hands the handler an ARRAY of jobs. batchSize 1 keeps it one job, but the array is still the contract. `job.id` is NOT
+  // populated by v12 (it printed `undefined` when the claim was proven), so CLAIMED carries the run id from job.data and `batch done`
+  // stays the evidence that the handler completed. The claim line alone is never the proof.
+  await boss.work<{ projectId: string; runId: string }>(
+    CREATIVE_PRODUCTION_QUEUE,
+    { batchSize: 1 },
+    async ([job]) => {
+      const { projectId, runId } = job.data;
+      console.info(`[${WORKER_NAME}] CLAIMED runId=${runId} jobId=${job.id ?? 'undefined'} process=${WORKER_NAME}`);
       const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
-      await runCreativeProduction(prisma as never, { projectId: (await projectIdFor(id)) ?? '', runId: id } as never);
-    });
-    console.log(`[${WORKER_NAME}] batch done: completed=${outcome.completed.length} failed=${outcome.failed.length}`);
-  });
+      await runCreativeProduction(prisma as never, { projectId, runId });
+      console.info(`[${WORKER_NAME}] batch done: runId=${runId}`);
+    },
+  );
 
   // A health line a human reads before believing a batch is merely slow.
   setInterval(async () => {
@@ -90,10 +90,6 @@ async function main() {
   }, 30_000);
 }
 
-async function projectIdFor(runId: string): Promise<string | null> {
-  const row = await prisma.creativeProductionRun.findUnique({ where: { id: runId }, select: { projectId: true } });
-  return row?.projectId ?? null;
-}
 
 main().catch((error) => {
   console.error(`[${WORKER_NAME}] failed to start`, error);

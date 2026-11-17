@@ -141,7 +141,7 @@ describe('the gate is wired into the production path, not just exported', () => 
     const { ProductionPlanService } = await import('../service');
     const prisma = producePrisma({ characters: [{ name: 'Lighthouse Keeper' }] }, []);
     await expect(
-      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }),
+      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined }),
     ).rejects.toThrow(/CAST_NOT_APPROVED.*Lighthouse Keeper/);
   });
 
@@ -150,11 +150,11 @@ describe('the gate is wired into the production path, not just exported', () => 
     const prisma = producePrisma({ characters: [{ name: 'Lighthouse Keeper' }] }, [{ characterName: 'Lighthouse Keeper' }]);
     // It may fail later on an incomplete stub; the assertion is that the failure is NOT the gate.
     await expect(
-      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }),
+      new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined }),
     ).rejects.not.toThrow(/CAST_NOT_APPROVED/).catch(() => undefined);
     let gateError: unknown = null;
     try {
-      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' });
+      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined });
     } catch (error) {
       gateError = error;
     }
@@ -166,7 +166,7 @@ describe('the gate is wired into the production path, not just exported', () => 
     const prisma = producePrisma({ characters: [] }, []);
     let gateError: unknown = null;
     try {
-      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' });
+      await new ProductionPlanService().produce(prisma, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined });
     } catch (error) {
       gateError = error;
     }
@@ -196,7 +196,7 @@ describe('the gate is ABOVE the early returns (the placement bug)', () => {
     const { ProductionPlanService } = await import('../service');
     // GENERATING is the state that returned already_running and skipped the gate.
     await expect(
-      new ProductionPlanService().produce(prismaFor('GENERATING', []), { projectId: 'p1', userId: 'u1' }),
+      new ProductionPlanService().produce(prismaFor('GENERATING', []), { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined }),
     ).rejects.toThrow(/CAST_NOT_APPROVED.*Lighthouse Keeper/);
   });
 
@@ -204,7 +204,7 @@ describe('the gate is ABOVE the early returns (the placement bug)', () => {
     process.env.RAIVSTREAM_5_ENABLED = 'true';
     process.env.RAIVSTREAM_5_PRODUCTION_ENABLED = 'true';
     const { ProductionPlanService } = await import('../service');
-    const result = await new ProductionPlanService().produce(prismaFor('GENERATING', ['Lighthouse Keeper']), { projectId: 'p1', userId: 'u1' });
+    const result = await new ProductionPlanService().produce(prismaFor('GENERATING', ['Lighthouse Keeper']), { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined });
     expect(result).toEqual({ started: false, reason: 'already_running' });
   });
 });

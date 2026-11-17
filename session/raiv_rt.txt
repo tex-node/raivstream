@@ -1,0 +1,1 @@
+raiv_rt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbXFuODg2YWowMDAwYzh3aTQ2NnBvcDNmIiwiZmFtaWx5IjoiODg3MTMyYzUtYWJjYS00YTc4LThjMzQtNGU3NTY0YTdmYzM4IiwiaWF0IjoxNzkwNTQzMTU1LCJleHAiOjE3OTMxMzUxNTV9.ggTSUuqe_Vn102D5rU6q1w6xWK-O5RV0C5tuV1LC4_s; Max-Age=2592000; Path=/api/auth/refresh; SameSite=lax; HttpOnly; Secure
