@@ -984,7 +984,7 @@ the replacement, and what must not change), and the 10 s band stays priced and u
 
 *The dedupe* (`runner.ts:167-172`): `byKey` is built with `new Map(existing.map(...))` — **one entry per key, last write wins**. The project has **8 READY IMAGE + 4 READY VIDEO + 3 QUEUED IMAGE**, so for `SCENE_01:-:IMAGE` the **newer READY row overwrites the older QUEUED row of the same key**. The loop therefore saw READY for every spec, skipped all of them, and correctly reported `generated=0`.
 
-*The QUEUED rows are stale duplicates from a previous run*: `cmw0yfpaf000112s1t4k27bpn` (SCENE_01), `cmw0yfpco000412s18g6wdawk` (SCENE_02), `cmw0yfpdt000712s1p2xl287d` (SCENE_04), all `IMAGE`, all created **2026-11-03**, none with an error. The plan's scene ids match the asset scene ids exactly, so this is not a naming mismatch — it is **three abandoned rows shadowed by newer READY takes**.
+*The QUEUED rows are stale duplicates from a previous run*: `cmw0yfpaf000112s1t4k27bpn` (SCENE_01), `cmw0yfpco000412s18g6wdawk` (SCENE_02), `cmw0yfpdt000712s1p2xl287d` (SCENE_04), all `IMAGE`, all created by an earlier run, none with an error. The plan's scene ids match the asset scene ids exactly, so this is not a naming mismatch — it is **three abandoned rows shadowed by newer READY takes**.
 
 **So the run was not lying.** It did what the resume rule says: a scene with a READY asset of that kind is finished. The defect is narrower and real: **a non-READY duplicate is never reconciled** — it stays QUEUED forever, invisible to the runner (shadowed) and to the UI (the project looks complete), which is why the asset counts and the run's `generated=0` disagree at a glance.
 
