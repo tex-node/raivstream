@@ -167,21 +167,23 @@ describe('creative capability router + approval gate', () => {
     const plan = buildCreativePlan({ projectType: COMMERCIAL.projectType });
     const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'PREVIEW', projectType: 'COMMERCIAL' }, plan });
     const service = new ProductionPlanService();
-    await expect(service.produce(prisma as never, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'PLAN_NOT_APPROVED' });
+    await expect(service.produce(prisma as never, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined })).rejects.toMatchObject({ code: 'PLAN_NOT_APPROVED' });
   });
 
   it('projects without a plan cannot enter production', async () => {
     const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'APPROVED', projectType: 'COMMERCIAL' }, plan: null });
     const service = new ProductionPlanService();
-    await expect(service.produce(prisma as never, { projectId: 'p1', userId: 'u1' })).rejects.toMatchObject({ code: 'PLAN_NOT_APPROVED' });
+    await expect(service.produce(prisma as never, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined })).rejects.toMatchObject({ code: 'PLAN_NOT_APPROVED' });
   });
 
-  it('approved projects start production and move to GENERATING', async () => {
+  it('a run that cannot be recorded is refused rather than started without one', async () => {
     const plan = buildCreativePlan({ projectType: COMMERCIAL.projectType });
     const prisma = prismaMock({ project: { id: 'p1', userId: 'u1', status: 'APPROVED', projectType: 'COMMERCIAL' }, plan });
     const service = new ProductionPlanService();
-    const result = await service.produce(prisma as never, { projectId: 'p1', userId: 'u1' });
-    expect(result).toEqual({ started: true, runId: null });
+    // CONTRACT CHANGE (2026-11-17): with the sender in place, 'started: true, runId: null' stopped being honest - there is nothing to
+    // enqueue and nothing to poll, so the refusal is typed instead of a silent no-op.
+    await expect(service.produce(prisma as never, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined }))
+      .rejects.toMatchObject({ code: 'RUN_CREATE_FAILED' });
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(prisma.__statusLog[0]).toBe('GENERATING');
   });

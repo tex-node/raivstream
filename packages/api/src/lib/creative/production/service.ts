@@ -324,7 +324,13 @@ export class ProductionPlanService {
    * point for the 5.0 semantic layer. Validates approval, moves the project to
    * GENERATING, and runs the (detached, resumable) production runner.
    */
-  async produce(prisma: PrismaClient, input: { projectId: string; userId: string }): Promise<{ started: boolean; reason?: 'already_running'; runId?: string | null }> {
+  async produce(
+    prisma: PrismaClient,
+    input: { projectId: string; userId: string },
+    // The sender is injectable so unit tests need no live pg-boss. The DEFAULT is the real queue: there is no test-only execution
+    // path, and no in-process fallback - a missing worker leaves the row queued and health says so (2026-11-17).
+    deps: { enqueue?: (job: { projectId: string; runId: string }) => Promise<void> } = {},
+  ): Promise<{ started: boolean; reason?: 'already_running'; runId?: string | null }> {
     logStage(input.projectId, 'produce', 'start');
     if (!isCreativeProductionEnabled()) throw new CreativeError('CREATIVE_DISABLED', 'Raivstream 5.0 production is not enabled.');
     const project = await prisma.creativeProject.findFirst({
@@ -395,7 +401,31 @@ export class ProductionPlanService {
     }
 
     await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'GENERATING' as never } });
-    void runCreativeProduction(prisma, { projectId: project.id, runId: runId ?? undefined });
+    // The sender: create-then-send, no in-process fallback (2026-11-17).
+    //
+    // The row above is created RUNNING with stage 'creating_scenes'; this marks it queued and stamps the ceiling on the ROW, because
+    // `assertWithinCeiling` reads `creditCeiling` from the row rather than from the job payload, so the job carries identity only.
+    // No fallback: with no worker running the row stays stage 'queued' and health reports missing-worker - the honest failure the
+    // restart test exercises. A fallback here would run the batch in the web tier again, which is the thing the worker removes.
+    if (!runId) throw new CreativeError('RUN_CREATE_FAILED', 'The run could not be recorded, so it was not queued.');
+    await prisma.creativeProductionRun.update({ where: { id: runId }, data: { creditCeiling: 1000, stage: 'queued' } });
+
+    if (deps.enqueue) {
+      await deps.enqueue({ projectId: project.id, runId });
+    } else {
+      const { getBoss } = await import('../../jobs');
+      const { CREATIVE_PRODUCTION_QUEUE } = await import('../../creative/jobs/productionWorker');
+      const boss = await getBoss();
+      await boss.createQueue(CREATIVE_PRODUCTION_QUEUE); // idempotent; never rely on send to create it
+      await boss.send(
+        CREATIVE_PRODUCTION_QUEUE,
+        { projectId: project.id, runId },
+        // No job expiry: pg-boss v12's SendOptions has none, and it is not needed - the run row's heartbeat and the worker's sweep
+        // are the recovery path, so a dead worker is swept rather than silently expired (the lease clause, applied at the queue).
+        { retryLimit: 0, singletonKey: runId }, // a retry is a resume decision, not an automatic repeat
+      );
+    }
+
     return { started: true, runId };
   }
 

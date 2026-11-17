@@ -266,7 +266,7 @@ describe('phase 9 — durable production runs', () => {
 
   it('allows refinement production from REVIEW (post-direct regeneration)', async () => {
     const prisma = runPrisma({ projectStatus: 'REVIEW' });
-    const result = await new ProductionPlanService().produce(prisma as never, { projectId: 'p1', userId: 'u1' });
+    const result = await new ProductionPlanService().produce(prisma as never, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined });
     expect(result.started).toBe(true);
     expect(prisma.__runs.length).toBe(1);
   });
@@ -274,7 +274,7 @@ describe('phase 9 — durable production runs', () => {
   it('produce is idempotent while a run is active', async () => {
     const prisma = runPrisma({ projectStatus: 'GENERATING', heartbeatAt: new Date() });
     // Project status is GENERATING → already running (no new run started).
-    const result = await new ProductionPlanService().produce(prisma as never, { projectId: 'p1', userId: 'u1' });
+    const result = await new ProductionPlanService().produce(prisma as never, { projectId: 'p1', userId: 'u1' }, { enqueue: async () => undefined });
     expect(result).toEqual({ started: false, reason: 'already_running' });
     expect(prisma.__runs.length).toBe(1);
   });
