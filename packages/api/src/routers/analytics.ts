@@ -32,6 +32,11 @@ export const analyticsRouter = router({
         beforeLength: z.number().int().nonnegative().optional(),
         afterLength: z.number().int().nonnegative().optional(),
         reason: z.string().max(120).optional(),
+        /** The chapter the signal belongs to: the join is scoped by creator AND chapter (2026-11-17). */
+        chapterId: z.string().max(64).optional(),
+        /** Critique scores AT ACCEPT TIME, and AFTER an edit. Stored as measurements; the verdict is derived. */
+        critiqueBefore: z.object({ sensory: z.number().optional(), pacing: z.number().optional(), voice: z.number().optional() }).optional(),
+        critiqueAfter: z.object({ sensory: z.number().optional(), pacing: z.number().optional(), voice: z.number().optional() }).optional(),
         /** Product label (never creator text); the server maps it to an axis and does not store it. */
         hint: z.string().max(80).optional(),
         axis: z.enum(STYLE_AXES).optional(),
