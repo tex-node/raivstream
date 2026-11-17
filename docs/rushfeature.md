@@ -978,6 +978,31 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The gate is live: a commercial now publishes or is refused, and an unscorable ad is neither.** *The read first:* the creative publish path (`creative/output/service.ts`,
+`publish`) gates on approval, READY and media — it does **not** consult a contract, and the story flow gates separately through `storyPublishBlock(evaluateStoryContract(…))`
+in `story.ts`. So the shape followed was **the existing branch, not a refactor**: a `COMMERCIAL` branch added inside publish, beside the preconditions, calling the
+contract. There is **one creative-to-feed path** and this is it; a commercial cannot reach the feed by a second route.
+
+**Three states, never two:**
+
+| state | verdict | why |
+|---|---|---|
+| scored, all three present | **publishes** | — |
+| scored, a beat missing | **blocks** with a **typed** reason code | a blocked publish is a refusal, not a 500 |
+| no copy, or the scorer throws | **`COMMERCIAL_UNSCORED`** | a loader's defect is not a creator's mistake — the `EXTRACTION_UNVERIFIED` distinction, applied |
+
+**Funnel order, and it is a claim about what matters:** `HOOK_MISSING` → `BENEFIT_FEATURE_LIST` → `CTA_MISSING`, because no hook means nobody watches, no benefit means
+nothing is remembered, and no CTA means nothing happens. **The first failing field is what a creator sees; all three are carried on `reasons`** so the log holds the full
+picture and fixing the hook reveals the next problem rather than "all three" at once.
+
+**The reason codes are typed** — `CommercialContractReason` added to the contract and the four codes added to `CreativeErrorCode` — so the router maps them to a refusal.
+**Thirteen tests**: a complete ad publishes; a missing CTA blocks naming `CTA_MISSING`; an ad missing hook and CTA surfaces `HOOK_MISSING` with all three failures kept; an
+empty ad is **unscored** with no fake reasons; a null body is unscored rather than throwing; and the funnel order is the contract's own, not the gate's invention.
+
+**The storage decision, stated:** the score is **not stored**. The scorer is deterministic, so the same copy yields the same verdict and the value is **re-derivable** rather
+than lost — which is the opposite of `durationSeconds`, a provider measurement nothing can recompute. The cost is that an audit asking *"why did this ad publish?"* would
+have to re-score the copy; if that becomes a real question, storing the verdict is a column and a migration, and it is recorded here as the trade rather than an oversight.
+
 **Phase 13 built: the contract and the title card, and the gate decision set to replace-and-gate on all three.** *The decision (operator):* **replace, and gate** —
 COMMERCIAL projects are scored by the CommercialContract and **never** by the story contract, because two scorers on one project is the disagreement defect, and judging an
 ad on protagonist/resolution is the template defect. An ad missing a beat blocks publication naming that beat.

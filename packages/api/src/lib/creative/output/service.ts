@@ -8,6 +8,7 @@
  */
 
 import type { PrismaClient } from '@raivstream/database';
+import { commercialPublishBlock } from '../../commerce/commercialContract';
 import { logStage } from '../stageLog';
 import { isCreativeOutputEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
@@ -345,6 +346,19 @@ export class OutputService {
     });
     if (!version || approved?.status !== 'APPROVED') {
       throw new CreativeError('PLAN_NOT_APPROVED', 'Approve the version before publishing its output.');
+    }
+
+    // A commercial is gated on ITS contract, never the story contract (operator decision 2026-11-17: replace and gate). Three states - a pass publishes, a missing
+    // beat blocks naming the first failing field in funnel order, and no copy at all is UNSCORED rather than a bad ad.
+    if (project.projectType === 'COMMERCIAL') {
+      const brief = await prisma.creativeBrief.findUnique({ where: { projectId: project.id }, select: { refinedIntent: true, originalIntent: true, objective: true } });
+      const verdict = commercialPublishBlock({ text: brief?.refinedIntent ?? brief?.originalIntent ?? null, productName: project.title });
+      if (verdict.state === 'blocked') {
+        throw new CreativeError(verdict.reason, `This ad is not ready to publish: ${verdict.reasons.join(', ')}.`);
+      }
+      if (verdict.state === 'unscored') {
+        throw new CreativeError('COMMERCIAL_UNSCORED', 'This ad has no copy to check, so it cannot be published yet.');
+      }
     }
 
     // Idempotent by media URL - the publishExport precedent: the same output can only

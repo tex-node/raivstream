@@ -5,6 +5,12 @@
  */
 
 export type CreativeErrorCode =
+  // Commercial publish gate (2026-11-17): the contract's reason codes are typed, so a blocked publish is a
+  // refusal rather than a 500, and an unscorable ad is distinct from a bad one.
+  | 'HOOK_MISSING'
+  | 'BENEFIT_FEATURE_LIST'
+  | 'CTA_MISSING'
+  | 'COMMERCIAL_UNSCORED'
   | 'CREATIVE_DISABLED'
   | 'PROJECT_NOT_FOUND'
   | 'INTENT_EMPTY'
