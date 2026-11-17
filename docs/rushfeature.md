@@ -978,6 +978,34 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The critique feeds the director's suggestions — and the axis mapping was decided, not inferred.** The integration is one input path, not a second generator:
+`buildDirectorSuggestions` already accepts `reviewFindings`, so the weakest dimension arrives as a finding there. The link is `CreativeProject.legacyStoryProjectId`
+— **the field that exists**. There is no `creativeProjectId` on `StoryProject`, and guessing one would have made the query throw and the integration silently never
+fire, which is the failure mode a missing link must not have.
+
+**The mapping, recorded before the code:**
+
+| critique dimension | axis | reasoning |
+|---|---|---|
+| pacing | **pacing** | the same concept at a different scale — how fast the story moves |
+| sensory grounding | **framing** | framing is what the camera includes; sensory grounding is whether anything concrete is shown at all — the same question one level up |
+| voice | **unclassified** | voice consistency is **craft consistency**, not a taste dimension: person and tense not drifting. Calling it `tone` would teach the profile that a drifting narrator likes a particular emotional register |
+
+`unclassified` used honestly beats a full bucket: a suggestion with a **wrong** axis teaches the profile the wrong thing, and a pad of mislabelled signals is
+worse than admitting a dimension is outside the vocabulary. **One finding, not three** — the lowest is the one thing a creator can fix, and it carries the
+**low-score sentence**, never the number. A chapter scoring at or above the line produces **no** finding.
+
+**Seven tests** pin the mapping, the axis on the finding, the sentence-instead-of-number rule, the `unclassified` case for voice, the never-a-finding case for a
+good chapter, the too-short body, and the one-finding rule. The existing director suggestions are unchanged and their six tests still pass — this adds a finding
+to an array, it does not alter how suggestions are derived.
+
+**Homer's remaining state, honestly:** the critique is **built, surfaced, and feeding suggestions**. The **agreement signal is unopened**. The **profile stays
+deferred on its measurable condition**. Scoping the agreement signal: `text_edited` already carries `surface` and before/after lengths, but **lengths cannot say
+which way the edit moved** — a longer paragraph is not "more pacing". Two viable paths, and the cheaper one is an association rather than a new measure: when a
+`text_edited` follows an `suggestion_accepted` on the same creator within a short window, the **accepted suggestion's axis and direction are the edit's
+intent**, and agreement is whether the edit moved the text *toward* that direction. That needs no new field and no content capture — it needs a timestamp
+window and a join. The alternative, classifying the edit's own diff, would need the text, which the arc has ruled out.
+
 **The critique is surfaced where a creator acts on it — beside the chapter, on load, one line.** The read decided the mount point before any code, because the
 transform panel's lesson was that the mount point IS the build: the story screen already renders the chapter body and the rewrite chips, so it is the one place a
 creator reads the text and can change it. Feedback that arrives on another surface is feedback that gets ignored.
