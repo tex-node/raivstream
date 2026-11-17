@@ -978,6 +978,53 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Closing the stretch: what exists, what is waiting, and how to tell the difference.**
+
+**Two acceptance items — recorded identically, because they are the same gap.** *Phase 12's transformation surface:* two operations, relight and restyle, surfaced end
+to end, priced from the same plan as the charge, with progress, timeout and creator-facing refusals — proven by tests, **not yet used by a creator**. The open question
+is whether **~20 stills and a 72.8–95.3 s wait** is a price creators will pay. *Homer's critique and suggestions:* a deterministic floor detector surfaced as one quiet
+line under the chapter, feeding the director's suggestions, with an agreement signal behind it — proven by tests, **not yet seen by a creator**. The open question is
+whether a quiet line under a chapter changes what anyone writes. **Both share one condition: a creator, not a probe.**
+
+**The profile's condition is a check, not a memory.** "Gated on data" is useless if a future session cannot tell whether the gate opened:
+
+```sql
+-- Has any creator's (axis, direction) distribution stopped looking uniform?
+SELECT e."userId", e.properties->>'axis' AS axis, e.properties->>'direction' AS direction, count(*) AS n
+FROM analytics_events e
+WHERE e."eventName" = 'suggestion_accepted' AND e.properties ? 'axis'
+GROUP BY 1, 2, 3
+HAVING count(*) >= 20
+ORDER BY e."userId", axis, n DESC;
+```
+
+**Reading:** a creator with **≥20 acceptances on one axis** whose direction split is clearly unequal — **70/30 or worse** — has a preference worth building against. A
+creator split evenly has **no preference to learn**, and a profile built on them would be confidently wrong. Until this returns such a row, the profile stays unbuilt.
+
+**Six rules this stretch added, each with a measured cause:**
+
+| rule | evidence |
+|---|---|
+| **Store the measurement, derive the judgement** | `durationSeconds` stored as measured, duration never re-derived; the agreement signal stores both critique scores and derives the verdict at read time |
+| **A signal is a side effect, never a participant in the write it observes** | a static analytics import aborted a chapter edit when its module was partially mocked; fixed with a lazy import plus catch |
+| **An input can be sufficient for a rule and insufficient for a build** | the sufficiency question answered *yes for the rule, no for the build* three sessions running |
+| **A wrong mapping is worse than an absent one** | `voice → unclassified` rather than forced into `tone`; `styleChange 15` read as a no-change outcome, not a low success |
+| **The mount point is the build** | the transform panel mounted in a project page with no selection; the fix was relocating it to the asset picker, not adding a wire |
+| **The cheapest proof uses a short source, not a short output** | `billed = max(2 × output, input + output)` — a 10 s source bills 13 s even at a 3 s output, so trimming the source is the cheaper proof |
+
+**The honest summary.** The engine is complete and the evidence is thin. Homer guides an idea into a story, checks its structure against a contract, measures three
+things structure does not cover with a deterministic scorer calibrated in CI, surfaces the weakest finding where a creator edits, and feeds it into the director's
+suggestions. It can learn a creator's taste — the signal exists — but the accept/edit history is new and nothing has accumulated. Phase 12's transformation surface is
+built, priced and proven, and no creator has used it. **Both wait on the same thing, and it isn't code.**
+
+**What would resume this, and what each trigger decides:**
+
+| trigger | what it unblocks |
+|---|---|
+| **A creator uses the transformation surface** | recast's viability (~26 stills), the 10 s band's viability (65/65/78 stills), and whether Phase 12 ships a surface at all |
+| **Accept/edit history accumulates past the threshold** | the profile, and with it the per-dimension decay rules designed in #407 — the derivation rule already exists; only the data does not |
+| **An operator decides a cheaper endpoint matters more than a verified one** | minimax/h3-max relight at **~1,400 credits** against kling at **1,578**, if its contract ever reads as verified — a trade of proven contract for price, which is a product decision rather than an engineering one |
+
 **The agreement signal exists: intent from the acceptance, evidence from the critique — and the measurements are stored, not the verdict.** Direction comes from the
 **accepted suggestion's mapping** (axis + direction, from #431); the evidence comes from the **critique's score on both sides of the edit**. Lengths could never do
 this — a longer paragraph is not "more pacing".
