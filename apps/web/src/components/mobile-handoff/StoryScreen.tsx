@@ -1,6 +1,7 @@
 'use client';
 
 import {useState, useEffect, useRef} from 'react';
+import { ChapterCritique } from '@/components/creative/ChapterCritique';
 import { engineLabel } from '@/lib/storyEngine';
 import { Shell } from '@/components/layout/Shell';
 import { Skeleton, EmptyState } from '@/components/mobile/primitives';
@@ -352,6 +353,7 @@ export function StoryScreen({ projectId }: { projectId: string }) {
                     </button>
                     {isSelected && !isR16 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 12px 0' }}>
+                        {!isR16 && <ChapterCritique projectId={projectId} />}
                         {STORY_ACTIONS.map((action) => (
                           <button
                             key={action}

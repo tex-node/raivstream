@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { critiqueStory } from '../lib/story/storyCritique';
 import { z } from 'zod';
 import { protectedProcedure, publicProcedure, r16Procedure, router } from '../trpc';
 import { resolveExportPolicy } from '../lib/story/storyExportPolicy';
@@ -4068,6 +4069,32 @@ async function generateSpeechForCue(
 }
 
 export const storyRouter = router({
+  /**
+   * The critique of the chapter in view (2026-11-17). Deterministic and free, so it runs on load rather than
+   * behind a paid action; ownership-scoped like every other story read, and it returns the LOWEST dimension with
+   * its sentence so the surface has one actionable thing rather than three numbers.
+   */
+  chapterCritique: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = await (ctx.prisma as any).storyProject.findFirst({
+        where: { id: input.projectId, userId: ctx.user.id },
+        select: { chapters: { orderBy: { chapterNumber: 'desc' }, take: 1, select: { chapterNumber: true, body: true } } },
+      });
+      if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Story not found.' });
+      const chapter = (project.chapters ?? [])[0];
+      if (!chapter?.body) return { chapterNumber: null, critique: null };
+      const critique = critiqueStory(chapter.body);
+      const dimensions = [
+        { key: 'sensory' as const, ...critique.sensory },
+        { key: 'pacing' as const, ...critique.pacing },
+        { key: 'voice' as const, ...critique.voice },
+      ];
+      // The lowest is the one to act on; ties resolve in a fixed order so the surface never flickers between runs.
+      const lowest = critique.tooShort ? null : [...dimensions].sort((a, b) => a.score - b.score)[0];
+      return { chapterNumber: chapter.chapterNumber, critique: { dimensions, lowest, tooShort: critique.tooShort } };
+    }),
+
   createSpark: protectedProcedure
     .input(z.object({
       idea: z.string().min(3).max(STORY_IDEA_MAX_LENGTH),
