@@ -978,6 +978,38 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The agreement signal exists: intent from the acceptance, evidence from the critique — and the measurements are stored, not the verdict.** Direction comes from the
+**accepted suggestion's mapping** (axis + direction, from #431); the evidence comes from the **critique's score on both sides of the edit**. Lengths could never do
+this — a longer paragraph is not "more pacing".
+
+**The join:** scoped by **creator AND chapter**, inside a **15-minute window**. Minutes rather than seconds because a creator accepts a suggestion, reads the
+paragraph, thinks, then edits; a stale acceptance never outranks a fresh one, and an edit to a different chapter is never attributed to the wrong suggestion. **An
+acceptance with no edit is unconfirmed, not agreement** — counting it as agreement is the click-trusting defect. **An edit with no preceding acceptance is
+ignored**, because it says nothing about agreement.
+
+**What is stored, and where:** the edit event carries `chapterId`, before/after lengths and **both critique score sets** (`critiqueBefore`, `critiqueAfter`), all
+computed server-side in `story.updateChapter` from the stored prior body and the new one. The **verdict is derived at read time** — so a scorer change recomputes
+agreement from the raw measurements instead of trusting a stale conclusion. That is the `durationSeconds` lesson applied to a second surface: **store the
+measurement, derive the judgement**.
+
+**Two of three dimensions carry direction.** `pacing → pacing` and `sensory / framing → sensory` both compare a score against a direction. **`different` and
+`unclassified` produce `no-direction`** — *"a different ending"* is not a directional claim about a score, and **voice has no direction at all**: its score is a
+dominance *margin*, so "first person dominant → evenly split" is a smaller number and is not "less voice". The limit is recorded rather than forced, because a
+voice verdict would teach the profile noise.
+
+**Thirteen tests** pin the join (chapter scope, creator scope, window edges, fresh-over-stale), the verdict (agreement, disagreement, no-change, no-direction), the
+`framing → sensory` mapping, voice's refusal to guess, and the missing-score case returning `no-direction` rather than a zero. The contradiction case is named
+explicitly: **an edit the other way is disagreement — the creator who accepted "more tension" and then cut the tension told the profile two opposite things**,
+which is exactly what only the edit can reveal.
+
+**One wiring note worth keeping:** the analytics emit inside `story.updateChapter` is a **lazy import wrapped in a catch**. Instrumentation must never break an edit, and a
+partially mocked module in a unit test is exactly the shape of that failure — the creator's chapter would have been lost to a missing export. It cost a red test to find,
+and the fix is the rule: **a signal is a side effect, never a participant in the write it observes.**
+
+**Homer's state, honestly:** the critique is built, surfaced and feeding suggestions; **the agreement signal is built, with the two-of-three limit named**; and the
+**profile is now gated on data, not on missing input**. The condition has **not** been met — the instrumentation is new and the accept/edit history is thin, so a
+profile today would learn from a handful of events. The input exists, the signal exists, the data has not accumulated.
+
 **The critique feeds the director's suggestions — and the axis mapping was decided, not inferred.** The integration is one input path, not a second generator:
 `buildDirectorSuggestions` already accepts `reviewFindings`, so the weakest dimension arrives as a finding there. The link is `CreativeProject.legacyStoryProjectId`
 — **the field that exists**. There is no `creativeProjectId` on `StoryProject`, and guessing one would have made the query throw and the integration silently never

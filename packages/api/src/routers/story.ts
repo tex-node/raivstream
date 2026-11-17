@@ -5203,6 +5203,33 @@ export const storyRouter = router({
         }
       }
 
+      // Agreement needs the MEASUREMENTS on both sides of an edit (2026-11-17). The prior body is stored, and the
+      // scorer is deterministic, so the "before" score is computed from the actual text rather than reconstructed
+      // later from a stored guess: store the two scores, derive the verdict at read time.
+      const priorBody = chapter.body ?? '';
+      const nextBody = input.body?.trim() ? input.body : priorBody;
+      const before = priorBody ? critiqueStory(priorBody) : null;
+      const after = nextBody ? critiqueStory(nextBody) : null;
+      if (before && after && priorBody !== nextBody) {
+        // Instrumentation must never break an edit, and a test double may mock this module partially - so it is a
+        // lazy import whose failure loses a signal, never the creator's chapter (2026-11-17).
+        void import('../lib/analytics')
+          .then(({ trackAnalyticsEvent }) => trackAnalyticsEvent(ctx.prisma, {
+            userId: ctx.user.id,
+            projectId: input.projectId,
+            event: 'text_edited',
+            properties: {
+              surface: 'chapter_edit',
+              chapterId: chapter.id,
+              beforeLength: priorBody.length,
+              afterLength: nextBody.length,
+              critiqueBefore: { sensory: before.sensory.score, pacing: before.pacing.score, voice: before.voice.score },
+              critiqueAfter: { sensory: after.sensory.score, pacing: after.pacing.score, voice: after.voice.score },
+            },
+          }))
+          .catch(() => null);
+      }
+
       // Snapshot the PRIOR state before applying the edit (undoable history).
       await snapshotChapterVersion(ctx.prisma, {
         chapterId: chapter.id,
