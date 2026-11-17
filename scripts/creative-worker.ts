@@ -1,0 +1,87 @@
+﻿/**
+ * The creative production worker (2026-11-17).
+ *
+ * Its own process, its own `FAL_MAX_REQUESTS` budget, and its own provider concurrency. The web tier enqueues a
+ * `CreativeProductionRun` and reads it; this process claims the row, runs the production, stamps the heartbeat and writes the
+ * status. The row is the only contract between them, and no session state crosses.
+ *
+ * WHY IT EXISTS: `service.ts` fired `runCreativeProduction` with `void` inside the request process, so a batch shared the web
+ * tier's process, its request budget and its restart. This is the separation, and `productionWorker.ts` holds the rules it obeys.
+ *
+ * Run it beside the app: `./node_modules/.bin/tsx scripts/creative-worker.ts` (or under PM2 as `raivstream-worker`).
+ */
+import { prisma } from '@raivstream/database';
+import {
+  CREATIVE_PRODUCTION_QUEUE,
+  PRODUCTION_WORKER_CONCURRENCY,
+  WORKER_LOST_REASON,
+  queueHealth,
+  runBatch,
+  sweepableRuns,
+  type ProductionRunRow,
+} from '../packages/api/src/lib/creative/jobs/productionWorker';
+
+const WORKER_NAME = 'creative-worker';
+
+async function main() {
+  const { getBoss } = await import('../packages/api/src/lib/creative/jobs/index');
+  const boss = await getBoss();
+
+  // The bound the unbounded default was missing. Recorded rather than implied: this is what a batch respects.
+  process.env.PROVIDER_MAX_CONCURRENCY = process.env.CREATIVE_WORKER_PROVIDER_CONCURRENCY ?? '2';
+  console.log(`[${WORKER_NAME}] started: concurrency=${PRODUCTION_WORKER_CONCURRENCY} providerConcurrency=${process.env.PROVIDER_MAX_CONCURRENCY} queue=${CREATIVE_PRODUCTION_QUEUE}`);
+
+  // The sweep runs at boot and on a timer: a run whose lease expired is released rather than silently stuck.
+  const sweep = async () => {
+    const rows = (await prisma.creativeProductionRun.findMany({
+      where: { status: 'RUNNING' },
+      select: { id: true, status: true, attempt: true, updatedAt: true },
+    })) as Array<{ id: string; status: ProductionRunRow['status']; attempt: number; updatedAt: Date }>;
+    const candidates: ProductionRunRow[] = rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      attempt: row.attempt,
+      heartbeatAt: row.updatedAt ? row.updatedAt.getTime() : null,
+    }));
+    const lost = sweepableRuns(candidates, Date.now());
+    for (const row of lost) {
+      await prisma.creativeProductionRun.update({
+        where: { id: row.id },
+        data: { status: 'FAILED', lastError: WORKER_LOST_REASON, stage: 'worker-lost' },
+      });
+      console.log(`[${WORKER_NAME}] swept run ${row.id}: ${WORKER_LOST_REASON}`);
+    }
+  };
+  await sweep();
+  setInterval(() => void sweep(), 60_000);
+
+  await boss.work<{ runIds: string[] }>(CREATIVE_PRODUCTION_QUEUE, async (job) => {
+    const runIds = job.data?.runIds ?? [];
+    console.log(`[${WORKER_NAME}] claimed ${runIds.length} run(s) as ${WORKER_NAME}`);
+    const outcome = await runBatch(runIds.map((id) => ({ id })), async (id) => {
+      // The production call itself is the web tier's existing runner; only the PROCESS changed. A run that throws is recorded
+      // and the batch continues - one episode failing must not stop episode four.
+      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner');
+      await runCreativeProduction(prisma as never, { projectId: (await projectIdFor(id)) ?? '', runId: id } as never);
+    });
+    console.log(`[${WORKER_NAME}] batch done: completed=${outcome.completed.length} failed=${outcome.failed.length}`);
+  });
+
+  // A health line a human reads before believing a batch is merely slow.
+  setInterval(async () => {
+    const queued = await prisma.creativeProductionRun.count({ where: { status: 'RUNNING' } });
+    const newest = await prisma.creativeProductionRun.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } });
+    const health = queueHealth({ queued, lastProcessedAt: newest?.updatedAt?.getTime() ?? null, now: Date.now() });
+    console.log(`[${WORKER_NAME}] health=${health.state} ${health.detail}`);
+  }, 30_000);
+}
+
+async function projectIdFor(runId: string): Promise<string | null> {
+  const row = await prisma.creativeProductionRun.findUnique({ where: { id: runId }, select: { projectId: true } });
+  return row?.projectId ?? null;
+}
+
+main().catch((error) => {
+  console.error(`[${WORKER_NAME}] failed to start`, error);
+  process.exit(1);
+});
