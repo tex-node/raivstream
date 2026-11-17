@@ -978,6 +978,26 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The critique is surfaced where a creator acts on it — beside the chapter, on load, one line.** The read decided the mount point before any code, because the
+transform panel's lesson was that the mount point IS the build: the story screen already renders the chapter body and the rewrite chips, so it is the one place a
+creator reads the text and can change it. Feedback that arrives on another surface is feedback that gets ignored.
+
+**One actionable line by default, all three behind an expand.** `chapterCritique` returns the dimensions **and the lowest**, ownership-scoped like every other
+story read. The surface shows *"Sensory grounding is low — this chapter is told in summary rather than images — add light, sound, texture and physical action"*;
+the number is **not** shown, because `sensory: 0` is a measurement and the sentence is the thing a creator can act on. **A chapter that scores well shows nothing
+at all** — three high numbers nobody needs is noise, and a permanent green tick is a verdict where a quiet line belongs.
+
+**On load, not on demand.** The scorer is deterministic and free, so the query costs nothing to run — and a "Review this chapter" button would hide the finding
+from exactly the creator who does not know to look for it. The copy is an **observation, never a verdict**: the test asserts no line contains *poor*, *bad*,
+*fail* or *must fix*, and that the sentence shown always matches the dimension the scorer flagged — a mismatch there would be the two-computations defect, in the
+UI instead of the record. **Seven web tests** pin the lowest-dimension rule, the exact threshold behaviour (at the line is quiet, one below is not), the
+all-three expand, the too-short body (nothing rather than a zero) and the copy.
+
+**The suggestion-feeding use is scoped, not built.** `buildDirectorSuggestions` already accepts
+`reviewFindings?: Array<{ suggestedFixInstruction?, description?, category? }>`, so feeding the weakest dimension is **one line at the caller**: push
+`{ category: dimension.key, description: dimension.lowScoreMeaning, suggestedFixInstruction: <an instruction derived from it> }` into the findings array it
+already receives. That is next session's work, and it is an integration rather than a new path — which is why it is named rather than started.
+
 **Critique is open, built on the one axis nothing else measures — and calibrated before any threshold existed.** *The read decided the scope:* the story
 contract already scores **structure** (protagonist, want, obstacle, turn, resolution), and the rewrite chips already name conflict, tension, humour and endings —
 so a critique that re-measures those is two scorers that can disagree, the defect this arc keeps finding. What nothing checks is what the narrative prompt already
