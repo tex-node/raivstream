@@ -112,3 +112,85 @@ the run (the runner does not stamp it today — that is the next small edit).
 Plan entry (`docs/rushfeature.md`), `docs/operations/roadmap-history.md`, and `SESSION.md` — corrected in place, with the
 original preserved where something was wrong. Branch off `main`, never commit to it, verify the branch after the switch,
 `git status --porcelain | grep -v '^??'` before claiming clean.
+
+---
+
+## The three specifics, verified 2026-11-17
+
+### 1. `getBoss()` and the queue constant
+
+| what | where | exact |
+|---|---|---|
+| `getBoss()` | **`packages/api/src/lib/jobs/index.ts:39`** | `export async function getBoss(): Promise<PgBoss>` — from `production/service.ts` the import is **`await (await import('../../jobs')).getBoss()`** (that file sits at `packages/api/src/lib/creative/production/service.ts`) |
+| `bossError()` | same file, line 81 | `export function bossError(error: unknown): void` |
+| `stopBoss()` | same file, line 64 | `export async function stopBoss(options: { graceful?: boolean } = {})` |
+| `CREATIVE_PRODUCTION_QUEUE` | **`packages/api/src/lib/creative/jobs/productionWorker.ts:21`** | `export const CREATIVE_PRODUCTION_QUEUE = 'creative-production'` — **it already exists**; add nothing |
+| how the worker imports it | `scripts/creative-worker.ts:14-16` | `import { CREATIVE_PRODUCTION_QUEUE, PRODUCTION_WORKER_CONCURRENCY, WORKER_LOST_REASON, queueHealth, runBatch, sweepableRuns, type ProductionRunRow } from '../packages/api/src/lib/creative/jobs/productionWorker';` |
+
+`jobs/index.ts` exports **only** `STORY_EXPORT_QUEUE`, `getBoss`, `stopBoss`, `enqueueStoryExport`, `bossError`. The production
+queue constant is not there — do not import it from `../../jobs`.
+
+### 2. `scripts/creative-worker.ts` — the current block, verbatim (lines 63–82)
+
+```ts
+  // THE QUEUE HAS TO EXIST. pg-boss does not create it on `work`, and the surfaced error said so plainly:
+  // PGBOSS_QUEUE_NOT_FOUND - which is also why the story-export queue has never claimed a job in production
+  // (2026-11-17). Creating it here is idempotent.
+  await boss.createQueue(CREATIVE_PRODUCTION_QUEUE).catch((error: unknown) => {
+    console.error(`[${WORKER_NAME}] createQueue failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+  });
+
+  await boss.work<{ runIds: string[] }>(CREATIVE_PRODUCTION_QUEUE, async (job) => {
+    const runIds = job.data?.runIds ?? [];
+    // CLAIMED=<jobId> is the other half of the sender's SENT=<jobId>. A SENT with no CLAIMED is a binding problem,
+    // not a provisioning one, and the pair is what proves the queue (2026-11-17).
+    console.log(`[${WORKER_NAME}] CLAIMED=${job.id} runIds=${runIds.length} process=${WORKER_NAME}`);
+    const outcome = await runBatch(runIds.map((id) => ({ id })), async (id) => {
+      // The production call itself is the web tier's existing runner; only the PROCESS changed. A run that throws is recorded
+      // and the batch continues - one episode failing must not stop episode four.
+      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
+      await runCreativeProduction(prisma as never, { projectId: (await projectIdFor(id)) ?? '', runId: id } as never);
+    });
+    console.log(`[${WORKER_NAME}] batch done: completed=${outcome.completed.length} failed=${outcome.failed.length}`);
+  });
+```
+
+The helper it calls (lines 93–96):
+
+```ts
+async function projectIdFor(runId: string): Promise<string | null> {
+  const row = await prisma.creativeProductionRun.findUnique({ where: { id: runId }, select: { projectId: true } });
+  return row?.projectId ?? null;
+}
+```
+
+Replacement, keeping the surrounding lines untouched:
+
+```ts
+  await boss.work<{ projectId: string; runId: string }>(
+    CREATIVE_PRODUCTION_QUEUE,
+    { batchSize: 1 },
+    async ([job]) => {
+      const { projectId, runId } = job.data;
+      // CLAIMED carries the RUN id: this is the line the kill test reads. pg-boss v12 does not put the job id at `.id`
+      // (it printed `undefined` when the claim was proven), so it is logged defensively rather than relied on.
+      console.info(`[creative-worker] CLAIMED runId=${runId} jobId=${job.id ?? 'undefined'} process=creative-worker`);
+      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
+      await runCreativeProduction(prisma as never, { projectId, runId });
+      console.info(`[creative-worker] DONE runId=${runId}`);
+    },
+  );
+```
+
+With `projectId` in the payload, `projectIdFor` and `runBatch` become unused in this handler; `runBatch` stays exported and
+tested in `productionWorker.ts` for the batch case, and the linter will flag the unused helper — delete it in the same diff.
+
+### 3. The candidate project id (re-verified live)
+
+```
+candidate_id          | approvals | completed_runs | assets | balance
+cmuzaoi6g0009jxbt6vla6jzl |     1     |        3       |   15   |  4760
+```
+
+**`cmuzaoi6g0009jxbt6vla6jzl`** — one approved reference, three completed runs, fifteen assets, **4,760 credits**. The
+1,000-credit ceiling is comfortably inside that balance.
