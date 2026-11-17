@@ -10,7 +10,7 @@
  *
  * Run it beside the app: `./node_modules/.bin/tsx scripts/creative-worker.ts` (or under PM2 as `raivstream-worker`).
  */
-import { prisma } from '@raivstream/database';
+import { prisma } from '../packages/database/index';
 import {
   CREATIVE_PRODUCTION_QUEUE,
   PRODUCTION_WORKER_CONCURRENCY,
@@ -24,7 +24,7 @@ import {
 const WORKER_NAME = 'creative-worker';
 
 async function main() {
-  const { getBoss } = await import('../packages/api/src/lib/creative/jobs/index');
+  const { getBoss } = await import('../packages/api/src/lib/jobs/index.ts');
   const boss = await getBoss();
 
   // The bound the unbounded default was missing. Recorded rather than implied: this is what a batch respects.
@@ -33,6 +33,8 @@ async function main() {
 
   // The sweep runs at boot and on a timer: a run whose lease expired is released rather than silently stuck.
   const sweep = async () => {
+    // A sweep failure must not kill the worker: logging it beats a process that cannot boot because a query is wrong.
+    try {
     const rows = (await prisma.creativeProductionRun.findMany({
       where: { status: 'RUNNING' },
       select: { id: true, status: true, attempt: true, updatedAt: true },
@@ -51,6 +53,9 @@ async function main() {
       });
       console.log(`[${WORKER_NAME}] swept run ${row.id}: ${WORKER_LOST_REASON}`);
     }
+    } catch (error) {
+      console.error(`[${WORKER_NAME}] sweep failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+    }
   };
   await sweep();
   setInterval(() => void sweep(), 60_000);
@@ -61,7 +66,7 @@ async function main() {
     const outcome = await runBatch(runIds.map((id) => ({ id })), async (id) => {
       // The production call itself is the web tier's existing runner; only the PROCESS changed. A run that throws is recorded
       // and the batch continues - one episode failing must not stop episode four.
-      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner');
+      const { runCreativeProduction } = await import('../packages/api/src/lib/creative/production/runner.ts');
       await runCreativeProduction(prisma as never, { projectId: (await projectIdFor(id)) ?? '', runId: id } as never);
     });
     console.log(`[${WORKER_NAME}] batch done: completed=${outcome.completed.length} failed=${outcome.failed.length}`);
