@@ -45,7 +45,7 @@ export async function getBoss(): Promise<PgBoss> {
       schema: 'pgboss',
     });
     boss.on('error', (error: unknown) => {
-      console.error('[jobs] pg-boss error:', error instanceof Error ? error.message : error);
+      bossError(error instanceof Error ? error.message : error);
     });
     await boss.start();
 
@@ -72,4 +72,23 @@ export async function stopBoss(options: { graceful?: boolean } = {}): Promise<vo
 export async function enqueueStoryExport(exportId: string): Promise<string | null> {
   const boss = await getBoss();
   return boss.send(STORY_EXPORT_QUEUE, { exportId });
+}
+
+/**
+ * pg-boss failures used to print `{}` (2026-11-17), which hid the real cause for months. An Error's `message`,
+ * `name` and `stack` are surfaced, and a non-Error payload is JSON-stringified so a nested object cannot vanish.
+ */
+export function bossError(error: unknown): void {
+  if (error instanceof Error) {
+    console.error(`[jobs] pg-boss error: ${error.name}: ${error.message}`);
+    if (error.stack) console.error(error.stack.split('\n').slice(0, 6).join('\n'));
+    return;
+  }
+  let serialised: string;
+  try {
+    serialised = JSON.stringify(error);
+  } catch {
+    serialised = String(error);
+  }
+  console.error(`[jobs] pg-boss error: ${serialised ?? String(error)}`);
 }
