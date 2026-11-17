@@ -37,13 +37,13 @@ async function main() {
     try {
     const rows = (await prisma.creativeProductionRun.findMany({
       where: { status: 'RUNNING' },
-      select: { id: true, status: true, attempt: true, updatedAt: true },
-    })) as Array<{ id: string; status: ProductionRunRow['status']; attempt: number; updatedAt: Date }>;
+      select: { id: true, status: true, attempt: true, heartbeatAt: true },
+    })) as Array<{ id: string; status: ProductionRunRow['status']; attempt: number; heartbeatAt: Date | null }>;
     const candidates: ProductionRunRow[] = rows.map((row) => ({
       id: row.id,
       status: row.status,
       attempt: row.attempt,
-      heartbeatAt: row.updatedAt ? row.updatedAt.getTime() : null,
+      heartbeatAt: row.heartbeatAt ? row.heartbeatAt.getTime() : null,
     }));
     const lost = sweepableRuns(candidates, Date.now());
     for (const row of lost) {
@@ -60,6 +60,13 @@ async function main() {
   await sweep();
   setInterval(() => void sweep(), 60_000);
 
+  // THE QUEUE HAS TO EXIST. pg-boss does not create it on `work`, and the surfaced error said so plainly:
+  // PGBOSS_QUEUE_NOT_FOUND - which is also why the story-export queue has never claimed a job in production
+  // (2026-11-17). Creating it here is idempotent.
+  await boss.createQueue(CREATIVE_PRODUCTION_QUEUE).catch((error: unknown) => {
+    console.error(`[${WORKER_NAME}] createQueue failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+  });
+
   await boss.work<{ runIds: string[] }>(CREATIVE_PRODUCTION_QUEUE, async (job) => {
     const runIds = job.data?.runIds ?? [];
     console.log(`[${WORKER_NAME}] claimed ${runIds.length} run(s) as ${WORKER_NAME}`);
@@ -75,8 +82,8 @@ async function main() {
   // A health line a human reads before believing a batch is merely slow.
   setInterval(async () => {
     const queued = await prisma.creativeProductionRun.count({ where: { status: 'RUNNING' } });
-    const newest = await prisma.creativeProductionRun.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } });
-    const health = queueHealth({ queued, lastProcessedAt: newest?.updatedAt?.getTime() ?? null, now: Date.now() });
+    const newest = await prisma.creativeProductionRun.findFirst({ select: { heartbeatAt: true } });
+    const health = queueHealth({ queued, lastProcessedAt: newest?.heartbeatAt?.getTime() ?? null, now: Date.now() });
     console.log(`[${WORKER_NAME}] health=${health.state} ${health.detail}`);
   }, 30_000);
 }

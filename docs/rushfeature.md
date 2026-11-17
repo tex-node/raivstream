@@ -978,6 +978,28 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Step 0 verified, with one part still open — and the open part named rather than rounded up.** *The type-check question, answered:* **`scripts/` is outside every
+package's tsconfig.** The root has no `include`, `turbo run type-check` only visits package workspaces, and none of `packages/api`, `packages/web`, `packages/mobile`
+covers `scripts/`. That is the defect behind defect one: a wrong package name could only fail at runtime because **nothing compiled the file**. Fix: `tsconfig.scripts.json`
+plus scripts in scope, so the next script cannot inherit the same failure.
+
+**The heartbeat column exists, on the mapped table.** `CreativeProductionRun.heartbeatAt DateTime?` in the schema, and the migration targets **`creative_production_runs`** —
+the `@@map` name, because `"CreativeProductionRun"` does not exist as a table and the first attempt failed on exactly that. The worker now reads and stamps the real
+column, and its health line runs: `[creative-worker] health=idle No episodes are waiting.`
+
+**The pg-boss error is surfaced, and that is what named the cause.** `[jobs] pg-boss error: {}` was the logging swallowing an `Error`'s shape; `bossError()` now prints
+name, message and stack, and the surfaced error was **`PGBOSS_QUEUE_NOT_FOUND: Queue creative-production does not exist`**. The worker now calls `boss.createQueue` before
+`work`, and the queue is present: `pgboss.queue` lists **`creative-production`**, `export.story` and `__pgboss__send-it` — so the story-export queue **did exist** and simply
+never claimed a job in production, which is a sharper finding than "the queue was never provisioned".
+
+**The worker now starts clean and stays alive:** `[creative-worker] started: concurrency=4 providerConcurrency=2 queue=creative-production`, no pg-boss errors, health idling.
+
+**What is still open, stated plainly:** the **no-op claim test did not complete.** Two send attempts failed to execute — one from `/tmp` (module resolution) and one from
+`scripts/_sendTest.ts`, which produced no `SENT=` line — so while the queue exists and the worker is listening, **no job has been observed being claimed**. A queue that
+registers `boss.work` but has never claimed is not yet proven, and this session does not claim it. That is the first thing the next session does, before any real run.
+
+**The 1,000-credit ceiling remains authorized and unspent**, and the proof sequence still starts at step 1.
+
 **The worker started for the first time — and starting it found three things that outrank the quote.** Boot log, verbatim:
 
 ```
