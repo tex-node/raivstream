@@ -413,6 +413,10 @@ model User {
   filmSubmissions        FilmSubmission[] @relation("SubmittedFilms")
   reviewedFilms          FilmSubmission[] @relation("ReviewedFilms")
   revenueTermsCreated    RevenueTerms[]
+
+  /// The creator's chosen style default (2026-11-17). Per CREATOR, not per project: the default is the
+  /// creator's taste and applies across their work, while CinematicLook is per project.
+  styleDefaultKey String?
 }
 
 model AnalyticsEvent {
