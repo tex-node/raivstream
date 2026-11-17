@@ -978,6 +978,39 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The worker started for the first time — and starting it found three things that outrank the quote.** Boot log, verbatim:
+
+```
+[creative-worker] started: concurrency=4 providerConcurrency=2 queue=creative-production
+```
+
+That is the process's own identity line: the queue name, the concurrency the unit tests pinned at 4, and a provider concurrency of 2 — **not the web tier's**. The
+process stayed alive (two pids: the tsx launcher and the worker). **`scripts/creative-worker.ts` has executed**, which it had never done since #444, and it could not
+have: two import paths were wrong (`@raivstream/database` does not resolve from a root script; `creative/jobs/index` is really `lib/jobs/index`), so the "written but
+unexecuted" script was **not even importable**. That is the session's first finding, and it is the strongest form of *a worker that has never started is a script*.
+
+**Finding two — the lease has nothing to measure.** The sweep failed with:
+
+```
+Unknown field `updatedAt` for select statement on model `CreativeProductionRun`.
+```
+
+`CreativeProductionRun` has **no `updatedAt`** — so the ten-minute lease in `productionWorker.ts` cannot read a heartbeat off the row, and the sweep cannot tell a
+stale run from a live one. The lease is designed and unit-tested against a `heartbeatAt` that **does not exist in the schema**. A `heartbeatAt` column (or a
+`stage`-transition timestamp) is a migration the worker needs before any batch, and the design's own rule applies: the row is the only contract, so the heartbeat must
+be on the row.
+
+**Finding three — the queue is not provisioned here.** pg-boss logged `[jobs] pg-boss error: {}` on start. The worker survives it, but no job can be claimed until the
+`pgboss` schema exists in this database — which is also why the story-export queue has never been exercised in production.
+
+**No episode was generated, and no credits were spent.** The submission was not attempted: there is no queue to enqueue onto, no heartbeat field to lease against, and a
+run submitted into that state would test nothing except the error path. The 1,000-credit ceiling remains authorized and unspent. **The worker that finally started is a
+worker with three wiring defects now visible** — which is exactly what starting it was for, and cheaper than discovering them under a five-episode batch.
+
+**The owed sequence is unchanged, with one addition at the front:** add the heartbeat column and provision the `pgboss` schema, then one run through the worker, then
+the five-episode batch, the kill, **the lease expiry without a restart (the clause — the sweep must fire on expiry, not on boot)**, the resume, and health in both
+directions.
+
 **The quote exists, and it came from rows rather than a fresh run — with the difference stated.** *The read changed the pricing question:* before a run could be
 submitted, the database was asked what past runs actually spent. **Six production runs carry a non-zero `creditsSpent`: average 44.4, maximum 920.** That is a
 **measured** per-episode cost from real rows, not an estimate — so the five-episode quote is **≈222 credits at the average, ≈4,600 at the observed maximum**, which is
