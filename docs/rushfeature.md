@@ -978,6 +978,45 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The worker is designed and its rules are tested — but it has not been started, and that distinction is the finding.** *The read answered the transport
+question:* **pg-boss is live, not dormant.** `creative/jobs/index.ts` opens a PgBoss on the `pgboss` schema and `exportJob.ts` registers a real `boss.work` for story
+exports — so the queue is already doing work, and reusing it is the eleventh-instance defence rather than a new job table. The run row is the contract: a
+`CreativeProductionRun` carries `status`, `attempt`, `stage`, `lastError`, `creditCeiling` and `creditsSpent`, so a job is a row and the row is its state.
+
+**The boundary — what moves and what stays:**
+
+| concern | stays in web | moves to worker |
+|---|---|---|
+| submission | a request creates the run row and enqueues | — |
+| run execution | — | `runCreativeProduction`, transforms, critic runs, narration, movie assembly |
+| polling | the client reads the run row | — |
+| the sweep | — | here, as the primary recovery path |
+
+**No session state crosses the boundary.** The row carries `projectId`; creator identity is already implied by project ownership, so a job needs a `userId` only
+for the charge — and a job that needed session state would mean the boundary was wrong.
+
+**What is proven, and what is only written.** `productionWorker.ts` holds the rules with **eleven tests**: a queue name of its own (`creative-production`, beside
+story exports rather than replacing them); `PRODUCTION_WORKER_CONCURRENCY = 4` — a real bound where `PROVIDER_MAX_CONCURRENCY` defaults to `0` and bounds only one
+process; a **lease** (`PRODUCTION_LEASE_MS` = 10 minutes) with a sweep that marks an expired run **FAILED with `WORKER_LOST`** and says *"released for a retry"*; a
+**health check that separates a dead worker from a slow batch** — *"episodes are queued and nothing has been processed for longer than the lease; the worker is
+probably down"*; and `runBatch`, where **one failing episode does not stop the next**, returning both the completed and the failed with reasons.
+
+`scripts/creative-worker.ts` exists as the process entry — its own `FAL_MAX_REQUESTS`, its own provider concurrency, a boot sweep, a periodic sweep and a health
+line — **and it has not been executed.** Starting it would process real runs, which means credits; the five-episode proof is therefore **not** run this session.
+
+**The named cost of the proof, stated before it can run:** five episodes at their per-episode production rate, **which is not yet quoted** — and that gap is itself
+the reason to state it rather than estimate: a batch smoke that guesses its cost is how a ceiling gets discovered at the till. The next session quotes one episode,
+multiplies by five, and runs the batch with the worker in its own process, then kills it mid-batch and verifies the sweep released the in-flight runs while the web
+tier stayed up. **A worker that has never been killed is a worker whose recovery path is untested** — so the restart test is the proof, not the log line.
+
+**Failure modes, named before build:** worker not running → runs stay `RUNNING` with no heartbeat and the health check says `missing-worker` (a worker that dies
+silently looks exactly like a slow batch, so this is the one that bites); web down, worker up → jobs process, the client's poll fails and recovers; both down → the
+boot sweep handles it; a job throws → `FAILED` with a reason and the batch continues; the queue fills → the bound is the worker's concurrency plus the provider
+budget, and it is stated rather than left unbounded.
+
+**Phase 16's status changed, and not as far as it sounds:** the worker decision is **implemented and unit-proven**, so the chunking build can start against a
+defined contract — but the batch proof and the restart test are still owed, and Phase 16 should not be claimed as shippable until both run.
+
 **Two requested features scheduled, and the worker decision taken before either — because the roadmap, not the request, forces it.**
 
 **The arithmetic first, in both entries:** a 90-minute film is **5,400 seconds** of output. At H3-Max and Kling rates that is **$270–$508 of provider cost**, or
