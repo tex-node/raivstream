@@ -1,14 +1,15 @@
 ﻿{
-  "extends": "./tsconfig.base.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "module": "commonjs",
+    "module": "CommonJS",
     "moduleResolution": "node",
-    "target": "ES2022",
-    "strict": false,
+    "types": ["node"],
+    "noEmit": true,
     "skipLibCheck": true,
+    "strict": false,
     "esModuleInterop": true,
-    "resolveJsonModule": true
+    "isolatedModules": false
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["node_modules"]
 }
