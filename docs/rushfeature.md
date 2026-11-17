@@ -978,6 +978,42 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Two requested features scheduled, and the worker decision taken before either — because the roadmap, not the request, forces it.**
+
+**The arithmetic first, in both entries:** a 90-minute film is **5,400 seconds** of output. At H3-Max and Kling rates that is **$270–$508 of provider cost**, or
+**756,000–1,422,400 credits**, or **9,450–17,780 FLUX2 stills**. `AUTO_DEFAULT_CEILING` is **1,680**, so a 90-minute film is **450–850× the current ceiling**. Neither
+feature can be scheduled as if it were a 3-second relight, and the numbers live beside both entries rather than in one of them.
+
+**The read, before any entry:**
+
+| read | finding |
+|---|---|
+| `CreativeSeries` / `CreativeEpisode` | **Already fit 45 episodes by design.** The series carries `canon`, `memory`, `visualLanguage` and `audioLanguage`; an episode carries `projectId` with a unique `(seriesId, seasonNumber, episodeNumber)`. Forty-five linked projects is the shape the models were built for, and they have never had a consumer. |
+| Segment persistence | `exportSegments.ts` writes `story-projects/{projectId}/export-segments/{segmentKey}.mp4` — keyed by **segment key, not a global shot index**, so the naming scales past 2,700 and resumability is per-segment existence. Proven at 5 shots; **never at 2,700.** |
+| The queue | Generation submissions are **in-process**, governed by `providerRateLimit` (`PROVIDER_MAX_CONCURRENCY`, **default 0 = unbounded**) and `FAL_MAX_REQUESTS` (**default 0 = no requests permitted**, 200 on the VPS). There is no batch queue with a depth — 45 submissions would either all fire unbounded or share one process's budget, and **a worker restart kills in-flight work**, which the record has already observed. |
+
+**The worker decision: a dedicated worker, decided now and built before the chunking.** The numbers: **45 concurrent submissions**, `PROVIDER_MAX_CONCURRENCY` **0**
+(unbounded) so nothing bounds a batch, `FAL_MAX_REQUESTS` **200 per process** on the VPS, and a recorded failure mode where a restart kills in-flight critic work. There is
+no queue depth to instrument because there is no queue — which rules out "instrument first" and points at a separate process with its own request budget rather than a cap
+inside the web tier. **Phase 16 must not ship without it:** 45 jobs on the current path is the contention case.
+
+**Phase 16 — script chunking.** A 90-minute script becomes **45 episodes of ~2 minutes**, split at its **own act and scene breaks** — a fixed-interval split produces 45
+episodes that each end mid-sentence, so **boundary detection is the engineering problem, not the splitting**, and it costs **one model call per boundary, 45 calls before any
+generation**. The episodes become **45 linked projects under one `CreativeSeries`**, not one project with 45 units, because the series models exist and this is their purpose.
+**Chunking happens before generation**, so a creator approves the splits before 45 episodes are generated at real cost. *Exit criterion:* boundaries fall on scene or act
+breaks, **verified by a human reading three**, and **episode 12 inherits episode 11's character state**. *Cost:* per-episode cost × 45, stated before the first generation.
+
+**Phase 17 — long-form, with a gate rather than only an exit criterion.** Three named problems: **cost exceeds every ceiling** (756,000–1,422,400 credits; a per-project
+ceiling that scales with the deliverable, and a creator sees the number before the first frame — *named decision: premium tier, or a cap-raise for everyone?*);
+**continuity is unmeasured at scale** (70/75 was measured at one framing, not hundreds of shots — the gate is a **five-episode continuity test, scored**, and if identity
+degrades by episode three the feature does not exist yet); and **a failure at minute 74 is a failed deliverable, not a failed asset** (the take model handles one scene;
+long-form needs resumable assembly at 2,700 segments, where the pattern exists and has only been proven at 5). *Exit criterion:* a **10-minute film (5 episodes)** produces
+a stitched deliverable with **per-episode regeneration**, and the cost is quoted before the first generation with a ceiling that permits it.
+
+**Sequence, and the constraints that hold it:** **worker decision → Phase 16 chunking → the five-episode continuity test → Phase 17.** Phase 16 must not ship without the
+worker. Phase 17 must not start without the continuity test passing — a 90-minute film built on unmeasured drift is 90 minutes of drift. And the cost arithmetic is recorded
+in both entries so neither is ever scheduled as a 3-second relight.
+
 **The commercial surface exists: three fields where the brief already lives, and the gate visible before publish.** *The read first:* a commercial has **no dedicated
 authoring route**. `/create` runs the intent engine, and the project workspace (`projects/[projectId]`) is where the brief, the refined intent, the plan and the review already
 live — so the surface is a **form over existing fields in the workspace**, not a new object and not a new route. That is the transform panel's lesson applied in advance: the
