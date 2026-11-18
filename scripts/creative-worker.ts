@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The creative production worker (2026-11-17).
  *
  * Its own process, its own `FAL_MAX_REQUESTS` budget, and its own provider concurrency. The web tier enqueues a
@@ -10,10 +10,13 @@
  *
  * Run it beside the app: `./node_modules/.bin/tsx scripts/creative-worker.ts` (or under PM2 as `raivstream-worker`).
  */
+import { hostname } from 'node:os';
 import { prisma } from '../packages/database/index';
 import {
   CREATIVE_PRODUCTION_QUEUE,
+  CREATIVE_WORKER_NAME,
   PRODUCTION_WORKER_CONCURRENCY,
+  WORKER_HEARTBEAT_INTERVAL_MS,
   WORKER_LOST_REASON,
   queueHealth,
   sweepableRuns,
@@ -29,6 +32,30 @@ async function main() {
   // The bound the unbounded default was missing. Recorded rather than implied: this is what a batch respects.
   process.env.PROVIDER_MAX_CONCURRENCY = process.env.CREATIVE_WORKER_PROVIDER_CONCURRENCY ?? '2';
   console.log(`[${WORKER_NAME}] started: concurrency=${PRODUCTION_WORKER_CONCURRENCY} providerConcurrency=${process.env.PROVIDER_MAX_CONCURRENCY} queue=${CREATIVE_PRODUCTION_QUEUE}`);
+
+  // The worker's OWN liveness stamp (2026-11-18). Not a run's heartbeat: this is written whether or not
+  // the worker holds work, which is the only way an idle-but-alive worker can look alive. A run's
+  // heartbeat is stale by definition when nothing is running, which is exactly how the first live run
+  // reported `missing-worker ... probably down` while the worker was up.
+  let livenessFailures = 0;
+  const stampLiveness = async () => {
+    try {
+      await prisma.workerHeartbeat.upsert({
+        where: { worker: CREATIVE_WORKER_NAME },
+        create: { worker: CREATIVE_WORKER_NAME, lastSeenAt: new Date(), pid: process.pid, host: hostname() },
+        update: { lastSeenAt: new Date(), pid: process.pid, host: hostname() },
+      });
+      livenessFailures = 0;
+    } catch (error) {
+      // A missing table (migration not applied yet) must not kill the worker - and must not be silent either.
+      livenessFailures += 1;
+      if (livenessFailures === 1) {
+        console.error(`[${WORKER_NAME}] liveness stamp failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+      }
+    }
+  };
+  await stampLiveness();
+  setInterval(() => void stampLiveness(), WORKER_HEARTBEAT_INTERVAL_MS);
 
   // The sweep runs at boot and on a timer: a run whose lease expired is released rather than silently stuck.
   const sweep = async () => {
@@ -93,8 +120,22 @@ async function main() {
   // A health line a human reads before believing a batch is merely slow.
   setInterval(async () => {
     const queued = await prisma.creativeProductionRun.count({ where: { status: 'RUNNING' } });
-    const newest = await prisma.creativeProductionRun.findFirst({ select: { heartbeatAt: true } });
-    const health = queueHealth({ queued, lastProcessedAt: newest?.heartbeatAt?.getTime() ?? null, now: Date.now() });
+    // Ordering is not cosmetic: an unordered `findFirst` read an arbitrary row, which is how a run
+    // that was live and progressing got reported as "probably down".
+    const newestRunning = await prisma.creativeProductionRun.findFirst({
+      where: { status: 'RUNNING' },
+      orderBy: { heartbeatAt: 'desc' },
+      select: { heartbeatAt: true },
+    });
+    const workerRow = await prisma.workerHeartbeat
+      .findUnique({ where: { worker: CREATIVE_WORKER_NAME }, select: { lastSeenAt: true } })
+      .catch(() => null);
+    const health = queueHealth({
+      queued,
+      workerLastSeenAt: workerRow?.lastSeenAt?.getTime() ?? null,
+      lastRunProgressAt: newestRunning?.heartbeatAt?.getTime() ?? null,
+      now: Date.now(),
+    });
     console.log(`[${WORKER_NAME}] health=${health.state} ${health.detail}`);
   }, 30_000);
 }

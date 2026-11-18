@@ -32,6 +32,7 @@ import type { CreativeBibleState } from '../shared/types';
 import { CreativeError } from '../shared/errors';
 import { MediaProviderError } from '../../mediaProviders/types';
 import { routeProduction, type GenerationSpec, type StillSpec, type VideoSpec } from './capabilityRouter';
+import { buildResumeIndex, resumeKey } from './resumeIndex';
 import { composeWithLook, lookPromptForProduction } from '../look/service';
 import { generateStill, generateVideo, extractLastFrame, type GeneratedMedia } from './generationAdapter';
 import type { CreativeProductionPlanState } from './plan';
@@ -66,6 +67,12 @@ export interface ProductionRunResult {
   failed: number;
   runId: string | null;
   status: ProductionRunStatus;
+  /**
+   * Non-READY duplicates whose scene+shot+kind already had a READY asset (2026-11-18).
+   * They are skipped correctly, but they are why an asset count can exceed what a run
+   * generated — reported instead of inferred.
+   */
+  shadowed: number;
 }
 
 export interface ProductionRunOptions {
@@ -95,7 +102,15 @@ export interface ProductionRunOptions {
   now?: () => Date;
 }
 
-type ExistingAsset = { id: string; sceneId: string; kind: string; status: string; assetUrl: string | null };
+type ExistingAsset = {
+  id: string;
+  sceneId: string;
+  shotId?: string | null;
+  kind: string;
+  status: string;
+  assetUrl: string | null;
+  createdAt?: Date | string | null;
+};
 
 type RunModel = {
   create?: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
@@ -149,7 +164,7 @@ async function runCreativeProductionInner(
     where: { id: input.projectId },
     include: { productionPlan: true, bible: true },
   });
-  if (!project || !project.productionPlan) return { generated: 0, failed: 0, runId: input.runId ?? null, status: 'FAILED' };
+  if (!project || !project.productionPlan) return { generated: 0, failed: 0, runId: input.runId ?? null, status: 'FAILED', shadowed: 0 };
 
   const plan = project.productionPlan.plan as unknown as CreativeProductionPlanState;
   const bible = project.bible as unknown as CreativeBibleState | null;
@@ -164,12 +179,19 @@ async function runCreativeProductionInner(
   // already produced the moment the scene has any IMAGE asset: `SCENE_01:IMAGE` matched the
   // scene-level composite, so every shot spec was skipped and a per-shot run generated 0
   // assets while reporting COMPLETED.
-  const byKey = new Map(
-    existing.map((asset) => [
-      `${asset.sceneId}:${(asset as { shotId?: string | null }).shotId ?? '-'}:${asset.kind}`,
-      asset,
-    ]),
-  );
+  //
+  // The index prefers READY over any duplicate (2026-11-18). The old one-entry-per-key map built
+  // straight from `existing` was order-dependent, and both directions were real: a non-READY row
+  // that won re-charged for a scene already produced, and a READY row that won left its QUEUED twin
+  // invisible forever.
+  const { byKey, shadowed } = buildResumeIndex(existing);
+  if (shadowed.length > 0) {
+    // An orphan is a number a session can quote, not something inferred from two screenshots.
+    console.info(
+      `[creative.resume] shadowed=${shadowed.length} keys=${shadowed.map((asset) => resumeKey(asset)).join(',')}`,
+    );
+    logStage(project.id, 'produce', 'ok', { shadowed: shadowed.length });
+  }
 
   // Resolve the saved look once per run, so every still carries the same fragment.
   let lookFragment: string | null = null;
@@ -214,7 +236,7 @@ async function runCreativeProductionInner(
 
   try {
     for (const spec of specs) {
-      const key = `${spec.sceneId}:${(spec as StillSpec).shotId ?? '-'}:${spec.kind}`;
+      const key = resumeKey({ sceneId: spec.sceneId, shotId: (spec as StillSpec).shotId ?? null, kind: spec.kind });
       const prior = byKey.get(key);
       if (prior && prior.status === 'READY') {
         if (spec.kind === 'VIDEO' && prior.assetUrl) lastClipUrl = prior.assetUrl;
@@ -245,7 +267,7 @@ async function runCreativeProductionInner(
           sceneSoftened.get(spec.sceneId),
         );
         // VIDEO is always scene-level, so its seed still is the scene key, never a shot key.
-        const still = byKey.get(`${spec.sceneId}:-:IMAGE`);
+        const still = byKey.get(resumeKey({ sceneId: spec.sceneId, shotId: null, kind: 'IMAGE' }));
         if (sourceSeedUrl) {
           // Source-conditioned project (product photo uploaded): prefer the scene's
           // own generated still — it already encodes the source identity via FLUX
@@ -407,7 +429,14 @@ async function runCreativeProductionInner(
             where: { id: asset.id },
             data: readyPatch({ assetUrl: media.assetUrl, thumbnailUrl: media.thumbnailUrl ?? null, provider: 'internal' }),
           });
-          byKey.set(key, { id: asset.id, sceneId: spec.sceneId, kind: spec.kind, status: 'READY', assetUrl: media.assetUrl });
+          byKey.set(key, {
+            id: asset.id,
+            sceneId: spec.sceneId,
+            shotId: (spec as StillSpec).shotId ?? null,
+            kind: spec.kind,
+            status: 'READY',
+            assetUrl: media.assetUrl,
+          });
           if (spec.kind === 'VIDEO') lastClipUrl = media.assetUrl;
           generated += 1;
           ready = true;
@@ -536,7 +565,7 @@ async function runCreativeProductionInner(
 
   // row said PARTIAL while the caller was told FAILED.
 
-  return { generated, failed, runId, status: finalRunStatus({ capHit: Boolean(capHit), generated, failed, droppedScenes: droppedScenes.size }) } as ProductionRunResult;
+  return { generated, failed, runId, status: finalRunStatus({ capHit: Boolean(capHit), generated, failed, droppedScenes: droppedScenes.size }), shadowed: shadowed.length } as ProductionRunResult;
 }
 
 export interface RecoveryResult {

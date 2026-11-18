@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resumeKey } from '../resumeIndex';
 
 /**
  * The runner's resume key includes the shot (2026-11-04).
@@ -9,22 +10,35 @@ import { join } from 'node:path';
  * `${sceneId}:${kind}`, so the scene-level composite made every shot spec look already done.
  * The video seed lookup was the mirror-image bug — VIDEO is scene-level, so its still lookup must
  * use the scene key even when stills are shot-keyed.
+ *
+ * The key shape now lives in `resumeIndex.ts` (2026-11-18) so the runner and the index cannot
+ * drift, and so the winner among duplicates is decided by a rule rather than by row order.
  */
 
 const RUNNER = join(__dirname, '..', 'runner.ts');
 
-describe('resume keys address the shot', () => {
+describe('the resume key addresses the shot', () => {
+  it('a per-shot spec and the scene composite are different keys', () => {
+    expect(resumeKey({ sceneId: 'SCENE_01', shotId: 'shot-a', kind: 'IMAGE' })).not.toBe(
+      resumeKey({ sceneId: 'SCENE_01', shotId: null, kind: 'IMAGE' }),
+    );
+  });
+
+  it('the video seed lookup uses the scene-level image key', () => {
+    expect(resumeKey({ sceneId: 'SCENE_01', shotId: null, kind: 'IMAGE' })).toBe('SCENE_01:-:IMAGE');
+  });
+});
+
+describe('the runner builds its index with the shared rule', () => {
   const source = readFileSync(RUNNER, 'utf8');
 
-  it('the per-spec key includes shotId', () => {
-    expect(source).toMatch(/const key = `\$\{spec\.sceneId\}:\$\{\(spec as StillSpec\)\.shotId \?\? '-'\}:\$\{spec\.kind\}`/);
+  it('imports the deterministic index instead of building a map inline', () => {
+    expect(source).toContain("from './resumeIndex'");
+    expect(source).toContain('buildResumeIndex(existing)');
+    expect(source).not.toMatch(/new Map\(\s*existing\.map/);
   });
 
-  it('the byKey map is built with the same shape', () => {
-    expect(source).toContain("(asset as { shotId?: string | null }).shotId ?? '-'");
-  });
-
-  it('the video seed still uses the scene-level image key', () => {
-    expect(source).toContain('byKey.get(`${spec.sceneId}:-:IMAGE`)');
+  it('reports shadowed duplicates instead of leaving them invisible', () => {
+    expect(source).toContain('shadowed');
   });
 });

@@ -978,6 +978,29 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase A is blocked before the free proof could run, and the paid run is withheld on the stop condition.** What was done and what stopped it, in order:
+
+*The migration is applied, by hand.* `prisma migrate deploy` **cannot run in this environment at all**: it fails with **P3009** because a migration from an earlier phase
+(`20261112120000_story_contract`) is recorded as **started and never finished** in `_prisma_migrations`, and Prisma refuses to apply anything after a failed migration. The
+`worker_heartbeats` table was therefore created with the migration's own SQL through `psql`, and verified: columns `worker, lastSeenAt, pid, host, updatedAt`, primary key on
+`worker`. **That is a standing finding about the pipeline, not a workaround for this session** — every migration since that failure has had to be applied by hand, which is why
+this arc keeps writing `ALTER TABLE ... IF NOT EXISTS` scripts.
+
+*The external reader exists but cannot yet load.* `scripts/creative-queue-health.ts` is written — reads the liveness row, counts non-terminal runs, prints one line, and is the
+shape a later admin endpoint reuses — but under `tsx` it fails to resolve the `productionWorker` import, the same `[ERR_MODULE_NOT_FOUND]` class that stopped the worker on its
+first two attempts. **It has not printed a verdict once**, so the health distinction is not yet demonstrated in either direction, and the plan does not claim it is.
+
+*The free no-op run could not be reproduced.* `produce` for the project behind run `cmwla6g2z00019v708q37iam9` now refuses with **`PrismaClientKnownRequestError P2022`** at
+`service.ts:336` — a column the deployed client expects and the database does not have. Because the free test is the gate on the paid one, **`shadowed=3` was never observed**, and
+by the stop condition the paid run **was not attempted**. The 1,000-credit ceiling remains authorized and unspent.
+
+**What the run table shows while that was being found, and it is worth carrying into the quote:** the two earlier completed runs on that project spent **280 credits**
+(`COMPLETED`, 4 scenes) and **840 credits** (`PARTIAL`, 4 scenes). That is real per-episode evidence far above the 44.4 average taken from six runs, and it suggests the average was
+dragged down by cheap or no-op runs — so the batch quote should be built from a run that is confirmed to have generated, not from the table average.
+
+**Sequence, unchanged and now explicitly gated on three fixes:** the reader must load and print (both directions), the P2022 must be resolved so `produce` runs, and only then
+the free no-op run may prove `shadowed=3`. The paid run follows those, and the batch after it.
+
 **Diagnosis of `generated=0` + `COMPLETED` + 3 QUEUED assets: the status was honest, and the dedupe is what hid the orphans.** The three artifacts:
 
 *The loop* (`runner.ts:216-222`): each spec is keyed `` `${sceneId}:${shotId ?? '-'}:${kind}` ``, looked up in `byKey`, and skipped **only when `prior.status === 'READY'`**.
@@ -2083,6 +2106,40 @@ a renderer exists.
 **5,260 (65)**; a person swap **~6,286 (78)**. **Relight is defensible at these prices** — the decision needed is about **recast and restyle**, not
 the phase. Relight can ship once a renderer exists; the other three wait on the operator saying whether a 78-still operation is one creators will use
 or whether the credit-to-dollar ratio is wrong for this class.
+
+**The liveness split is written, and the false positive had a second cause this entry missed.** `WorkerHeartbeat` — additive, one
+table, one row per worker name, no relations — is stamped by the worker itself every 30 s whether or not it holds work, and
+`queueHealth` now reads only that stamp, demoting a run's heartbeat to quoted detail. Four states replace three: `healthy` (work
+waits, worker alive), `idle` (nothing waits, worker alive), `idle-no-worker` (nothing waits, nobody alive — explicitly not an
+alarm), `missing-worker` (work waits, nobody alive — the only alarm). The stamp outranks the run heartbeat because they answer
+different questions, and a run that finished hours ago keeps its last heartbeat forever. *The second cause, found while fixing the
+first:* the caller's `findFirst` had **no `orderBy` and no status filter**, so the "newest progress" it fed the verdict was an
+arbitrary row — a day-old run decided the state of a live one. That is why the captured line said "probably down" while the run
+was progressing; the semantic split alone would not have fixed it. The boundary is compared on raw timestamps rather than the
+rounded display value, because a test caught the rounding.
+
+**The resume index is deterministic, and the dedupe's other direction is a spend, not a display.** `resumeIndex.ts` now owns the
+key and the rule: **READY always wins**, recency breaks ties only inside a class, and the order is total — readiness, then
+`createdAt`, then id — so `findMany` cannot decide a resume. Rows still waiting or in flight under a key a READY row settles
+(`QUEUED`, `GENERATING`) are returned as `shadowed`, logged once per run and carried on the run result, which turns "12
+assets, generated=0" from a contradiction into a number; a `FAILED` take is terminal and is not counted, because the take model
+means one key legitimately owns several rows. *The correction to the diagnosis above:* that entry described the shadowing as a
+visibility defect, and called the rows duplicates. It is also a **charge** defect in the mirror direction — when a non-READY
+duplicate wins, the runner reuses that row and charges again for a scene already produced. The three orphan rows this arc found
+were older than their READY twins, so order chose correctly by accident.
+
+**What is deliberately not done.** The orphan rows are still `QUEUED`. Rewriting them to `FAILED` would make `failedScenes` lie,
+and a `SUPERSEDED` status is an enum migration plus a product decision, so it is named rather than taken: the durable
+reconciliation is a status meaning "a newer READY asset settles this key", and until it exists the honest record is the shadowed
+count. The worker is still not a deployed process — `ecosystem.config.cjs` defines `raivstream-worker` as the **export** worker
+(`packages/api/src/worker/index.ts`), not the creative one — so the liveness stamp has one caller, the script's own health line,
+until the creative worker gets its own PM2 entry. And **step 1 is still owed**: this arc has proved the sender, the claim, the
+heartbeat and now the liveness verdict, but **no real generation has run through the worker**, so the per-episode quote is still
+zero from a project with no pending work rather than measured from this path.
+
+**Gates, measured after the change:** API **230 files / 2,732 passed, 5 skipped**, exit 0; API and web type-checks 0; web strict
+lint 0; plan gate 3/3. `scripts/` type-check remains red with **68 pre-existing errors** — two of them the `.ts`-extension imports
+this script already carried — which is the corrected state recorded above, not a regression.
 
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
