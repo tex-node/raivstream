@@ -73,6 +73,12 @@ describe('a graceful stop leaves no encoder behind', () => {
     expect(WORKER).toContain('reapOrphanedRenders()');
     expect(WORKER).toMatch(/setInterval\(\(\) => \{[\s\S]{0,120}reapOrphanedRenders/);
   });
+
+  it('the worker sweeps orphaned output rows as well as runs', () => {
+    // Eleven rows were stuck GENERATING in production; a killed worker writes no FAILED row of its own.
+    expect(WORKER).toContain('sweepableOutputs');
+    expect(WORKER).toContain('OUTPUT_ORPHAN_REASON');
+  });
 });
 
 describe('assembleProject refuses what it cannot assemble', () => {
