@@ -207,7 +207,17 @@ jobs:
           # NEVER `pm2 delete all` — this VPS also runs other projects.
           pm2 delete raivstream-web 2>/dev/null || true
           pm2 delete raivstream-worker 2>/dev/null || true
-          pm2 start ecosystem.config.cjs --update-env
+          # --only, because a bare `pm2 start ecosystem.config.cjs` also RELOADS the
+          # creative worker (2026-11-18). A reload kills an in-flight run: the job stays
+          # `active` in pg-boss for its 900 s default expiry and is never redelivered, and
+          # the FFmpeg children keep rendering into /tmp with no parent. A routine merge
+          # must not destroy a 45-episode batch, so the creative worker is started once
+          # and then left alone. The `||` is deliberate: an unsupported flag must not take
+          # the site down, so it falls back to the previous behaviour.
+          pm2 start ecosystem.config.cjs --only raivstream-web,raivstream-worker --update-env \
+            || pm2 start ecosystem.config.cjs --update-env
+          pm2 describe raivstream-creative-worker >/dev/null 2>&1 \
+            || pm2 start ecosystem.config.cjs --only raivstream-creative-worker
           sleep 10
           pm2 describe raivstream-web | grep -q online || (echo "Web offline" && exit 1)
           pm2 describe raivstream-worker | grep -q online || (echo "Worker offline" && exit 1)

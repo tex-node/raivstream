@@ -83,7 +83,9 @@ module.exports = {
     },
       {
       // The creative production worker (2026-11-18). It processes one run at a time from its own process, with its own provider budget.
-      // The web deploy does NOT restart it: a deploy restarts raivstream-web only, so the worker keeps its queue and its liveness stamp.
+      // The deploy starts it once and never reloads it (`--only` in deploy.yml), so an in-flight run keeps its queue slot and its
+      // liveness stamp. A reload is not free: the SIGKILL test left the job `active` in pg-boss until its 900 s expiry with no
+      // redelivery, and orphaned the FFmpeg children still rendering into /tmp.
       name: 'raivstream-creative-worker',
       cwd: __dirname,
       script: './node_modules/.bin/tsx',
