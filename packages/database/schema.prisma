@@ -2701,6 +2701,23 @@ model CreativeProductionRun {
   @@map("creative_production_runs")
 }
 
+/// Worker liveness (2026-11-18), deliberately separate from a run's heartbeat.
+///
+/// A run's `heartbeatAt` measures a RUN. It goes stale the moment nothing is running, so
+/// judging the worker by it reports "probably down" for a worker that is alive and idle —
+/// the false positive the first live creative run captured. This row is stamped by the
+/// worker itself on a timer, holding work or not, and is the only input the health verdict
+/// trusts about liveness. One row per worker name; no relations, no per-project scope.
+model WorkerHeartbeat {
+  worker     String   @id
+  lastSeenAt DateTime
+  pid        Int?
+  host       String?
+  updatedAt  DateTime @updatedAt
+
+  @@map("worker_heartbeats")
+}
+
 model CreativeVersion {
   id            String          @id @default(cuid())
   projectId     String

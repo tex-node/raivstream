@@ -2084,6 +2084,40 @@ a renderer exists.
 the phase. Relight can ship once a renderer exists; the other three wait on the operator saying whether a 78-still operation is one creators will use
 or whether the credit-to-dollar ratio is wrong for this class.
 
+**The liveness split is written, and the false positive had a second cause this entry missed.** `WorkerHeartbeat` — additive, one
+table, one row per worker name, no relations — is stamped by the worker itself every 30 s whether or not it holds work, and
+`queueHealth` now reads only that stamp, demoting a run's heartbeat to quoted detail. Four states replace three: `healthy` (work
+waits, worker alive), `idle` (nothing waits, worker alive), `idle-no-worker` (nothing waits, nobody alive — explicitly not an
+alarm), `missing-worker` (work waits, nobody alive — the only alarm). The stamp outranks the run heartbeat because they answer
+different questions, and a run that finished hours ago keeps its last heartbeat forever. *The second cause, found while fixing the
+first:* the caller's `findFirst` had **no `orderBy` and no status filter**, so the "newest progress" it fed the verdict was an
+arbitrary row — a day-old run decided the state of a live one. That is why the captured line said "probably down" while the run
+was progressing; the semantic split alone would not have fixed it. The boundary is compared on raw timestamps rather than the
+rounded display value, because a test caught the rounding.
+
+**The resume index is deterministic, and the dedupe's other direction is a spend, not a display.** `resumeIndex.ts` now owns the
+key and the rule: **READY always wins**, recency breaks ties only inside a class, and the order is total — readiness, then
+`createdAt`, then id — so `findMany` cannot decide a resume. Rows still waiting or in flight under a key a READY row settles
+(`QUEUED`, `GENERATING`) are returned as `shadowed`, logged once per run and carried on the run result, which turns "12
+assets, generated=0" from a contradiction into a number; a `FAILED` take is terminal and is not counted, because the take model
+means one key legitimately owns several rows. *The correction to the diagnosis above:* that entry described the shadowing as a
+visibility defect, and called the rows duplicates. It is also a **charge** defect in the mirror direction — when a non-READY
+duplicate wins, the runner reuses that row and charges again for a scene already produced. The three orphan rows this arc found
+were older than their READY twins, so order chose correctly by accident.
+
+**What is deliberately not done.** The orphan rows are still `QUEUED`. Rewriting them to `FAILED` would make `failedScenes` lie,
+and a `SUPERSEDED` status is an enum migration plus a product decision, so it is named rather than taken: the durable
+reconciliation is a status meaning "a newer READY asset settles this key", and until it exists the honest record is the shadowed
+count. The worker is still not a deployed process — `ecosystem.config.cjs` defines `raivstream-worker` as the **export** worker
+(`packages/api/src/worker/index.ts`), not the creative one — so the liveness stamp has one caller, the script's own health line,
+until the creative worker gets its own PM2 entry. And **step 1 is still owed**: this arc has proved the sender, the claim, the
+heartbeat and now the liveness verdict, but **no real generation has run through the worker**, so the per-episode quote is still
+zero from a project with no pending work rather than measured from this path.
+
+**Gates, measured after the change:** API **230 files / 2,732 passed, 5 skipped**, exit 0; API and web type-checks 0; web strict
+lint 0; plan gate 3/3. `scripts/` type-check remains red with **68 pre-existing errors** — two of them the `.ts`-extension imports
+this script already carried — which is the corrected state recorded above, not a regression.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)

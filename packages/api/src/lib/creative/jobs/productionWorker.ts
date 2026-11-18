@@ -29,10 +29,24 @@ export const PRODUCTION_WORKER_CONCURRENCY = 4;
 /** A run whose heartbeat is older than this is presumed lost and swept. Generous: a single shot can legitimately take minutes. */
 export const PRODUCTION_LEASE_MS = 10 * 60 * 1000;
 
+/**
+ * Worker liveness (2026-11-18) — a stamp the WORKER owns, not a run's heartbeat.
+ *
+ * `CreativeProductionRun.heartbeatAt` says "this run is progressing". A run that finished hours
+ * ago keeps its last heartbeat forever, so judging the worker by it reports "probably down" while
+ * the worker is alive and idle — the false positive the first live run captured, and the same
+ * shape as judging a heartbeat that was never written at all. The worker now stamps
+ * `WorkerHeartbeat.lastSeenAt` itself, on a timer, holding work or not.
+ */
+export const CREATIVE_WORKER_NAME = 'creative-worker';
+export const WORKER_HEARTBEAT_INTERVAL_MS = 30 * 1000;
+/** Two missed stamps. Deliberately shorter than the run lease: a dead worker is knowable sooner than a lost run. */
+export const WORKER_LIVENESS_MS = 2 * 60 * 1000;
+
 /** The reason a swept run carries, so a creator sees "the worker was lost", not a timeout. */
 export const WORKER_LOST_REASON = 'WORKER_LOST: the worker stopped while this episode was running, so it was released for a retry.';
 
-export type ProductionRunStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type ProductionRunStatus = 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
 
 export interface ProductionRunRow {
   id: string;
@@ -58,26 +72,67 @@ export function sweepableRuns(runs: ProductionRunRow[], now: number): Production
 }
 
 export interface QueueHealth {
-  state: 'healthy' | 'missing-worker' | 'idle';
+  /**
+   * `healthy` — work is waiting and a worker is alive.
+   * `idle` — nothing is waiting and a worker is alive.
+   * `idle-no-worker` — nothing is waiting and no worker is alive. Not an alarm: nothing is lost.
+   * `missing-worker` — work is waiting and no worker is alive. This is the alarm.
+   */
+  state: 'healthy' | 'idle' | 'idle-no-worker' | 'missing-worker';
   /** Why, in words a human reads before believing a batch is slow. */
   detail: string;
 }
 
+export interface QueueHealthInput {
+  /** Runs that exist and are not terminal: waiting in pg-boss or in flight. */
+  queued: number;
+  /** `WorkerHeartbeat.lastSeenAt` for the creative worker; null = never checked in (or unreadable). */
+  workerLastSeenAt: number | null;
+  /** The newest RUNNING run's heartbeat. Detail only — a finished run's heartbeat would judge a live worker by work it is not doing. */
+  lastRunProgressAt?: number | null;
+  now: number;
+  livenessMs?: number;
+}
+
+function secondsAgo(now: number, at: number): number {
+  return Math.max(0, Math.round((now - at) / 1000));
+}
+
 /**
- * A worker that dies silently looks exactly like a slow batch. This distinguishes them.
+ * A worker that dies silently looks exactly like a slow batch. This distinguishes them — and it
+ * distinguishes a worker that is merely IDLE from one that is GONE, which the run-heartbeat
+ * version could not do: idle work leaves a stale (or absent) run heartbeat by definition.
  *
- * `queued` is the count of runs waiting; `lastProcessedAt` is the newest run a worker finished or heartbeat. If work is
- * waiting and nothing has been processed for longer than the lease, the worker is missing — not slow.
+ * The verdict reads only the worker's own stamp. `queued` says whether anyone is waiting; the run
+ * heartbeat is quoted, never trusted.
  */
-export function queueHealth(input: { queued: number; lastProcessedAt: number | null; now: number }): QueueHealth {
-  if (input.queued === 0) return { state: 'idle', detail: 'No episodes are waiting.' };
-  if (input.lastProcessedAt === null) {
-    return { state: 'missing-worker', detail: 'Episodes are queued and no worker has ever processed one. Start the worker.' };
+export function queueHealth(input: QueueHealthInput): QueueHealth {
+  const livenessMs = input.livenessMs ?? WORKER_LIVENESS_MS;
+  const lastSeenAgo = input.workerLastSeenAt === null ? null : secondsAgo(input.now, input.workerLastSeenAt);
+  // Compared on the raw timestamps, not the rounded display value: `secondsAgo` rounds, so a
+  // boundary test against it is off by up to 500 ms.
+  const alive = input.workerLastSeenAt !== null && input.now - input.workerLastSeenAt <= livenessMs;
+  const seen = lastSeenAgo === null ? 'no worker has ever checked in' : `the worker's last check-in was ${lastSeenAgo}s ago`;
+  const limit = Math.round(livenessMs / 1000);
+  const progress =
+    input.lastRunProgressAt != null ? ` Last run progress ${secondsAgo(input.now, input.lastRunProgressAt)}s ago.` : '';
+
+  if (input.queued === 0) {
+    if (alive) return { state: 'idle', detail: `No episodes are waiting, and ${seen}.` };
+    return {
+      state: 'idle-no-worker',
+      detail: `No episodes are waiting, and ${seen}${lastSeenAgo === null ? '' : ` (limit ${limit}s)`}. Nothing is lost; a worker picks work up when it starts.`,
+    };
   }
-  if (input.now - input.lastProcessedAt > PRODUCTION_LEASE_MS) {
-    return { state: 'missing-worker', detail: 'Episodes are queued and nothing has been processed for longer than the lease. The worker is probably down.' };
+
+  if (!alive) {
+    return {
+      state: 'missing-worker',
+      detail: `Episodes are queued and ${seen}${lastSeenAgo === null ? '' : `, past the ${limit}s limit`}. The worker is probably down.`,
+    };
   }
-  return { state: 'healthy', detail: 'Episodes are queued and a worker is progressing.' };
+
+  return { state: 'healthy', detail: `Episodes are queued and ${seen}.${progress}` };
 }
 
 export interface BatchOutcome {
