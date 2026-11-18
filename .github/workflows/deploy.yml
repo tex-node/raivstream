@@ -121,9 +121,15 @@ jobs:
           sed -i 's/\r//' /tmp/deploy_key
           trap 'rm -f /tmp/deploy_key' EXIT
 
+          # The 2026-11-18 hang: the remote work finished (HEAD, build, PM2, both health checks 200) and the ssh step then
+          # never returned, holding the `deploy-production` concurrency group until the job timeout. Client keepalive makes a
+          # dead peer fail in ~90s instead of waiting for the job's 30 minutes. Options validated with `ssh -G`.
           ssh -i /tmp/deploy_key \
             -o StrictHostKeyChecking=no \
             -o PasswordAuthentication=no \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
             -p 22 \
             root@${{ secrets.SSH_HOST }} \
             'bash -s' <<'REMOTE_DEPLOY'

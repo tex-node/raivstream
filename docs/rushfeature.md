@@ -2198,6 +2198,16 @@ policy is now a **3-minute floor, ×8, 10-minute cap**, exported as `ffmpegWallC
 re-assembly cost nothing, because assembly is local and has no provider call. The lesson is the price-shaped one: a
 wall-clock guard that is tighter than the work kills the deliverable, not the runaway.
 
+**The output rows were leaking too, and the sweep closed it.** Eleven `CreativeOutput` rows sat `GENERATING` in production —
+one from the first diagnosis, ten from early November — because a killed worker writes no FAILED row and nothing swept
+them, so the UI showed those films rendering forever. The sweep runs in the worker's existing 60-second loop beside the run
+lease, at the **same boundary** the assembly guard uses (one hour, ten times the render cap), and it cleared **11 of 11** on
+its first boot with **0 failures** and no false positives (READY stayed 46, the paid run's 62.43 s film untouched). The
+observed limit is the checkout, not the code: the creative worker does not follow deploys, so every worker change needs an
+explicit `pm2 restart`, and the deploy that shipped this one was **cancelled at 35 minutes** — the job applied everything
+(HEAD, build, PM2, health 200) and then its SSH step hung; the job's own 30-minute timeout was about to fire. Named next
+fix: `ServerAliveInterval`/`ConnectTimeout` on that ssh call, because a hung deploy holds the concurrency group.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
