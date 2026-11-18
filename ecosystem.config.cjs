@@ -81,5 +81,18 @@ module.exports = {
       max_memory_restart: '3G',
       node_args: '--max-old-space-size=2800',
     },
-  ],
+      {
+      // The creative production worker (2026-11-18). It processes one run at a time from its own process, with its own provider budget.
+      // The web deploy does NOT restart it: a deploy restarts raivstream-web only, so the worker keeps its queue and its liveness stamp.
+      name: 'raivstream-creative-worker',
+      cwd: __dirname,
+      script: './node_modules/.bin/tsx',
+      args: 'scripts/creative-worker.ts',
+      interpreter: 'none',
+      env_file: './.env',
+      max_memory_restart: '600M',
+      autorestart: true,
+      restart_delay: 5000,
+    },
+],
 };
