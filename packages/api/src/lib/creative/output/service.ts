@@ -164,6 +164,23 @@ export class OutputService {
     prisma: PrismaClient,
     projectId: string,
   ): Promise<{ assembled: boolean; blocked: boolean; blockedScenes: string[]; outputId?: string }> {
+    // One assembly per project at a time (2026-11-18). `singletonKey` on the send was not enough: pg-boss accepts a second
+    // job while the first is ACTIVE, and the live test produced two concurrent renders of one project (two GENERATING
+    // output rows). The database is the only truth two workers share, so the guard lives here.
+    // Bounded to the last hour: a row left GENERATING by a killed worker must not block this project forever.
+    const inFlight = await prisma.creativeOutput.findFirst({
+      where: {
+        projectId,
+        status: 'GENERATING' as never,
+        createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (inFlight) {
+      console.info(`[creative.assemble] skipped project=${projectId}: assembly ${inFlight.id} is already in flight`);
+      return { assembled: false, blocked: true, blockedScenes: [] };
+    }
+
     const project = await prisma.creativeProject.findUnique({
       where: { id: projectId },
       include: { productionPlan: true },

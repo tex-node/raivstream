@@ -77,8 +77,29 @@ describe('a graceful stop leaves no encoder behind', () => {
 
 describe('assembleProject refuses what it cannot assemble', () => {
   it('returns blocked for a project with no plan, without querying further', async () => {
-    const prisma = { creativeProject: { findUnique: async () => null } } as never;
+    const prisma = {
+      creativeOutput: { findFirst: async () => null },
+      creativeProject: { findUnique: async () => null },
+    } as never;
     const result = await outputService.assembleProject(prisma, 'does-not-exist');
     expect(result).toEqual({ assembled: false, blocked: true, blockedScenes: [] });
+  });
+
+  it('skips when another assembly for the same project is already in flight', async () => {
+    // The live test produced two concurrent renders of one project because pg-boss accepts a second job while the first is
+    // ACTIVE; `singletonKey` did not hold. The guard is the database, which both workers share.
+    let loadedProject = false;
+    const prisma = {
+      creativeOutput: { findFirst: async () => ({ id: 'out-in-flight' }) },
+      creativeProject: {
+        findUnique: async () => {
+          loadedProject = true;
+          return null;
+        },
+      },
+    } as never;
+    const result = await outputService.assembleProject(prisma, 'project-1');
+    expect(result).toEqual({ assembled: false, blocked: true, blockedScenes: [] });
+    expect(loadedProject).toBe(false);
   });
 });

@@ -2170,6 +2170,19 @@ merge reloaded the creative worker — the kill just measured, triggered by a pu
 `raivstream-web,raivstream-worker`, starts the creative worker only when it is not registered, and falls back to the old form if
 the flag is unsupported.
 
+**Assembly left the production handler, and the renderers no longer outlive a kill.** The queue split is live: `batch done`
+now prints before `ASSEMBLE`, and the assembly is a `creative-assembly` job with its own handler, so the production slot is
+released when the run row is terminal rather than when FFmpeg exits. The reaper is live in both directions — it killed a
+planted orphan and removed its directory (`killed=1 … removed=1`), and it left the worker's own in-progress render alone
+for ninety seconds, which is the property that matters: a live render has a live parent. *Two findings the live test
+produced, not the design.* A **stray worker** started by hand during an earlier session had been claiming jobs beside the
+PM2 one for a hundred minutes, invisible to `pm2 list` — which is how a run's log lines were missing and why two assemblies
+of one project ran at once; `pm2 list` is not the process inventory, `ps` is. And `singletonKey` did **not** prevent those
+two assemblies, because pg-boss accepts a second job while the first is ACTIVE, so the guard moved into
+`assembleProject`: one assembly per project within the hour, checked in the database both workers share. That guard is
+unit-tested and awaits its live re-check. **Named, not built:** a killed worker also leaves its `CreativeOutput` row
+`GENERATING` forever — the run row has a sweep, the output row does not.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
