@@ -18,10 +18,12 @@ import {
   CREATIVE_ASSEMBLY_QUEUE,
   CREATIVE_PRODUCTION_QUEUE,
   CREATIVE_WORKER_NAME,
+  OUTPUT_ORPHAN_REASON,
   PRODUCTION_WORKER_CONCURRENCY,
   WORKER_HEARTBEAT_INTERVAL_MS,
   WORKER_LOST_REASON,
   queueHealth,
+  sweepableOutputs,
   sweepableRuns,
   type ProductionRunRow,
 } from '../packages/api/src/lib/creative/jobs/productionWorker';
@@ -87,6 +89,25 @@ async function main() {
         data: { status: 'FAILED', lastError: WORKER_LOST_REASON, stage: 'worker-lost' },
       });
       console.log(`[${WORKER_NAME}] swept run ${row.id}: ${WORKER_LOST_REASON}`);
+    }
+
+    // Output rows leak too (2026-11-18): eleven were GENERATING in production, the oldest from the first diagnosis.
+    // A killed worker writes no FAILED row, so the film reads as "rendering" forever. Same boundary as the assembly
+    // guard, so a row is either in flight or swept, never both.
+    const outputRows = (await prisma.creativeOutput.findMany({
+      where: { status: 'GENERATING' },
+      select: { id: true, status: true, createdAt: true },
+    })) as Array<{ id: string; status: string; createdAt: Date }>;
+    const lostOutputs = sweepableOutputs(
+      outputRows.map((row) => ({ id: row.id, status: row.status, createdAt: row.createdAt.getTime() })),
+      Date.now(),
+    );
+    for (const row of lostOutputs) {
+      await prisma.creativeOutput.update({
+        where: { id: row.id },
+        data: { status: 'FAILED', errorMessage: OUTPUT_ORPHAN_REASON },
+      });
+      console.log(`[${WORKER_NAME}] swept output ${row.id}: ${OUTPUT_ORPHAN_REASON}`);
     }
     } catch (error) {
       console.error(`[${WORKER_NAME}] sweep failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);

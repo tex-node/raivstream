@@ -32,6 +32,32 @@ export const CREATIVE_PRODUCTION_QUEUE = 'creative-production';
 export const CREATIVE_ASSEMBLY_QUEUE = 'creative-assembly';
 
 /**
+ * An assembly still `GENERATING` after this long has outlived any render — the wall-clock cap is ten minutes — so its
+ * worker is gone (2026-11-18). Measured, not guessed: eleven such rows were found in production, the oldest from the
+ * first diagnosis and the rest from early November, each one a film the UI shows as forever rendering.
+ *
+ * The same constant answers "is an assembly in flight?" in `assembleProject`: a row past this age no longer blocks its
+ * project, and the sweep marks it FAILED. One boundary, so a row can never be both blocking and swept.
+ */
+export const ASSEMBLY_STALE_MS = 60 * 60 * 1000;
+export const OUTPUT_ORPHAN_REASON =
+  'OUTPUT_ORPHANED: the worker stopped while this film was assembling, so it was released for a re-run.';
+
+export interface OutputRow {
+  id: string;
+  status: string;
+  createdAt: number;
+}
+
+/**
+ * The assembly sweep. Returns the rows to mark FAILED — returned rather than mutated so the caller owns the write and
+ * this stays testable against a clock, the same shape as `sweepableRuns`.
+ */
+export function sweepableOutputs(rows: OutputRow[], now: number): OutputRow[] {
+  return rows.filter((row) => row.status === 'GENERATING' && now - row.createdAt > ASSEMBLY_STALE_MS);
+}
+
+/**
  * How many runs a single worker process may hold at once. This is the bound the unbounded default was missing: it is set on
  * the WORKER, not in the web tier, so an interactive relight never queues behind a 45-episode batch's box.
  */

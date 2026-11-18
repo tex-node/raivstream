@@ -13,6 +13,7 @@ import { logStage } from '../stageLog';
 import { isCreativeOutputEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
 import { approvalService } from '../approval/service';
+import { ASSEMBLY_STALE_MS } from '../jobs/productionWorker';
 import type { CreativeProductionPlanState } from '../production/plan';
 import { deriveOutput, type OutputDerivation, type OutputFormat } from './derivation';
 import { renderOutputDerivative, type OutputRenderDeps, type RenderScene } from './render';
@@ -167,12 +168,12 @@ export class OutputService {
     // One assembly per project at a time (2026-11-18). `singletonKey` on the send was not enough: pg-boss accepts a second
     // job while the first is ACTIVE, and the live test produced two concurrent renders of one project (two GENERATING
     // output rows). The database is the only truth two workers share, so the guard lives here.
-    // Bounded to the last hour: a row left GENERATING by a killed worker must not block this project forever.
+    // Bounded by the same constant the worker's sweep uses: past it the row is stale, not in flight.
     const inFlight = await prisma.creativeOutput.findFirst({
       where: {
         projectId,
         status: 'GENERATING' as never,
-        createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+        createdAt: { gt: new Date(Date.now() - ASSEMBLY_STALE_MS) },
       },
       select: { id: true },
     });
