@@ -2158,6 +2158,18 @@ four states, and the no-op run produced `shadowed=3` on the three exact keys wit
 finding. A run that generated one scene's pair spent **280**; a capped run spent **840**. The ×5 quote must come from a run
 confirmed to have generated, and that run is still owed.
 
+**The kill test ran. The clause holds; the loss on a kill is real and is now named.** `SIGKILL` on the PM2-hosted worker while a
+job was mid-assembly: PM2 restarted it in five seconds, the liveness stamp resumed, and the web tier stayed up. The in-flight
+pg-boss job was **not redelivered** — one `CLAIMED`, then `state=active` with `retry_count=0` and `expire_seconds=900`, so it sits
+active for fifteen minutes and then fails with no retry (`retryLimit: 0`). A retry is a resume decision, but a fifteen-minute dead
+window with no log is not one. The FFmpeg children **survived the parent** and kept rendering into `/tmp/raivstream-output-*`
+(`-t 1800`, 500 MB cap); two generations were found and killed by hand. **The lease clause is proven without a restart:** a RUNNING
+row with an eleven-minute-old heartbeat, inserted while the worker was up, was swept inside the sixty-second timer with
+`WORKER_LOST`. Finally, the deploy itself was the same hazard: `pm2 start ecosystem.config.cjs` starts all three apps, so every
+merge reloaded the creative worker — the kill just measured, triggered by a push. The workflow now starts only
+`raivstream-web,raivstream-worker`, starts the creative worker only when it is not registered, and falls back to the old form if
+the flag is unsupported.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
