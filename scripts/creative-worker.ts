@@ -12,7 +12,10 @@
  */
 import { hostname } from 'node:os';
 import { prisma } from '../packages/database/index';
+import { killAllChildren } from '../packages/api/src/lib/childProcesses';
+import { reapOrphanedRenders } from '../packages/api/src/lib/creative/jobs/orphanReaper';
 import {
+  CREATIVE_ASSEMBLY_QUEUE,
   CREATIVE_PRODUCTION_QUEUE,
   CREATIVE_WORKER_NAME,
   PRODUCTION_WORKER_CONCURRENCY,
@@ -29,9 +32,15 @@ async function main() {
   const { getBoss } = await import('../packages/api/src/lib/jobs/index.ts');
   const boss = await getBoss();
 
+  // Clean up after a worker that was killed (SIGKILL/OOM): its FFmpeg children survive the parent and keep rendering into
+  // /tmp/raivstream-output-*. This process is the one that comes back, so it owns the cleanup (2026-11-18).
+  await reapOrphanedRenders().catch((error: unknown) => {
+    console.error(`[${WORKER_NAME}] orphan reap failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+  });
+
   // The bound the unbounded default was missing. Recorded rather than implied: this is what a batch respects.
   process.env.PROVIDER_MAX_CONCURRENCY = process.env.CREATIVE_WORKER_PROVIDER_CONCURRENCY ?? '2';
-  console.log(`[${WORKER_NAME}] started: concurrency=${PRODUCTION_WORKER_CONCURRENCY} providerConcurrency=${process.env.PROVIDER_MAX_CONCURRENCY} queue=${CREATIVE_PRODUCTION_QUEUE}`);
+  console.log(`[${WORKER_NAME}] started: concurrency=${PRODUCTION_WORKER_CONCURRENCY} providerConcurrency=${process.env.PROVIDER_MAX_CONCURRENCY} queues=${CREATIVE_PRODUCTION_QUEUE},${CREATIVE_ASSEMBLY_QUEUE}`);
 
   // The worker's OWN liveness stamp (2026-11-18). Not a run's heartbeat: this is written whether or not
   // the worker holds work, which is the only way an idle-but-alive worker can look alive. A run's
@@ -86,10 +95,23 @@ async function main() {
   await sweep();
   setInterval(() => void sweep(), 60_000);
 
+  // The reaper runs on the same cadence: a render orphaned by a kill is cleaned up within a minute, not when someone notices
+  // the CPU. It is safe while renders are live - it only targets processes whose parent is gone (2026-11-18).
+  setInterval(() => {
+    void reapOrphanedRenders().catch((error: unknown) => {
+      console.error(`[${WORKER_NAME}] orphan reap failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+    });
+  }, 60_000);
+
   // THE QUEUE HAS TO EXIST. pg-boss does not create it on `work`, and the surfaced error said so plainly:
   // PGBOSS_QUEUE_NOT_FOUND - which is also why the story-export queue has never claimed a job in production
   // (2026-11-17). Creating it here is idempotent.
   await boss.createQueue(CREATIVE_PRODUCTION_QUEUE).catch((error: unknown) => {
+    console.error(`[${WORKER_NAME}] createQueue failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+  });
+  // Assembly has its own queue and its own handler (2026-11-18). Two `work` registrations mean the next episode can start
+  // while the previous one renders: the production slot is released when the run row is terminal, not when FFmpeg exits.
+  await boss.createQueue(CREATIVE_ASSEMBLY_QUEUE).catch((error: unknown) => {
     console.error(`[${WORKER_NAME}] createQueue failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
   });
 
@@ -117,6 +139,23 @@ async function main() {
     },
   );
 
+  // Assembly handler (2026-11-18). The plan is re-read from the project rather than carried in the payload, so the job
+  // stays identity-only. `retryLimit: 0` lives on the sender: autoAssemble creates a NEW output row per call, so a retry
+  // would duplicate the deliverable rather than repair it.
+  await boss.work<{ projectId: string; runId: string | null }>(
+    CREATIVE_ASSEMBLY_QUEUE,
+    { batchSize: 1 },
+    async ([job]) => {
+      const { projectId, runId } = job.data;
+      console.info(`[${WORKER_NAME}] ASSEMBLE projectId=${projectId} runId=${runId ?? 'null'} jobId=${job.id ?? 'undefined'}`);
+      const { outputService } = await import('../packages/api/src/lib/creative/output/service.ts');
+      const result = await outputService.assembleProject(prisma as never, projectId);
+      console.info(
+        `[${WORKER_NAME}] assemble done: projectId=${projectId} assembled=${result.assembled} blocked=${result.blocked} output=${result.outputId ?? 'none'}`,
+      );
+    },
+  );
+
   // A health line a human reads before believing a batch is merely slow.
   setInterval(async () => {
     const queued = await prisma.creativeProductionRun.count({ where: { status: 'RUNNING' } });
@@ -138,6 +177,27 @@ async function main() {
     });
     console.log(`[${WORKER_NAME}] health=${health.state} ${health.detail}`);
   }, 30_000);
+
+  // Graceful stop (2026-11-18). `pm2 stop`/`restart` and the deploy send a signal first; catching it means the encoders die
+  // with the worker instead of outliving it. SIGKILL cannot be caught, which is why the reaper above exists as well.
+  let shuttingDown = false;
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.info(`[${WORKER_NAME}] ${signal} — reaping ffmpeg children and stopping the queues`);
+    const killed = killAllChildren('SIGKILL');
+    console.info(`[${WORKER_NAME}] killed ${killed} child process(es)`);
+    try {
+      const { stopBoss } = await import('../packages/api/src/lib/jobs/index.ts');
+      await stopBoss({ graceful: false });
+    } catch (error) {
+      console.error(`[${WORKER_NAME}] stopBoss failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+    }
+    await prisma.$disconnect().catch(() => undefined);
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 

@@ -21,6 +21,17 @@
 export const CREATIVE_PRODUCTION_QUEUE = 'creative-production';
 
 /**
+ * Assembly has its own queue (2026-11-18).
+ *
+ * The runner used to await `outputService.autoAssemble` inside its own `finally`, so the production job stayed claimed
+ * for the whole FFmpeg export — minutes per episode, measured. The run row is written before assembly starts, so the
+ * export belongs to a job of its own: a second `boss.work` on this queue lets the next episode start while the previous
+ * one renders. No retry (`retryLimit: 0`) because `autoAssemble` creates a NEW output row per call: a retry would
+ * duplicate the deliverable, so a failed assembly is a FAILED row plus a decision to re-run, not an automatic repeat.
+ */
+export const CREATIVE_ASSEMBLY_QUEUE = 'creative-assembly';
+
+/**
  * How many runs a single worker process may hold at once. This is the bound the unbounded default was missing: it is set on
  * the WORKER, not in the web tier, so an interactive relight never queues behind a 45-episode batch's box.
  */

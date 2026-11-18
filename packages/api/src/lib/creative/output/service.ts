@@ -153,6 +153,26 @@ export class OutputService {
    *
    * No-op if RAIVSTREAM_5_OUTPUT_ENABLED is not set.
    */
+  /**
+   * Assemble a project's output from its stored plan (2026-11-18).
+   *
+   * The assembly queue's handler calls this; the runner no longer awaits assembly, so the production slot is released
+   * when the run row is terminal rather than when FFmpeg finishes. The plan is loaded here instead of being carried in
+   * the job payload: the payload stays identity, the same rule the production sender follows.
+   */
+  async assembleProject(
+    prisma: PrismaClient,
+    projectId: string,
+  ): Promise<{ assembled: boolean; blocked: boolean; blockedScenes: string[]; outputId?: string }> {
+    const project = await prisma.creativeProject.findUnique({
+      where: { id: projectId },
+      include: { productionPlan: true },
+    });
+    const plan = project?.productionPlan?.plan as unknown as CreativeProductionPlanState | undefined;
+    if (!project || !plan) return { assembled: false, blocked: true, blockedScenes: [] };
+    return this.autoAssemble(prisma, { projectId, plan });
+  }
+
   async autoAssemble(
     prisma: PrismaClient,
     input: { projectId: string; plan: CreativeProductionPlanState },

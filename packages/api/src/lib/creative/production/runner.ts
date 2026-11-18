@@ -45,15 +45,20 @@ import {
   withIdentityBlock,
   type CreativeCharacterRef,
 } from './identityBlock';
-import { outputService } from '../output/service';
+import { enqueueCreativeAssembly } from '../jobs/assemblyQueue';
 
 export interface ProductionDeps {
   generateStill: (spec: StillSpec, projectId: string, assetId: string) => Promise<GeneratedMedia>;
   generateVideo: (spec: VideoSpec, projectId: string, assetId: string, seedImageUrl?: string) => Promise<GeneratedMedia>;
   extractLastFrame: (videoUrl: string, keyPrefix: string) => Promise<string | null>;
+  /**
+   * Hand a finished run to the assembly queue (2026-11-18). Optional so tests that drive the runner with mocks never open
+   * pg-boss; the default is the real queue.
+   */
+  enqueueAssembly?: (job: { projectId: string; runId: string | null }) => Promise<unknown>;
 }
 
-const defaultDeps: ProductionDeps = { generateStill, generateVideo, extractLastFrame };
+const defaultDeps: ProductionDeps = { generateStill, generateVideo, extractLastFrame, enqueueAssembly: enqueueCreativeAssembly };
 
 /** A run with no heartbeat for this long is considered abandoned (process restart). */
 export const STALE_RUN_MS = 5 * 60 * 1000;
@@ -552,12 +557,18 @@ async function runCreativeProductionInner(
     // Production completed (fully or partially) — hand off to REVIEW.
     await prisma.creativeProject.update({ where: { id: project.id }, data: { status: 'REVIEW' as never } }).catch(() => undefined);
 
-    // Auto-assembly: when every scene video succeeded, immediately assemble the
-    // final film. Scene videos are concatenated in plan order via FFmpeg and stored
-    // as a creativeOutput (PORTRAIT). Errors are swallowed — they do not affect
-    // the production result; the UI derives assembly state from creativeOutput status.
+    // Auto-assembly is a SEPARATE JOB (2026-11-18). Awaiting it here held this run's pg-boss slot for the whole FFmpeg
+    // export - minutes per episode, measured - so the next episode could not start. The run row is already terminal, so
+    // the deliverable's render is not this job's to finish.
     if (failed === 0) {
-      await outputService.autoAssemble(prisma, { projectId: project.id, plan }).catch(() => undefined);
+      const enqueueAssembly = deps.enqueueAssembly;
+      if (enqueueAssembly) {
+        await enqueueAssembly({ projectId: project.id, runId }).catch((error: unknown) => {
+          console.warn(
+            `[creative.assemble] enqueue failed project=${project.id}: ${String((error as Error)?.message ?? error).slice(0, 160)}`,
+          );
+        });
+      }
     }
   }
 
