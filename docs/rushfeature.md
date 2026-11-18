@@ -2141,6 +2141,23 @@ zero from a project with no pending work rather than measured from this path.
 lint 0; plan gate 3/3. `scripts/` type-check remains red with **68 pre-existing errors** — two of them the `.ts`-extension imports
 this script already carried — which is the corrected state recorded above, not a regression.
 
+**The deploy pipeline was the real blocker, and `P3009` was its symptom.** Six migration files began with a UTF-8 BOM;
+Postgres rejects a BOM as SQL, so `migrate deploy` died on the first with `42601`, recorded a failed migration, and every later
+attempt was refused before doing anything. The deploy job runs migrations **before** build and restart, so the job failed,
+the build never ran, and production served a build six days old while the unit and integration jobs reported green. The same
+line hid a second defect: two migrations named the Prisma **model** rather than the table — `"User"` and `"CreativeBrief"` —
+so they answered `42P01` and could never apply. That is why those columns were missing, not "applied by hand": there was
+nothing to apply. Both are now correct, the six pending migrations applied and are recorded, and `migrate status` says the
+schema is up to date. Two static guards hold the class: no migration may begin with a BOM, and no migration may target a
+model name whose `@@map` is different. The external reader was never failing on a module import — it asked Prisma for
+`workerName` when the field is `worker`, and its catch exited zero, so it could not have printed a verdict. It now prints all
+four states, and the no-op run produced `shadowed=3` on the three exact keys with `creditsSpent=0`.
+
+**The quote arithmetic was corrected, and the correction is larger than stated.** The six non-zero runs average **733.3**, not
+44.4 — the smaller figure came from dividing by runs that generated nothing, which is the composition trap this arc keeps
+finding. A run that generated one scene's pair spent **280**; a capped run spent **840**. The ×5 quote must come from a run
+confirmed to have generated, and that run is still owed.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
