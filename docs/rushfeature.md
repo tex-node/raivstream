@@ -2183,6 +2183,21 @@ two assemblies, because pg-boss accepts a second job while the first is ACTIVE, 
 unit-tested and awaits its live re-check. **Named, not built:** a killed worker also leaves its `CreativeOutput` row
 `GENERATING` forever — the run row has a sweep, the output row does not.
 
+**The paid run completed, and it found the ffmpeg budget.** A four-scene commercial that had never been produced was
+approved and produced through the real sender: **8 of 8 assets READY, `creditsSpent` 1,120, status COMPLETED**, and an
+assembled film of **62.43 s** whose output row is READY and serves HTTP 200. Two facts about the cost, stated rather than
+rounded: the sender hardcodes a **1,000** ceiling and this plan is `4 × (FLUX2 80 + H3_MAX 200) = 1,120`, so the ceiling on
+the row was set to the measured arithmetic before the run could be claimed; and the six-run average of 733.3 was never a
+per-episode cost — those runs generated fewer assets, so **1,120 is the first measured full-episode number**, and the
+five-episode quote is **5,600** at this size (a two-minute episode scales with scene count, not with this figure).
+
+**The first assembly died at exactly 60 seconds, after the production had been paid for.** The ffmpeg budget was
+`expectedSeconds × 4` with a 60 s floor; a 15.1 s 1080x1920 segment render needed more while four segments and an end card
+encoded on the shared VPS, so the deliverable was lost while the run row said COMPLETED and the credits were spent. The
+policy is now a **3-minute floor, ×8, 10-minute cap**, exported as `ffmpegWallClockMs` and pinned by five tests; the
+re-assembly cost nothing, because assembly is local and has no provider call. The lesson is the price-shaped one: a
+wall-clock guard that is tighter than the work kills the deliverable, not the runaway.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
