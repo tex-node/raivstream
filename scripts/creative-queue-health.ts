@@ -8,7 +8,7 @@
  * Usage: ./node_modules/.bin/tsx scripts/creative-queue-health.ts
  */
 import { prisma } from '../packages/database/index';
-import { CREATIVE_WORKER_NAME, queueHealth } from '../packages/api/src/lib/creative/jobs/productionWorker';
+import { CREATIVE_WORKER_NAME, queueHealth } from '../packages/api/src/lib/creative/jobs/productionWorker.ts';
 
 (async () => {
   const stamp = await prisma.workerHeartbeat.findUnique({ where: { workerName: CREATIVE_WORKER_NAME } });

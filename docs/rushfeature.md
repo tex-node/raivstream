@@ -978,6 +978,29 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase A is blocked before the free proof could run, and the paid run is withheld on the stop condition.** What was done and what stopped it, in order:
+
+*The migration is applied, by hand.* `prisma migrate deploy` **cannot run in this environment at all**: it fails with **P3009** because a migration from an earlier phase
+(`20261112120000_story_contract`) is recorded as **started and never finished** in `_prisma_migrations`, and Prisma refuses to apply anything after a failed migration. The
+`worker_heartbeats` table was therefore created with the migration's own SQL through `psql`, and verified: columns `worker, lastSeenAt, pid, host, updatedAt`, primary key on
+`worker`. **That is a standing finding about the pipeline, not a workaround for this session** — every migration since that failure has had to be applied by hand, which is why
+this arc keeps writing `ALTER TABLE ... IF NOT EXISTS` scripts.
+
+*The external reader exists but cannot yet load.* `scripts/creative-queue-health.ts` is written — reads the liveness row, counts non-terminal runs, prints one line, and is the
+shape a later admin endpoint reuses — but under `tsx` it fails to resolve the `productionWorker` import, the same `[ERR_MODULE_NOT_FOUND]` class that stopped the worker on its
+first two attempts. **It has not printed a verdict once**, so the health distinction is not yet demonstrated in either direction, and the plan does not claim it is.
+
+*The free no-op run could not be reproduced.* `produce` for the project behind run `cmwla6g2z00019v708q37iam9` now refuses with **`PrismaClientKnownRequestError P2022`** at
+`service.ts:336` — a column the deployed client expects and the database does not have. Because the free test is the gate on the paid one, **`shadowed=3` was never observed**, and
+by the stop condition the paid run **was not attempted**. The 1,000-credit ceiling remains authorized and unspent.
+
+**What the run table shows while that was being found, and it is worth carrying into the quote:** the two earlier completed runs on that project spent **280 credits**
+(`COMPLETED`, 4 scenes) and **840 credits** (`PARTIAL`, 4 scenes). That is real per-episode evidence far above the 44.4 average taken from six runs, and it suggests the average was
+dragged down by cheap or no-op runs — so the batch quote should be built from a run that is confirmed to have generated, not from the table average.
+
+**Sequence, unchanged and now explicitly gated on three fixes:** the reader must load and print (both directions), the P2022 must be resolved so `produce` runs, and only then
+the free no-op run may prove `shadowed=3`. The paid run follows those, and the batch after it.
+
 **Diagnosis of `generated=0` + `COMPLETED` + 3 QUEUED assets: the status was honest, and the dedupe is what hid the orphans.** The three artifacts:
 
 *The loop* (`runner.ts:216-222`): each spec is keyed `` `${sceneId}:${shotId ?? '-'}:${kind}` ``, looked up in `byKey`, and skipped **only when `prior.status === 'READY'`**.
