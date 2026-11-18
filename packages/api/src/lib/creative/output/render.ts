@@ -90,9 +90,26 @@ async function probeWithFfprobe(filePath: string): Promise<MediaProbe> {
   });
 }
 
-/** Wall-clock ceiling per ffmpeg spawn. A looped input can otherwise encode forever. */
-const FFMPEG_MIN_WALL_MS = 60_000;
-const FFMPEG_MAX_WALL_MS = 4 * 60 * 1000;
+/**
+ * Wall-clock ceiling per ffmpeg spawn. A looped input can otherwise encode forever.
+ *
+ * Measured, not assumed (2026-11-18): a paid run's assembly was killed at exactly 60 s with
+ * `ffmpeg timed out (killed) after 60000ms`. The step that died was a **15.1 s segment render** at
+ * 1080x1920 — `expectedSeconds * 4` gave 60.4 s, and the floor was 60 s — while four such segments
+ * plus an end card were encoding on the shared VPS. Production had already completed and been paid
+ * for; only the deliverable was lost.
+ *
+ * The multiplier and floor now reflect the measured segment time (roughly 3-4x the clip on an idle
+ * box, more when the worker is busy), and the cap is raised to ten minutes so a long film's concat
+ * is not killed either. A runaway encode is still bounded.
+ */
+const FFMPEG_MIN_WALL_MS = 3 * 60 * 1000;
+const FFMPEG_MAX_WALL_MS = 10 * 60 * 1000;
+
+/** The wall-clock budget for one spawn. Exported so the policy is testable without spawning ffmpeg. */
+export function ffmpegWallClockMs(expectedSeconds: number): number {
+  return Math.min(FFMPEG_MAX_WALL_MS, Math.max(FFMPEG_MIN_WALL_MS, Math.round(expectedSeconds * 1000 * 8)));
+}
 
 async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -104,10 +121,7 @@ async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
     trackChild(child);
     let stderr = '';
     let timedOut = false;
-    const timeoutMs = Math.min(
-      FFMPEG_MAX_WALL_MS,
-      Math.max(FFMPEG_MIN_WALL_MS, Math.round(expectedSeconds * 1000 * 4)),
-    );
+    const timeoutMs = ffmpegWallClockMs(expectedSeconds);
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
