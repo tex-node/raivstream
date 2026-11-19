@@ -978,6 +978,32 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase A is proven, and the free proof reproduced the diagnosis it was written to confirm.** The captures, verbatim from the PM2 worker's log:
+
+```
+[creative-worker] CLAIMED runId=cmwn0o19o0001mgs8wp0lkyhl jobId=923b9029-… process=creative-worker
+[creative.resume] shadowed=3 keys=SCENE_01:-:IMAGE,SCENE_02:-:IMAGE,SCENE_04:-:IMAGE
+[creative.production] {"type":"run_finished",…,"status":"COMPLETED","generated":0,"failed":0}
+[creative-worker] batch done: runId=cmwn0o19o0001mgs8wp0lkyhl
+```
+
+**`shadowed=3` on exactly the three orphans the diagnosis named**, with their keys — the free test passed, which is the gate the paid run was waiting on. The run row reads `COMPLETED | creditsSpent 0 | readyScenes 0/4`, so nothing was charged and the resume index is *reporting* the shadowed rows rather than silently shadowing them.
+
+**The health distinction now works in all four states, read from outside the worker** — which was the point of writing a separate reader, since a stopped worker prints nothing and a restarted one stamps a fresh row that hides the state being tested:
+
+| state | capture |
+|---|---|
+| `idle` (worker up, queue empty) | `state=idle queued=0 lastCheckIn=26s ago` |
+| `idle-no-worker` (down 141 s, queue empty) | `state=idle-no-worker queued=0 lastCheckIn=141s ago (limit 120s) — Nothing is lost; a worker picks work up when it starts.` |
+| `missing-worker` (queued=1, down 160 s) | `state=missing-worker queued=1 lastCheckIn=160s ago — The worker is probably down.` |
+| back to `idle` after a restart | `state=idle queued=0 lastCheckIn=26s ago` |
+
+**A live worker that is merely idle no longer reports down**, which was the false positive the first live run captured.
+
+**The worker is running under PM2.** `raivstream-creative-worker` is online and claiming, so the deploy did pick up the new entry — and the worker logs `queues=creative-production,creative-assembly`, meaning a second queue is registered there. Recorded rather than assumed.
+
+**Phase B was attempted and did not run.** A candidate query for a ≤3-scene project with zero READY assets and ≥1,200 credits was written, and the run was not submitted because the one-shot script failed to execute (its source line came back instead of output). **No credits were spent** — the worker log shows no new claim — so the 1,000-credit ceiling remains authorized and unspent, and the per-episode quote is still owed. The next attempt should run the candidate query and the produce call as two steps rather than one script, so a script failure cannot be mistaken for a refusal.
+
 **Phase A is blocked before the free proof could run, and the paid run is withheld on the stop condition.** What was done and what stopped it, in order:
 
 *The migration is applied, by hand.* `prisma migrate deploy` **cannot run in this environment at all**: it fails with **P3009** because a migration from an earlier phase
