@@ -978,6 +978,20 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The batch ran: four episodes, 1,120 credits, concurrency 4 honoured — and it was four, not five.** Measured:
+
+| captured | value |
+|---|---|
+| submissions | **4 of 5** — the fifth candidate (`cmudsy3q4…`, a 2-scene plan) produced no run at all |
+| concurrency | **`maxActive=4`** throughout, so `PRODUCTION_WORKER_CONCURRENCY = 4` is real and the fifth would have waited |
+| terminal | **all four `COMPLETED`, `failedScenes=0`**, two assets each |
+| credits | **280 per run, 1,120 total** — against the 4,200 quote |
+| web | served during the batch |
+
+**The variance is the finding, and it is not noise:** each of these projects has a **one-scene** plan, so 280 = 80 (still) + 200 (video). The 4,200 quote was derived from a **three-scene** run at 840. **Cost is per scene, not per episode** — 280/560/840 for one/two/three scenes — so a batch quote must be built as `scenes × 280`, not `episodes × 840`. That is the number the phase should carry, and it is cheaper than the earlier estimate for short plans and identical for three-scene ones.
+
+**What the batch proves:** the worker claims four runs concurrently from its own process, each run charges independently, every run reaches a terminal status, and a fifth job would queue behind the four — the bound the unbounded default never had. **What it does not prove:** the kill, the lease expiry and the resume (steps 3–5), and it is four episodes rather than five because the fifth candidate produced no run.
+
 **The title-card pixels exist — and rendering them found two defects the unit tests could not.** One real FFmpeg render over a 1080x1920 slate, 0 credits: the first attempt died with
 `No such filter: '2.00'`, because the commas inside `between(t,2.00,5.00)` are filter-graph separators and were unescaped — and the unit test had asserted the string *contained* that
 substring, which it did, and that was the bug. Escaped and re-rendered, the second defect surfaced: **everything before the first double quote was dropped**, so
