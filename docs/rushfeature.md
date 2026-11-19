@@ -978,6 +978,18 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Third clause attempt: the candidate refused at the product level, and the harness let it continue.** `cmuebyz0…` answered `SUBMIT_FAIL=MISSING_SOURCE — What would you like to
+transform? Add an image I can use as the source.` That is the pipeline working correctly: a transformation-shaped project with no source cannot produce, and it said so in the creator's
+language. **No run was created and no credits were spent.**
+
+The harness bug this exposed is the useful part: it printed `SUBMIT_FAIL`, but the shell's guard checked the **grep exit code** rather than whether `RUN` was non-empty, so the script
+carried on to kill and wait for a run that never existed. **A guard on the wrong thing is the same class as no guard.** The corrected rule for the next attempt: abort on `[ -z "$RUN" ]`,
+before any kill or wait, and treat every `SUBMIT_FAIL=` as terminal.
+
+**So the lease clause is still unproven, and the blocker is candidate selection, not the design:** the cheap one-scene projects are exhausted, and the three-scene one that remained is a
+transformation project that needs a source image. The next attempt should **create a throwaway three-scene project for this test** rather than hunting the existing pool — a test fixture is
+cheaper than an argument, and it can be abandoned afterwards.
+
 **The harness is fixed; the clause still isn't tested, and this time the reason is timing.** The submission script now prints `PROJECT=`, `RUN=` and `SUBMIT_FAIL=<code> <message>` on
 every path and exits non-zero, so its silence can no longer be mistaken for a product result — the first widening attempt used it correctly, printed `SUBMIT_FAIL=NO_CANDIDATE`, aborted,
 and spent nothing.
