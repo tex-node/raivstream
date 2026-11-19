@@ -978,6 +978,12 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The title-card pixels exist — and rendering them found two defects the unit tests could not.** One real FFmpeg render over a 1080x1920 slate, 0 credits: the first attempt died with
+`No such filter: '2.00'`, because the commas inside `between(t,2.00,5.00)` are filter-graph separators and were unescaped — and the unit test had asserted the string *contained* that
+substring, which it did, and that was the bug. Escaped and re-rendered, the second defect surfaced: **everything before the first double quote was dropped**, so
+`Bob's 100% Glow: >Best< Trust me, it works` reached the frame as `>Best< Trust me, it works`. `escapeDrawtext` covered backslash, apostrophe, colon, percent and comma, not the quote.
+**So "the escaping is tested" was true and insufficient: a string assertion is not the artefact.** Both defects are fixed and pinned by tests.
+
 **Phase B ran: one real episode through the worker, 840 credits measured, and the batch quote is 4,200.** The captures, all measured:
 
 | captured | value |
