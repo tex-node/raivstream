@@ -171,7 +171,10 @@ export function escapeDrawtext(value: string): string {
     .replace(/'/g, "\\'")
     .replace(/:/g, '\\:')
     .replace(/%/g, '\\%')
-    .replace(/,/g, '\\,');
+    .replace(/,/g, '\\,')
+    // A double quote is a filter-graph quoting character: unescaped, drawtext silently DROPS everything before it. Rendering the
+    // card for real showed `Bob's 100% Glow: "Best"` arriving as `"Best"` - the unit test could not see it (2026-11-19).
+    .replace(/"/g, '\\"');
 }
 
 export interface EndCardOptions {
@@ -986,7 +989,9 @@ export function buildTitleCardArgs(opts: TitleCardOptions): string[] {
     `drawtext=text='${safeText}'${font}:fontcolor=white:fontsize=${fontSize}`,
     `:box=1:boxcolor=black@0.45:boxborderw=24`,
     `:x=(w-text_w)/2:y=h*0.72`,
-    `:enable='between(t,${Math.max(0, atSeconds).toFixed(2)},${safeEnd.toFixed(2)})'`,
+    // The commas inside `between(...)` are filter-graph separators: unescaped, ffmpeg reads `2.00` as a filter name and fails with
+    // "No such filter: '2.00'". Found by rendering the card for real, which the unit test could not see (2026-11-19).
+    `:enable='between(t\\,${Math.max(0, atSeconds).toFixed(2)}\\,${safeEnd.toFixed(2)})'`,
   ].join('');
 
   return [

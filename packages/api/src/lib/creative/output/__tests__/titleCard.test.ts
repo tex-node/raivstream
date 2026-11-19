@@ -14,7 +14,7 @@ describe('a title card is composition, not a new render path', () => {
     });
     const filter = args[args.indexOf('-vf') + 1];
     expect(filter).toContain("text='Glow Serum'");
-    expect(filter).toContain('between(t,2.00,5.00)');
+    expect(filter).toContain('between(t\\,2.00\\,5.00)');
     expect(args).toContain('in.mp4');
     expect(args[args.length - 1]).toBe('out.mp4');
   });
@@ -44,5 +44,21 @@ describe('a title card is composition, not a new render path', () => {
     });
     expect(args.join(' ')).toContain('Created on Raivstream');
     expect(args.join(' ')).toContain("@creator");
+  });
+});
+
+describe('two defects only a real render could find (2026-11-19)', () => {
+  it('escapes the commas inside the enable window, or ffmpeg reads "2.00" as a filter name', () => {
+    const args = buildTitleCardArgs({ inputPath: 'in.mp4', outputPath: 'out.mp4', text: 'x', atSeconds: 2, durationSeconds: 3, width: 1080, height: 1920 });
+    const filter = args[args.indexOf('-vf') + 1];
+    expect(filter).toContain('between(t\\,2.00\\,5.00)');
+    expect(filter).not.toContain('between(t,2.00');
+  });
+
+  it('escapes a double quote, which otherwise silently drops the text before it', () => {
+    const esc = escapeDrawtext('Bob 100% "Best"');
+    expect(esc).toContain('\\"');
+    const args = buildTitleCardArgs({ inputPath: 'in.mp4', outputPath: 'out.mp4', text: 'Bob 100% "Best"', atSeconds: 0, durationSeconds: 2, width: 1080, height: 1920 });
+    expect(args[args.indexOf('-vf') + 1]).toContain('\\"Best\\"');
   });
 });
