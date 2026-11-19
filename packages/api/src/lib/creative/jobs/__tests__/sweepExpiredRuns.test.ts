@@ -9,12 +9,12 @@ import { WORKER_LOST_REASON, sweepExpiredRuns } from '../productionWorker';
  * live run is untouched.
  */
 function fakePrisma(rows: Array<{ id: string; status: string; heartbeatAt: Date | null }>) {
-  const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+  const updates: Array<{ where: { id: string }; data: Record<string, unknown> }> = [];
   return {
     updates,
     creativeProductionRun: {
       findMany: async () => rows,
-      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => { updates.push(args); return args; },
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown> => { updates.push(args); return args as unknown; },
     },
   };
 }
