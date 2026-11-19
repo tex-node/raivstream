@@ -11,6 +11,7 @@
  * Run it beside the app: `./node_modules/.bin/tsx scripts/creative-worker.ts` (or under PM2 as `raivstream-worker`).
  */
 import { hostname } from 'node:os';
+import { sweepExpiredRuns } from '../packages/api/src/lib/creative/jobs/productionWorker.ts';
 import { prisma } from '../packages/database/index';
 import { killAllChildren } from '../packages/api/src/lib/childProcesses';
 import { reapOrphanedRenders } from '../packages/api/src/lib/creative/jobs/orphanReaper';
@@ -69,46 +70,11 @@ async function main() {
   setInterval(() => void stampLiveness(), WORKER_HEARTBEAT_INTERVAL_MS);
 
   // The sweep runs at boot and on a timer: a run whose lease expired is released rather than silently stuck.
+  // One sweep, shared with the external reader: a recovery path that exists only here is not a recovery path (2026-11-19).
   const sweep = async () => {
-    // A sweep failure must not kill the worker: logging it beats a process that cannot boot because a query is wrong.
     try {
-    const rows = (await prisma.creativeProductionRun.findMany({
-      where: { status: 'RUNNING' },
-      select: { id: true, status: true, attempt: true, heartbeatAt: true },
-    })) as Array<{ id: string; status: ProductionRunRow['status']; attempt: number; heartbeatAt: Date | null }>;
-    const candidates: ProductionRunRow[] = rows.map((row) => ({
-      id: row.id,
-      status: row.status,
-      attempt: row.attempt,
-      heartbeatAt: row.heartbeatAt ? row.heartbeatAt.getTime() : null,
-    }));
-    const lost = sweepableRuns(candidates, Date.now());
-    for (const row of lost) {
-      await prisma.creativeProductionRun.update({
-        where: { id: row.id },
-        data: { status: 'FAILED', lastError: WORKER_LOST_REASON, stage: 'worker-lost' },
-      });
-      console.log(`[${WORKER_NAME}] swept run ${row.id}: ${WORKER_LOST_REASON}`);
-    }
-
-    // Output rows leak too (2026-11-18): eleven were GENERATING in production, the oldest from the first diagnosis.
-    // A killed worker writes no FAILED row, so the film reads as "rendering" forever. Same boundary as the assembly
-    // guard, so a row is either in flight or swept, never both.
-    const outputRows = (await prisma.creativeOutput.findMany({
-      where: { status: 'GENERATING' },
-      select: { id: true, status: true, createdAt: true },
-    })) as Array<{ id: string; status: string; createdAt: Date }>;
-    const lostOutputs = sweepableOutputs(
-      outputRows.map((row) => ({ id: row.id, status: row.status, createdAt: row.createdAt.getTime() })),
-      Date.now(),
-    );
-    for (const row of lostOutputs) {
-      await prisma.creativeOutput.update({
-        where: { id: row.id },
-        data: { status: 'FAILED', errorMessage: OUTPUT_ORPHAN_REASON },
-      });
-      console.log(`[${WORKER_NAME}] swept output ${row.id}: ${OUTPUT_ORPHAN_REASON}`);
-    }
+      const swept = await sweepExpiredRuns(prisma as never, Date.now());
+      if (swept.length > 0) console.info(`[${WORKER_NAME}] swept=${swept.length} ids=${swept.join(',')}`);
     } catch (error) {
       console.error(`[${WORKER_NAME}] sweep failed: ${String((error as Error)?.message ?? error).slice(0, 200)}`);
     }

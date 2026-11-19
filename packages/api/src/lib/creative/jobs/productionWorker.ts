@@ -196,3 +196,39 @@ export async function runBatch(
   }
   return outcome;
 }
+
+/**
+ * Sweep expired leases (2026-11-19).
+ *
+ * The sweep used to live only inside the worker - at boot and on a 60s timer - which meant nothing swept when the worker died: a run
+ * killed mid-flight stayed RUNNING past its lease, because the only process that would notice was the one that had crashed. A recovery
+ * path that exists only in the crashed process is not a recovery path. This function is the recovery, and it is callable from outside the
+ * worker (the health reader, a cron entry), so the clause "the sweep must fire on expiry, not on boot" can actually be satisfied.
+ */
+export interface SwappablePrisma {
+  creativeProductionRun: {
+    findMany(args: { where: { status: string }; select: { id: true; status: true; heartbeatAt: true } }): Promise<Array<{ id: string; status: string; attempt?: number; heartbeatAt?: Date | null }>>;
+    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
+  };
+}
+
+export async function sweepExpiredRuns(prisma: SwappablePrisma, now = Date.now()): Promise<string[]> {
+  const rows = await prisma.creativeProductionRun.findMany({
+    where: { status: 'RUNNING' },
+    select: { id: true, status: true, heartbeatAt: true },
+  });
+  const candidates: ProductionRunRow[] = rows.map((row) => ({
+    id: row.id,
+    status: row.status as ProductionRunRow['status'],
+    attempt: 0,
+    heartbeatAt: row.heartbeatAt ? row.heartbeatAt.getTime() : null,
+  }));
+  const expired = sweepableRuns(candidates, now).map((row) => row.id);
+  for (const id of expired) {
+    await prisma.creativeProductionRun.update({
+      where: { id },
+      data: { status: 'FAILED', lastError: WORKER_LOST_REASON, stage: 'worker-lost' },
+    });
+  }
+  return expired;
+}
