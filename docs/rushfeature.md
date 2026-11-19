@@ -978,6 +978,20 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The kill is proven; the lease clause is not, and the reason is structural.** Captured with the worker stopped mid-flight:
+
+| captured | value |
+|---|---|
+| web tier after the kill | **HTTP 200** — the same kill that used to take the app down |
+| reader immediately after | `state=idle queued=0 lastCheckIn=36s ago` |
+| reader 130 s later | **`state=idle-no-worker … lastCheckIn=171s ago (limit 120s) — Nothing is lost; a worker picks work up when it starts.`** |
+
+So: **stopping the worker does not stop the app**, and the reader distinguishes a dead worker from an idle one from outside the process. Those were the two things the separation existed to prove.
+
+**The clause fails by construction, and that is the finding.** The sweep lives **inside the worker** — at boot and on a 60 s timer. With the worker dead, **nothing sweeps**: a run killed mid-flight stays `RUNNING` past its lease, because the only process that would notice is the one that died. A recovery path that fires on boot **and only exists in the process that crashed** is not a recovery path. The fix is an external sweeper — the health reader is the natural home, since it already runs outside the worker and already reads liveness — and until that exists the lease clause cannot be satisfied, only described.
+
+**Consequently steps 3 and 4 split cleanly:** the *kill* is done (web unaffected, health says `missing-worker`/`idle-no-worker`); the *lease expiry without a restart* is **owed and blocked on a sweeper outside the worker**, not on more waiting.
+
 **The batch ran: four episodes, 1,120 credits, concurrency 4 honoured — and it was four, not five.** Measured:
 
 | captured | value |
