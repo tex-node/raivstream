@@ -978,6 +978,17 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The sweep moved out of the worker; the clause test did not run.** `sweepExpiredRuns(prisma, now)` now lives in `productionWorker.ts` as one function used by **both** the worker and
+the external reader — `scripts/creative-queue-health.ts --sweep` — so the recovery path no longer exists only inside the process that a crash would kill. Three tests pin it: only an
+expired lease is swept, it becomes `FAILED` with `WORKER_LOST` and `stage=worker-lost`, a live lease is untouched, and a second pass finds nothing.
+
+The live half failed for a mundane reason and it is the second time this has happened: **the submit script produced no output at all**, so no run was created, so
+`swept=0` and the clause test had nothing to sweep. The reader itself behaved correctly — `swept=0` then `state=idle-no-worker … lastCheckIn=636s ago (limit 120s)` with the worker
+down — and the web tier served **HTTP 200** across the kill. **No credits were spent**, because nothing was submitted.
+
+**The pattern worth naming:** twice now, a one-shot submission script has silently produced no output and the session has nearly recorded a "blocked" finding that was really a
+broken harness. Submission scripts need to print something on every path — including the failure path — before their silence is treated as a product result.
+
 **The kill is proven; the lease clause is not, and the reason is structural.** Captured with the worker stopped mid-flight:
 
 | captured | value |
