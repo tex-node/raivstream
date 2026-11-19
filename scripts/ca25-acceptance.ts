@@ -23,7 +23,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { intentService } from '../packages/api/src/lib/creative/intent/service';
 import { projectService } from '../packages/api/src/lib/creative/project/service';
 import { productionPlanService } from '../packages/api/src/lib/creative/production/service';
@@ -207,7 +207,7 @@ async function journeyStory(userId: string): Promise<RunEvidence> {
   const intent = 'Tell a short story about a young girl who discovers a glowing object in an abandoned garden.';
   log('STORY — CREATE');
   const interpretation = intentService.interpret(intent);
-  log('STORY — INTERPRET', { projectType: interpretation.projectType, format: interpretation.format });
+  log('STORY — INTERPRET', { projectType: interpretation.projectType });
   if (interpretation.projectType !== 'STORY') fail('story:intent', `expected STORY, got ${interpretation.projectType}`);
   pass('story:interpret', `projectType=${interpretation.projectType}`);
 

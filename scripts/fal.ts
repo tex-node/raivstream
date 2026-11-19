@@ -16,12 +16,11 @@
  * Every test submits then polls to completion and prints the R2-mirrored URL.
  */
 
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 // ─── Load isolated staging credentials (wins over .env) ───────────────────────
 function loadCredFile(path: string): void {
@@ -59,15 +58,23 @@ import { submitFalFlux2, getFalFlux2Status } from '../packages/api/src/lib/gener
 import { submitFalH3Max, getFalH3MaxStatus } from '../packages/api/src/lib/generators/falH3Max';
 import { submitFalVeed, getFalVeedStatus } from '../packages/api/src/lib/generators/falVeed';
 import { readFalMediaConfig } from '../packages/api/src/lib/mediaProviders';
+import type { MediaJobStatus, NormalizedMediaError } from '../packages/api/src/lib/mediaProviders';
 
 type Model = 'flux2' | 'h3max' | 'veed';
 
-interface StatusShape {
+/**
+ * The poller's shape is the PROVIDER's, not a local copy (2026-11-19).
+ *
+ * This used to redeclare `status` without `'cancelled'` and `error` as `string`, so the three `getFal*Status` functions were
+ * not assignable to it — and the printout below would have rendered a `[object Object]` for a real failure. Importing the
+ * types keeps one definition and makes a new provider state a compile error instead of a silent infinite poll.
+ */
+type StatusShape = {
   jobId: string;
-  status: 'queued' | 'generating' | 'completed' | 'failed';
+  status: MediaJobStatus;
   outputUrl?: string;
-  error?: string;
-}
+  error?: NormalizedMediaError;
+};
 
 async function cmdInfo(): Promise<void> {
   const cfg = readFalMediaConfig();
@@ -131,9 +138,14 @@ async function pollToCompletion(model: Model, jobId: string): Promise<void> {
       console.log('  R2 URL:', res.outputUrl ?? '(none)');
       break;
     }
+    if (res.status === 'cancelled') {
+      console.log('\n\n  CANCELLED');
+      break;
+    }
     if (res.status === 'failed') {
       console.log('\n\n  ❌  FAILED');
-      console.log('  Error:', res.error ?? '(none)');
+      // error is a NormalizedMediaError, not a string; printing it directly showed [object Object].
+      console.log('  Error:', res.error ? (res.error.code + ': ' + res.error.message) : '(none)');
       break;
     }
     await new Promise((r) => setTimeout(r, 5_000));

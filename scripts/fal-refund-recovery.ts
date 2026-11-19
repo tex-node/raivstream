@@ -13,12 +13,11 @@
  *
  * Exit codes: 0 = completed, 1 = unrecoverable runtime error, 2 = refused by guard.
  */
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { resolve } from 'path';
 
 // Load the staging env first (mirrors scripts/runpod.ts), before any DB import.
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 async function main(): Promise<void> {
   const limitRaw = process.argv[2];

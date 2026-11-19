@@ -20,7 +20,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { intentService } from '../packages/api/src/lib/creative/intent/service';
 import { projectService } from '../packages/api/src/lib/creative/project/service';
 import { productionPlanService } from '../packages/api/src/lib/creative/production/service';

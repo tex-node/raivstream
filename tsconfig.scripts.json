@@ -1,14 +1,17 @@
-﻿{
+{
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "node",
-    "types": ["node"],
+    "lib": ["ES2020"],
     "noEmit": true,
     "skipLibCheck": true,
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
-    "isolatedModules": false
+    "isolatedModules": true,
+    // The workers are executed by tsx, never compiled, and they import through explicit `.ts` paths because that is what
+    // tsx resolves reliably. Without this, `tsc` rejects the very imports that run correctly (TS5097).
+    "allowImportingTsExtensions": true
   },
   "include": ["scripts/**/*.ts"],
   "exclude": ["node_modules"]

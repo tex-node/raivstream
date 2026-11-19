@@ -20,12 +20,11 @@
  * Cost: ~9 real fal submissions on the funded account (bounded, explicit).
  */
 
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 function loadCredFile(path: string): void {
   let raw: string;

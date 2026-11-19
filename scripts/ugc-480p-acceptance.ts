@@ -30,7 +30,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { submitGenerationJob, pollJobStatus } from '../packages/api/src/lib/generators';
 import { readFalMediaConfig, isFalCapabilityLive } from '../packages/api/src/lib/mediaProviders/config';
 

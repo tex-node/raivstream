@@ -25,7 +25,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { directorService } from '../packages/api/src/lib/creative/director/service';
 import { reviewService } from '../packages/api/src/lib/creative/review/service';
 import { approvalService } from '../packages/api/src/lib/creative/approval/service';

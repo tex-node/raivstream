@@ -194,7 +194,7 @@ async function main(): Promise<void> {
     ]);
 
     // ── 5. Mux ──────────────────────────────────────────────────────────────
-    await muxAudioWithVideo({ videoPath: silentPath, audioPath: mixPath, outputPath: finalPath, run });
+    await muxAudioWithVideo({ videoPath: silentPath, audioPath: mixPath, outputPath: finalPath, durationSeconds: RUNTIME_SECONDS, run });
 
     // ── 6. Ready gate + INDEPENDENT ffprobe ─────────────────────────────────
     const finalAudio = await probeAudioStream(finalPath, run);
