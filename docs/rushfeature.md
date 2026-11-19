@@ -978,6 +978,18 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The harness is fixed; the clause still isn't tested, and this time the reason is timing.** The submission script now prints `PROJECT=`, `RUN=` and `SUBMIT_FAIL=<code> <message>` on
+every path and exits non-zero, so its silence can no longer be mistaken for a product result — the first widening attempt used it correctly, printed `SUBMIT_FAIL=NO_CANDIDATE`, aborted,
+and spent nothing.
+
+The retry found a candidate and submitted: **`RUN=cmwnz9yo700019ebrg0i5vpmh`**, one scene, one asset already READY, so a single missing video. The web tier served **HTTP 200** across the
+kill — but the kill landed **after the run had already reached `COMPLETED`**, so there was nothing in flight, and `--sweep` had nothing to recover. **The clause test needs a run that is
+still running when the process dies**, and this candidate was too small to still be running 25 s later.
+
+**So the external sweep is built, unit-tested and callable, and the lease-expiry clause remains unproven in the wild** — not for a design reason any more, but because the two attempts so far
+either had no candidate or killed a run that had already finished. The fix is mechanical and recorded: **kill within ~3 s of submission, or pick a three-scene run (≈105 s measured) so the
+worker is provably mid-run when `pm2 stop` lands.**
+
 **The sweep moved out of the worker; the clause test did not run.** `sweepExpiredRuns(prisma, now)` now lives in `productionWorker.ts` as one function used by **both** the worker and
 the external reader — `scripts/creative-queue-health.ts --sweep` — so the recovery path no longer exists only inside the process that a crash would kill. Three tests pin it: only an
 expired lease is swept, it becomes `FAILED` with `WORKER_LOST` and `stage=worker-lost`, a live lease is untouched, and a second pass finds nothing.
