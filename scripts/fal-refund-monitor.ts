@@ -16,12 +16,11 @@
  *
  * Exit codes: 0 = ran, 1 = runtime error, 2 = environment/guard refusal.
  */
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { resolve } from 'path';
 import { readFileSync, writeFileSync } from 'fs';
 
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 async function main(): Promise<void> {
   const { assertStagingEnvironment } = await import('../packages/api/src/lib/mediaProviders/refundRecovery');

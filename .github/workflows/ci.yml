@@ -46,6 +46,11 @@ jobs:
         run: pnpm --filter @raivstream/database exec prisma generate --schema schema.prisma
       - name: Type-check (api)
         run: pnpm --filter @raivstream/api type-check
+      # The operations scripts are executed, never compiled, so nothing caught their breakage: two shipped wrong import
+      # paths, six imported an undeclared `dotenv`, and ten imported `@prisma/client` from a root that does not declare it.
+      # This gate compiles them against the API source (2026-11-19).
+      - name: Type-check (scripts)
+        run: pnpm type-check:scripts
       - name: API unit tests
         run: pnpm --filter @raivstream/api test
 

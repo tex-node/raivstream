@@ -25,7 +25,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { intentService } from '../packages/api/src/lib/creative/intent/service';
 import { projectService } from '../packages/api/src/lib/creative/project/service';
 import { productionPlanService } from '../packages/api/src/lib/creative/production/service';
@@ -108,6 +108,7 @@ async function journeyP(userId: string) {
   ok('P:CREATE → intent interpreted, brief + bible created');
 
   const built = await productionPlanService.plan(prisma as never, { projectId: project.id, userId });
+  if (!built.ok) throw new Error(`P:plan refused: ${built.code}`);
   assert(built.plan.scenes.length >= 2, 'P:plan', 'plan has < 2 scenes');
   assert(built.preview.scenes.length === built.plan.scenes.length, 'P:preview', 'preview scenes missing');
   const trimmed = await persistTrimmed(project.id, built.plan, 2);
@@ -171,7 +172,7 @@ async function journeyX(userId: string) {
     brand: {
       brandIdentity: { name: 'Voltaic Noir', tagline: 'Night belongs to you' },
       tone: { style: 'noir, high-contrast' },
-      approvedMessaging: ['Night belongs to you'],
+      approvedMessaging: { lines: ['Night belongs to you'] },
       visualLanguage: { style: 'noir cinematic, deep shadows' },
     },
   });
@@ -180,11 +181,13 @@ async function journeyX(userId: string) {
   const { projectId } = await studioService.createCampaignProject(prisma as never, { campaignId: campaign.id, userId, prompt: 'Create a 30-second cinematic launch for Voltaic Nectar.' });
 
   const built = await productionPlanService.plan(prisma as never, { projectId, userId });
+  if (!built.ok) throw new Error(`X:plan refused: ${built.code}`);
   const context = built.plan.contextSnapshot;
   assert(context?.source === 'STUDIO', 'X:source', `expected STUDIO, got ${context?.source}`);
   assert(context?.brandName === 'Voltaic Noir', 'X:brand', `brandName=${context?.brandName}`);
-  assert(context?.approvedMessaging?.includes('Night belongs to you'), 'X:messaging', 'approved messaging not inherited');
-  ok(`X:context snapshot → source=${context?.source}, brand=${context?.brandName}, messaging=[${context?.approvedMessaging?.join('; ')}]`);
+  const messagingLines = (context?.approvedMessaging as { lines?: string[] } | undefined)?.lines ?? [];
+  assert(messagingLines.includes('Night belongs to you'), 'X:messaging', 'approved messaging not inherited');
+  ok(`X:context snapshot → source=${context?.source}, brand=${context?.brandName}, messaging=[${messagingLines.join('; ')}]`);
 
   const trimmed = await persistTrimmed(projectId, built.plan, 1);
   const bible = await prisma.creativeBible.findUnique({ where: { projectId } });
@@ -212,6 +215,7 @@ async function journeyR(userId: string) {
   const interpretation = intentService.interpret(prompt);
   const project = await projectService.createFromIntent(prisma as never, { userId, text: prompt, interpretation });
   const built = await productionPlanService.plan(prisma as never, { projectId: project.id, userId });
+  if (!built.ok) throw new Error(`S:plan refused: ${built.code}`);
   await persistTrimmed(project.id, built.plan, 1);
   await projectService.updateStatus(prisma as never, { projectId: project.id, userId, status: 'APPROVED' });
   // Simulate the app's `produce` path: the project enters GENERATING before the
@@ -289,8 +293,8 @@ const PRODUCE = process.argv.indexOf('--produce');
 if (PRODUCE >= 0) {
   const projectId = process.argv[PRODUCE + 1];
   runCreativeProduction(prisma as never, { projectId })
-    .then((result) => console.log(JSON.stringify({ status: 'PRODUCE_DONE', projectId, ...result })))
-    .catch((error) => console.log(JSON.stringify({ status: 'PRODUCE_ERROR', projectId, error: String(error) })))
+    .then((result) => console.log(JSON.stringify({ stage: 'PRODUCE_DONE', projectId, ...result })))
+    .catch((error) => console.log(JSON.stringify({ stage: 'PRODUCE_ERROR', projectId, error: String(error) })))
     .finally(() => { void prisma.$disconnect(); });
 } else {
   main().catch(async (error) => {

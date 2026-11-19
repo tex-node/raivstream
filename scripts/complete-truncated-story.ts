@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { storyTextService } from '../packages/api/src/lib/storyTextService';
 import type { StoryAudienceMode } from '../packages/api/src/lib/storyTextService';
 

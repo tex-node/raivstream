@@ -11,7 +11,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { intentService } from '../packages/api/src/lib/creative/intent/service';
 import { projectService } from '../packages/api/src/lib/creative/project/service';
 import { productionPlanService } from '../packages/api/src/lib/creative/production/service';
@@ -90,6 +90,7 @@ async function main() {
       const intent = await timed(() => intentService.interpret(prompt)); stages.intent.push(intent.ms);
       const project = await projectService.createFromIntent(prisma as never, { userId, text: prompt, interpretation: intent.value });
       const plan = await timed(() => productionPlanService.plan(prisma as never, { projectId: project.id, userId })); stages.plan.push(plan.ms);
+      if (!plan.value.ok) throw new Error(`plan refused: ${plan.value.code}`);
       await prisma.creativeProductionPlan.update({ where: { projectId: project.id }, data: { plan: boundPlan(plan.value.plan, 1) as never, version: { increment: 1 } } });
       await projectService.updateStatus(prisma as never, { projectId: project.id, userId, status: 'APPROVED' });
 

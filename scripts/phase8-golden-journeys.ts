@@ -21,7 +21,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 import { intentService } from '../packages/api/src/lib/creative/intent/service';
 import { projectService } from '../packages/api/src/lib/creative/project/service';
 import { productionPlanService } from '../packages/api/src/lib/creative/production/service';
@@ -98,6 +98,7 @@ async function ensureIntegrationUser(): Promise<string> {
 
 async function buildAndTrimPlan(projectId: string, scenes: number) {
   const result = await productionPlanService.plan(prisma as never, { projectId, userId: (await prisma.creativeProject.findUnique({ where: { id: projectId } }))!.userId });
+  if (!result.ok) throw new Error(`plan refused: ${result.code}`);
   const trimmed = boundPlan(result.plan, scenes);
   await prisma.creativeProductionPlan.update({ where: { projectId }, data: { plan: trimmed as never, version: { increment: 1 } } });
   return trimmed;
@@ -143,7 +144,7 @@ async function journeyA(userId: string) {
   assert(interpretation.projectType === 'STORY', 'A:intent', `expected STORY, got ${interpretation.projectType}`);
   ok('A:intent → STORY');
   const project = await projectService.createFromIntent(prisma as never, { userId, text: prompt, interpretation });
-  assert(project.bible, 'A:bible', 'no bible seeded');
+  assert(Boolean(project.bible), 'A:bible', 'no bible seeded');
   ok('A:brief+bible created');
 
   const { plan } = await planApproveProduce(project.id, userId, 'Make it more cinematic.');

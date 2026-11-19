@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../packages/database';
 
 function loadEnvFile(filePath: string) {
   if (!existsSync(filePath)) return;

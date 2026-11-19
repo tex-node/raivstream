@@ -1,5 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
+/**
+ * Re-exported for callers that need the class rather than the singleton (2026-11-19).
+ *
+ * The operations scripts used `import { PrismaClient } from '@prisma/client'`, which the repository root does not declare
+ * — so the import only resolved when hoisting happened to provide it, and the scripts type-check could not see it at all.
+ * Going through the workspace package gives one Prisma type identity and one declaration site.
+ */
+export { PrismaClient };
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };

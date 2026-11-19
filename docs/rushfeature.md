@@ -2208,6 +2208,16 @@ explicit `pm2 restart`, and the deploy that shipped this one was **cancelled at 
 (HEAD, build, PM2, health 200) and then its SSH step hung; the job's own 30-minute timeout was about to fire. Named next
 fix: `ServerAliveInterval`/`ConnectTimeout` on that ssh call, because a hung deploy holds the concurrency group.
 
+**The operations-scripts type-check is green and enforced, after 68 errors that were never claimed.** Three classes, all
+real: the project extended the root tsconfig with `strict: false`, which disabled the union narrowing the API source needs —
+so API files failed there while passing in their own project; six scripts imported `dotenv` and ten imported
+`@prisma/client` from a root that declares neither, which is why "written but never executed" kept shipping; and the gate,
+once it could see straight, exposed staleness with teeth — `scripts/fal.ts` redeclared the provider status shape without
+`'cancelled'` and with `error` as a string, so a real failure printed `[object Object]` and the three status functions were
+not assignable. Now: `strict` on, `lib` ES2020 to match the API, `process.loadEnvFile` instead of an undeclared dependency,
+`PrismaClient` re-exported from the workspace so there is one type identity, and `allowImportingTsExtensions` because these
+files are executed, never compiled. **0 errors, and CI runs it on every pull request** — the number is green, not unclaimed.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)

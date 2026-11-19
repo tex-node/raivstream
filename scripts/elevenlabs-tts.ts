@@ -14,13 +14,12 @@
  * Cost: a few dozen characters of TTS (~negligible on a paid account).
  */
 
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 // ─── Load isolated staging credentials (wins over .env) ───────────────────────
 function loadCredFile(path: string): void {

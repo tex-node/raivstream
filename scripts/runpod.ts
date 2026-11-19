@@ -13,12 +13,11 @@
  * Models: flux | wan | seedance | ltx | hunyuan | cogvideo
  */
 
-import { config } from 'dotenv';
+import { loadEnv } from './lib/env';
 import { resolve } from 'path';
 
 // Load env — try web app .env.local first, then repo root .env
-config({ path: resolve(__dirname, '../apps/web/.env.local') });
-config({ path: resolve(__dirname, '../.env') });
+loadEnv(resolve(__dirname, '../apps/web/.env.local'), resolve(__dirname, '../.env'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

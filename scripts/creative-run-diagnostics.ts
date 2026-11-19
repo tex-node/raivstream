@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../packages/database';
 import { buildRunDiagnostics } from '../packages/api/src/lib/creative/production/diagnostics';
 
 function loadEnvFile(filePath: string) {
@@ -28,7 +28,7 @@ loadEnvFile(path.join(process.cwd(), '.env'));
 loadEnvFile(path.join(process.cwd(), 'apps', 'web', '.env.local'));
 loadEnvFile(path.join(process.cwd(), 'packages', 'database', '.env'));
 
-const prisma = new PrismaClient();
+// Uses the workspace client, so the scripts project and packages/database share one Prisma type identity.
 
 async function main() {
   const projectId = process.argv[2];

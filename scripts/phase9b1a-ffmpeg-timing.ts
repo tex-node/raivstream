@@ -94,7 +94,7 @@ async function runCase(name: string, shots: ShotInput[]) {
   const asset = await executeMovieRenderJob(prisma, job.id, {
     uploadMovie: async (_buffer, key) => `memory://${key}`,
   });
-  if (!asset) throw new Error(`${name} failed: ${job.errorCode ?? 'UNKNOWN'} ${job.errorMessage ?? ''}`.trim());
+  if (!asset) throw new Error(`${name} failed: ${(job as { lastError?: string }).lastError ?? 'UNKNOWN'}`.trim());
   const verification = asset.metadata.verification;
   return {
     name,
