@@ -978,6 +978,18 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**The lease clause is proven: the sweep fired on expiry, from outside the worker, with nothing restarted.** After the worker was stopped mid-run and left down, the external reader did it:
+
+```
+[queue-health] swept=1 ids=cmwo0khtn0001n51ghys8jsnk
+[queue-health] state=idle-no-worker queued=0 worker=creative-worker lastCheckIn=2809s ago (limit 120s)
+STATUS_AFTER_SWEEP=FAILED
+```
+
+**`2809 s` since the last check-in, no restart, and the run went `FAILED`** — so the recovery path no longer depends on the process that crashed, which is exactly what the clause was written to catch and what the previous architecture failed. The sweep is a function callable from anywhere (`sweepExpiredRuns`), the reader exposes it (`--sweep`), and a cron entry can now run it every minute.
+
+**The resume leg did not run** — the restart-and-resubmit step produced no output, the third time a heredoc-driven submission script has gone quiet. The clause is closed; **step 5 (resume) remains owed** and should be run as its own short call with output printed unfiltered.
+
 **Third clause attempt: the candidate refused at the product level, and the harness let it continue.** `cmuebyz0…` answered `SUBMIT_FAIL=MISSING_SOURCE — What would you like to
 transform? Add an image I can use as the source.` That is the pipeline working correctly: a transformation-shaped project with no source cannot produce, and it said so in the creator's
 language. **No run was created and no credits were spent.**
