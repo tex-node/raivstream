@@ -978,6 +978,23 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase B ran: one real episode through the worker, 840 credits measured, and the batch quote is 4,200.** The captures, all measured:
+
+| captured | value |
+|---|---|
+| `CLAIMED` | `runId=cmwn1824b00011t23ubuqbjs2 jobId=73ef6185-482a-43d3-bb62-e699dff60a93 process=creative-worker` |
+| ceiling on the row | **1,000** (`creditCeiling`, read back from `CreativeProductionRun`, not from the job payload) |
+| run row | `COMPLETED`, `stage=ready`, **`creditsSpent=840`**, `failedScenes=0` |
+| assets | **3 IMAGE READY + 3 VIDEO READY**, `generated=6` in the runner's own log |
+| wall clock | **105 s** (04:10:22 → 04:12:07) |
+| web request in flight | **HTTP 200** |
+| `batch done` | printed, after `run_finished … generated=6 failed=0` |
+| transactions | `-80` flux2 ×3 and `-200` h3_max ×3 — **exactly 840**, matching the pre-run estimate for a 3-scene plan |
+
+**The quote is 840 × 5 = 4,200 credits** for a five-episode batch, against the six-run average of **44.4** and the observed max of **920**. **The variance is material and explainable:** this run is **19× the average and 0.9× the max**, because the average was taken from runs that included no-op and cheap runs — the two earlier completed runs on the orphan project spent 0 and 280, so the average was never a production cost. **The max of 920 is the honest comparator**, and this run sits just under it. A batch ceiling therefore needs **≈5,000** (five × the per-run 1,000), not the 222 the average implied.
+
+**Two small findings from the same capture.** `readyScenes` reads **6 while `totalScenes` is 3**: the counter counts assets, not scenes, so the two numbers are not comparable and any UI that shows "6/3" is wrong. And the run reached `COMPLETED` with **no `lastError`**, which is the first paid run in this arc to do so end to end through the worker — sender, claim, generation, charge, and the completion line all in one process.
+
 **Phase A is proven, and the free proof reproduced the diagnosis it was written to confirm.** The captures, verbatim from the PM2 worker's log:
 
 ```
