@@ -11,9 +11,13 @@
  * Usage: ./node_modules/.bin/tsx scripts/creative-queue-health.ts
  */
 import { prisma } from '../packages/database/index';
-import { CREATIVE_WORKER_NAME, queueHealth } from '../packages/api/src/lib/creative/jobs/productionWorker.ts';
+import { CREATIVE_WORKER_NAME, queueHealth, sweepExpiredRuns } from '../packages/api/src/lib/creative/jobs/productionWorker.ts';
 
 (async () => {
+  // `--sweep` turns the reader into the recovery path: it runs outside the worker, so it can fire on lease expiry even when the
+  // worker is dead. A cron entry passes it; a human reading health does not.
+  const doSweep = process.argv.includes('--sweep');
+  const swept = doSweep ? await sweepExpiredRuns(prisma as never, Date.now()) : [];
   // `worker` is the primary key: the model field is `worker`, not `workerName`. The first version asked for `workerName`, which Prisma
   // rejects before it reaches the database - a reader that never printed a verdict, which is why it could not be claimed as working.
   const stamp = await prisma.workerHeartbeat.findUnique({ where: { worker: CREATIVE_WORKER_NAME } });
@@ -32,6 +36,7 @@ import { CREATIVE_WORKER_NAME, queueHealth } from '../packages/api/src/lib/creat
     now,
   });
   const age = stamp?.lastSeenAt ? Math.round((now - stamp.lastSeenAt.getTime()) / 1000) : null;
+  if (doSweep) console.log(`[queue-health] swept=${swept.length}${swept.length ? ' ids=' + swept.join(',') : ''}`);
   console.log(
     `[queue-health] state=${health.state} queued=${queued} worker=${CREATIVE_WORKER_NAME} lastCheckIn=${
       age === null ? 'never' : `${age}s ago`
