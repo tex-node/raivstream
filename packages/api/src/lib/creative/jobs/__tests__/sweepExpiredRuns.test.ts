@@ -8,13 +8,21 @@ import { WORKER_LOST_REASON, sweepExpiredRuns } from '../productionWorker';
  * that had died. These tests hold the function to its contract: only expired leases are swept, each becomes FAILED with the reason, and a
  * live run is untouched.
  */
-function fakePrisma(rows: Array<{ id: string; status: string; heartbeatAt: Date | null }>) {
+function fakePrisma(rows: Array<{ id: string; status: string; heartbeatAt: Date | null; projectId?: string }>) {
   const updates: Array<{ where: { id: string }; data: Record<string, unknown> }> = [];
+  const projectUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   return {
     updates,
+    projectUpdates,
     creativeProductionRun: {
       findMany: async () => rows,
       update: async (args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown> => { updates.push(args); return args as unknown; },
+    },
+    creativeProject: {
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        projectUpdates.push(args);
+        return { count: 1 };
+      },
     },
   };
 }
@@ -26,8 +34,8 @@ const live = new Date(NOW - 60 * 1000);
 describe('sweepExpiredRuns', () => {
   it('sweeps only the expired lease, with the WORKER_LOST reason', async () => {
     const prisma = fakePrisma([
-      { id: 'stale', status: 'RUNNING', heartbeatAt: stale },
-      { id: 'live', status: 'RUNNING', heartbeatAt: live },
+      { id: 'stale', status: 'RUNNING', heartbeatAt: stale, projectId: 'proj-1' },
+      { id: 'live', status: 'RUNNING', heartbeatAt: live, projectId: 'proj-2' },
     ]);
     const swept = await sweepExpiredRuns(prisma as never, NOW);
     expect(swept).toEqual(['stale']);
@@ -45,5 +53,16 @@ describe('sweepExpiredRuns', () => {
     const prisma = fakePrisma([]);
     expect(await sweepExpiredRuns(prisma as never, NOW)).toEqual([]);
     expect(prisma.updates).toHaveLength(0);
+  });
+});
+
+describe('sweepExpiredRuns also frees the project', () => {
+  it('resets GENERATING to REVIEW for the swept run\'s project, and only that project', async () => {
+    const prisma = fakePrisma([
+      { id: 'stale', status: 'RUNNING', heartbeatAt: stale, projectId: 'proj-1' },
+      { id: 'live', status: 'RUNNING', heartbeatAt: live, projectId: 'proj-2' },
+    ]);
+    await sweepExpiredRuns(prisma as never, NOW);
+    expect(prisma.projectUpdates).toEqual([{ where: { id: 'proj-1', status: 'GENERATING' }, data: { status: 'REVIEW' } }]);
   });
 });
