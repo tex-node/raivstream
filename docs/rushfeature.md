@@ -1077,6 +1077,27 @@ So: **stopping the worker does not stop the app**, and the reader distinguishes 
 
 **What the batch proves:** the worker claims four runs concurrently from its own process, each run charges independently, every run reaches a terminal status, and a fifth job would queue behind the four — the bound the unbounded default never had. **What it does not prove:** the kill, the lease expiry and the resume (steps 3–5), and it is four episodes rather than five because the fifth candidate produced no run.
 
+**Motion graphics exist as a first layer: a plan, a gate, and a renderer — no longer only a title card.** `graphicPlan.ts` turns the commercial's three contract beats into a
+deterministic plan (role, window, motion, slot), and `graphicIssues` refuses a plan that cannot be read. `buildGraphicArgs` composes one `drawtext` per beat with motion from three
+primitives: `alpha` for fade, `y` for rise, `x` for slide. Every comma inside an option is escaped — the defect that stopped the title card dead on its first real render.
+
+Measured on a real render over a black slate (0 credits):
+
+| frame | time | YAVG |
+|---|---|---|
+| beat 1 (fade-up) | 0.5 s, 1.2 s | **16.70** |
+| beat 1 end (fading) | 2.5 s | 16.55 |
+| **gap between beats** | **3.0 s** | **16.00** |
+| beat 2 (slide-left) | 4.5 s, 5.5 s | **17.01** |
+| cta (fade) | 7.0 s, 8.5 s | 16.39 |
+
+**The gap is the control**: with no text the frame is `16.00`; every beat is brighter, so the text really is drawn, timed, and absent between windows. The plan's windows were
+`0.00–2.73`, `3.13–5.87`, `6.27–9.00` with three different motions, and `graphicIssues` returned `[]` for the plan it rendered.
+
+**What this is not, and the record says so plainly:** per-character animation is **out of scope by design** (`drawtext` animates a string, and a "pop" that scales glyphs is not
+offered because the renderer cannot honour it); the **motion ramp itself is not yet confirmed by pixels** — the frame pairs measured sit after each ramp settled, so rise and slide are
+in the argument string but not yet demonstrated frame-by-frame; and **none of this is wired into the commercial render path** yet.
+
 **The title-card pixels exist — and rendering them found two defects the unit tests could not.** One real FFmpeg render over a 1080x1920 slate, 0 credits: the first attempt died with
 `No such filter: '2.00'`, because the commas inside `between(t,2.00,5.00)` are filter-graph separators and were unescaped — and the unit test had asserted the string *contained* that
 substring, which it did, and that was the bug. Escaped and re-rendered, the second defect surfaced: **everything before the first double quote was dropped**, so
