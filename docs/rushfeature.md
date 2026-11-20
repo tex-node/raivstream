@@ -1077,6 +1077,17 @@ So: **stopping the worker does not stop the app**, and the reader distinguishes 
 
 **What the batch proves:** the worker claims four runs concurrently from its own process, each run charges independently, every run reaches a terminal status, and a fifth job would queue behind the four — the bound the unbounded default never had. **What it does not prove:** the kill, the lease expiry and the resume (steps 3–5), and it is four episodes rather than five because the fifth candidate produced no run.
 
+**The motion ramp now has pixels, and the control frame is what proves it.** A single-beat plan (`Rise`, `fade-up`) rendered over a black slate, then two frame pairs compared with a
+difference blend:
+
+| frames compared | mean absolute difference |
+|---|---|
+| `0.10 s` vs `0.25 s` — **inside the 0.35 s ramp** | **0.157** |
+| `0.60 s` vs `0.90 s` — **after it settled** | **0.000** (identical files, 11,323 bytes each) |
+
+**The text moves during the ramp and is pixel-identical after it.** That is the missing half of the motion claim: not "the argument string contains a `y` expression", but "the
+rendered text is at one place at 0.10 s and another at 0.25 s, and stops moving once the ramp ends". Presence, timing, and now **motion** are all measured.
+
 **The graphic gate is wired into publishing, behind a flag — and the motion ramp is still unproven.** The gate now runs where the commercial contract already runs, so an ad whose
 on-screen text would clip is refused at publish with the creator's own sentences:
 
