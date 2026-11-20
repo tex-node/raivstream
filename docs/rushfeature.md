@@ -978,6 +978,17 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Resume is blocked, and the reason is a stale project status — the recovery path recovers the run but not the project.** After the sweep marked the run `FAILED`, a resubmission was refused:
+
+`RESUBMIT={"started":false,"reason":"already_running"}` with `PROJECT_RUNS=[PARTIAL:1, FAILED:1]`.
+
+The guard is `if (project.status === 'GENERATING') return { started: false, reason: 'already_running' }` — **it keys on the project, not on any active run**. `sweepExpiredRuns` sets the
+run to `FAILED` but never resets `creativeProject.status`, so the project stays `GENERATING` forever and **no further episode can ever be produced for it**. A recovery path that frees the
+run and leaves the project locked is half a recovery.
+
+**The fix is one write in the sweeper:** when a run is swept, also reset its project from `GENERATING` back to a producible status (`REVIEW` is in `producible`, so it re-enables resume
+without claiming approval), and test it with a fake prisma that asserts both rows move.
+
 **The lease clause is proven: the sweep fired on expiry, from outside the worker, with nothing restarted.** After the worker was stopped mid-run and left down, the external reader did it:
 
 ```
