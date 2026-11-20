@@ -93,14 +93,14 @@ export function Navbar() {
         }
       >
         {/* Logo */}
-        <Link href="/" className="flex-shrink-0 flex items-center" style={{ color: 'var(--noc-t1)' }}>
+        <Link href="/" className="flex-shrink-0 flex items-center min-w-0" style={{ color: 'var(--noc-t1)' }}>
           {isR16 ? (
             <span className="font-extrabold text-lg tracking-tight">
               R16 <span style={{ color: 'var(--noc-cyan)' }}>Kids</span>
             </span>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-7 w-auto" />
+            <img src="/brand/raivstream-logofull.png" alt="Raivstream" className="h-6 sm:h-7 w-auto" />
           )}
         </Link>
 
@@ -276,16 +276,16 @@ export function Navbar() {
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <Link
                 href="/sign-in"
-                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
+                className="whitespace-nowrap px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-[var(--noc-t5)] hover:text-[var(--noc-t1)]"
               >
                 Sign in
               </Link>
               <Link
                 href="/sign-up"
-                className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+                className="whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
                 style={{ background: 'var(--noc-gradient)', color: '#0B0D14' }}
               >
                 Get started
