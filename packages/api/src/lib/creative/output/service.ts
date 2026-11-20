@@ -9,6 +9,7 @@
 
 import type { PrismaClient } from '@raivstream/database';
 import { commercialPublishBlock } from '../../commerce/commercialContract';
+import { commercialGraphicGateEnabled, commercialGraphicVerdict } from './graphicPlan';
 import { logStage } from '../stageLog';
 import { isCreativeOutputEnabled } from '../featureFlags';
 import { CreativeError } from '../shared/errors';
@@ -405,6 +406,20 @@ export class OutputService {
       }
       if (verdict.state === 'unscored') {
         throw new CreativeError('COMMERCIAL_UNSCORED', 'This ad has no copy to check, so it cannot be published yet.');
+      }
+      // The copy is good; the ON-SCREEN text still has to be readable at phone size. Same shape as the contract gate - it blocks with the creator's
+      // own sentences - and it is opt-in (`CREATIVE_GRAPHIC_GATE=1`) until a creator has seen it in the surface, so publishing behaviour does not
+      // change for anyone who has not asked for it.
+      if (commercialGraphicGateEnabled()) {
+        const graphic = commercialGraphicVerdict({
+          hook: brief?.commercialHook ?? null,
+          benefit: brief?.commercialBenefit ?? null,
+          cta: brief?.commercialCta ?? null,
+          durationSeconds: Math.max(1, Math.round(output.durationSeconds ?? 5)),
+        });
+        if (graphic.issues.length > 0) {
+          throw new CreativeError('COMMERCIAL_GRAPHIC_BLOCKED', `This ad's on-screen text is not readable yet: ${graphic.issues.map((issue) => issue.message).join(' ')}`);
+        }
       }
     }
 
