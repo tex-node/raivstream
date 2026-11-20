@@ -207,7 +207,7 @@ export async function runBatch(
  */
 export interface SwappablePrisma {
   creativeProductionRun: {
-    findMany(args: { where: { status: string }; select: { id: true; status: true; heartbeatAt: true } }): Promise<Array<{ id: string; status: string; attempt?: number; heartbeatAt?: Date | null }>>;
+    findMany(args: { where: { status: string }; select: { id: true; status: true; heartbeatAt: true; projectId: true } }): Promise<Array<{ id: string; status: string; attempt?: number; heartbeatAt?: Date | null; projectId: string }>>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
 }
@@ -215,7 +215,7 @@ export interface SwappablePrisma {
 export async function sweepExpiredRuns(prisma: SwappablePrisma, now = Date.now()): Promise<string[]> {
   const rows = await prisma.creativeProductionRun.findMany({
     where: { status: 'RUNNING' },
-    select: { id: true, status: true, heartbeatAt: true },
+    select: { id: true, status: true, heartbeatAt: true, projectId: true },
   });
   const candidates: ProductionRunRow[] = rows.map((row) => ({
     id: row.id,
@@ -223,12 +223,22 @@ export async function sweepExpiredRuns(prisma: SwappablePrisma, now = Date.now()
     attempt: 0,
     heartbeatAt: row.heartbeatAt ? row.heartbeatAt.getTime() : null,
   }));
-  const expired = sweepableRuns(candidates, now).map((row) => row.id);
+  const expiredRows = sweepableRuns(candidates, now);
+  const expired = expiredRows.map((row) => row.id);
+  const projectByRun = new Map(rows.map((row) => [row.id, row.projectId]));
+  const projectModel = (prisma as unknown as { creativeProject?: { updateMany?: (args: Record<string, unknown>) => Promise<unknown> } }).creativeProject;
   for (const id of expired) {
     await prisma.creativeProductionRun.update({
       where: { id },
       data: { status: 'FAILED', lastError: WORKER_LOST_REASON, stage: 'worker-lost' },
     });
+    // Freeing the RUN is only half a recovery (2026-11-19): `produce` refuses while the PROJECT is GENERATING, and nothing else resets it,
+    // so a swept project was locked out of production permanently with `already_running` - a refusal naming a run that no longer runs.
+    // REVIEW is already in `producible`, so this re-enables resume without claiming an approval that never happened.
+    const projectId = projectByRun.get(id);
+    if (projectId && projectModel?.updateMany) {
+      await projectModel.updateMany({ where: { id: projectId, status: 'GENERATING' }, data: { status: 'REVIEW' } });
+    }
   }
   return expired;
 }
