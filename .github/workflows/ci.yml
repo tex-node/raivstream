@@ -51,6 +51,10 @@ jobs:
       # This gate compiles them against the API source (2026-11-19).
       - name: Type-check (scripts)
         run: pnpm type-check:scripts
+      # The web app has had a vitest suite (26 files: nav, export eligibility, draft handling, story engine helpers) that
+      # no workflow ran, so it could only fail on someone's machine. It is pure — no database, no env — so it gates here.
+      - name: Web unit tests
+        run: pnpm --filter @raivstream/web test
       - name: API unit tests
         run: pnpm --filter @raivstream/api test
 

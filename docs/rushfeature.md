@@ -2416,6 +2416,18 @@ not assignable. Now: `strict` on, `lib` ES2020 to match the API, `process.loadEn
 `PrismaClient` re-exported from the workspace so there is one type identity, and `allowImportingTsExtensions` because these
 files are executed, never compiled. **0 errors, and CI runs it on every pull request** — the number is green, not unclaimed.
 
+**The navigation now says what the product is.** Twelve flat links accumulated across five eras — Create, Avatar, AI Studio,
+Pricing, Story Playground, Director, Academy, Credits, Library, Upload, Analytics, Advanced Story Studio — with two story
+systems and three generation entry points at the same level, and **no `/projects` index at all**: `/projects/[id]` existed
+but nothing listed projects, so the 5.0 workspaces were reachable only from `/create`'s resume path. The header is now five
+destinations — **Watch · Create · Learn · Films · Account** — with Create holding the hierarchy (Projects, New film, Story
+Playground, AI Studio, Director, Avatar, Upload, Advanced story studio) and one primary action. **Nothing moved and nothing
+404s**: the old routes keep their URLs and are grouped, not retired. A real `/projects` page lists films and stories in one
+list, each card carrying the next step the backend already derives, because "what am I working on" previously had two
+answers on two pages. Phones get a drawer for the first time — the centre links were `hidden md:flex`, so a phone user's only
+navigation was the avatar menu. The tests pin the structure rather than the link list: no duplicate destinations, every
+legacy target still reachable, and **R16 never linked to a route its own middleware blocks**.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)

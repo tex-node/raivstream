@@ -15,6 +15,10 @@ const PROTECTED_ROUTES = [
   '/story-studio',
   '/admin',
   '/notifications',
+  // The project index (2026-11-20). It lists what you are working on, so a guest has nothing to see; send them to sign-in
+  // with a redirect_url rather than render an empty page that looks like a bug. `/projects/[id]` is covered by the prefix
+  // match below.
+  '/projects',
 ];
 
 // ─── Security headers ─────────────────────────────────────────────────────────
