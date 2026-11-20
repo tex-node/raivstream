@@ -95,11 +95,28 @@ const GLOBAL_ICONS = {
       <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" />
     </svg>
   ),
+  projects: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    </svg>
+  ),
+  films: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 12h18" />
+    </svg>
+  ),
 } as const;
 
+/**
+ * The workspace's links back to the app (2026-11-20). Order and naming follow `navConfig.ts`: Home, Projects, Films,
+ * Academy, Account — the same five destinations the global header offers, so leaving the Story workspace and leaving any
+ * other page do not look like two different products.
+ */
 function globalDestinations(isR16: boolean, canAdmin: boolean): GlobalDestination[] {
   return [
     { key: 'feed', label: 'Home', href: '/', icon: GLOBAL_ICONS.feed },
+    ...(!isR16 ? [{ key: 'projects', label: 'Projects', href: '/projects', icon: GLOBAL_ICONS.projects }] : []),
+    ...(!isR16 ? [{ key: 'films', label: 'Films', href: '/watch', icon: GLOBAL_ICONS.films }] : []),
     ...(!isR16 ? [{ key: 'academy', label: 'Academy', href: '/academy', icon: GLOBAL_ICONS.academy }] : []),
     { key: 'account', label: 'Account', href: '/settings', icon: GLOBAL_ICONS.account },
     ...(!isR16 && canAdmin ? [{ key: 'admin', label: 'Admin', href: '/admin', icon: GLOBAL_ICONS.admin }] : []),
