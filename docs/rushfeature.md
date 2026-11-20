@@ -978,6 +978,19 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Resume works structurally — and the episode still fails, for a product reason.** After the fix (the sweep now resets the project from `GENERATING` to `REVIEW`) and a one-row repair of the
+project the pre-fix sweep had left locked, a resubmission was accepted and created a **new run** (`cmwokd32l…`) while the old one (`cmwo0khtn…`) kept its own row:
+
+| run | status | credits | meaning |
+|---|---|---|---|
+| `cmugpha3n…` | PARTIAL | 0 | an older attempt, same project |
+| `cmwo0khtn…` | PARTIAL | **440** | the killed run, re-claimed after the restart |
+| `cmwokd32l…` | FAILED | 0 | **the resume's new run** — no duplicate row |
+
+So the resume property holds: **a resubmission produces a new run, and the failed/killed run is not duplicated.** What failed is the episode itself — `lastError` on both is *"Some scenes could not be generated."* at `stage=ready`, i.e. scene generation refused or failed for this project's plan, not a plumbing error. **That makes this project a bad fixture**, not a broken resume: three runs, two content failures, and the resume path proved anyway.
+
+**Cost of the proof: 440 credits** (the re-claimed run). Total arc spend **≈2,040 of 5,000**.
+
 **Resume is blocked, and the reason is a stale project status — the recovery path recovers the run but not the project.** After the sweep marked the run `FAILED`, a resubmission was refused:
 
 `RESUBMIT={"started":false,"reason":"already_running"}` with `PROJECT_RUNS=[PARTIAL:1, FAILED:1]`.
