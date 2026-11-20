@@ -153,6 +153,9 @@ async function runFfmpeg(args: string[], expectedSeconds = 0): Promise<void> {
  * (previously narration + background music only, so audio-less-cue exports were
  * silent). Existing silent exports must re-render.
  */
+import type { GraphicPlan } from './graphicPlan';
+import { GRAPHIC_SLOT_Y } from './graphicPlan';
+
 export const EXPORT_RENDERER_VERSION = 'phase-3-v2';
 
 /** Appended end-card duration, in seconds (added to every derivative). */
@@ -1003,3 +1006,65 @@ export function buildTitleCardArgs(opts: TitleCardOptions): string[] {
     outputPath,
   ];
 }
+
+/**
+ * Compose a GraphicPlan onto a video (2026-11-20).
+ *
+ * One pass, N drawtext filters, no second encode per beat. Motion is expressed with ffmpeg expressions - alpha for fade, y for rise, x for
+ * slide - and EVERY comma inside an option value is escaped, because a comma is a filter-graph separator: unescaped, `between(t,2,5)` made
+ * ffmpeg look for a filter named `2.00`, which is exactly how the title card failed on its first real render.
+ *
+ * The plan is validated before this is called (`graphicIssues`); this function assumes a clean plan and does not silently repair one.
+ */
+export interface GraphicArgsOptions {
+  inputPath: string;
+  outputPath: string;
+  plan: GraphicPlan;
+  width: number;
+  height: number;
+  fontFile?: string;
+}
+
+export function buildGraphicArgs(opts: GraphicArgsOptions): string[] {
+  const { inputPath, outputPath, plan, width, height, fontFile } = opts;
+  const font = fontFile ? `:fontfile='${fontFile.replace(/'/g, "\\'")}'` : '';
+  const fontSize = Math.max(28, Math.round(width / 18));
+  const safePad = Math.round(width * plan.style.safeArea);
+
+  const filters = plan.beats.map((beat) => {
+    const text = escapeDrawtext(String(beat.text ?? '').replace(/[\r\n]+/g, ' ').trim());
+    const start = Math.max(0, beat.in);
+    const end = Math.max(start + 0.3, beat.out);
+    const fadeIn = 0.35;
+    const fadeOut = 0.3;
+    const y = Math.round(height * GRAPHIC_SLOT_Y[beat.slot]);
+
+    // Alpha ramps in and out, so no beat ever hard-cuts.
+    const alpha = `min(1\\,max(0\\,min((t-${start.toFixed(2)})/${fadeIn}\\,(${end.toFixed(2)}-t)/${fadeOut})))`;
+    // A rise of 36px over the fade-in; a slide of 56px from the left. Both settle at 0 as the beat establishes.
+    const yExpr = beat.motion === 'fade-up'
+      ? `${y}+36*max(0\\,1-(t-${start.toFixed(2)})/${fadeIn})`
+      : `${y}`;
+    const xExpr = beat.motion === 'slide-left'
+      ? `${safePad}-56*max(0\\,1-(t-${start.toFixed(2)})/${fadeIn})`
+      : `${safePad}`;
+
+    const box = plan.style.box ? ':box=1:boxcolor=black@0.45:boxborderw=20' : '';
+    return [
+      `drawtext=text='${text}'${font}:fontcolor=white:fontsize=${fontSize}${box}`,
+      `:x='${xExpr}':y='${yExpr}'`,
+      `:alpha='${alpha}'`,
+      `:enable='between(t\\,${start.toFixed(2)}\\,${end.toFixed(2)})'`,
+    ].join('');
+  });
+
+  return [
+    '-y', '-i', inputPath,
+    '-vf', filters.join(','),
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    '-c:a', 'copy',
+    '-s', `${width}x${height}`,
+    outputPath,
+  ];
+}
+
