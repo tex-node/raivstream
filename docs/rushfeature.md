@@ -1077,6 +1077,24 @@ So: **stopping the worker does not stop the app**, and the reader distinguishes 
 
 **What the batch proves:** the worker claims four runs concurrently from its own process, each run charges independently, every run reaches a terminal status, and a fifth job would queue behind the four — the bound the unbounded default never had. **What it does not prove:** the kill, the lease expiry and the resume (steps 3–5), and it is four episodes rather than five because the fifth candidate produced no run.
 
+**The graphic gate is wired into publishing, behind a flag — and the motion ramp is still unproven.** The gate now runs where the commercial contract already runs, so an ad whose
+on-screen text would clip is refused at publish with the creator's own sentences:
+
+```ts
+if (commercialGraphicGateEnabled()) {
+  const graphic = commercialGraphicVerdict({ hook, benefit, cta, durationSeconds });
+  if (graphic.issues.length > 0) throw new CreativeError('COMMERCIAL_GRAPHIC_BLOCKED', …);
+}
+```
+
+It is **opt-in** (`CREATIVE_GRAPHIC_GATE=1`), so publishing behaviour does not change for anyone who has not asked for it — the same discipline that kept the contract gate from
+retroactively failing old ads. `commercialGraphicVerdict` is a pure function of the beats and the runtime, so the verdict is unit-tested without a frame: a readable ad passes, a hook that
+will clip blocks with `LINE_TOO_LONG`, and the flag itself is tested both ways.
+
+**The motion ramp did not get its pixels this session.** Frame extraction and the bounding-box probe were both fought to a standstill by tooling (the detection filter's output was
+suppressed at the verbosity I ran it at, and the follow-up measurement produced no numbers), so **rise and slide remain in the argument string and not on a measured frame**. What *is*
+measured is presence and timing: beats bright at `16.70`/`17.01`/`16.39` against a **gap of `16.00`**. The record says exactly that rather than upgrading it.
+
 **Motion graphics exist as a first layer: a plan, a gate, and a renderer — no longer only a title card.** `graphicPlan.ts` turns the commercial's three contract beats into a
 deterministic plan (role, window, motion, slot), and `graphicIssues` refuses a plan that cannot be read. `buildGraphicArgs` composes one `drawtext` per beat with motion from three
 primitives: `alpha` for fade, `y` for rise, `x` for slide. Every comma inside an option is escaped — the defect that stopped the title card dead on its first real render.

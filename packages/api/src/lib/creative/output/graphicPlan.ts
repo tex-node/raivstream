@@ -167,3 +167,34 @@ export function graphicIssues(
 
   return issues;
 }
+
+/** The publish gate is opt-in until a creator has seen it: `CREATIVE_GRAPHIC_GATE=1` turns it on. */
+export function commercialGraphicGateEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CREATIVE_GRAPHIC_GATE === '1';
+}
+
+/**
+ * What publish should do about an ad's on-screen text: the plan it would render, and the reasons it should not. Kept separate from the renderer so
+ * the verdict is unit-testable without a frame.
+ */
+export function commercialGraphicVerdict(input: {
+  hook?: string | null;
+  benefit?: string | null;
+  cta?: string | null;
+  durationSeconds: number;
+  width?: number;
+  height?: number;
+}): { plan: GraphicPlan; issues: GraphicIssue[] } {
+  const plan = buildGraphicPlan({
+    hook: input.hook,
+    benefit: input.benefit,
+    cta: input.cta,
+    durationSeconds: input.durationSeconds,
+  });
+  const issues = graphicIssues(plan, {
+    width: input.width ?? 1080,
+    height: input.height ?? 1920,
+    durationSeconds: input.durationSeconds,
+  });
+  return { plan, issues };
+}
