@@ -978,6 +978,21 @@ but **no creator has used it**. *Two operations surfaced end to end and proven b
 a 72.8–95.3 s wait is a price creators will pay; that needs a creator, not another probe.* Recast stays deferred with its prompt work scoped (name the person,
 the replacement, and what must not change), and the 10 s band stays priced and undecided (65 / 65 / 78 stills).
 
+**Phase 16 is closed: the kill, the sweep, and a resume that actually completes.** One run on a project with proven generation history, killed mid-flight and recovered without a restart:
+
+| step | capture |
+|---|---|
+| submit | `cmwolkine…`, `RUNNING` at 80 credits when the worker was stopped |
+| kill | `WEB=200`; the run stayed `RUNNING` with the worker down |
+| **sweep, 650 s later, nothing restarted** | `swept=1 ids=cmwolkine…`, run → **`FAILED` with `WORKER_LOST: the worker stopped while th…`** |
+| project freed by the same sweep | the resubmission was **accepted**, which is the proof the project was no longer `GENERATING` |
+| **resume** | new run `cmwolzbcz…` → **`COMPLETED`, 920 credits, 7 ready assets, `failedScenes=0`** |
+| no duplicate | `cmwolkine…` kept its own `FAILED` row; four runs, four distinct ids |
+
+**So the whole clause now holds end to end:** a killed episode is swept on expiry from outside the worker, its project is freed by the same call, and a resubmission produces a **new** run that **completes** — with the failed attempt preserved rather than overwritten.
+
+**Cost of the proof: 1,000 credits** (80 burned on the killed attempt, 920 on the successful resume), which lands exactly on the previously observed maximum per-episode spend. Arc total **≈3,040 of 5,000**.
+
 **Resume works structurally — and the episode still fails, for a product reason.** After the fix (the sweep now resets the project from `GENERATING` to `REVIEW`) and a one-row repair of the
 project the pre-fix sweep had left locked, a resubmission was accepted and created a **new run** (`cmwokd32l…`) while the old one (`cmwo0khtn…`) kept its own row:
 
