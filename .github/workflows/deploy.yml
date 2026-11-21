@@ -3,6 +3,10 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
+  # Added 2026-11-21. A push to main does not always produce a run: on 2026-11-21 the merge of #487 never created one
+  # (the previous run still held the deploy-production group), so the fix sat on main undeployed with no way to retry
+  # short of an empty commit. This lets a human dispatch the same pipeline for main explicitly.
+  workflow_dispatch:
 
 concurrency:
   group: deploy-production
