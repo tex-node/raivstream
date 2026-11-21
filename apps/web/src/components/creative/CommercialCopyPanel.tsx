@@ -28,6 +28,14 @@ export function CommercialCopyPanel({ projectId }: { projectId: string }) {
     onSuccess: () => utils.creative.commercialCopy.invalidate({ projectId }),
   });
 
+  // Readability runs on the DRAFT, as it is typed: the same server verdict publish uses, so the block and the refusal cannot disagree.
+  const readability = trpc.creative.commercialTextIssues.useQuery(
+    { hook: beats.hook, benefit: beats.benefit, cta: beats.cta, durationSeconds: 9 },
+    { retry: false, refetchOnWindowFocus: false },
+  );
+  const graphicIssues = readability.data?.issues ?? [];
+  const blocked = graphicIssues.length > 0;
+
   const verdict = (query.data?.verdict ?? null) as CommercialVerdict | null;
   const line = signalLine(verdict);
   const all = allSignals(verdict);
@@ -52,11 +60,21 @@ export function CommercialCopyPanel({ projectId }: { projectId: string }) {
       <button
         type="button"
         className="mt-3 rounded-xl bg-white/15 px-3 py-1 text-xs disabled:opacity-40"
-        disabled={save.isPending}
+        disabled={save.isPending || blocked}
         onClick={() => save.mutate({ projectId, ...beats })}
       >
-        {save.isPending ? 'Saving…' : 'Save the ad'}
+        {save.isPending ? 'Saving…' : blocked ? 'Fix the text first' : 'Save the ad'}
       </button>
+
+      {blocked && (
+        <ul className="mt-2 space-y-1 text-xs" role="status" aria-live="polite">
+          {graphicIssues.map((issue) => (
+            <li key={issue.code + String(issue.beatIndex ?? '')} className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2">
+              {issue.message}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {line && (
         <div className="mt-3 rounded-xl border border-[rgba(233,233,237,0.08)] p-3 text-xs">
