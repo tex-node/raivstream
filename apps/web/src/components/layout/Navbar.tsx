@@ -23,8 +23,16 @@ import { destinationsFor, isDestinationActive, type NavDestination } from './nav
  *
  * The avatar menu is deliberately reduced to account actions: Create, Library and the rest live in the destinations now,
  * and duplicating them in two menus is how the flat list happened in the first place.
+ *
+ * POSITIONING (2026-11-21). The bar used to be `fixed` everywhere, so it floated over the page and every page had to guess
+ * its own clearance: some used `py-8` (32 px against a 56 px bar, cropping the heading by 24 px), others `pt-24`. That is
+ * why "AI Avatar" and "Library" were cut off — a `fixed` bar is out of flow, so the page cannot know. It is now `sticky`
+ * by default: in flow, 56 px of real space, so content starts below it without per-page arithmetic. Only the feed passes
+ * `floating`, because there the bar is meant to sit over the video inside the feed's own overlay.
  */
-export function Navbar() {
+export const NAV_HEIGHT_PX = 56;
+
+export function Navbar({ floating = false }: { floating?: boolean } = {}) {
   const { isSignedIn, user } = useUser();
   const { signOut } = useAuth();
   const router = useRouter();
@@ -80,17 +88,18 @@ export function Navbar() {
   return (
     <>
       <nav
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 sm:px-5 h-14 gap-2"
-        style={
-          isFeed
+        className={`${floating ? 'fixed' : 'sticky'} top-0 left-0 right-0 z-50 flex items-center justify-between px-4 sm:px-5 gap-2`}
+        style={{
+          height: NAV_HEIGHT_PX,
+          ...(isFeed
             ? { background: 'transparent' }
             : {
                 background: 'var(--noc-bar-alpha)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
                 borderBottom: '1px solid var(--noc-rule)',
-              }
-        }
+              }),
+        }}
       >
         {/* Logo */}
         <Link href="/" className="flex-shrink-0 flex items-center min-w-0" style={{ color: 'var(--noc-t1)' }}>

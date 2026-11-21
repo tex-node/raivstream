@@ -29,9 +29,9 @@ export default function HomePage() {
       {/* Floating header — transparent, overlays the feed */}
       <div className="absolute top-0 left-0 right-0 z-50 flex flex-col items-center pt-3 pb-4 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
         <div className="pointer-events-auto w-full">
-          <Navbar />
+          <Navbar floating />
         </div>
-        <div className="pointer-events-auto mt-10">
+        <div className="pointer-events-auto mt-16">
           <FeedTabs
             activeTab={activeTab}
             onChange={setActiveTab}

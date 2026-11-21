@@ -80,7 +80,7 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--noc-page)', color: 'var(--noc-t1)' }}>
       <Navbar />
-      <div className="max-w-2xl mx-auto pt-24 px-4 pb-20">
+      <div className="max-w-2xl mx-auto pt-10 px-4 pb-20">
         <h1 className="text-2xl font-bold mb-8">Settings</h1>
 
         {/* Tabs */}

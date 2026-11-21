@@ -139,7 +139,7 @@ export default function UploadPage() {
     return (
       <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
         <Navbar />
-        <div className="flex items-center justify-center h-screen">
+        <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
           <p className="text-[var(--noc-t4)]">Redirecting to sign in…</p>
         </div>
       </div>

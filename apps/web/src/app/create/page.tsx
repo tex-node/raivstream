@@ -580,7 +580,7 @@ export default function CreatePage() {
     return (
       <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
         <Navbar />
-        <div className="mx-auto max-w-3xl px-4 pt-28 pb-16 text-center">
+        <div className="mx-auto max-w-3xl px-4 pt-8 pb-16 text-center">
           <p className="text-sm text-[var(--noc-t5)]">Preparing your creative workspace…</p>
         </div>
       </div>

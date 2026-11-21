@@ -70,7 +70,7 @@ export default function PricingPage() {
       <div className="relative z-10">
         <Navbar />
 
-        <div className="max-w-5xl mx-auto pt-28 px-4 pb-24">
+        <div className="max-w-5xl mx-auto pt-10 px-4 pb-24">
 
           {/* Header */}
           <div className="text-center mb-14">

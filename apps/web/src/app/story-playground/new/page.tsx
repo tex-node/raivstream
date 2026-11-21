@@ -1106,7 +1106,7 @@ export default function StoryPlaygroundPage() {
   return (
     <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
-      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-24">
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 pb-16 pt-10">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setHomeTab('create')}

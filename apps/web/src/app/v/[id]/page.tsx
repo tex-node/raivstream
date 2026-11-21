@@ -42,7 +42,7 @@ export default function VideoPage() {
   const isOwner = Boolean(user && user.id === data.creator.id);
 
   return (
-    <div className="h-screen bg-black lg:bg-[var(--noc-page)] flex flex-col">
+    <div className="h-[calc(100vh-3.5rem)] bg-black lg:bg-[var(--noc-page)] flex flex-col">
       <Navbar />
       {/*
         Same desktop-stage pattern as the root feed (Phase 3A) — below `lg`
@@ -51,7 +51,7 @@ export default function VideoPage() {
         becomes a framed, centered video card instead of full-bleed.
         VideoCard itself is untouched.
       */}
-      <div className="flex-1 relative mt-14 flex lg:justify-center lg:py-6 lg:px-6">
+      <div className="flex-1 relative flex lg:justify-center lg:py-6 lg:px-6">
         <div className="relative flex-1 flex lg:flex-none lg:w-full lg:max-w-[480px] xl:max-w-[520px] 2xl:max-w-[580px] lg:h-full lg:rounded-[28px] lg:overflow-hidden lg:border lg:border-[var(--noc-hairline)] lg:shadow-2xl">
           <VideoCard
             video={{

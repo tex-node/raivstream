@@ -150,7 +150,7 @@ export default function AnalyticsPage() {
     <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
 
-      <div className="max-w-5xl mx-auto pt-24 px-4 pb-20">
+      <div className="max-w-5xl mx-auto pt-10 px-4 pb-20">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold">Creator Analytics</h1>
           <Link
