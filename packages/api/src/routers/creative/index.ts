@@ -1,6 +1,7 @@
 import { router } from '../../trpc';
 import { commercialPublishBlock } from '../../lib/commerce/commercialContract';
 import { commercialGraphicVerdict } from '../../lib/creative/output/graphicPlan';
+import { routeChoices, routeIntent } from '../../lib/homer/routeIntent';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { creativeProcedure } from '../../trpc';
@@ -79,6 +80,18 @@ export const creativeRouter = router({
       if (ctx.isR16) throw new TRPCError({ code: 'FORBIDDEN', message: 'Style defaults are not available here.' });
       await ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { styleDefaultKey: input.key } });
       return { ok: true, key: input.key };
+    }),
+
+  /**
+   * Homer's front door (2026-11-21). One sentence in, a proposal out: which of the four paths it sounds like, why, and at most four buttons.
+   * Deterministic and instant (see routeIntent) because routing must be explainable and overridable, and always HOMER_INFERENCE - the creator
+   * has confirmed nothing yet.
+   */
+  routeIntent: creativeProcedure
+    .input(z.object({ thinking: z.string().min(1).max(1000) }))
+    .query(({ input }) => {
+      const route = routeIntent(input.thinking);
+      return { ...route, choices: routeChoices(route) };
     }),
 
   /**
