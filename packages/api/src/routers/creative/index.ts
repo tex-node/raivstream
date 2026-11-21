@@ -1,5 +1,6 @@
 import { router } from '../../trpc';
 import { commercialPublishBlock } from '../../lib/commerce/commercialContract';
+import { commercialGraphicVerdict } from '../../lib/creative/output/graphicPlan';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { creativeProcedure } from '../../trpc';
@@ -78,6 +79,31 @@ export const creativeRouter = router({
       if (ctx.isR16) throw new TRPCError({ code: 'FORBIDDEN', message: 'Style defaults are not available here.' });
       await ctx.prisma.user.update({ where: { id: ctx.user.id }, data: { styleDefaultKey: input.key } });
       return { ok: true, key: input.key };
+    }),
+
+  /**
+   * The readability verdict for the beats as they are TYPED, not as they are saved (2026-11-21). Same pure function the publish gate uses
+   * (`commercialGraphicVerdict`), exposed so the surface can block before the click - and deliberately a server call, so the rules have one
+   * home. A client that reimplemented them would eventually disagree with the refusal.
+   */
+  commercialTextIssues: creativeProcedure
+    .input(
+      z.object({
+        hook: z.string().max(400).optional(),
+        benefit: z.string().max(400).optional(),
+        cta: z.string().max(400).optional(),
+        durationSeconds: z.number().min(1).max(600).default(9),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      if (ctx.isR16) throw new TRPCError({ code: 'FORBIDDEN', message: 'Commercial authoring is not available here.' });
+      const verdict = commercialGraphicVerdict({
+        hook: input.hook ?? null,
+        benefit: input.benefit ?? null,
+        cta: input.cta ?? null,
+        durationSeconds: input.durationSeconds,
+      });
+      return { issues: verdict.issues, beats: verdict.plan.beats.length };
     }),
 
   /**
