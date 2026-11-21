@@ -12,7 +12,34 @@ Work in reviewable increments: one branch per phase, gates green at every commit
 
 ---
 
-## The six decisions you implement (do not re-open)
+## The product spine: Homer first (2026-11-21, operator direction)
+
+**The app revolves around Homer.** The home surface is not a dashboard, a nav grid, or a feed — it is one question:
+
+> **"What are you thinking?"**
+
+The creator answers in their own words. Homer classifies the answer and offers **a few buttons** — the smallest set that fits what they said — leading into one of four paths:
+
+| Path | What Homer offers | Lands in |
+|---|---|---|
+| **Ad** | a short, single-idea spot | the beat composer (hook → benefit → CTA) |
+| **Commercial** | a produced spot with scenes | plan → produce → assemble |
+| **Film** | a multi-scene story with a cast | project → plan → scenes → film |
+| **Writing** | story text, chapters, storybook | Story Playground |
+
+**Rules for this spine:**
+
+- **One input, then a small choice.** After the answer, show **2–4 buttons**, never a menu of every capability. The product's job is to choose, not to make the creator choose.
+- **The four paths are the same four objects the backend already models.** Ad and commercial are both `projectType === 'COMMERCIAL'` (ad = one beat set, no scenes; commercial = scenes). Film and writing are the story/film paths. Do not invent a fifth type.
+- **Homer's question is the front door**, so the five-destination nav demotes to a utility: a slim bar for Watch, Projects, Library, Account — never the five-destination menu as the primary way to start work.
+- **Provenance applies to the routing too.** When Homer decides "this sounds like a film", that is `HOMER_INFERENCE` and must be visible as a proposal the creator can override with one tap ("No — an ad").
+- **No dead end.** After the classification, the creator can always type again instead of answering; the composer/flow opens *from* an answer, never as a form that ignores it.
+
+**Acceptance for the spine:** a first-time signed-in creator lands on "What are you thinking?", types one sentence, sees at most four suggested paths with the chosen one marked as Homer's read, taps one, and reaches a flow pre-filled with their sentence. Two taps from idea to work.
+
+---
+
+## The seven decisions you implement (do not re-open)
 
 1. **Story Studio stays as "Advanced".** `Story Playground` is the default story path; `/story-studio` remains reachable and labelled Advanced. The label must do real work: denser UI is acceptable there, but it is never offered as a starting point.
 2. **The ad composer is the default Create path for commercial projects.** `projectType === 'COMMERCIAL'` becomes a fork in Create, opening a beat composer (hook → benefit → CTA), not the generic film flow.
@@ -20,6 +47,7 @@ Work in reviewable increments: one branch per phase, gates green at every commit
 4. **Academy gets a mobile screen.** Consumption and submission only — class list, lesson, assignment, submit.
 5. **Admin stays a dense internal tool.** Group the 17 items (Money / Content / Renders / People), tighten tables, do not product-style it.
 6. **One visual language** across feed and studio. The existing `var(--noc-*)` tokens are the single source. A second token set fails this requirement even if it looks better.
+7. **Homer is the front door.** Home is "What are you thinking?", the answer routes to **Ad / Commercial / Film / Writing** as a few buttons, and the nav demotes to a utility. This outranks the previous five-destination prominence: the destinations still exist, but they are no longer how work begins.
 
 ### Order matters because of one dependency
 
@@ -97,10 +125,29 @@ Work in reviewable increments: one branch per phase, gates green at every commit
 
 ---
 
-## What to avoid
+## What NOT to do (read this twice)
 
-- A second design system, a second gate implementation, or a second copy of the readability rules.
-- Chat-style surfaces for Homer. The value is the record, not the transcript.
-- Making Advanced Story Studio or Admin beautiful at the cost of density.
-- "Just in time" cost warnings after the click.
-- Redesigning the feed into the studio's language without keeping its over-video legibility.
+**Product**
+
+- **Do not turn Home into a dashboard, a tile grid, or a capability menu.** Home is one question.
+- **Do not show more than four choices** after the creator answers. If you need a fifth, the classification is wrong.
+- **Do not add a chat box or a transcript.** Homer is a structured loop with a visible record; the value is the record, not the conversation.
+- **Do not add a mode selector before the question** (no "pick: ad / film / story" screen). The question comes first; the choice comes after the answer.
+- **Do not invent project types.** Ad and commercial are one backend type with two shapes; film and writing already exist.
+- **Do not let Homer's routing be invisible.** If Homer reads the answer as a film, say so and allow one-tap override.
+- **Do not make the creator re-type their idea** in the flow they land in — carry it as the premise.
+- **Do not break the four provenances.** `USER_EXPLICIT`, `USER_APPROVED`, `HOMER_INFERENCE`, `HOMER_PROPOSAL` stay four, and stay distinguishable beyond colour.
+
+**Craft**
+
+- No second design system, second gate implementation, or second copy of the readability rules. The client asks the server; it does not compute.
+- No "just in time" cost warnings after the click. Price appears before the button that spends.
+- No gate that speaks only as a refusal. Blocking messages appear while typing, in the creator's words.
+- Do not make Advanced Story Studio or Admin beautiful at the cost of density; both are dense on purpose and must say so.
+- Do not redesign the feed into the studio's language without keeping its over-video legibility.
+- Do not add a route, component or token without updating the docs entry that names it.
+
+**Process**
+
+- Do not commit to `main`; do not ship a phase with a red gate; do not leave a phase half-wired.
+- Do not re-open a decided question — if a decision seems wrong, say so in the PR body and implement it as decided.
