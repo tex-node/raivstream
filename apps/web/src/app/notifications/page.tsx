@@ -115,7 +115,7 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen text-white" style={{ background: 'var(--noc-page)' }}>
       <Navbar />
-      <div className="max-w-lg lg:max-w-xl mx-auto pt-20 px-4 pb-16">
+      <div className="max-w-lg lg:max-w-xl mx-auto pt-6 px-4 pb-16">
 
         {/* Header */}
         <div className="flex items-center justify-between py-6">

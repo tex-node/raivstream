@@ -140,7 +140,7 @@ export default function DirectorPage() {
   return (
     <div className="min-h-screen bg-[var(--noc-page)] text-[var(--noc-t1)]">
       <Navbar />
-      <div className="max-w-6xl mx-auto px-4 pt-20 pb-16">
+      <div className="max-w-6xl mx-auto px-4 pt-6 pb-16">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold mb-2 bg-gradient-to-r from-[var(--noc-magenta)] via-[var(--noc-purple)] to-[var(--noc-blue)] bg-clip-text text-transparent">
             Director

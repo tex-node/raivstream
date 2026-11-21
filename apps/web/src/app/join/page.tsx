@@ -12,7 +12,7 @@ export default function JoinPage() {
   return (
     <div className="min-h-screen bg-[var(--noc-page)]">
       <Navbar />
-      <main className="mx-auto max-w-md px-4 py-16">
+      <main className="mx-auto max-w-md px-4 py-4">
         <h1 className="text-2xl font-black text-[var(--noc-t1)]">Join your school</h1>
         <p className="mt-1 text-sm text-[var(--noc-t4)]">
           Enter the code your coordinator gave you.
