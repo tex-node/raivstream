@@ -2428,6 +2428,18 @@ answers on two pages. Phones get a drawer for the first time — the centre link
 navigation was the avatar menu. The tests pin the structure rather than the link list: no duplicate destinations, every
 legacy target still reachable, and **R16 never linked to a route its own middleware blocks**.
 
+**Homer remembers, and the first loop proved it — by failing.** The decision timeline had a table, a writer and a derivation, and
+nothing called any of them. The three write points now live in the router: a proposal is appended **when it is shown**, not when
+it is accepted, because a rejection must point at what it refused; an approval appends the accepted decisions with the proposal
+each supersedes; a rejection is a procedure of its own. Then the four-row loop — propose, reject, propose, accept — failed its own
+assertion, and the failure was real: the profile's category map named `CAMERA`, `MOVEMENT`, `EDIT`, `FRAMING`, `LIGHTING`, `TONE`
+and `MOOD`, of which Homer emits **one**, so four genuine decisions derived an empty profile that would have told a creator
+"Nothing decided yet." The map is keyed by Homer's own categories now, and a category without an axis is a compile error. **The proof
+ran against production through the router**: four rows, two `supersedes` links, and `REVEAL accepted=1 rejected=1` with the sentence
+it generates. **What it exposed and did not fix:** the proposer still chooses from genre and tone alone, so after a creator declined
+`naturalistic` it proposed `naturalistic` again — the rejection is recorded, but it does not yet change what Homer offers. That is
+the next step, and it is named rather than implied.
+
 **Status.** Plumbing audited and fixed, renderer adapter missing — see [history — Other status notes](roadmap-history.md#other-status-notes).
 
 ## Phase template (proven on Phase 1)
