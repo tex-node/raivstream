@@ -40,6 +40,7 @@
     "deploy:web": "cd apps/web && vercel --prod",
     "deploy:mobile": "cd apps/mobile && eas build --platform all",
     "runpod": "tsx scripts/runpod.ts",
+    "homer:proof": "tsx scripts/homer-timeline-proof.ts",
     "fal": "tsx scripts/fal.ts",
     "fal:quality": "tsx scripts/fal-quality-batch.ts",
     "fal:e2e": "pnpm --filter @raivstream/api exec tsx scripts/fal-generation-e2e.ts",
