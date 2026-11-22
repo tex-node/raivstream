@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { useAuth, useUser, type AuthUser } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
@@ -56,7 +57,17 @@ export default function CreatePage() {
   const userId = user?.id ?? null;
 
   // Initial intent text and attachments
-  const [text, setText] = useState('');
+  // Homer's front door carries the creator's own sentence in ?premise= (2026-11-21). Seeded once, never overwritten afterwards: the creator
+  // may edit it, and re-seeding on every render would fight them.
+  const searchParams = useSearchParams();
+  const premiseSeed = searchParams.get('premise') ?? '';
+  const [text, setText] = useState(premiseSeed);
+  const [premiseApplied, setPremiseApplied] = useState(premiseSeed.length > 0);
+  useEffect(() => {
+    if (premiseApplied || !premiseSeed) return;
+    setText(premiseSeed);
+    setPremiseApplied(true);
+  }, [premiseSeed, premiseApplied]);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [sourceSupplied, setSourceSupplied] = useState(false);
   const [interpreted, setInterpreted] = useState(false);

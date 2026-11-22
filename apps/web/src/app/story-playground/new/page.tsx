@@ -353,7 +353,16 @@ export default function StoryPlaygroundPage() {
   const playgroundOpenedTracked = useRef(false);
 
   const [step, setStep] = useState<PlaygroundStep>('spark');
-  const [idea, setIdea] = useState('');
+  // `?premise=` arrives from Homer's front door: the creator already said what they are thinking, and asking again would be the exact failure the
+  // spine forbids. Seeded once, then theirs to edit.
+  const premiseSeed = searchParams.get('premise') ?? '';
+  const [idea, setIdea] = useState(premiseSeed);
+  const [premiseApplied, setPremiseApplied] = useState(premiseSeed.length > 0);
+  useEffect(() => {
+    if (premiseApplied || !premiseSeed) return;
+    setIdea(premiseSeed);
+    setPremiseApplied(true);
+  }, [premiseSeed, premiseApplied]);
   const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyleValue>('STORYBOOK_ILLUSTRATION');
 
   // R16 offers only the restricted styles; keep the selection in-allowlist (the
