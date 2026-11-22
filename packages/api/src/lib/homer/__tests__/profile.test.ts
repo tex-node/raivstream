@@ -33,6 +33,24 @@ describe('deriveCreatorProfile - Homer remembering a creator', () => {
     expect(warmth.lean).toBeLessThan(0);
   });
 
+  it('counts every category Homer actually asks about', () => {
+    // The regression (2026-11-22): the map named CAMERA/MOVEMENT/EDIT/FRAMING/LIGHTING/TONE, of which Homer emits none but
+    // MOOD - so a real four-row loop derived an empty profile. Every question Homer can ask must produce evidence.
+    const categories = [
+      'VISUAL_TREATMENT',
+      'MOOD',
+      'WORLD_TREATMENT',
+      'TIME_OF_DAY',
+      'PACING',
+      'CHARACTER_PRESENTATION',
+      'CAMERA_PERSPECTIVE',
+    ] as const;
+    for (const category of categories) {
+      const profile = deriveCreatorProfile([ev(category, 'ACCEPTED')]);
+      expect(profile.empty, category).toBe(false);
+      expect(profile.evidenceCount, category).toBe(1);
+    }
+  });
   it('ignores categories it has no axis for, so new decisions do not silently bend the profile', () => {
     const profile = deriveCreatorProfile([ev('SOMETHING_NEW', 'ACCEPTED')]);
     expect(profile.empty).toBe(true);
