@@ -237,13 +237,34 @@ jobs:
 
           echo "==> Checking production health..."
           sleep 5
-          curl --fail --silent --show-error https://app.raivstream.com/api/health
-          curl --fail --silent --show-error https://r16.raivstream.com/api/health
+          # Two questions, two answers (2026-11-22).
+          #
+          # The deploy's gate is "does this build serve on the server we just updated". That is asked over loopback with
+          # the real SNI, so it does not depend on DNS at all.
+          #
+          # Whether the public domain answers is a DNS/CDN question. On 2026-11-21 raivstream.com (apex and every
+          # subdomain) was repointed to AWS Global Accelerator addresses with nothing behind them, and every deploy
+          # after that failed here with `tlsv1 unrecognized name` even though the build was serving. That must be loud,
+          # but it must not be reported as a broken deploy, and it must not block shipping the fix that matters.
+          for host in app.raivstream.com r16.raivstream.com; do
+            curl --fail --silent --show-error --max-time 20 \
+              --resolve "$host:443:127.0.0.1" "https://$host/api/health" > /dev/null
+            echo "  $host: serving on the VPS"
+          done
+          for host in app.raivstream.com r16.raivstream.com; do
+            if curl --fail --silent --show-error --max-time 20 "https://$host/api/health" > /dev/null 2>&1; then
+              echo "  $host: reachable publicly"
+            else
+              echo "::warning title=Public domain unhealthy::$host did not answer its health check over the public domain. This deploy is fine - the build is serving on the VPS - but users cannot reach the site until DNS points back at it. Check the A records for raivstream.com."
+            fi
+          done
 
           echo "Deployed commit: $(git rev-parse HEAD)"
           LOCKED_DEPLOY
           then
-            echo "Another Raivstream deployment is already running; could not acquire /tmp/raivstream-deploy.lock." >&2
+            # `flock` returns non-zero both when the lock is held and when the inner script fails, so the old message
+            # ("Another deployment is already running") was printed for every build and health failure too. Name both.
+            echo "The remote deploy script exited non-zero. If the log above ends at a build, test or health failure, that is the cause; otherwise another deployment may hold /tmp/raivstream-deploy.lock." >&2
             exit 1
           fi
           REMOTE_DEPLOY
