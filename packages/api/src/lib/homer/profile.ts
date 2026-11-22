@@ -8,7 +8,14 @@
  *   - **Earned from acceptances and rejections, never from silence.** An ignored proposal moves nothing, because attention is not consent.
  *   - **Derived on read, never stored.** A materialised profile disagrees with the events the moment either changes; if this ever gets slow, cache
  *     it - do not make it the source of truth.
+ *
+ * THE CATEGORY MAP WAS WRONG (2026-11-22, found by the first real four-row loop). It named CAMERA, MOVEMENT, EDIT, EDITING, FRAMING, LIGHTING and
+ * TONE — of which Homer emits exactly one (MOOD) — so a timeline of real decisions derived an empty profile and said "Nothing decided yet" about
+ * a creator who had just accepted and rejected things. The map is now keyed by Homer's own `CreativeDecisionCategory`, so a category that has no
+ * axis is a compile error rather than a silent omission; the old names stay below for rows written before this.
  */
+import type { CreativeDecisionCategory } from './directingTypes';
+
 export type ProfileAxis = 'STILLNESS' | 'CUT_RHYTHM' | 'REVEAL' | 'WARMTH';
 
 export interface ProfileEvent {
@@ -36,7 +43,22 @@ export interface CreatorProfile {
   evidenceCount: number;
 }
 
-const AXIS_OF_CATEGORY: Record<string, ProfileAxis> = {
+/**
+ * Every category Homer can ask about, mapped to the axis its answer is evidence for. `Record<CreativeDecisionCategory, …>` on purpose: adding a
+ * category to the question set without deciding what it says about the creator stops the build instead of quietly never counting it.
+ */
+const HOMER_CATEGORY_AXIS: Record<CreativeDecisionCategory, ProfileAxis> = {
+  CAMERA_PERSPECTIVE: 'STILLNESS',
+  PACING: 'CUT_RHYTHM',
+  VISUAL_TREATMENT: 'REVEAL',
+  WORLD_TREATMENT: 'REVEAL',
+  TIME_OF_DAY: 'REVEAL',
+  MOOD: 'WARMTH',
+  CHARACTER_PRESENTATION: 'WARMTH',
+};
+
+/** Categories written before the map above existed. Kept so old rows still count. */
+const LEGACY_CATEGORY_AXIS: Record<string, ProfileAxis> = {
   CAMERA: 'STILLNESS',
   MOVEMENT: 'STILLNESS',
   PACING: 'CUT_RHYTHM',
@@ -47,6 +69,11 @@ const AXIS_OF_CATEGORY: Record<string, ProfileAxis> = {
   TONE: 'WARMTH',
   MOOD: 'WARMTH',
 };
+
+function axisFor(category: string): ProfileAxis | null {
+  const key = category.toUpperCase();
+  return HOMER_CATEGORY_AXIS[key as CreativeDecisionCategory] ?? LEGACY_CATEGORY_AXIS[key] ?? null;
+}
 
 const AXES: ProfileAxis[] = ['STILLNESS', 'CUT_RHYTHM', 'REVEAL', 'WARMTH'];
 
@@ -64,7 +91,7 @@ export function deriveCreatorProfile(events: ProfileEvent[]): CreatorProfile {
   let evidenceCount = 0;
 
   for (const event of events) {
-    const axis = AXIS_OF_CATEGORY[event.category.toUpperCase()];
+    const axis = axisFor(event.category);
     if (!axis) continue;
     const bucket = tally.get(axis)!;
     if (event.outcome === 'ACCEPTED') { bucket.accepted += 1; evidenceCount += 1; }

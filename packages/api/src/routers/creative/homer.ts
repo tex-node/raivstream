@@ -19,6 +19,13 @@ import {
   refreshAnimaticState,
   isFalImageEnabled,
 } from '../../lib/homer/animaticService';
+import {
+  loadDecisionTimeline,
+  recordAcceptance,
+  recordProposal,
+  recordRejection,
+  type TimelinePrisma,
+} from '../../lib/homer/timeline';
 
 // ─── Directing schemas ─────────────────────────────────────────────────────────
 
@@ -41,6 +48,48 @@ const zHomerCreativeDecision = z.object({
   provenance: z.enum(['USER_EXPLICIT', 'USER_APPROVED', 'HOMER_INFERENCE', 'HOMER_PROPOSAL']),
   createdAt: z.string(),
 });
+
+/**
+ * A decision the creator actually made, for the append-only timeline (2026-11-22).
+ *
+ * `proposalEventId` is the PROPOSED row this replaces. It is nullable because a creator can type their own answer without
+ * Homer having proposed anything — an explicit decision has no proposal to supersede.
+ */
+const zRecordedDecision = z.object({
+  category: zCreativeDecisionCategory,
+  label: z.string(),
+  value: z.string(),
+  rationale: z.string().default(''),
+  provenance: z.enum(['USER_EXPLICIT', 'USER_APPROVED']).default('USER_APPROVED'),
+  proposalEventId: z.string().nullish(),
+});
+
+/** The timeline helpers only need this slice of the client; the real one is wider. */
+function timelineFor(prisma: unknown): TimelinePrisma {
+  return prisma as TimelinePrisma;
+}
+
+interface ProjectLookup {
+  creativeProject: {
+    findFirst(args: {
+      where: { id: string; userId: string };
+      select: { id: true };
+    }): Promise<{ id: string } | null>;
+  };
+}
+
+/**
+ * The timeline hangs off a project, so a caller must own it before anything is appended to it — otherwise the event log is
+ * a place anyone can write into anyone's history. The project procedures make the same check; this is its own because the
+ * Homer router does not go through them.
+ */
+async function assertProjectOwned(prisma: unknown, projectId: string, userId: string): Promise<void> {
+  const project = await (prisma as ProjectLookup).creativeProject.findFirst({
+    where: { id: projectId, userId },
+    select: { id: true },
+  });
+  if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found.' });
+}
 
 // ─── AI-powered proposal (falls back to deterministic) ─────────────────────────
 
@@ -186,15 +235,24 @@ export const creativeHomerRouter = router({
   /**
    * Propose a creative decision for "Let Homer decide."
    * Uses AI when HOMER_INTERPRETER_ENABLED; falls back to deterministic rule-based logic.
+   *
+   * The proposal is appended to the timeline HERE, when it is shown — not when it is accepted (2026-11-22). A rejection has
+   * to point at the thing that was rejected, and rejections are the evidence the profile needs most; recording on
+   * acceptance would leave every rejection with nothing to supersede.
+   *
+   * `projectId` is optional because the front door runs before a project exists: the creator answers questions, and only
+   * then is the project created. With no project there is no history to append to, which is honest — the alternative is an
+   * orphan row.
    */
   proposeDecision: creativeProcedure
     .input(z.object({
+      projectId: z.string().nullish(),
       storyState: z.record(z.unknown()),
       category: zCreativeDecisionCategory,
       existingDecisions: z.array(z.record(z.unknown())),
       audienceMode: z.enum(['GENERAL', 'KIDS']).default('GENERAL'),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const state = input.storyState as unknown as HomerStoryState;
       const decisions = input.existingDecisions as unknown as HomerCreativeDecision[];
       let decision: HomerCreativeDecision;
@@ -209,19 +267,37 @@ export const creativeHomerRouter = router({
         decision = proposeDirectingDecision(input.category, state, decisions, input.audienceMode);
       }
 
-      return { ok: true as const, decision };
+      let proposalEventId: string | null = null;
+      if (input.projectId) {
+        await assertProjectOwned(ctx.prisma, input.projectId, ctx.user.id);
+        const event = await recordProposal(timelineFor(ctx.prisma), {
+          projectId: input.projectId,
+          category: decision.category,
+          label: decision.label,
+          value: decision.value,
+          rationale: decision.rationale,
+          provenance: 'HOMER_PROPOSAL',
+        });
+        proposalEventId = event.id;
+      }
+
+      return { ok: true as const, decision, proposalEventId };
     }),
 
   /**
    * Persist an approved HomerStoryState into the CreativeBible of an existing project.
    * Called after the creator approves the "Here's what I understand" view.
    * Writes to CreativeBible.story — the canonical Homer state field.
+   *
+   * `decisions` is what makes the approval evidence: each one is appended as ACCEPTED, pointing at the proposal it came
+   * from (2026-11-22). The state JSON is the current belief; the events are how it was reached.
    */
   approveAndSave: creativeProcedure
     .input(z.object({
       projectId: z.string(),
       /** HomerStoryState as opaque JSON — validated structurally in saveHomerState. */
       storyState: z.record(z.unknown()),
+      decisions: z.array(zRecordedDecision).default([]),
     }))
     .mutation(async ({ ctx, input }) => {
       const project = await ctx.prisma.creativeProject.findFirst({
@@ -231,7 +307,63 @@ export const creativeHomerRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found.' });
       }
       await saveHomerState(ctx.prisma, input.projectId, input.storyState as unknown as HomerStoryState);
-      return { ok: true as const };
+
+      for (const decision of input.decisions) {
+        await recordAcceptance(timelineFor(ctx.prisma), {
+          projectId: input.projectId,
+          category: decision.category,
+          label: decision.label,
+          value: decision.value,
+          rationale: decision.rationale,
+          provenance: decision.provenance,
+          supersedes: decision.proposalEventId ?? null,
+        });
+      }
+
+      return { ok: true as const, accepted: input.decisions.length };
+    }),
+
+  /**
+   * Decline a proposal. The row points at the proposal it refuses, which is why proposals are written when they are shown.
+   * A rejection is as much evidence as an acceptance — it is the only way the profile learns what this creator does not
+   * want — so it is a first-class procedure rather than a client-side no-op.
+   */
+  rejectDecision: creativeProcedure
+    .input(z.object({
+      projectId: z.string(),
+      category: zCreativeDecisionCategory,
+      label: z.string(),
+      value: z.string(),
+      rationale: z.string().default(''),
+      proposalEventId: z.string().nullish(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertProjectOwned(ctx.prisma, input.projectId, ctx.user.id);
+      const event = await recordRejection(timelineFor(ctx.prisma), {
+        projectId: input.projectId,
+        category: input.category,
+        label: input.label,
+        value: input.value,
+        rationale: input.rationale,
+        provenance: 'USER_EXPLICIT',
+        supersedes: input.proposalEventId ?? null,
+      });
+      return { ok: true as const, eventId: event.id };
+    }),
+
+  /**
+   * The project's decision history, newest first, with whatever replaced each decision resolved by the reader. This is what
+   * the surface lists; without it the writers would be an audit log nobody can see.
+   */
+  decisionTimeline: creativeProcedure
+    .input(z.object({
+      projectId: z.string(),
+      take: z.number().min(1).max(500).default(200),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertProjectOwned(ctx.prisma, input.projectId, ctx.user.id);
+      const events = await loadDecisionTimeline(timelineFor(ctx.prisma), input.projectId, input.take);
+      return { ok: true as const, events };
     }),
 
   // ─── Phase 3: First-Frame Animatic ────────────────────────────────────────
