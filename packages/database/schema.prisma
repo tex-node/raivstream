@@ -3197,3 +3197,23 @@ model CinematicLook {
   @@index([projectId])
   @@map("cinematic_looks")
 }
+
+/// The decision timeline (2026-11-22). Homer's current state lives in `visualLanguage.directingDecisions`, which is OVERWRITTEN on every change -
+/// so it can say what is true now and nothing about what was proposed, rejected, or replaced. This table is the append-only record beside it: every
+/// proposal, acceptance and rejection with its provenance, when it happened, and what it superseded. It is the data the timeline screen reads, and the
+/// only record from which "Homer becomes the creator" can be computed, because drift must be earned from acceptances and rejections, not from silence.
+model HomerDecisionEvent {
+  id         String   @id @default(cuid())
+  projectId  String
+  category   String
+  label      String
+  value      String
+  rationale  String
+  provenance String
+  outcome    String
+  supersedes String?
+  at         DateTime @default(now())
+
+  @@index([projectId, at])
+  @@map("homer_decision_events")
+}
