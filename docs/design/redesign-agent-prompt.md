@@ -125,6 +125,24 @@ The creator answers in their own words. Homer classifies the answer and offers *
 
 ---
 
+## 8. Homer's voice: four director seeds, then the creator (2026-11-22, operator direction)
+
+**Homer does not begin empty.** It begins with four named style templates, drawn from directors whose choices are legible and teachable:
+
+| Seed | Domain | What it contributes |
+|---|---|---|
+| **Buster Keaton** | comedy | deadpan stillness, the gag built from the set, the unblinking camera |
+| **Charlie Chaplin** | comedy | pathos inside the gag, the close on the face, sentiment earned by timing |
+| **Orson Welles** | drama | depth staging, the low angle, the long take that refuses to cut |
+| **Alfred Hitchcock** | suspense | the withheld reveal, the audience knowing more than the character, tension by framing |
+
+**How it is used:** these are **proposals with provenance**, never a house style imposed. When Homer suggests a decision, it may say *"this is the Keaton read"* — that is `HOMER_INFERENCE` derived from a named seed, and the creator can accept or reject it. Seeds are the vocabulary Homer reasons with, not a hidden bias.
+
+**Then Homer becomes the creator.** Over time, the accepted and rejected proposals shift the weights: a creator who keeps choosing stillness drifts toward Keaton, one who keeps cutting toward the withheld reveal drifts toward Hitchcock. The mechanism already exists in the codebase — `styleAxes`, `tasteSignals`, `suggestionDirection` and the agreement signal — so this is a **seeding and weighting** change, not a new subsystem. Two rules:
+
+1. **The drift must be visible.** A creator can see which seed Homer is currently leaning on and why, and reset it. An adaptation nobody can see is a manipulation, not a service.
+2. **The drift must be earned from acceptances, not from silence.** Rejected proposals move the weights away; ignored proposals do not move anything.
+
 ## What NOT to do (read this twice)
 
 **Product**
