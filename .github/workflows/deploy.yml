@@ -236,20 +236,36 @@ jobs:
           pm2 save
 
           echo "==> Checking production health..."
-          sleep 5
+          sleep 10
           # Two questions, two answers (2026-11-22).
           #
           # The deploy's gate is "does this build serve on the server we just updated". That is asked over loopback with
-          # the real SNI, so it does not depend on DNS at all.
+          # the real SNI, so it does not depend on DNS at all — and it POLLS, because `next start` accepts the TCP
+          # connection before it can answer: the first deploy after this gate landed failed with
+          # `curl: (28) Operation timed out ... 0 bytes received` 25 s after a restart, while the same check returned 200
+          # a minute later. A single attempt at a restarting server measures warm-up, not correctness.
           #
           # Whether the public domain answers is a DNS/CDN question. On 2026-11-21 raivstream.com (apex and every
           # subdomain) was repointed to AWS Global Accelerator addresses with nothing behind them, and every deploy
           # after that failed here with `tlsv1 unrecognized name` even though the build was serving. That must be loud,
           # but it must not be reported as a broken deploy, and it must not block shipping the fix that matters.
+          wait_for_health() {
+            host="$1"
+            attempt=1
+            while [ "$attempt" -le 12 ]; do
+              if curl --fail --silent --show-error --max-time 10 \
+                --resolve "$host:443:127.0.0.1" "https://$host/api/health" > /dev/null 2>&1; then
+                echo "  $host: serving on the VPS (attempt $attempt)"
+                return 0
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            echo "  $host: did not answer its health check within 60s" >&2
+            return 1
+          }
           for host in app.raivstream.com r16.raivstream.com; do
-            curl --fail --silent --show-error --max-time 20 \
-              --resolve "$host:443:127.0.0.1" "https://$host/api/health" > /dev/null
-            echo "  $host: serving on the VPS"
+            wait_for_health "$host"
           done
           for host in app.raivstream.com r16.raivstream.com; do
             if curl --fail --silent --show-error --max-time 20 "https://$host/api/health" > /dev/null 2>&1; then
