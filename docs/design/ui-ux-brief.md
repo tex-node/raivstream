@@ -264,16 +264,26 @@ Commercials are a project type (`projectType === 'COMMERCIAL'`) with three autho
 
 ---
 
-## 8. Open questions for the operator (answer before designing)
+## 8. Decisions taken (2026-11-21, operator)
 
-1. **Is Story Studio retired** or repositioned as "advanced"? The nav currently offers both.
-2. **Does the ad composer become the default Create path** for commercial projects, replacing the generic film flow?
-3. **Homer's next step:** should the creator see a *timeline* of decisions (provenance over time) or only the current state?
-4. **Mobile parity:** does Academy need a mobile screen, or is web-only acceptable?
-5. **Admin:** is it internal-only forever (dense is fine) or should it look like the product (slower, prettier)?
-6. **The feed vs the studio:** one visual language or two (feed stays cinematic, studio stays calm)?
+These are settled. A redesign implements them; it does not re-open them.
 
----
+| # | Question | Decision | What it changes |
+|---|---|---|---|
+| 1 | Story Studio | **Advanced** | `Story Playground` is the default story path; `/story-studio` stays, labelled *Advanced*, and is never the primary entry. The nav already says "Advanced story studio" — the redesign must make the *label* do real work: denser UI is acceptable there, and it must not be offered to new users as a starting point. |
+| 2 | Ad composer | **Default Create path for commercial projects** | `/create` branches by project type: a commercial project opens the **beat composer** (hook → benefit → CTA on a phone frame with inline readability and cost), not the generic film flow. `projectType === 'COMMERCIAL'` becomes a first-class fork in Create, not a setting. |
+| 3 | Homer | **Timeline over time** | Homer gains a **decision history**: every decision with its provenance, when it was made, and what it superseded. Current-state-only is insufficient. Design implication: a vertical timeline with provenance chips, filters (said / approved / inferred / proposed), and the ability to see what a decision replaced. |
+| 4 | Academy mobile | **Yes, a screen** | Expo app gains Academy: class list, lesson, assignment, submission. This is new mobile work, not a port of web markup; keep it to consumption + submission, not authoring. |
+| 5 | Admin | **Dense internal tool** | Do not product-style it. Group the 17 items (Money / Content / Renders / People), tighten tables, keep density. Optimise for incident reading, not beauty. |
+| 6 | Feed vs studio | **One visual language** | The feed's cinematic treatment and the studio's calm layout become **one system**: shared tokens, shared components, the feed keeping translucency only where it sits over video. No second design language. |
+
+### Consequences worth stating plainly
+
+- **One visual language** means the current `var(--noc-*)` token set becomes the single source. Any redesign that introduces a second set has failed requirement 6, even if it looks better.
+- **Ad composer as default** means the commercial path needs its own Create entry, not a checkbox inside the film flow.
+- **Homer timeline** is the largest new build of the six: provenance over time is a data + UI change, not a restyle.
+- **Academy mobile** is the only item that adds a platform surface; sequence it after the web language is settled so it inherits rather than invents.
+- **Advanced Story Studio** and **dense Admin** are the two places where a designer is *allowed* to be ugly on purpose — and both must be labelled so users know why.
 
 ## 9. Suggested redesign sequence
 
